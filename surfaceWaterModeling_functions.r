@@ -1221,6 +1221,9 @@ projectionValidationAndPlotGeneration_f = function(
 		
 		startDates = unique(validDF$startDate) 
 			
+			# datatable for assessing error / performance over entire period for which we have data
+		sumModPerf = data.frame(month = NA, leadTime = NA, predTerc = NA, actTerc = NA, 
+			predMAE25 = NA, climMAE25 = NA, predMAE50 = NA, climMAE50 = NA, predMAE75 = NA, climMAE75 = NA)
 		
 		for(thisStartDate in startDates)	{
 			validSubset = subset(validDF, startDate == thisStartDate)
@@ -1234,7 +1237,7 @@ projectionValidationAndPlotGeneration_f = function(
 				climStart = which(climSubset$month == month(validSubset$startDate)[1])[1]
 				
 				climDF = rbind(climDF,
-					data.frame(month = theseMonths, cumsumQ = cumsum(climSubset$totQ[climStart:(climStart+numMonths-1)]), plotMonth = c(1:7)))
+					data.table(month = theseMonths, cumsumQ = cumsum(climSubset$totQ[climStart:(climStart+numMonths-1)]), plotMonth = c(1:7)))
 			}	
 		
 			
@@ -1283,9 +1286,180 @@ projectionValidationAndPlotGeneration_f = function(
 				paste0('Actual'),
 				adj = c(0,0), font=2, col='#196CE1', family='A', cex=1.6*1.3)
 			dev.off()
-		}
 
+			monthsLead = 0
+			for(thisLeadTime in unique(validSubset$Date)) {
+				monthsLead = monthsLead + 1
+				validSubsetLd = subset(validSubset, Date == thisLeadTime)
+				climDFLd = subset(climDF, plotMonth == monthsLead)
+				climQuant = quantile(climDFLd$cumsumQ, c(0.333, 0.5, 0.667), na.rm=TRUE) 
+				predQuant = quantile(validSubsetLd$predQ, c(0.333, 0.5, 0.667)) 
+				
+				predTerc = 1
+				if(predQuant[2] > climQuant[1]) {predTerc = 2}
+				if(predQuant[2] > climQuant[3])	{predTerc = 3}
+				
+				actVal = validSubsetLd$actQ[1]
+				actTerc = 1
+				if(actVal > climQuant[1]) 		{actTerc = 2}
+				if(actVal > climQuant[3])		{actTerc = 3}
+
+				sumModPerf = rbind(sumModPerf, c(
+					as.numeric(climDFLd$month[1]), monthsLead, predTerc, actTerc, 
+					as.numeric(predQuant[1] - actVal), as.numeric(climQuant[1] - actVal),
+					as.numeric(predQuant[2] - actVal), as.numeric(climQuant[2] - actVal),
+					as.numeric(predQuant[3] - actVal), as.numeric(climQuant[3] - actVal)))
+			}
+		}
 	}
+	fwrite(sumModPerf, paste0(dataOut_location, basinName, '_summaryOfModelPerformance.csv'))
+
+#	sumModPerf = data.frame(month = NA, leadTime = NA, predTerc = NA, actTerc = NA, 
+#		predMAE25 = NA, climMAE25 = NA, predMAE50 = NA, climMAE50 = NA, predMAE75 = NA, climMAE75 = NA)
+
+	highTercHeatMap = matrix(nrow=7, ncol=12)
+	lowTercHeatMap  = matrix(nrow=7, ncol=12)
+	medTercHeatMap  = matrix(nrow=7, ncol=12)
+	absMae25HeatMap = matrix(nrow=7, ncol=12)
+	absMae50HeatMap = matrix(nrow=7, ncol=12)
+	absMae75HeatMap = matrix(nrow=7, ncol=12)
+	relMae25HeatMap = matrix(nrow=7, ncol=12)
+	relMae50HeatMap = matrix(nrow=7, ncol=12)
+	relMae75HeatMap = matrix(nrow=7, ncol=12)
+	
+	for(ii in 1:12)	{
+		for(jj in 1:7)	{
+			subModPerf = subset(sumModPerf, month == ii & leadTime == jj)
+			
+			absMae25HeatMap[jj,ii] = median(subModPerf$predMAE25)
+			absMae50HeatMap[jj,ii] = median(subModPerf$predMAE50)
+			absMae75HeatMap[jj,ii] = median(subModPerf$predMAE75)
+
+			relMae25HeatMap[jj,ii] = median((abs(subModPerf$predMAE25) - abs(subModPerf$climMAE25)) / abs(subModPerf$climMAE25)) * 100
+			relMae50HeatMap[jj,ii] = median((abs(subModPerf$predMAE50) - abs(subModPerf$climMAE50)) / abs(subModPerf$climMAE50)) * 100 
+			relMae75HeatMap[jj,ii] = median((abs(subModPerf$predMAE75) - abs(subModPerf$climMAE75)) / abs(subModPerf$climMAE75)) * 100
+
+			subHighModPerf = subset(subModPerf, actTerc == 3)
+			subMedModPerf = subset(subModPerf, actTerc == 2)
+			subLowModPerf = subset(subModPerf, actTerc == 1)
+			highTercHeatMap[jj,ii] = length(which(subHighModPerf$predTerc == 3)) / nrow(subHighModPerf)
+			medTercHeatMap[jj,ii] = length(which(subMedModPerf$predTerc == 2)) / nrow(subMedModPerf)
+			lowTercHeatMap[jj,ii] = length(which(subLowModPerf$predTerc == 1)) / nrow(subLowModPerf)
+		}
+	}
+	
+	rampcols = colorRampPalette(c('#B91863','white', '#196CE1'))(11) # colors are 'blue' to 'red' but in CAi scheme
+	rampbreaks = seq(-100, 100, length.out = 12)
+	
+	png(paste0(dataOut_location, basinName, '_projectedOutputFigures\\SummaryPlot_relMAE50.png'), width = 720, height = 720)
+	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
+	if(any(relMae50HeatMap > 100))	{relMae50HeatMap[which(relMae50HeatMap > 100)] = 99.9}
+	image(t(relMae50HeatMap),# Rowv = NA, Colv = NA, scale='none',
+		col = rev(rampcols), breaks = rampbreaks,
+		main='Relative MAE (% change)', ylab='Lead Time (months)', xlab='Month', xaxt='n', yaxt='n',
+		col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
+		family='A')
+	text(x=rep(1:12,each=7)/11 - 0.09, y=rep(1:7,12)/6 - 0.18, labels = paste0(round(relMae50HeatMap, 0), '%'))
+	axis(1, at=1:12 / 11 - 0.09,
+		labels =c('Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'),
+		col.lab='#1A232F', col.axis='#666D74')
+	axis(2, at = 1:7 / 6 - 0.18,
+		labels =1:7,
+		col.lab='#1A232F', col.axis='#666D74')
+	dev.off()
+			
+	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
+	png(paste0(dataOut_location, basinName, '_projectedOutputFigures\\SummaryPlot_relMAE25.png'), width = 720, height = 720)
+	if(any(relMae25HeatMap > 100))	{relMae25HeatMap[which(relMae25HeatMap > 100)] = 99.9}
+	image(t(relMae25HeatMap),# Rowv = NA, Colv = NA, scale='none',
+		col = rev(rampcols), breaks = rampbreaks,
+		main='Relative MAE (% change)', ylab='Lead Time (months)', xlab='Month', xaxt='n', yaxt='n',
+		col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
+		family='A')
+	text(x=rep(1:12,each=7)/11 - 0.09, y=rep(1:7,12)/6 - 0.18, labels = paste0(round(relMae25HeatMap, 0), '%'))
+	axis(1, at=1:12 / 11 - 0.09,
+		labels =c('Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'),
+		col.lab='#1A232F', col.axis='#666D74')
+	axis(2, at = 1:7 / 6 - 0.18,
+		labels =1:7,
+		col.lab='#1A232F', col.axis='#666D74')
+	dev.off()
+
+
+	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
+	png(paste0(dataOut_location, basinName, '_projectedOutputFigures\\SummaryPlot_relMAE75.png'), width = 720, height = 720)
+	if(any(relMae75HeatMap > 100))	{relMae75HeatMap[which(relMae75HeatMap > 100)] = 99.9}
+	image(t(relMae75HeatMap),# Rowv = NA, Colv = NA, scale='none',
+		col = rev(rampcols), breaks = rampbreaks,
+		main='Relative MAE (% change)', ylab='Lead Time (months)', xlab='Month', xaxt='n', yaxt='n',
+		col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
+		family='A')
+	text(x=rep(1:12,each=7)/11 - 0.09, y=rep(1:7,12)/6 - 0.18, labels = paste0(round(relMae75HeatMap, 0), '%'))
+	axis(1, at=1:12 / 11 - 0.09,
+		labels =c('Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'),
+		col.lab='#1A232F', col.axis='#666D74')
+	axis(2, at = 1:7 / 6 - 0.18,
+		labels =1:7,
+		col.lab='#1A232F', col.axis='#666D74')
+	dev.off()
+
+
+	rampcols = colorRampPalette(c('#B91863','white', '#196CE1'))(11)# colors are 'blue' to 'red' but in CAi scheme
+	rampbreaks = c(seq(0,0.30, length.out = 6), seq(0.34,1,length.out=6))
+	png(paste0(dataOut_location, basinName, '_projectedOutputFigures\\tercileSummaryPlot_high.png'), width = 720, height = 720)
+	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
+	image(t(highTercHeatMap),
+		col = rampcols, breaks = rampbreaks,
+		main='% High Tercile Correct', ylab='Lead Time (months)', xlab='Month', xaxt='n', yaxt='n',
+		col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
+		family='A')
+	text(x=rep(1:12,each=7)/11 - 0.09, y=rep(1:7,12)/6 - 0.18, labels = paste0(round(highTercHeatMap * 100, 0), '%'))
+	axis(1, at=1:12 / 11 - 0.09,
+		labels =c('Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'),
+		col.lab='#1A232F', col.axis='#666D74')
+	axis(2, at = 1:7 / 6 - 0.18,
+		labels =1:7,
+		col.lab='#1A232F', col.axis='#666D74')
+	dev.off()
+
+
+	rampcols = colorRampPalette(c('#B91863','white', '#196CE1'))(11)# colors are 'blue' to 'red' but in CAi scheme
+	rampbreaks = c(seq(0,0.30, length.out = 6), seq(0.34,1,length.out=6))
+	png(paste0(dataOut_location, basinName, '_projectedOutputFigures\\tercileSummaryPlot_med.png'), width = 720, height = 720)
+	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
+	image(t(medTercHeatMap),
+		col = rampcols, breaks = rampbreaks,
+		main='% Med Tercile Correct', ylab='Lead Time (months)', xlab='Month', xaxt='n', yaxt='n',
+		col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
+		family='A')
+	text(x=rep(1:12,each=7)/11 - 0.09, y=rep(1:7,12)/6 - 0.18, labels = paste0(round(medTercHeatMap * 100, 0), '%'))
+	axis(1, at=1:12 / 11 - 0.09,
+		labels =c('Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'),
+		col.lab='#1A232F', col.axis='#666D74')
+	axis(2, at = 1:7 / 6 - 0.18,
+		labels =1:7,
+		col.lab='#1A232F', col.axis='#666D74')
+	dev.off()
+
+
+	rampcols = colorRampPalette(c('#B91863','white', '#196CE1'))(11)# colors are 'blue' to 'red' but in CAi scheme
+	rampbreaks = c(seq(0,0.30, length.out = 6), seq(0.34,1,length.out=6))
+	png(paste0(dataOut_location, basinName, '_projectedOutputFigures\\tercileSummaryPlot_low.png'), width = 720, height = 720)
+	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
+	image(t(lowTercHeatMap),
+		col = rampcols, breaks = rampbreaks,
+		main='% Low Tercile Correct', ylab='Lead Time (months)', xlab='Month', xaxt='n', yaxt='n',
+		col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
+		family='A')
+	text(x=rep(1:12,each=7)/11 - 0.09, y=rep(1:7,12)/6 - 0.18, labels = paste0(round(lowTercHeatMap * 100, 0), '%'))
+	axis(1, at=1:12 / 11 - 0.09,
+		labels =c('Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'),
+		col.lab='#1A232F', col.axis='#666D74')
+	axis(2, at = 1:7 / 6 - 0.18,
+		labels =1:7,
+		col.lab='#1A232F', col.axis='#666D74')
+	dev.off()
+	
 }
 
 
@@ -1509,12 +1683,15 @@ storageProjectionValidationAndPlotGeneration_f = function(
 							futureStor = reservoirVals[[monthsOut]]$stor[initialStorRow + monthsOut]
 #							totalOutflow = sum(reservoirVals[[monthsOut]]$Predictions[initialStorRow:(initialStorRow + monthsOut - 1)])
 #							predRatio = 1 * (1 / monthsOut)
-							predRation = reservoirR2s[monthsOut]
-							outflowCumsum = outflowCumsum + monthAvgResLoss[thisMonth + monthsOut - 1] * (1-predRatio) + 
-								predRatio * reservoirVals[[monthsOut]]$Predictions[initialStorRow + monthsOut - 1]
-
+							predRatio = reservoirR2s[monthsOut]
 							numDays = nrow(outputSubset)
 							predCumsum = predCumsum + mean(outputSubset$QinAcFt) * numDays
+
+							outflowCumsum = min(
+								outflowCumsum + monthAvgResLoss[thisMonth + monthsOut - 1] * (1-predRatio) + 
+									predRatio * reservoirVals[[monthsOut]]$Predictions[initialStorRow + monthsOut - 1],
+								initialStor + predCumsum)
+
 							predStor = initialStor + predCumsum - outflowCumsum
 							actStor = reservoirVals[[monthsOut]]$stor[initialStorRow + 1]
 

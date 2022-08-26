@@ -1,12 +1,8 @@
-<<<<<<< HEAD
-<<<<<<< HEAD
-## testing howfast
-
 	# example input data
-basinSymbol = 'PNF'
+basinSymbol = 'CLE'
 basinName = paste0(basinSymbol, '_atOutlet')
 infOrFNF = 'fnf' # fnf or inflow	
-gageLonLat = 	 c(-119.318, 36.845)
+gageLonLat = c(-122.765, 40.8225)
 				# for ENG: c(-121.270278, 39.240278)
 				# for ISB: c(-118.479, 35.650) 
 				# for PNF: c(-119.318, 36.845)
@@ -22,7 +18,7 @@ gageLonLat = 	 c(-119.318, 36.845)
 				# for SJF: c(-119.697,37.004) 
 				# for YRS: c(-121.292500, 39.223611) 
 				# for LEW: c(-122.800, 40.732)
-historicStreamflowFileLoc = "https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=PNF&SensorNums=8&dur_code=D&Start=1900-01-01&End=2022-08-01"
+historicStreamflowFileLoc =  "https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=CLE&SensorNums=8&dur_code=D&Start=1906-01-01&End=2022-08-01"
 	# for ENG: "https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=ENG&SensorNums=76&dur_code=D&Start=1900-01-01&End=2022-08-01"
 	# for ORO: "https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=ORO&SensorNums=8&dur_code=D&Start=1900-01-01&End=2022-08-01"
 	# for EXC: "https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=EXC&SensorNums=8&dur_code=D&Start=1900-01-01&End=2022-08-01"
@@ -142,13 +138,98 @@ modelCalibration_f(
 
 
 
+
+
+#########################################################################################################
+####	This section is for validating model performance 
+####
+#########################################################################################################
+
+	# step 4
+	# validate historical data and generate plots
+validationHistoricalOutput = validationAndPlotGeneration_f(
+	basinName = basinName,
+	climateInputsFileLoc = climateInputsFileLoc,	# seas5 / cfs / era5 / Recent .RData is appended in the function
+	pathToWatershedsGPKG = pathToWatershedsGPKG,
+	historicStreamflowFileLoc = historicStreamflowFileLoc,
+	dataOut_location = dataOut_location,
+	dataSource = 1)							# 1 for FNF from cal.gov,
+
+
+	# step 5
+	# import and convert multi projection climate data for validationAndPlotGeneration_f
+allWYs = 2002:2021
+for(thisWY in allWYs)	{
+	seas5MultiDataNCDF = paste0('J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\testing-multiple-forecasts-seas5_wy', thisWY, '.nc')
+	climateInputConversion_f(
+		pathToBasinBoundaryGPKG = pathToBasinBoundaryGPKG,
+		pathToWatershedsGPKG = pathToWatershedsGPKG,
+		basinName = basinName,
+		climateDataNCDF = seas5MultiDataNCDF,	####!!!!! change btw cfs and seas5
+		tempConversionFactor = NA,
+		pptConversionFactor = NA,
+		avgTempGiven = FALSE, 
+		multipleModels = FALSE,	# are there multiple models that need to be stored?
+		startDate = seas5MultiStartDate, 	# when does the clock of the netcdf start?
+		timeToDaysConversion = 1,	# convert time increments to days if necessary
+		dataOut_location = dataOut_location,
+		optionForPET = 1, 	# 1 = PET_fromTemp modified Pen-Mon, 
+		variableOrderOption = 'seas5Multi', 
+		precipName = 'tp_sum')	# other options include: tp, tp_sum	
+}
+
+
+	# step 6
+	# validate streamflow projection data and generate plots
+validationProjectionOutput = projectionValidationAndPlotGeneration_f(
+	basinName = basinName,
+	climateInputsFileLoc = climateInputsFileLoc,	# seas5 / cfs / era5 / Recent .RData is appended in the function
+	pathToWatershedsGPKG = pathToWatershedsGPKG,
+	historicStreamflowFileLoc = historicStreamflowFileLoc,
+	dataOut_location = dataOut_location,
+	dataSource = 1)							# 1 for FNF from cal.gov,
+
+
+
+#########################################################################################################
+####	This section is for linking streamflow models to reservoirs
+####
+#########################################################################################################
+	# step 7
+	# ML for predicting reservoir outflows
+reservoirOutflowCalVal = reservoirOutflowCalVal_f(
+	dataOut_location = dataOut_location,
+	basinName = basinName,
+	basinSymbol = basinSymbol,
+	infOrFNF = infOrFNF,
+	dataSource = 1, 			# 1 for FNF or inflow from cal.gov,
+	nTreeModel=500,
+	modelMetric = 'Rsquared',
+	modelMethod = 'rf',
+	metric="Rsquared",
+	numFolds = 5,
+	numRepeats = 30)
+
+	# step 8
+	# validation of combined model projections of total storage
+validationProjectedStorageOutput = storageProjectionValidationAndPlotGeneration_f(
+	basinName = basinName,
+	infOrFNF = infOrFNF,
+	climateInputsFileLoc = climateInputsFileLoc,	# seas5 / cfs / era5 / Recent .RData is appended in the function
+	pathToWatershedsGPKG = pathToWatershedsGPKG,
+	historicStreamflowFileLoc = historicStreamflowFileLoc,
+	dataOut_location = dataOut_location,
+	dataSource = 1)							# 1 for FNF from cal.gov,
+
+	
+	
 #########################################################################################################
 ####	This section is for running and making projections with a previously calibrated model
 ####
 #########################################################################################################
 					
 #########################################################################################################
-	# step 4
+	# step 9
 	# import and convert projection climate data
 recentEra5ClimateDataframe = climateInputConversion_f(
 	pathToBasinBoundaryGPKG = pathToBasinBoundaryGPKG,
@@ -205,7 +286,7 @@ seas5ClimateDataframe = climateInputConversion_f(
 saveRDS(seas5ClimateDataframe, paste0(climateInputsFileLoc, 'SEAS5.RData'))
 
 
-	# step 5 
+	# step 10 
 	# run the model with forecasting data
 	## Running the Model for Seasonal Forecasts 
 allForecastsOutput = seasonalForecast_f(
@@ -220,107 +301,19 @@ saveRDS(allForecastsOutput, paste0(climateInputsFileLoc, 'ForecastsFor_', foreca
 
 
 
-
-
-#########################################################################################################
-####	This section is for validating model performance 
-####
-#########################################################################################################
-
-	# step 6
-	# validate historical data and generate plots
-validationHistoricalOutput = validationAndPlotGeneration_f(
-	basinName = basinName,
-	climateInputsFileLoc = climateInputsFileLoc,	# seas5 / cfs / era5 / Recent .RData is appended in the function
-	pathToWatershedsGPKG = pathToWatershedsGPKG,
-	historicStreamflowFileLoc = historicStreamflowFileLoc,
-	dataOut_location = dataOut_location,
-	dataSource = 1)							# 1 for FNF from cal.gov,
-
-
-	# step 7
-	# import and convert multi projection climate data for validationAndPlotGeneration_f
-seas5MultiDataNCDF = 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\testing-multiple-forecasts-seas5-wy2019.nc'
-climateInputConversion_f(
-	pathToBasinBoundaryGPKG = pathToBasinBoundaryGPKG,
-	pathToWatershedsGPKG = pathToWatershedsGPKG,
-	basinName = basinName,
-	climateDataNCDF = seas5MultiDataNCDF,	####!!!!! change btw cfs and seas5
-	tempConversionFactor = NA,
-	pptConversionFactor = NA,
-	avgTempGiven = FALSE, 
-	multipleModels = FALSE,	# are there multiple models that need to be stored?
-	startDate = seas5MultiStartDate, 	# when does the clock of the netcdf start?
-	timeToDaysConversion = 1,	# convert time increments to days if necessary
-	dataOut_location = dataOut_location,
-	optionForPET = 1, 	# 1 = PET_fromTemp modified Pen-Mon, 
-	variableOrderOption = 'seas5Multi', 
-	precipName = 'tp_sum')	# other options include: tp, tp_sum	
-
-	# step 7b
-	# import and convert multi projection climate data for validationAndPlotGeneration_f
-	# now for a new wy
-seas5MultiDataNCDF = 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\testing-multiple-forecasts-seas5_wy2014.nc'
-climateInputConversion_f(
-	pathToBasinBoundaryGPKG = pathToBasinBoundaryGPKG,
-	pathToWatershedsGPKG = pathToWatershedsGPKG,
-	basinName = basinName,
-	climateDataNCDF = seas5MultiDataNCDF,	####!!!!! change btw cfs and seas5
-	tempConversionFactor = NA,
-	pptConversionFactor = NA,
-	avgTempGiven = FALSE, 
-	multipleModels = FALSE,	# are there multiple models that need to be stored?
-	startDate = seas5MultiStartDate, 	# when does the clock of the netcdf start?
-	timeToDaysConversion = 1,	# convert time increments to days if necessary
-	dataOut_location = dataOut_location,
-	optionForPET = 1, 	# 1 = PET_fromTemp modified Pen-Mon, 
-	variableOrderOption = 'seas5Multi', 
-	precipName = 'tp_sum')	# other options include: tp, tp_sum	
-
-
-
-	# step 8
-	# validate streamflow projection data and generate plots
-validationProjectionOutput = projectionValidationAndPlotGeneration_f(
-	basinName = basinName,
-	climateInputsFileLoc = climateInputsFileLoc,	# seas5 / cfs / era5 / Recent .RData is appended in the function
-	pathToWatershedsGPKG = pathToWatershedsGPKG,
-	historicStreamflowFileLoc = historicStreamflowFileLoc,
-	dataOut_location = dataOut_location,
-	dataSource = 1)							# 1 for FNF from cal.gov,
-
-
-
-#########################################################################################################
-####	This section is for linking streamflow models to reservoirs
-####
-#########################################################################################################
-	# step 9
-	# ML for predicting reservoir outflows
-reservoirOutflowCalVal = reservoirOutflowCalVal_f(
-	dataOut_location = dataOut_location,
-	basinName = basinName,
-	basinSymbol = basinSymbol,
-	infOrFNF = infOrFNF,
-	dataSource = 1, 			# 1 for FNF or inflow from cal.gov,
-	nTreeModel=500,
-	modelMetric = 'Rsquared',
-	modelMethod = 'rf',
-	metric="Rsquared",
-	numFolds = 5,
-	numRepeats = 30)
-
-	# step 10
-	# validation of combined model projections of total storage
-validationProjectedStorageOutput = storageProjectionValidationAndPlotGeneration_f(
-	basinName = basinName,
-	infOrFNF = infOrFNF,
-	climateInputsFileLoc = climateInputsFileLoc,	# seas5 / cfs / era5 / Recent .RData is appended in the function
-	pathToWatershedsGPKG = pathToWatershedsGPKG,
-	historicStreamflowFileLoc = historicStreamflowFileLoc,
-	dataOut_location = dataOut_location,
-	dataSource = 1)							# 1 for FNF from cal.gov,
-
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
 	
 	
 	
