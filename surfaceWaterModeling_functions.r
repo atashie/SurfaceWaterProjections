@@ -8,6 +8,11 @@ basinDelineation_f = function(
 	dataOut_location = 'save_file_location',
 	basinName = 'inster_basin_or_outlet_name')
 	{
+
+		# create the folder for storing outputs
+	if(!file.exists(paste0(dataOut_location)))	{
+			dir.create(file.path(paste0(dataOut_location)))
+	}
 	# check to make sure the basin has not already been delineated
 	if(file.exists(paste0(dataOut_location, "watershedBoundaries_", basinName, ".gpkg")))	{
 		print("This file already exists you big ole dummy!")
@@ -15,7 +20,7 @@ basinDelineation_f = function(
 
 		# load relevant libraries
 	library(sf)				# for geospatial data
-	sf::sf_use_s2(FALSE)	# for suppressing issue with intersecting spherical w flat
+	sf::sf_use_s2(FALSE)	# for suppressing issue with intersecting spherical w flat; this does not matter for the scale we are interested in
 	library(ncdf4)			# for loading netcdf that contains lat-lons of climate data
 	
 	
@@ -26,10 +31,11 @@ basinDelineation_f = function(
 	st_crs(gageLocation_asSF) = 4326
 	gageIntersection = as.numeric(st_intersects(gageLocation_asSF, st_buffer(basinAt12,0))) # keeps points
 	
+		# only the adjacent upstream watersheds is identified in the database, so first we identify the most downstream basin according to the intersection above
 	basinIDs = basinAt12$HYBAS_ID[gageIntersection]
 	basinAt12Remaining = basinAt12[-gageIntersection,]
 	
-		# identify all upstream watersheds
+		# then we search the database iteratively to identify each watershed upstream of the newly identified watershed, until there are not more upstream watersheds
 	while(any(basinIDs %in% basinAt12Remaining$NEXT_DOWN))	{
 		for(trueys in which(basinIDs %in% basinAt12Remaining$NEXT_DOWN))	{
 			newIDRows = which(basinAt12Remaining$NEXT_DOWN == basinIDs[trueys])
@@ -47,6 +53,7 @@ basinDelineation_f = function(
 	# creating new polygon based on merging all the upstream hydrobasins
 	delineatedBasin = st_sf(st_union(basinWatersheds))
 	
+		# save the watersheds both indivudually and as a single basin (st_union above) 
 	st_write(delineatedBasin, paste0(dataOut_location, "watershedBoundaries_", basinName, ".gpkg"), append=FALSE)
 	st_write(basinWatersheds, paste0(dataOut_location, "HydroBASINSdata_", basinName, ".gpkg"), append=FALSE)
 	}
@@ -83,19 +90,28 @@ climateInputConversion_f = function(
 	library(data.table)	# for data.table
 	if(optionForPET == 1) {library(EcoHydRology)}	# for PET_fromTemp
 
+		# creating the folder if it does not exist
+	if(!file.exists(paste0(dataOut_location)))	{
+			dir.create(file.path(paste0(dataOut_location)))
+	}
 	
+		# read in the previously delineated basins
 	delineatedBasin = st_read(pathToBasinBoundaryGPKG)
 	basinWatersheds = st_read(pathToWatershedsGPKG)
 
+		# identifying area of each subbasin for rescaling the 
 	basinArea = sum(basinWatersheds$SUB_AREA)
 
+		# routine for seas5 data
 	if(variableOrderOption == 'seas5')	{
-		# reading in the ncdfs
+			# reading in the ncdfs
 		ncin = nc_open(climateDataNCDF)
 
+			# current post processing of ncdfs results in some nas, so must remove these before proceeding
 		ncTmin = ncvar_get(ncin, 't2m_min'); if(any(is.na(ncTmin)))	{ncTmin[is.na(ncTmin)] = median(ncTmin, na.rm=TRUE)} 
 		ncTmax = ncvar_get(ncin, 't2m_max'); if(any(is.na(ncTmax)))	{ncTmax[is.na(ncTmax)] = median(ncTmax, na.rm=TRUE)} 
 		ncPPT = ncvar_get(ncin, precipName); if(any(is.na(ncPPT)))	{ncPPT[is.na(ncPPT)] = median(ncPPT, na.rm=TRUE)} 
+			# current CAi climate data pipeline does not include tavg, so must estimate using tmin and tmax
 		if(avgTempGiven)	{ncTavg = ncvar_get(ncin, 't2m_avg')
 		}	else {ncTavg = (ncTmin + ncTmax) / 2}	
 
@@ -104,10 +120,12 @@ climateInputConversion_f = function(
 		nc_lon = ncvar_get(ncin, 'longitude')
 		nc_date = startDate + timeToDaysConversion * ncvar_get(ncin, 'lead_time') # time is days after jan 1 1990
 
+			# list for storing time series of climate data
 		allClimateData = list()
 		for(numModels in 1:length(ncvar_get(ncin, 'member')))	{
 			allPPT = 0	; allTmin = 0	; allTmax = 0	; allPET = 0
 			for(numberOfWatersheds in 1:nrow(basinWatersheds))	{
+					#identify climate data closest to the centroid of the subbasin of interest
 				thisLonLat = st_coordinates(st_centroid(basinWatersheds[numberOfWatersheds, ]))
 				nearestLon = which.min(abs(thisLonLat[1] - nc_lon))
 				nearestLat = which.min(abs(thisLonLat[2] - nc_lat))
@@ -119,9 +137,11 @@ climateInputConversion_f = function(
 					theseTmin[theseTmin >= theseTmax] = theseTmax[theseTmin >= theseTmax] - 0.1
 				}
 				
+					# summing all climate variables; they normalized by basin area below
 				allTmin = allTmin +  theseTmin *  basinWatersheds$SUB_AREA[numberOfWatersheds]
 				allTmax = allTmax + theseTmax *  basinWatersheds$SUB_AREA[numberOfWatersheds]
 				allPPT = allPPT + ncPPT[ , nearestLon, nearestLat, numModels] *  basinWatersheds$SUB_AREA[numberOfWatersheds]
+					# since we don't currently ingest PET data, we arecalculating from a penman monteith eq
 				if(optionForPET == 1)	{
 					allPET = allPET + PET_fromTemp(yday(nc_date), theseTmax , theseTmin,
 						lat_radians =  min((thisLonLat[1,2]*pi/180), 1.1)) * 1000  *  basinWatersheds$SUB_AREA[numberOfWatersheds]	# output in m, convert to mm
@@ -135,17 +155,21 @@ climateInputConversion_f = function(
 			avgPPT = if(is.na(pptConversionFactor)) 	{allPPT / basinArea}	else	{pptConversionFactor * allPPT / basinArea}
 			avgPET = allPET / basinArea
 
+				# all climate data to be saved
 			allClimateData[[numModels]] = data.frame(Date = nc_date, Tmin = avgTmin, Tmax = avgTmax, Tavg = avgTavg, PPT = avgPPT, PET = avgPET)
 		}
 	}
 
+		# routine for era5 data
 	if(variableOrderOption == 'era5')	{
 			# reading in the ncdfs
 		ncin = nc_open(climateDataNCDF)
 
+			# current post processing of ncdfs results in some nas, so must remove these before proceeding
 		ncTmin = ncvar_get(ncin, 't2m_min'); if(any(is.na(ncTmin)))	{ncTmin[is.na(ncTmin)] = median(ncTmin, na.rm=TRUE)} 
 		ncTmax = ncvar_get(ncin, 't2m_max'); if(any(is.na(ncTmax)))	{ncTmax[is.na(ncTmax)] = median(ncTmax, na.rm=TRUE)} 
 		ncPPT = ncvar_get(ncin, precipName); if(any(is.na(ncPPT)))	{ncPPT[is.na(ncPPT)] = median(ncPPT, na.rm=TRUE)} 
+				# current CAi climate data pipeline does not include tavg, so must estimate using tmin and tmax
 		if(avgTempGiven)	{ncTavg = ncvar_get(ncin, 't2m_avg')
 		}	else {ncTavg = (ncTmin + ncTmax) / 2}	
 
@@ -160,9 +184,11 @@ climateInputConversion_f = function(
 			nearestLon = which.min(abs(thisLonLat[1] - nc_lon))
 			nearestLat = which.min(abs(thisLonLat[2] - nc_lat))
 					
+				# summing all climate variables; they normalized by basin area below
 			allTmin = allTmin + ncTmin[nearestLon, nearestLat, ] *  basinWatersheds$SUB_AREA[numberOfWatersheds]
 			allTmax = allTmax + ncTmax[nearestLon, nearestLat, ] *  basinWatersheds$SUB_AREA[numberOfWatersheds]
 			allPPT = allPPT + ncPPT[nearestLon, nearestLat, ] *  basinWatersheds$SUB_AREA[numberOfWatersheds]
+				# since we don't currently ingest PET data, we arecalculating from a penman monteith eq
 			if(optionForPET == 1)	{
 				allPET = allPET + PET_fromTemp(yday(nc_date), ncTmax[nearestLon, nearestLat, ], ncTmin[nearestLon, nearestLat, ],
 					lat_radians =  min((thisLonLat[1,2]*pi/180), 1.1)) * 1000  *  basinWatersheds$SUB_AREA[numberOfWatersheds]	# output in m, convert to mm
@@ -177,8 +203,9 @@ climateInputConversion_f = function(
 		avgPPT = if(is.na(pptConversionFactor)) 	{allPPT / basinArea}	else	{pptConversionFactor * allPPT / basinArea}
 		avgPET = allPET / basinArea
 		
-		# save data output
+			# save data output
 		allClimateData = data.frame(Date = nc_date, Tmin = avgTmin, Tmax = avgTmax, Tavg = avgTavg, PPT = avgPPT, PET = avgPET)
+		saveRDS(allClimateData, paste0(dataOut_location, basinName, '.RData'))
 	}
 	
 	if(variableOrderOption == 'seas5Multi')	{
@@ -212,6 +239,7 @@ climateInputConversion_f = function(
 			for(numModels in 1:length(ncvar_get(ncin, 'member')))	{
 				allPPT = 0	; allTmin = 0	; allTmax = 0	; allPET = 0
 				for(numberOfWatersheds in 1:nrow(basinWatersheds))	{
+						#identify climate data closest to the centroid of the subbasin of interest
 					thisLonLat = st_coordinates(st_centroid(basinWatersheds[numberOfWatersheds, ]))
 					nearestLon = which.min(abs(thisLonLat[1] - nc_lon))
 					nearestLat = which.min(abs(thisLonLat[2] - nc_lat))
@@ -223,9 +251,11 @@ climateInputConversion_f = function(
 						theseTmin[theseTmin >= theseTmax] = theseTmax[theseTmin >= theseTmax] - 0.1
 					}
 					
+						# summing all climate variables; they normalized by basin area below
 					allTmin = allTmin +  theseTmin *  basinWatersheds$SUB_AREA[numberOfWatersheds]
 					allTmax = allTmax + theseTmax *  basinWatersheds$SUB_AREA[numberOfWatersheds]
 					allPPT = allPPT + ncPPT[ , nearestLon, nearestLat, numModels, thisInitTime] *  basinWatersheds$SUB_AREA[numberOfWatersheds]
+						# since we don't currently ingest PET data, we arecalculating from a penman monteith eq
 					if(optionForPET == 1)	{
 						allPET = allPET + PET_fromTemp(yday(nc_date), theseTmax , theseTmin,
 							lat_radians =  min((thisLonLat[1,2]*pi/180), 1.1)) * 1000  *  basinWatersheds$SUB_AREA[numberOfWatersheds]	# output in m, convert to mm
@@ -239,6 +269,7 @@ climateInputConversion_f = function(
 				avgPPT = if(is.na(pptConversionFactor)) 	{allPPT / basinArea}	else	{pptConversionFactor * allPPT / basinArea}
 				avgPET = allPET / basinArea
 
+					# all climate data to be saved
 				allClimateData[[numModels]] = data.frame(Date = nc_date, Tmin = avgTmin, Tmax = avgTmax, Tavg = avgTavg, PPT = avgPPT, PET = avgPET)
 			}
 			saveRDS(allClimateData, paste0(dataOut_location, basinName, '_seas5MultiOutput\\SEAS5_startDate_', nc_date[1], '.RData'))
@@ -403,7 +434,10 @@ modelCalibration_f = function(
 			nseAll = rep(NA,minGoodRuns),
 			maeAll = rep(NA,minGoodRuns),
 			rmseAll = rep(NA,minGoodRuns),
-			biasAll = rep(NA,minGoodRuns)
+			biasAll = rep(NA,minGoodRuns),
+			mnthSumAbsBias = rep(NA,minGoodRuns),
+			mnthSumMAE = rep(NA,minGoodRuns),
+			mnthSumRMSE = rep(NA,minGoodRuns)
 		)
 
 
@@ -479,6 +513,19 @@ modelCalibration_f = function(
 					cal_out$maeAll[iter] = mae(HBVoutput$Qg, HBVoutput$historicQinmm)
 					cal_out$rmseAll[iter] = rmse(HBVoutput$Qg, HBVoutput$historicQinmm)
 					cal_out$biasAll[iter] = pbias(HBVoutput$Qg, HBVoutput$historicQinmm)
+						# calculating monthly metrics
+					HBVoutput$month = month(HBVoutput$Date)
+					HBVoutputMonth = subset(HBVoutput, month == 1)
+					cal_out$mnthSumAbsBias[iter] = abs(pbias(HBVoutputMonth$Qg, HBVoutputMonth$historicQinmm))
+					cal_out$mnthSumMAE[iter]  = mae(HBVoutputMonth$Qg, HBVoutputMonth$historicQinmm)
+					cal_out$mnthSumRMSE[iter] = rmse(HBVoutputMonth$Qg, HBVoutputMonth$historicQinmm)
+					for(thisMonth in 2:12)	{
+						HBVoutputMonth = subset(HBVoutput, month == thisMonth)
+						cal_out$mnthSumAbsBias[iter] = cal_out$mnthSumAbsBias[iter] + abs(pbias(HBVoutputMonth$Qg, HBVoutputMonth$historicQinmm))
+						cal_out$mnthSumMAE[iter]  = cal_out$mnthSumMAE[iter]  + mae(HBVoutputMonth$Qg, HBVoutputMonth$historicQinmm)
+						cal_out$mnthSumRMSE[iter] = cal_out$mnthSumRMSE[iter] + rmse(HBVoutputMonth$Qg, HBVoutputMonth$historicQinmm)
+					}
+							
 					
 					fwrite(cal_out, paste0(dataOut_location, "calibration_", basinName, ".csv"), append=FALSE)
 				}
@@ -514,11 +561,13 @@ seasonalForecast_f = function(
 		era5ClimateInput = as.data.table(readRDS(paste0(climateInputsFileLoc, 'Recent.RData')))
 		
 		calibratedVarsAll = subset(fread(paste0(dataOut_location, "calibration_", basinName, ".csv")), !is.na(kgeAll))
-		calibratedVars = tail(calibratedVarsAll[order(calibratedVarsAll$kgeAll), ], 20)
-		calibratedVars = rbind(calibratedVars, head(calibratedVarsAll[order(abs(calibratedVarsAll$biasAll)), ], 10))
-		calibratedVars = rbind(calibratedVars, tail(calibratedVarsAll[order(calibratedVarsAll$nseAll), ], 4))
-		calibratedVars = rbind(calibratedVars, head(calibratedVarsAll[order(calibratedVarsAll$maeAll), ], 4))
-		calibratedVars = rbind(calibratedVars, head(calibratedVarsAll[order(calibratedVarsAll$rmseAll), ], 2))	; rm(calibratedVarsAll)
+		calibratedVars = head(calibratedVarsAll[order(abs(calibratedVarsAll$mnthSumAbsBias)), ], 20)
+		calibratedVars = rbind(calibratedVars, head(calibratedVarsAll[order(abs(calibratedVarsAll$mnthSumMAE)), ], 5))
+		calibratedVars = rbind(calibratedVars, head(calibratedVarsAll[order(abs(calibratedVarsAll$mnthSumRMSE)), ], 5))
+		calibratedVars = rbind(calibratedVars, tail(calibratedVarsAll[order(calibratedVarsAll$kgeAll), ], 5)
+		calibratedVars = rbind(calibratedVars, tail(calibratedVarsAll[order(calibratedVarsAll$nseAll), ], 3))
+		calibratedVars = rbind(calibratedVars, head(calibratedVarsAll[order(calibratedVarsAll$maeAll), ], 2))	; rm(calibratedVarsAll)
+
 
 		historicStreamflow = as.data.table(read.csv(paste0(historicStreamflowFileLoc)))
 			# reading in and reformatting streamflow input 
@@ -533,7 +582,6 @@ seasonalForecast_f = function(
 			return("we need to figure out how to read in and normalize this streamflow data")
 		}
 
-	
 
 		lastHistData = last(era5ClimateInput$Date)
 		seas5Rows = (1 + which(as.character(seas5ClimateInput[[1]]$Date) == as.character(lastHistData))):length(seas5ClimateInput[[1]]$Date)
@@ -612,11 +660,13 @@ validationAndPlotGeneration_f = function(
 
 		
 		calibratedVarsAll = subset(fread(paste0(dataOut_location, "calibration_", basinName, ".csv")), !is.na(kgeAll))
-		calibratedVars = tail(calibratedVarsAll[order(calibratedVarsAll$kgeAll), ], 20)
-		calibratedVars = rbind(calibratedVars, head(calibratedVarsAll[order(abs(calibratedVarsAll$biasAll)), ], 10))
-		calibratedVars = rbind(calibratedVars, tail(calibratedVarsAll[order(calibratedVarsAll$nseAll), ], 4))
-		calibratedVars = rbind(calibratedVars, head(calibratedVarsAll[order(calibratedVarsAll$maeAll), ], 4))
-		calibratedVars = rbind(calibratedVars, head(calibratedVarsAll[order(calibratedVarsAll$rmseAll), ], 2))	; rm(calibratedVarsAll)
+		calibratedVars = head(calibratedVarsAll[order(abs(calibratedVarsAll$mnthSumAbsBias)), ], 20)
+		calibratedVars = rbind(calibratedVars, head(calibratedVarsAll[order(abs(calibratedVarsAll$mnthSumMAE)), ], 5))
+		calibratedVars = rbind(calibratedVars, head(calibratedVarsAll[order(abs(calibratedVarsAll$mnthSumRMSE)), ], 5))
+		calibratedVars = rbind(calibratedVars, tail(calibratedVarsAll[order(calibratedVarsAll$kgeAll), ], 5)
+		calibratedVars = rbind(calibratedVars, tail(calibratedVarsAll[order(calibratedVarsAll$nseAll), ], 3))
+		calibratedVars = rbind(calibratedVars, head(calibratedVarsAll[order(calibratedVarsAll$maeAll), ], 2))	; rm(calibratedVarsAll)
+
 
 		historicStreamflow = as.data.table(read.csv(paste0(historicStreamflowFileLoc)))
 			# reading in and reformatting streamflow input 
@@ -1320,6 +1370,9 @@ projectionValidationAndPlotGeneration_f = function(
 	highTercHeatMap = matrix(nrow=7, ncol=12)
 	lowTercHeatMap  = matrix(nrow=7, ncol=12)
 	medTercHeatMap  = matrix(nrow=7, ncol=12)
+	tercHighBarplot = matrix(nrow=3, ncol=7)
+	tercMedBarplot  = matrix(nrow=3, ncol=7)
+	tercLowBarplot  = matrix(nrow=3, ncol=7)
 	absMae25HeatMap = matrix(nrow=7, ncol=12)
 	absMae50HeatMap = matrix(nrow=7, ncol=12)
 	absMae75HeatMap = matrix(nrow=7, ncol=12)
@@ -1327,8 +1380,28 @@ projectionValidationAndPlotGeneration_f = function(
 	relMae50HeatMap = matrix(nrow=7, ncol=12)
 	relMae75HeatMap = matrix(nrow=7, ncol=12)
 	
-	for(ii in 1:12)	{
-		for(jj in 1:7)	{
+	
+	for(jj in 1:7)	{
+		highPredTerc  = subset(sumModPerf, predTerc == 3 & leadTime == jj)
+		medPredTerc   = subset(sumModPerf, predTerc == 2 & leadTime == jj)
+		lowPredTerc   = subset(sumModPerf, predTerc == 1 & leadTime == jj)
+		
+		tercHighBarplot[1:3,jj] = c(
+			length(which(highPredTerc$actTerc == 3)) / nrow(highPredTerc), 
+			length(which(highPredTerc$actTerc == 2)) / nrow(highPredTerc),
+			length(which(highPredTerc$actTerc == 1)) / nrow(highPredTerc))
+		
+		tercMedBarplot[1:3,jj] = c(
+			length(which(medPredTerc$actTerc == 3)) / nrow(medPredTerc), 
+			length(which(medPredTerc$actTerc == 2)) / nrow(medPredTerc),
+			length(which(medPredTerc$actTerc == 1)) / nrow(medPredTerc))
+
+		tercLowBarplot[1:3,jj] = c(
+			length(which(lowPredTerc$actTerc == 3)) / nrow(lowPredTerc), 
+			length(which(lowPredTerc$actTerc == 2)) / nrow(lowPredTerc),
+			length(which(lowPredTerc$actTerc == 1)) / nrow(lowPredTerc))
+
+		for(ii in 1:12)	{
 			subModPerf = subset(sumModPerf, month == ii & leadTime == jj)
 			
 			absMae25HeatMap[jj,ii] = median(subModPerf$predMAE25)
@@ -1347,6 +1420,9 @@ projectionValidationAndPlotGeneration_f = function(
 			lowTercHeatMap[jj,ii] = length(which(subLowModPerf$predTerc == 1)) / nrow(subLowModPerf)
 		}
 	}
+	row.names(tercHighBarplot) = c('high', 'med', 'low')
+	row.names(tercMedBarplot) = c('high', 'med', 'low')
+	row.names(tercLowBarplot) = c('high', 'med', 'low')
 	
 	rampcols = colorRampPalette(c('#B91863','white', '#196CE1'))(11) # colors are 'blue' to 'red' but in CAi scheme
 	rampbreaks = seq(-100, 100, length.out = 12)
@@ -1356,7 +1432,7 @@ projectionValidationAndPlotGeneration_f = function(
 	if(any(relMae50HeatMap > 100))	{relMae50HeatMap[which(relMae50HeatMap > 100)] = 99.9}
 	image(t(relMae50HeatMap),# Rowv = NA, Colv = NA, scale='none',
 		col = rev(rampcols), breaks = rampbreaks,
-		main='Relative MAE (% change)', ylab='Lead Time (months)', xlab='Month', xaxt='n', yaxt='n',
+		main='Relative MAE (% change)', ylab='Months Out', xlab='Month', xaxt='n', yaxt='n',
 		col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
 		family='A')
 	text(x=rep(1:12,each=7)/11 - 0.09, y=rep(1:7,12)/6 - 0.18, labels = paste0(round(relMae50HeatMap, 0), '%'))
@@ -1373,7 +1449,7 @@ projectionValidationAndPlotGeneration_f = function(
 	if(any(relMae25HeatMap > 100))	{relMae25HeatMap[which(relMae25HeatMap > 100)] = 99.9}
 	image(t(relMae25HeatMap),# Rowv = NA, Colv = NA, scale='none',
 		col = rev(rampcols), breaks = rampbreaks,
-		main='Relative MAE (% change)', ylab='Lead Time (months)', xlab='Month', xaxt='n', yaxt='n',
+		main='Relative MAE (% change)', ylab='Months Out', xlab='Month', xaxt='n', yaxt='n',
 		col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
 		family='A')
 	text(x=rep(1:12,each=7)/11 - 0.09, y=rep(1:7,12)/6 - 0.18, labels = paste0(round(relMae25HeatMap, 0), '%'))
@@ -1391,7 +1467,7 @@ projectionValidationAndPlotGeneration_f = function(
 	if(any(relMae75HeatMap > 100))	{relMae75HeatMap[which(relMae75HeatMap > 100)] = 99.9}
 	image(t(relMae75HeatMap),# Rowv = NA, Colv = NA, scale='none',
 		col = rev(rampcols), breaks = rampbreaks,
-		main='Relative MAE (% change)', ylab='Lead Time (months)', xlab='Month', xaxt='n', yaxt='n',
+		main='Relative MAE (% change)', ylab='Months Out', xlab='Month', xaxt='n', yaxt='n',
 		col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
 		family='A')
 	text(x=rep(1:12,each=7)/11 - 0.09, y=rep(1:7,12)/6 - 0.18, labels = paste0(round(relMae75HeatMap, 0), '%'))
@@ -1410,7 +1486,7 @@ projectionValidationAndPlotGeneration_f = function(
 	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
 	image(t(highTercHeatMap),
 		col = rampcols, breaks = rampbreaks,
-		main='% High Tercile Correct', ylab='Lead Time (months)', xlab='Month', xaxt='n', yaxt='n',
+		main='% High Tercile Correct', ylab='Months Out', xlab='Month', xaxt='n', yaxt='n',
 		col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
 		family='A')
 	text(x=rep(1:12,each=7)/11 - 0.09, y=rep(1:7,12)/6 - 0.18, labels = paste0(round(highTercHeatMap * 100, 0), '%'))
@@ -1429,7 +1505,7 @@ projectionValidationAndPlotGeneration_f = function(
 	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
 	image(t(medTercHeatMap),
 		col = rampcols, breaks = rampbreaks,
-		main='% Med Tercile Correct', ylab='Lead Time (months)', xlab='Month', xaxt='n', yaxt='n',
+		main='% Med Tercile Correct', ylab='Months Out', xlab='Month', xaxt='n', yaxt='n',
 		col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
 		family='A')
 	text(x=rep(1:12,each=7)/11 - 0.09, y=rep(1:7,12)/6 - 0.18, labels = paste0(round(medTercHeatMap * 100, 0), '%'))
@@ -1448,7 +1524,7 @@ projectionValidationAndPlotGeneration_f = function(
 	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
 	image(t(lowTercHeatMap),
 		col = rampcols, breaks = rampbreaks,
-		main='% Low Tercile Correct', ylab='Lead Time (months)', xlab='Month', xaxt='n', yaxt='n',
+		main='% Low Tercile Correct', ylab='Months Out', xlab='Month', xaxt='n', yaxt='n',
 		col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
 		family='A')
 	text(x=rep(1:12,each=7)/11 - 0.09, y=rep(1:7,12)/6 - 0.18, labels = paste0(round(lowTercHeatMap * 100, 0), '%'))
@@ -1459,6 +1535,56 @@ projectionValidationAndPlotGeneration_f = function(
 		labels =1:7,
 		col.lab='#1A232F', col.axis='#666D74')
 	dev.off()
+	
+	
+	png(paste0(dataOut_location, basinName, '_projectedOutputFigures\\tercileSummaryPlot_high.png'), width = 900, height = 720)
+	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
+	barplot(tercHighBarplot * 100, beside=TRUE, ylim=c(0,100),
+		col = c('#B91863', '#A9BF2C', '#039CE2'), 
+		main='High Tercile', ylab='% Tercile Correct', xlab='Lead Time', xaxt='n', yaxt='n',
+		col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
+		family='A')
+	axis(2, at=seq(0,100,20) ,
+		#labels = 3*(1:7),
+		col.lab='#1A232F', col.axis='#666D74')
+	axis(1, at=seq(3,(7*4), 4) -1.5 ,
+		labels = 1:7,
+		col.lab='#1A232F', col.axis='#666D74')
+	abline(h=100/3, col = '#666D74', lwd = 3, cex=1.5)
+	dev.off()
+	
+	png(paste0(dataOut_location, basinName, '_projectedOutputFigures\\tercileSummaryPlot_med.png'), width = 900, height = 720)
+	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
+	barplot(tercMedBarplot * 100, beside=TRUE, ylim=c(0,100),
+		col = c('#B91863', '#A9BF2C', '#039CE2'), 
+		main='Med Tercile', ylab='% Tercile Correct', xlab='Lead Time', xaxt='n', yaxt='n',
+		col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
+		family='A')
+	axis(2, at=seq(0,100,20) ,
+		#labels = 3*(1:7),
+		col.lab='#1A232F', col.axis='#666D74')
+	axis(1, at=seq(3,(7*4), 4) -1.5 ,
+		labels = 1:7,
+		col.lab='#1A232F', col.axis='#666D74')
+	abline(h=100/3, col = '#666D74', lwd = 3, cex=1.5)
+	dev.off()
+
+	png(paste0(dataOut_location, basinName, '_projectedOutputFigures\\tercileSummaryPlot_low.png'), width = 900, height = 720)
+	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
+	barplot(tercLowBarplot * 100, beside=TRUE, ylim=c(0,100),
+		col = c('#B91863', '#A9BF2C', '#039CE2'), 
+		main='Low Tercile', ylab='% Tercile Correct', xlab='Lead Time', xaxt='n', yaxt='n',
+		col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
+		family='A')
+	axis(2, at=seq(0,100,20) ,
+		#labels = 3*(1:7),
+		col.lab='#1A232F', col.axis='#666D74')
+	axis(1, at=seq(3,(7*4), 4) -1.5 ,
+		labels = 1:7,
+		col.lab='#1A232F', col.axis='#666D74')
+	abline(h=100/3, col = '#666D74', lwd = 3, cex=1.5)
+	dev.off()
+
 	
 }
 

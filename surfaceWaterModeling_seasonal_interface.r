@@ -1,8 +1,8 @@
 	# example input data
-basinSymbol = 'CLE'
+basinSymbol = 'BND'
 basinName = paste0(basinSymbol, '_atOutlet')
 infOrFNF = 'fnf' # fnf or inflow	
-gageLonLat = c(-122.765, 40.8225)
+gageLonLat =  c(-122.185556, 40.288611) 
 				# for ENG: c(-121.270278, 39.240278)
 				# for ISB: c(-118.479, 35.650) 
 				# for PNF: c(-119.318, 36.845)
@@ -18,7 +18,7 @@ gageLonLat = c(-122.765, 40.8225)
 				# for SJF: c(-119.697,37.004) 
 				# for YRS: c(-121.292500, 39.223611) 
 				# for LEW: c(-122.800, 40.732)
-historicStreamflowFileLoc =  "https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=CLE&SensorNums=8&dur_code=D&Start=1906-01-01&End=2022-08-01"
+historicStreamflowFileLoc =  "https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=BND&SensorNums=8&dur_code=D&Start=1900-01-01&End=2022-08-01"
 	# for ENG: "https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=ENG&SensorNums=76&dur_code=D&Start=1900-01-01&End=2022-08-01"
 	# for ORO: "https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=ORO&SensorNums=8&dur_code=D&Start=1900-01-01&End=2022-08-01"
 	# for EXC: "https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=EXC&SensorNums=8&dur_code=D&Start=1900-01-01&End=2022-08-01"
@@ -37,7 +37,7 @@ historicStreamflowFileLoc =  "https://cdec.water.ca.gov/dynamicapp/req/CSVDataSe
 		# to search for Cali reservoirs: https://cdec.water.ca.gov/dynamicapp/wsSensorData
 
 basinATLAS_locationAndFile = 'C:\\Users\\arik\\Documents\\PhD Research\\D4\\BasinATLAS_Data_v10\\BasinATLAS_v10.gdb'
-dataOut_location = 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\'
+dataOut_location = paste0('J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\', basinName, '\\')
 pathToBasinBoundaryGPKG = paste0(dataOut_location, "watershedBoundaries_", basinName, ".gpkg")
 pathToWatershedsGPKG =  paste0(dataOut_location, "HydroBASINSdata_", basinName, ".gpkg")
 seas5DataNCDF = 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\cali-seas5.nc'
@@ -116,7 +116,7 @@ modelCalibration_f(
 	dataOut_location = dataOut_location,					#'save_file_location',
 	dataSource = 1,											# 1 for FNF from cal.gov, 
 	numberOfRuns = 200000,
-	targetMetric = 1, 										# 1 = KGE, 2 = NSE, 3 = MAE, 4 = RMSE, 5 = bias
+	targetMetric = 1, 										# 1 = KGE; other options not included yey
 	targetMetricValue = 0.81,								# threshold for considering a value good
 	minGoodRuns = 100,										# number of 'good' calibrations before the routine stops
 	sfcf = c(runif(5000, .2, 1), runif(5000, 1, 3)),			#snowfall correction factor [-]
@@ -132,7 +132,7 @@ modelCalibration_f(
 	k1   = c(runif(5000, .005, .09), (runif(5000, .09, .5))),	#middle bucket drainage
 	k2   = c(runif(5000, .0001, .01), (runif(5000, .01, .1))),#bottom bucket drainage	
 	uz1  = c(runif(5000, .22, 10), (runif(5000, 10, 40))),	#max flux rate from STZ to SUZ in mm/d
-	perc = c(runif(5000, .1, .5), (runif(5000, .5, 20)))
+	perc = c(runif(5000, .1, .5), (runif(5000, .5, 20)))	# max flux rate from SUZ to SLZ in mm/d
 )	
 
 
