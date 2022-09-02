@@ -1,8 +1,8 @@
 	# example input data
-basinSymbol = 'BND'
-basinName = paste0(basinSymbol, '_atOutlet')
-infOrFNF = 'fnf' # fnf or inflow	
-gageLonLat =  c(-122.185556, 40.288611) 
+basinSymbol = 'EXC'
+basinName = basinSymbol # paste0(basinSymbol, '_atOutlet')
+infOrFNF = 'inflow' # fnf or inflow	
+gageLonLat =  c(-120.264, 37.591) 
 				# for ENG: c(-121.270278, 39.240278)
 				# for ISB: c(-118.479, 35.650) 
 				# for PNF: c(-119.318, 36.845)
@@ -18,9 +18,10 @@ gageLonLat =  c(-122.185556, 40.288611)
 				# for SJF: c(-119.697,37.004) 
 				# for YRS: c(-121.292500, 39.223611) 
 				# for LEW: c(-122.800, 40.732)
-historicStreamflowFileLoc =  "https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=BND&SensorNums=8&dur_code=D&Start=1900-01-01&End=2022-08-01"
+historicStreamflowFileLoc =   paste0("https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=", basinSymbol, "&SensorNums=76&dur_code=D&Start=1900-01-01&End=2022-08-01")
+historicReservoirFileLoc = paste0("https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=", basinSymbol, "&SensorNums=15&dur_code=D&Start=1900-01-01&End=2022-08-01")
 	# for ENG: "https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=ENG&SensorNums=76&dur_code=D&Start=1900-01-01&End=2022-08-01"
-	# for ORO: "https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=ORO&SensorNums=8&dur_code=D&Start=1900-01-01&End=2022-08-01"
+	# for ORO: "https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=ORO&SensorNums=8&dur_code=D&Start=1900-01-01&End=2022-08-01" # also has fnf
 	# for EXC: "https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=EXC&SensorNums=8&dur_code=D&Start=1900-01-01&End=2022-08-01"
 	# for TRM: "https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=TRM&SensorNums=8&dur_code=D&Start=1900-01-01&End=2022-08-01"
 	# for PNF: "https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=PNF&SensorNums=8&dur_code=D&Start=1900-01-01&End=2022-08-01"
@@ -36,17 +37,20 @@ historicStreamflowFileLoc =  "https://cdec.water.ca.gov/dynamicapp/req/CSVDataSe
 	# for LEW: 'https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=LEW&SensorNums=76&dur_code=D&Start=1900-01-01&End=2022-08-01'
 		# to search for Cali reservoirs: https://cdec.water.ca.gov/dynamicapp/wsSensorData
 
-basinATLAS_locationAndFile = 'C:\\Users\\arik\\Documents\\PhD Research\\D4\\BasinATLAS_Data_v10\\BasinATLAS_v10.gdb'
+	# defining pathways to basin-specific files
 dataOut_location = paste0('J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\', basinName, '\\')
-pathToBasinBoundaryGPKG = paste0(dataOut_location, "watershedBoundaries_", basinName, ".gpkg")
-pathToWatershedsGPKG =  paste0(dataOut_location, "HydroBASINSdata_", basinName, ".gpkg")
+#pathToBasinBoundaryGPKG = paste0(dataOut_location, "watershedBoundaries_", basinName, ".gpkg")
+#pathToWatershedsGPKG =  paste0(dataOut_location, "HydroBASINSdata_", basinName, ".gpkg")
+#climateInputsFileLoc = paste0(dataOut_location, 'processedClimateData')
+forecastDate = '28JUL2022'
+	# these file locations remain the same for all watersheds
 seas5DataNCDF = 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\cali-seas5.nc'
 cfsDataNCDF = 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\cali-cfs.nc'
 era5DataHistoricalNCDF = 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\cali-hist-era5.nc'
 era5DataRecentNCDF = 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\cali-recent-era5.nc'
 seas5MultiDataNCDF = 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\testing-multiple-forecasts-seas5-wy2019.nc'
-climateInputsFileLoc = paste0(dataOut_location, basinName, '_processedClimateData')
-forecastDate = '28JUL2022'
+basinATLAS_locationAndFile = 'C:\\Users\\arik\\Documents\\PhD Research\\D4\\BasinATLAS_Data_v10\\BasinATLAS_v10.gdb'
+
 	
 	
 	# reading in the ncdfs to ensure timing / structure 
@@ -88,9 +92,9 @@ basinDelineation_f(
 #########################################################################################################
 	# step 2
 	# import and convert historical climate data
-climateDataframe =	climateInputConversion_f(
-	pathToBasinBoundaryGPKG = pathToBasinBoundaryGPKG,
-	pathToWatershedsGPKG = pathToWatershedsGPKG,
+climateInputConversion_f(
+#	pathToBasinBoundaryGPKG = pathToBasinBoundaryGPKG,
+#	pathToWatershedsGPKG = pathToWatershedsGPKG,
 	basinName = basinName,
 	climateDataNCDF = era5DataHistoricalNCDF,
 	tempConversionFactor = NA,
@@ -104,35 +108,31 @@ climateDataframe =	climateInputConversion_f(
 	variableOrderOption = 'era5', # # 'era5' = [longitude,latitude,time]; 'cfs' = [longitude, latitude, member, step]; 'seas5' = [longitude, latitude, member, lead_time] for tmax and tmin but [lead_time, longitude, latitude, member] for tp_sum]
 	precipName = 'tp_sum')	# other options include: tp, tp_sum	
 	
-saveRDS(climateDataframe, paste0(climateInputsFileLoc, 'Historical.RData'))
-
 #########################################################################################################
 	# step 3 
 	# calibrate model
 modelCalibration_f(
-	climateInputsFileLoc = climateInputsFileLoc,			#'file_location_and_name.RData',
 	historicStreamflowFileLoc = historicStreamflowFileLoc,	#'https://someplace.gov',
-	pathToWatershedsGPKG = pathToWatershedsGPKG,			#'file_location_and_name.gpkg',
 	dataOut_location = dataOut_location,					#'save_file_location',
 	dataSource = 1,											# 1 for FNF from cal.gov, 
 	numberOfRuns = 200000,
 	targetMetric = 1, 										# 1 = KGE; other options not included yey
 	targetMetricValue = 0.81,								# threshold for considering a value good
-	minGoodRuns = 100,										# number of 'good' calibrations before the routine stops
-	sfcf = c(runif(5000, .2, 1), runif(5000, 1, 3)),			#snowfall correction factor [-]
-	tr   = runif(10000, -6, 5),								#solid and liquid precipitation threshold temperature [C]
+	minGoodRuns = 200,										# number of 'good' calibrations before the routine stops
+	sfcf = c(runif(50000, .2, 1), runif(50000, 1, 3)),			#snowfall correction factor [-]
+	tr   = runif(100000, -6, 5),								#solid and liquid precipitation threshold temperature [C]
 	tt   = runif(10000, -5, 6),								#melt temperature [C]
-	fm   = c(runif(5000, .2, 1.5), (runif(5000, 1.5, 8))),	#snowmelt factor [mm/C]
-	fi   = c(runif(5000, .2, 1.5), (runif(5000, 1.5, 10))),	#icemelt factor [mm/C]
-	fic  = runif(10000, 2, 10),								#debris-covered icemelt factor [mm/C]
-	fc   = c(runif(5000, 25, 150), (runif(5000, 150, 1200))),	#field capacity
-	lp   = runif(10000, .2, 0.999),								#parameter to actual ET
-	beta_soils = runif(10000, 1, 3),							#beta - exponential value for nonlinear relations between soil storage and runoff
-	k0   = c(runif(5000, .05, .5), (runif(5000, .5, 0.999))),		#top bucket drainage
-	k1   = c(runif(5000, .005, .09), (runif(5000, .09, .5))),	#middle bucket drainage
-	k2   = c(runif(5000, .0001, .01), (runif(5000, .01, .1))),#bottom bucket drainage	
-	uz1  = c(runif(5000, .22, 10), (runif(5000, 10, 40))),	#max flux rate from STZ to SUZ in mm/d
-	perc = c(runif(5000, .1, .5), (runif(5000, .5, 20)))	# max flux rate from SUZ to SLZ in mm/d
+	fm   = c(runif(50000, .2, 1.5), (runif(50000, 1.5, 8))),	#snowmelt factor [mm/C]
+	fi   = c(runif(50000, .2, 1.5), (runif(50000, 1.5, 10))),	#icemelt factor [mm/C]
+	fic  = runif(100000, 2, 10),								#debris-covered icemelt factor [mm/C]
+	fc   = c(runif(50000, 25, 150), (runif(50000, 150, 1200))),	#field capacity
+	lp   = runif(100000, .2, 0.999),								#parameter to actual ET
+	beta_soils = runif(100000, 1, 3),							#beta - exponential value for nonlinear relations between soil storage and runoff
+	k0   = c(runif(50000, .05, .5), (runif(50000, .5, 0.999))),		#top bucket drainage
+	k1   = c(runif(50000, .005, .09), (runif(50000, .09, .5))),	#middle bucket drainage
+	k2   = c(runif(50000, .0001, .01), (runif(50000, .01, .1))),#bottom bucket drainage	
+	uz1  = c(runif(50000, .22, 10), (runif(50000, 10, 40))),	#max flux rate from STZ to SUZ in mm/d
+	perc = c(runif(50000, .1, .5), (runif(50000, .5, 20)))	# max flux rate from SUZ to SLZ in mm/d
 )	
 
 
@@ -150,7 +150,6 @@ modelCalibration_f(
 validationHistoricalOutput = validationAndPlotGeneration_f(
 	basinName = basinName,
 	climateInputsFileLoc = climateInputsFileLoc,	# seas5 / cfs / era5 / Recent .RData is appended in the function
-	pathToWatershedsGPKG = pathToWatershedsGPKG,
 	historicStreamflowFileLoc = historicStreamflowFileLoc,
 	dataOut_location = dataOut_location,
 	dataSource = 1)							# 1 for FNF from cal.gov,
@@ -162,14 +161,11 @@ allWYs = 2002:2021
 for(thisWY in allWYs)	{
 	seas5MultiDataNCDF = paste0('J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\testing-multiple-forecasts-seas5_wy', thisWY, '.nc')
 	climateInputConversion_f(
-		pathToBasinBoundaryGPKG = pathToBasinBoundaryGPKG,
-		pathToWatershedsGPKG = pathToWatershedsGPKG,
 		basinName = basinName,
-		climateDataNCDF = seas5MultiDataNCDF,	####!!!!! change btw cfs and seas5
+		climateDataNCDF = seas5MultiDataNCDF,
 		tempConversionFactor = NA,
 		pptConversionFactor = NA,
 		avgTempGiven = FALSE, 
-		multipleModels = FALSE,	# are there multiple models that need to be stored?
 		startDate = seas5MultiStartDate, 	# when does the clock of the netcdf start?
 		timeToDaysConversion = 1,	# convert time increments to days if necessary
 		dataOut_location = dataOut_location,
@@ -183,11 +179,9 @@ for(thisWY in allWYs)	{
 	# validate streamflow projection data and generate plots
 validationProjectionOutput = projectionValidationAndPlotGeneration_f(
 	basinName = basinName,
-	climateInputsFileLoc = climateInputsFileLoc,	# seas5 / cfs / era5 / Recent .RData is appended in the function
-	pathToWatershedsGPKG = pathToWatershedsGPKG,
 	historicStreamflowFileLoc = historicStreamflowFileLoc,
 	dataOut_location = dataOut_location,
-	dataSource = 1)							# 1 for FNF from cal.gov,
+	dataSource = 1)							# 1 for cal.gov,
 
 
 
@@ -199,10 +193,11 @@ validationProjectionOutput = projectionValidationAndPlotGeneration_f(
 	# ML for predicting reservoir outflows
 reservoirOutflowCalVal = reservoirOutflowCalVal_f(
 	dataOut_location = dataOut_location,
+	historicReservoirFileLoc = 'insert_file_loc_here.com',
+	historicStreamflowFileLoc = 'insert_file_loc_here.com',
 	basinName = basinName,
 	basinSymbol = basinSymbol,
-	infOrFNF = infOrFNF,
-	dataSource = 1, 			# 1 for FNF or inflow from cal.gov,
+	dataSource = 1, 			# 1 for cal.gov,
 	nTreeModel=500,
 	modelMetric = 'Rsquared',
 	modelMethod = 'rf',
@@ -214,7 +209,6 @@ reservoirOutflowCalVal = reservoirOutflowCalVal_f(
 	# validation of combined model projections of total storage
 validationProjectedStorageOutput = storageProjectionValidationAndPlotGeneration_f(
 	basinName = basinName,
-	infOrFNF = infOrFNF,
 	climateInputsFileLoc = climateInputsFileLoc,	# seas5 / cfs / era5 / Recent .RData is appended in the function
 	pathToWatershedsGPKG = pathToWatershedsGPKG,
 	historicStreamflowFileLoc = historicStreamflowFileLoc,
@@ -231,9 +225,9 @@ validationProjectedStorageOutput = storageProjectionValidationAndPlotGeneration_
 #########################################################################################################
 	# step 9
 	# import and convert projection climate data
-recentEra5ClimateDataframe = climateInputConversion_f(
-	pathToBasinBoundaryGPKG = pathToBasinBoundaryGPKG,
-	pathToWatershedsGPKG = pathToWatershedsGPKG,
+climateInputConversion_f(
+#	pathToBasinBoundaryGPKG = pathToBasinBoundaryGPKG,
+#	pathToWatershedsGPKG = pathToWatershedsGPKG,
 	basinName = basinName,
 	climateDataNCDF = era5DataRecentNCDF,	####!!!!! change btw cfs and seas5
 	tempConversionFactor = NA,
@@ -247,7 +241,6 @@ recentEra5ClimateDataframe = climateInputConversion_f(
 	variableOrderOption = 'era5', # # 'era5' = [longitude,latitude,time]; 'cfs' = [longitude, latitude, member, step]; 'seas5' = [longitude, latitude, member, lead_time] for tmax and tmin but [lead_time, longitude, latitude, member] for tp_sum]
 	precipName = 'tp_sum')	# other options include: tp, tp_sum	
 	
-saveRDS(recentEra5ClimateDataframe, paste0(climateInputsFileLoc, 'Recent.RData'))
 
 #cfsClimateDataframe = climateInputConversion_f(
 #	pathToBasinBoundaryGPKG = pathToBasinBoundaryGPKG,
@@ -267,9 +260,9 @@ saveRDS(recentEra5ClimateDataframe, paste0(climateInputsFileLoc, 'Recent.RData')
 
 #saveRDS(cfsClimateDataframe, paste0(climateInputsFileLoc, 'CFS.RData'))
 
-seas5ClimateDataframe = climateInputConversion_f(
-	pathToBasinBoundaryGPKG = pathToBasinBoundaryGPKG,
-	pathToWatershedsGPKG = pathToWatershedsGPKG,
+climateInputConversion_f(
+#	pathToBasinBoundaryGPKG = pathToBasinBoundaryGPKG,
+#	pathToWatershedsGPKG = pathToWatershedsGPKG,
 	basinName = basinName,
 	climateDataNCDF = seas5DataNCDF,	####!!!!! change btw cfs and seas5
 	tempConversionFactor = NA,
@@ -283,16 +276,12 @@ seas5ClimateDataframe = climateInputConversion_f(
 	variableOrderOption = 'seas5', # 'era5' = [longitude,latitude,time]; 'cfs' = [longitude, latitude, member, step]; 'seas5' = [longitude, latitude, member, lead_time] for tmax and tmin but [lead_time, longitude, latitude, member] for tp_sum]
 	precipName = 'tp_sum')	# other options include: tp, tp_sum	
 
-saveRDS(seas5ClimateDataframe, paste0(climateInputsFileLoc, 'SEAS5.RData'))
-
 
 	# step 10 
 	# run the model with forecasting data
 	## Running the Model for Seasonal Forecasts 
 allForecastsOutput = seasonalForecast_f(
 	basinName = basinName,
-	climateInputsFileLoc = climateInputsFileLoc,	# seas5 / cfs / era5 / Recent .RData is appended in the function
-	pathToWatershedsGPKG = pathToWatershedsGPKG,
 	historicStreamflowFileLoc = historicStreamflowFileLoc,
 	dataOut_location = dataOut_location,
 	dataSource = 1)							# 1 for FNF from cal.gov,

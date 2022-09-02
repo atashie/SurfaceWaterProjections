@@ -14,7 +14,7 @@ basinDelineation_f = function(
 			dir.create(file.path(paste0(dataOut_location)))
 	}
 	# check to make sure the basin has not already been delineated
-	if(file.exists(paste0(dataOut_location, "watershedBoundaries_", basinName, ".gpkg")))	{
+	if(file.exists(paste0(dataOut_location, "HydroBASINSdata_", basinName, ".gpkg")))	{
 		print("This file already exists you big ole dummy!")
 	}	else	{
 
@@ -68,14 +68,11 @@ basinDelineation_f = function(
 	# function for selecting climate inputs and converting to appropriate units
 
 climateInputConversion_f = function(
-	pathToBasinBoundaryGPKG = 'file_location_and_name.gpkg',
-	pathToWatershedsGPKG = 'file_location_and_name.gpkg',
 	basinName = 'inster_basin_or_outlet_name',
 	climateDataNCDF = 'file_location_and_name.nc',
 	tempConversionFactor = NA,
 	pptConversionFactor = NA,
 	avgTempGiven = FALSE, 
-	multipleModels = FALSE,	# are there multiple models that need to be stored?
 	startDate = as.Date("1990-01-01"), 	# when does the clock of the netcdf start?
 	timeToDaysConversion = 1,	# convert time increments to days if necessary
 	dataOut_location = 'save_file_location',
@@ -87,154 +84,40 @@ climateInputConversion_f = function(
 	library(sf)				# for geospatial data
 	sf::sf_use_s2(FALSE)	# for suppressing issue with intersecting spherical w flat
 	library(ncdf4)			# for loading netcdf that contains lat-lons of climate data
-	library(data.table)	# for data.table
+	library(data.table)		# for data.frame and fread
 	if(optionForPET == 1) {library(EcoHydRology)}	# for PET_fromTemp
 
 		# creating the folder if it does not exist
-	if(!file.exists(paste0(dataOut_location)))	{
-			dir.create(file.path(paste0(dataOut_location)))
-	}
-	
-		# read in the previously delineated basins
-	delineatedBasin = st_read(pathToBasinBoundaryGPKG)
-	basinWatersheds = st_read(pathToWatershedsGPKG)
+	if(!file.exists(paste0(dataOut_location, "HydroBASINSdata_", basinName, ".gpkg"))) {
+		print('Gotta delineate the basin first!!')
+	} else {
+		
+			# read in the previously delineated basins
+		basinWatersheds = st_read(paste0(dataOut_location, "HydroBASINSdata_", basinName, ".gpkg"))
 
-		# identifying area of each subbasin for rescaling the 
-	basinArea = sum(basinWatersheds$SUB_AREA)
+			# identifying area of each subbasin for rescaling the 
+		basinArea = sum(basinWatersheds$SUB_AREA)
 
-		# routine for seas5 data
-	if(variableOrderOption == 'seas5')	{
-			# reading in the ncdfs
-		ncin = nc_open(climateDataNCDF)
+		######################################################################################################################
+			# routine for seas5 monthly forecast data
+		if(variableOrderOption == 'seas5')	{
+				# reading in the ncdfs
+			ncin = nc_open(climateDataNCDF)
 
-			# current post processing of ncdfs results in some nas, so must remove these before proceeding
-		ncTmin = ncvar_get(ncin, 't2m_min'); if(any(is.na(ncTmin)))	{ncTmin[is.na(ncTmin)] = median(ncTmin, na.rm=TRUE)} 
-		ncTmax = ncvar_get(ncin, 't2m_max'); if(any(is.na(ncTmax)))	{ncTmax[is.na(ncTmax)] = median(ncTmax, na.rm=TRUE)} 
-		ncPPT = ncvar_get(ncin, precipName); if(any(is.na(ncPPT)))	{ncPPT[is.na(ncPPT)] = median(ncPPT, na.rm=TRUE)} 
-			# current CAi climate data pipeline does not include tavg, so must estimate using tmin and tmax
-		if(avgTempGiven)	{ncTavg = ncvar_get(ncin, 't2m_avg')
-		}	else {ncTavg = (ncTmin + ncTmax) / 2}	
-
-			# assuming all lat / lon structures are the same
-		nc_lat = ncvar_get(ncin, 'latitude')
-		nc_lon = ncvar_get(ncin, 'longitude')
-		nc_date = startDate + timeToDaysConversion * ncvar_get(ncin, 'lead_time') # time is days after jan 1 1990
-
-			# list for storing time series of climate data
-		allClimateData = list()
-		for(numModels in 1:length(ncvar_get(ncin, 'member')))	{
-			allPPT = 0	; allTmin = 0	; allTmax = 0	; allPET = 0
-			for(numberOfWatersheds in 1:nrow(basinWatersheds))	{
-					#identify climate data closest to the centroid of the subbasin of interest
-				thisLonLat = st_coordinates(st_centroid(basinWatersheds[numberOfWatersheds, ]))
-				nearestLon = which.min(abs(thisLonLat[1] - nc_lon))
-				nearestLat = which.min(abs(thisLonLat[2] - nc_lat))
-			
-					# Tmax is sometimes < Tmin, so need to adjust before running for PET
-				theseTmin = ncTmin[nearestLon, nearestLat, numModels, ]
-				theseTmax = ncTmax[nearestLon, nearestLat, numModels, ]
-				if(any(theseTmin >= theseTmax))	{
-					theseTmin[theseTmin >= theseTmax] = theseTmax[theseTmin >= theseTmax] - 0.1
-				}
-				
-					# summing all climate variables; they normalized by basin area below
-				allTmin = allTmin +  theseTmin *  basinWatersheds$SUB_AREA[numberOfWatersheds]
-				allTmax = allTmax + theseTmax *  basinWatersheds$SUB_AREA[numberOfWatersheds]
-				allPPT = allPPT + ncPPT[ , nearestLon, nearestLat, numModels] *  basinWatersheds$SUB_AREA[numberOfWatersheds]
-					# since we don't currently ingest PET data, we arecalculating from a penman monteith eq
-				if(optionForPET == 1)	{
-					allPET = allPET + PET_fromTemp(yday(nc_date), theseTmax , theseTmin,
-						lat_radians =  min((thisLonLat[1,2]*pi/180), 1.1)) * 1000  *  basinWatersheds$SUB_AREA[numberOfWatersheds]	# output in m, convert to mm
-				}	else	{
-					print('need to figure this one out later')
-				}
-			}
-			avgTmin	= if(is.na(tempConversionFactor))	{allTmin / basinArea}	else	{tempConversionFactor + allTmin / basinArea}
-			avgTmax = if(is.na(tempConversionFactor)) 	{allTmax / basinArea}	else	{tempConversionFactor + allTmax / basinArea}
-			avgTavg = (avgTmin + avgTmax) / 2
-			avgPPT = if(is.na(pptConversionFactor)) 	{allPPT / basinArea}	else	{pptConversionFactor * allPPT / basinArea}
-			avgPET = allPET / basinArea
-
-				# all climate data to be saved
-			allClimateData[[numModels]] = data.frame(Date = nc_date, Tmin = avgTmin, Tmax = avgTmax, Tavg = avgTavg, PPT = avgPPT, PET = avgPET)
-		}
-	}
-
-		# routine for era5 data
-	if(variableOrderOption == 'era5')	{
-			# reading in the ncdfs
-		ncin = nc_open(climateDataNCDF)
-
-			# current post processing of ncdfs results in some nas, so must remove these before proceeding
-		ncTmin = ncvar_get(ncin, 't2m_min'); if(any(is.na(ncTmin)))	{ncTmin[is.na(ncTmin)] = median(ncTmin, na.rm=TRUE)} 
-		ncTmax = ncvar_get(ncin, 't2m_max'); if(any(is.na(ncTmax)))	{ncTmax[is.na(ncTmax)] = median(ncTmax, na.rm=TRUE)} 
-		ncPPT = ncvar_get(ncin, precipName); if(any(is.na(ncPPT)))	{ncPPT[is.na(ncPPT)] = median(ncPPT, na.rm=TRUE)} 
+				# current post processing of ncdfs results in some nas, so must remove these before proceeding
+			ncTmin = ncvar_get(ncin, 't2m_min'); if(any(is.na(ncTmin)))	{ncTmin[is.na(ncTmin)] = median(ncTmin, na.rm=TRUE)} 
+			ncTmax = ncvar_get(ncin, 't2m_max'); if(any(is.na(ncTmax)))	{ncTmax[is.na(ncTmax)] = median(ncTmax, na.rm=TRUE)} 
+			ncPPT = ncvar_get(ncin, precipName); if(any(is.na(ncPPT)))	{ncPPT[is.na(ncPPT)] = median(ncPPT, na.rm=TRUE)} 
 				# current CAi climate data pipeline does not include tavg, so must estimate using tmin and tmax
-		if(avgTempGiven)	{ncTavg = ncvar_get(ncin, 't2m_avg')
-		}	else {ncTavg = (ncTmin + ncTmax) / 2}	
+			if(avgTempGiven)	{ncTavg = ncvar_get(ncin, 't2m_avg')
+			}	else {ncTavg = (ncTmin + ncTmax) / 2}	
 
-			# assuming all lat / lon structures are the same
-		nc_lat = ncvar_get(ncin, 'latitude')
-		nc_lon = ncvar_get(ncin, 'longitude')
-		nc_date = startDate + timeToDaysConversion * ncvar_get(ncin, 'time') # time is days after jan 1 1990
+				# assuming all lat / lon structures are the same
+			nc_lat = ncvar_get(ncin, 'latitude')
+			nc_lon = ncvar_get(ncin, 'longitude')
+			nc_date = startDate + timeToDaysConversion * ncvar_get(ncin, 'lead_time') # time is days after jan 1 1990
 
-		allPPT = 0	; allTmin = 0	; allTmax = 0	; allPET = 0
-		for(numberOfWatersheds in 1:nrow(basinWatersheds))	{
-			thisLonLat = st_coordinates(st_centroid(basinWatersheds[numberOfWatersheds, ]))
-			nearestLon = which.min(abs(thisLonLat[1] - nc_lon))
-			nearestLat = which.min(abs(thisLonLat[2] - nc_lat))
-					
-				# summing all climate variables; they normalized by basin area below
-			allTmin = allTmin + ncTmin[nearestLon, nearestLat, ] *  basinWatersheds$SUB_AREA[numberOfWatersheds]
-			allTmax = allTmax + ncTmax[nearestLon, nearestLat, ] *  basinWatersheds$SUB_AREA[numberOfWatersheds]
-			allPPT = allPPT + ncPPT[nearestLon, nearestLat, ] *  basinWatersheds$SUB_AREA[numberOfWatersheds]
-				# since we don't currently ingest PET data, we arecalculating from a penman monteith eq
-			if(optionForPET == 1)	{
-				allPET = allPET + PET_fromTemp(yday(nc_date), ncTmax[nearestLon, nearestLat, ], ncTmin[nearestLon, nearestLat, ],
-					lat_radians =  min((thisLonLat[1,2]*pi/180), 1.1)) * 1000  *  basinWatersheds$SUB_AREA[numberOfWatersheds]	# output in m, convert to mm
-			}	else	{
-				print('need to figure this one out later')
-			}
-		}
-		
-		avgTmin	= if(is.na(tempConversionFactor))	{allTmin / basinArea}	else	{tempConversionFactor + allTmin / basinArea}
-		avgTmax = if(is.na(tempConversionFactor)) 	{allTmax / basinArea}	else	{tempConversionFactor + allTmax / basinArea}
-		avgTavg = (avgTmin + avgTmax) / 2
-		avgPPT = if(is.na(pptConversionFactor)) 	{allPPT / basinArea}	else	{pptConversionFactor * allPPT / basinArea}
-		avgPET = allPET / basinArea
-		
-			# save data output
-		allClimateData = data.frame(Date = nc_date, Tmin = avgTmin, Tmax = avgTmax, Tavg = avgTavg, PPT = avgPPT, PET = avgPET)
-		saveRDS(allClimateData, paste0(dataOut_location, basinName, '.RData'))
-	}
-	
-	if(variableOrderOption == 'seas5Multi')	{
-		# creating the folder to hold the output
-			if(!file.exists(paste0(dataOut_location, basinName, '_seas5MultiOutput')))	{
-			dir.create(file.path(paste0(dataOut_location, basinName, '_seas5MultiOutput')))
-		}
-
-		
-		# reading in the ncdfs
-		ncin = nc_open(climateDataNCDF) # for tmax and tmin [longitude,latitude,member,lead_time,init_time] 
-										# for tp_sum [lead_time,longitude,latitude,member,init_time]
-
-		ncTmin = ncvar_get(ncin, 't2m_min'); if(any(is.na(ncTmin)))	{ncTmin[is.na(ncTmin)] = median(ncTmin, na.rm=TRUE)} 
-		ncTmax = ncvar_get(ncin, 't2m_max'); if(any(is.na(ncTmax)))	{ncTmax[is.na(ncTmax)] = median(ncTmax, na.rm=TRUE)} 
-		ncPPT = ncvar_get(ncin, precipName); if(any(is.na(ncPPT)))	{ncPPT[is.na(ncPPT)] = median(ncPPT, na.rm=TRUE)} 
-		if(avgTempGiven)	{ncTavg = ncvar_get(ncin, 't2m_avg')
-		}	else {ncTavg = (ncTmin + ncTmax) / 2}	
-
-			# assuming all lat / lon structures are the same
-		nc_lat = ncvar_get(ncin, 'latitude')
-		nc_lon = ncvar_get(ncin, 'longitude')
-
-		initTimes = ncvar_get(ncin, 'init_time')
-		leadTimes = ncvar_get(ncin, 'lead_time')
-		for(thisInitTime in 1:length(initTimes))	{
-			
-			nc_date = startDate + timeToDaysConversion * leadTimes + timeToDaysConversion * initTimes[thisInitTime] # time is days after jan 1 
-
+				# list for storing time series of climate data
 			allClimateData = list()
 			for(numModels in 1:length(ncvar_get(ncin, 'member')))	{
 				allPPT = 0	; allTmin = 0	; allTmax = 0	; allPET = 0
@@ -245,8 +128,8 @@ climateInputConversion_f = function(
 					nearestLat = which.min(abs(thisLonLat[2] - nc_lat))
 				
 						# Tmax is sometimes < Tmin, so need to adjust before running for PET
-					theseTmin = ncTmin[nearestLon, nearestLat, numModels, , thisInitTime]
-					theseTmax = ncTmax[nearestLon, nearestLat, numModels, , thisInitTime]
+					theseTmin = ncTmin[nearestLon, nearestLat, numModels, ]
+					theseTmax = ncTmax[nearestLon, nearestLat, numModels, ]
 					if(any(theseTmin >= theseTmax))	{
 						theseTmin[theseTmin >= theseTmax] = theseTmax[theseTmin >= theseTmax] - 0.1
 					}
@@ -254,7 +137,7 @@ climateInputConversion_f = function(
 						# summing all climate variables; they normalized by basin area below
 					allTmin = allTmin +  theseTmin *  basinWatersheds$SUB_AREA[numberOfWatersheds]
 					allTmax = allTmax + theseTmax *  basinWatersheds$SUB_AREA[numberOfWatersheds]
-					allPPT = allPPT + ncPPT[ , nearestLon, nearestLat, numModels, thisInitTime] *  basinWatersheds$SUB_AREA[numberOfWatersheds]
+					allPPT = allPPT + ncPPT[ , nearestLon, nearestLat, numModels] *  basinWatersheds$SUB_AREA[numberOfWatersheds]
 						# since we don't currently ingest PET data, we arecalculating from a penman monteith eq
 					if(optionForPET == 1)	{
 						allPET = allPET + PET_fromTemp(yday(nc_date), theseTmax , theseTmin,
@@ -263,6 +146,8 @@ climateInputConversion_f = function(
 						print('need to figure this one out later')
 					}
 				}
+
+				# normalizing data by basin area
 				avgTmin	= if(is.na(tempConversionFactor))	{allTmin / basinArea}	else	{tempConversionFactor + allTmin / basinArea}
 				avgTmax = if(is.na(tempConversionFactor)) 	{allTmax / basinArea}	else	{tempConversionFactor + allTmax / basinArea}
 				avgTavg = (avgTmin + avgTmax) / 2
@@ -271,8 +156,130 @@ climateInputConversion_f = function(
 
 					# all climate data to be saved
 				allClimateData[[numModels]] = data.frame(Date = nc_date, Tmin = avgTmin, Tmax = avgTmax, Tavg = avgTavg, PPT = avgPPT, PET = avgPET)
+				saveRDS(allClimateData, paste0(dataOut_location, 'SEAS5_', basinName, '.RData'))
 			}
-			saveRDS(allClimateData, paste0(dataOut_location, basinName, '_seas5MultiOutput\\SEAS5_startDate_', nc_date[1], '.RData'))
+		}
+
+		######################################################################################################################
+			# routine for era5 data
+		if(variableOrderOption == 'era5')	{
+				# reading in the ncdfs
+			ncin = nc_open(climateDataNCDF)
+
+				# current post processing of ncdfs results in some nas, so must remove these before proceeding
+			ncTmin = ncvar_get(ncin, 't2m_min'); if(any(is.na(ncTmin)))	{ncTmin[is.na(ncTmin)] = median(ncTmin, na.rm=TRUE)} 
+			ncTmax = ncvar_get(ncin, 't2m_max'); if(any(is.na(ncTmax)))	{ncTmax[is.na(ncTmax)] = median(ncTmax, na.rm=TRUE)} 
+			ncPPT = ncvar_get(ncin, precipName); if(any(is.na(ncPPT)))	{ncPPT[is.na(ncPPT)] = median(ncPPT, na.rm=TRUE)} 
+					# current CAi climate data pipeline does not include tavg, so must estimate using tmin and tmax
+			if(avgTempGiven)	{ncTavg = ncvar_get(ncin, 't2m_avg')
+			}	else {ncTavg = (ncTmin + ncTmax) / 2}	
+
+				# assuming all lat / lon structures are the same
+			nc_lat = ncvar_get(ncin, 'latitude')
+			nc_lon = ncvar_get(ncin, 'longitude')
+			nc_date = startDate + timeToDaysConversion * ncvar_get(ncin, 'time') # time is days after jan 1 1990
+
+			allPPT = 0	; allTmin = 0	; allTmax = 0	; allPET = 0
+			for(numberOfWatersheds in 1:nrow(basinWatersheds))	{
+				thisLonLat = st_coordinates(st_centroid(basinWatersheds[numberOfWatersheds, ]))
+				nearestLon = which.min(abs(thisLonLat[1] - nc_lon))
+				nearestLat = which.min(abs(thisLonLat[2] - nc_lat))
+						
+					# summing all climate variables; they normalized by basin area below
+				allTmin = allTmin + ncTmin[nearestLon, nearestLat, ] *  basinWatersheds$SUB_AREA[numberOfWatersheds]
+				allTmax = allTmax + ncTmax[nearestLon, nearestLat, ] *  basinWatersheds$SUB_AREA[numberOfWatersheds]
+				allPPT = allPPT + ncPPT[nearestLon, nearestLat, ] *  basinWatersheds$SUB_AREA[numberOfWatersheds]
+					# since we don't currently ingest PET data, we arecalculating from a penman monteith eq
+				if(optionForPET == 1)	{
+					allPET = allPET + PET_fromTemp(yday(nc_date), ncTmax[nearestLon, nearestLat, ], ncTmin[nearestLon, nearestLat, ],
+						lat_radians =  min((thisLonLat[1,2]*pi/180), 1.1)) * 1000  *  basinWatersheds$SUB_AREA[numberOfWatersheds]	# output in m, convert to mm
+				}	else	{
+					print('need to figure this one out later')
+				}
+			}
+			
+				# normalizing data by basin area
+			avgTmin	= if(is.na(tempConversionFactor))	{allTmin / basinArea}	else	{tempConversionFactor + allTmin / basinArea}
+			avgTmax = if(is.na(tempConversionFactor)) 	{allTmax / basinArea}	else	{tempConversionFactor + allTmax / basinArea}
+			avgTavg = (avgTmin + avgTmax) / 2
+			avgPPT = if(is.na(pptConversionFactor)) 	{allPPT / basinArea}	else	{pptConversionFactor * allPPT / basinArea}
+			avgPET = allPET / basinArea
+			
+				# save data output
+			allClimateData = data.frame(Date = nc_date, Tmin = avgTmin, Tmax = avgTmax, Tavg = avgTavg, PPT = avgPPT, PET = avgPET)
+			saveRDS(allClimateData, paste0(dataOut_location, 'ERA5_', basinName, '.RData'))
+		}
+		
+		######################################################################################################################
+			# for long record of seas5 data for hindcasting
+		if(variableOrderOption == 'seas5Multi')	{
+			# creating the folder to hold the output
+				if(!file.exists(paste0(dataOut_location, 'seas5MultiOutput')))	{
+				dir.create(file.path(paste0(dataOut_location, 'seas5MultiOutput')))
+			}
+
+			
+			# reading in the ncdfs
+			ncin = nc_open(climateDataNCDF) # for tmax and tmin [longitude,latitude,member,lead_time,init_time] 
+											# for tp_sum [lead_time,longitude,latitude,member,init_time]
+
+			ncTmin = ncvar_get(ncin, 't2m_min'); if(any(is.na(ncTmin)))	{ncTmin[is.na(ncTmin)] = median(ncTmin, na.rm=TRUE)} 
+			ncTmax = ncvar_get(ncin, 't2m_max'); if(any(is.na(ncTmax)))	{ncTmax[is.na(ncTmax)] = median(ncTmax, na.rm=TRUE)} 
+			ncPPT = ncvar_get(ncin, precipName); if(any(is.na(ncPPT)))	{ncPPT[is.na(ncPPT)] = median(ncPPT, na.rm=TRUE)} 
+			if(avgTempGiven)	{ncTavg = ncvar_get(ncin, 't2m_avg')
+			}	else {ncTavg = (ncTmin + ncTmax) / 2}	
+
+				# assuming all lat / lon structures are the same
+			nc_lat = ncvar_get(ncin, 'latitude')
+			nc_lon = ncvar_get(ncin, 'longitude')
+
+			initTimes = ncvar_get(ncin, 'init_time')
+			leadTimes = ncvar_get(ncin, 'lead_time')
+			for(thisInitTime in 1:length(initTimes))	{
+				
+				nc_date = startDate + timeToDaysConversion * leadTimes + timeToDaysConversion * initTimes[thisInitTime] # time is days after jan 1 
+
+				allClimateData = list()
+				for(numModels in 1:length(ncvar_get(ncin, 'member')))	{
+					allPPT = 0	; allTmin = 0	; allTmax = 0	; allPET = 0
+					for(numberOfWatersheds in 1:nrow(basinWatersheds))	{
+							#identify climate data closest to the centroid of the subbasin of interest
+						thisLonLat = st_coordinates(st_centroid(basinWatersheds[numberOfWatersheds, ]))
+						nearestLon = which.min(abs(thisLonLat[1] - nc_lon))
+						nearestLat = which.min(abs(thisLonLat[2] - nc_lat))
+					
+							# Tmax is sometimes < Tmin, so need to adjust before running for PET
+						theseTmin = ncTmin[nearestLon, nearestLat, numModels, , thisInitTime]
+						theseTmax = ncTmax[nearestLon, nearestLat, numModels, , thisInitTime]
+						if(any(theseTmin >= theseTmax))	{
+							theseTmin[theseTmin >= theseTmax] = theseTmax[theseTmin >= theseTmax] - 0.1
+						}
+						
+							# summing all climate variables; they normalized by basin area below
+						allTmin = allTmin +  theseTmin *  basinWatersheds$SUB_AREA[numberOfWatersheds]
+						allTmax = allTmax + theseTmax *  basinWatersheds$SUB_AREA[numberOfWatersheds]
+						allPPT = allPPT + ncPPT[ , nearestLon, nearestLat, numModels, thisInitTime] *  basinWatersheds$SUB_AREA[numberOfWatersheds]
+							# since we don't currently ingest PET data, we arecalculating from a penman monteith eq
+						if(optionForPET == 1)	{
+							allPET = allPET + PET_fromTemp(yday(nc_date), theseTmax , theseTmin,
+								lat_radians =  min((thisLonLat[1,2]*pi/180), 1.1)) * 1000  *  basinWatersheds$SUB_AREA[numberOfWatersheds]	# output in m, convert to mm
+						}	else	{
+							print('need to figure this one out later')
+						}
+					}
+					
+					# normalizing data by basin area
+					avgTmin	= if(is.na(tempConversionFactor))	{allTmin / basinArea}	else	{tempConversionFactor + allTmin / basinArea}
+					avgTmax = if(is.na(tempConversionFactor)) 	{allTmax / basinArea}	else	{tempConversionFactor + allTmax / basinArea}
+					avgTavg = (avgTmin + avgTmax) / 2
+					avgPPT = if(is.na(pptConversionFactor)) 	{allPPT / basinArea}	else	{pptConversionFactor * allPPT / basinArea}
+					avgPET = allPET / basinArea
+
+						# all climate data to be saved
+					allClimateData[[numModels]] = data.frame(Date = nc_date, Tmin = avgTmin, Tmax = avgTmax, Tavg = avgTavg, PPT = avgPPT, PET = avgPET)
+				}
+				saveRDS(allClimateData, paste0(dataOut_location, 'seas5MultiOutput\\SEAS5_startDate_', nc_date[1], '.RData'))
+			}
 		}
 	}
 }	
@@ -332,7 +339,6 @@ runHBV_f = function(
 ##########################################################################################################
 	## Calibration Function
 modelCalibration_f = function(
-	climateInputsFileLoc = 'file_location_and_name.RData',
 	historicStreamflowFileLoc = 'https://someplace.gov',
 	pathToWatershedsGPKG = 'file_location_and_name.gpkg',
 	dataOut_location = 'save_file_location',
@@ -340,7 +346,7 @@ modelCalibration_f = function(
 	numberOfRuns = 100000,									# maximum number of runs
 	targetMetric = 1, 										# 1 = KGE, 2 = NSE, 3 = MAE, 4 = RMSE, 5 = bias
 	targetMetricValue = 0.81,								# threshold for considering a value good
-	minGoodRuns = 100,										# number of 'good' calibrations before the routine stops
+	minGoodRuns = 200,										# number of 'good' calibrations before the routine stops
 	sfcf = c(runif(5000, .2, 1), runif(5000, 1, 3)),			#snowfall correction factor [-]
 	tr   = runif(10000, -6, 5),								#solid and liquid precipitation threshold temperature [C]
 	tt   = runif(10000, -5, 6),								#melt temperature [C]
@@ -365,15 +371,17 @@ modelCalibration_f = function(
 		library(sf)
 		library(data.table)
 		library(lubridate)
-		library(hydroGOF)		# for nse calculations
+		library(hydroGOF)		# for nse / kge calculations
 		
 		
-		climateInput = as.data.table(readRDS(paste0(climateInputsFileLoc, 'Historical.RData')))
-		historicStreamflow = as.data.table(read.csv(paste0(historicStreamflowFileLoc)))
+			# reading in previously reanalyzed climate data
+		climateInput = as.data.table(readRDS(paste0(dataOut_location, 'ERA5_', basinName, '.RData')))
+
 			# reading in and reformatting streamflow input 
+		historicStreamflow = as.data.table(read.csv(paste0(historicStreamflowFileLoc)))
 		if(dataSource == 1)	{
 			historicStreamflow$Date = ymd(unlist(strsplit(historicStreamflow$DATE.TIME, " "))[seq(1,nrow(historicStreamflow)*2,2)])
-			basinArea = sum(st_read(paste0(pathToWatershedsGPKG))$SUB_AREA)
+			basinArea = sum(st_read(paste0(dataOut_location, "HydroBASINSdata_", basinName, ".gpkg"))$SUB_AREA)
 			flowUnitConversion = 4.08735e-13 # cubic mm / day in cfs
 			areaUnitConversion = (1000000)^2     # sq mm per sq km
 			historicStreamflow$historicQinmm = (as.numeric(historicStreamflow$VALUE) / flowUnitConversion) / (areaUnitConversion * basinArea)
@@ -385,25 +393,11 @@ modelCalibration_f = function(
 		
 			# merging historic streamflow record onto climate inputs data
 		climateAndStreamflowInput = historicStreamflow[climateInput, on='Date']
+			# apportioning data for calibration and validation
 		lengthOfCalibrationInput = nrow(climateAndStreamflowInput)
 		calRows = c(1:(floor(lengthOfCalibrationInput / 3)), ceiling(lengthOfCalibrationInput/(3/2)):lengthOfCalibrationInput)
 		valRows = c(ceiling(lengthOfCalibrationInput / 3):floor(lengthOfCalibrationInput/(3/2)))
 		
-		sfcf =	sample(sfcf, numberOfRuns, replace=TRUE)
-		tr = 	sample(tr, numberOfRuns, replace=TRUE)
-		tt = 	sample(tt, numberOfRuns, replace=TRUE)
-		fm = 	sample(fm, numberOfRuns, replace=TRUE)
-		fi = 	sample(fi, numberOfRuns, replace=TRUE)
-		fic =	sample(fic, numberOfRuns, replace=TRUE)
-		fc =	sample(fc, numberOfRuns, replace=TRUE)
-		lp =	sample(lp, numberOfRuns, replace=TRUE)
-		beta_soils = sample(beta_soils, numberOfRuns, replace=TRUE)
-		k0 = 	sample(k0, numberOfRuns, replace=TRUE)
-		k1 = 	sample(k1, numberOfRuns, replace=TRUE)
-		k2 = 	sample(k2, numberOfRuns, replace=TRUE)
-		uz1 = 	sample(uz1, numberOfRuns, replace=TRUE)
-		perc = 	sample(perc, numberOfRuns, replace=TRUE)
-
 			# dataframe for capturing calibration metrics
 		cal_out = data.frame(
 			sfcf =	rep(NA,minGoodRuns),
@@ -435,30 +429,49 @@ modelCalibration_f = function(
 			maeAll = rep(NA,minGoodRuns),
 			rmseAll = rep(NA,minGoodRuns),
 			biasAll = rep(NA,minGoodRuns),
-			mnthSumAbsBias = rep(NA,minGoodRuns),
-			mnthSumMAE = rep(NA,minGoodRuns),
-			mnthSumRMSE = rep(NA,minGoodRuns)
+			mnthSumAbsBias = rep(NA,minGoodRuns)
 		)
-
-
-		  # since k0>k1>k2 and uz1>perc or an error is thrown, we need a routine to ensure this is true while still allowing random sampling
-		if(any(k1 > k0))	{
-			k1[which(k1 > k0)] = k0[which(k1 > k0)] * .99
-		}
-		if(any(k2 > k1))	{
-			k2[which(k2 > k1)] = k1[which(k2 > k1)] * .99
-		}
-		if(any(uz1 < perc))	{
-			uz1[which(uz1 < perc)] = perc[which(uz1 < perc)] * 1.01
-		}
-
 
 		iter = 0
 		while(iter < minGoodRuns)	{
 			jj = 0
+
+				# sampling parameter values for calibration
+			sfcf =	sample(sfcf, numberOfRuns, replace=TRUE)
+			tr = 	sample(tr, numberOfRuns, replace=TRUE)
+			tt = 	sample(tt, numberOfRuns, replace=TRUE)
+			fm = 	sample(fm, numberOfRuns, replace=TRUE)
+			fi = 	sample(fi, numberOfRuns, replace=TRUE)
+			fic =	sample(fic, numberOfRuns, replace=TRUE)
+			fc =	sample(fc, numberOfRuns, replace=TRUE)
+			lp =	sample(lp, numberOfRuns, replace=TRUE)
+			beta_soils = sample(beta_soils, numberOfRuns, replace=TRUE)
+			k0 = 	sample(k0, numberOfRuns, replace=TRUE)
+			k1 = 	sample(k1, numberOfRuns, replace=TRUE)
+			k2 = 	sample(k2, numberOfRuns, replace=TRUE)
+			uz1 = 	sample(uz1, numberOfRuns, replace=TRUE)
+			perc = 	sample(perc, numberOfRuns, replace=TRUE)
+
+
+
+			  # since k0>k1>k2 and uz1>perc or an error is thrown, we need a routine to ensure this is true while still allowing 'random' sampling
+			if(any(k1 > k0))	{
+				k1[which(k1 > k0)] = k0[which(k1 > k0)] * .99
+			}
+			if(any(k2 > k1))	{
+				k2[which(k2 > k1)] = k1[which(k2 > k1)] * .99
+			}
+			if(any(uz1 < perc))	{
+				uz1[which(uz1 < perc)] = perc[which(uz1 < perc)] * 1.01
+			}
+
+
+				# incrementally decreasing the target metric value every n runs
 			targetMetricValue = targetMetricValue - 0.01
+			print(targetMetricValue)
+			print(iter)
 			while(jj < numberOfRuns & iter < minGoodRuns) {
-				jj = jj+1	; print(jj)
+				jj = jj+1
 					# running HBV
 				HBVoutput = runHBV_f(
 					climateInput = climateAndStreamflowInput,
@@ -478,6 +491,7 @@ modelCalibration_f = function(
 					perc[jj])  # max flux rate from SUZ to SLZ in mm/d
 			
 			
+					# identifying if a parameterization meets the criteria to be saved
 				if(KGE(HBVoutput$Qg[calRows], HBVoutput$historicQinmm[calRows]) > targetMetricValue &
 					KGE(HBVoutput$Qg[valRows], HBVoutput$historicQinmm[valRows]) > targetMetricValue)	{
 					
@@ -513,19 +527,15 @@ modelCalibration_f = function(
 					cal_out$maeAll[iter] = mae(HBVoutput$Qg, HBVoutput$historicQinmm)
 					cal_out$rmseAll[iter] = rmse(HBVoutput$Qg, HBVoutput$historicQinmm)
 					cal_out$biasAll[iter] = pbias(HBVoutput$Qg, HBVoutput$historicQinmm)
-						# calculating monthly metrics
+						# calculating monthly mean bias
 					HBVoutput$month = month(HBVoutput$Date)
 					HBVoutputMonth = subset(HBVoutput, month == 1)
 					cal_out$mnthSumAbsBias[iter] = abs(pbias(HBVoutputMonth$Qg, HBVoutputMonth$historicQinmm))
-					cal_out$mnthSumMAE[iter]  = mae(HBVoutputMonth$Qg, HBVoutputMonth$historicQinmm)
-					cal_out$mnthSumRMSE[iter] = rmse(HBVoutputMonth$Qg, HBVoutputMonth$historicQinmm)
 					for(thisMonth in 2:12)	{
 						HBVoutputMonth = subset(HBVoutput, month == thisMonth)
 						cal_out$mnthSumAbsBias[iter] = cal_out$mnthSumAbsBias[iter] + abs(pbias(HBVoutputMonth$Qg, HBVoutputMonth$historicQinmm))
-						cal_out$mnthSumMAE[iter]  = cal_out$mnthSumMAE[iter]  + mae(HBVoutputMonth$Qg, HBVoutputMonth$historicQinmm)
-						cal_out$mnthSumRMSE[iter] = cal_out$mnthSumRMSE[iter] + rmse(HBVoutputMonth$Qg, HBVoutputMonth$historicQinmm)
 					}
-							
+					cal_out$mnthSumAbsBias[iter] = cal_out$mnthSumAbsBias[iter] / 12
 					
 					fwrite(cal_out, paste0(dataOut_location, "calibration_", basinName, ".csv"), append=FALSE)
 				}
@@ -542,8 +552,6 @@ modelCalibration_f = function(
 	## Running the Model for Seasonal Forecasts 
 seasonalForecast_f = function(
 	basinName = 'inster_basin_or_outlet_name',
-	climateInputsFileLoc = 'file_location_and_name',	# seas5 / cfs / era5 / Recent .RData is appended in the function
-	pathToWatershedsGPKG = 'file_location_and_name.gpkg',
 	historicStreamflowFileLoc = 'https://someplace.gov',
 	dataOut_location = 'save_file_location',
 	dataSource = 1)							# 1 for FNF from cal.gov,
@@ -557,24 +565,21 @@ seasonalForecast_f = function(
 		sf::sf_use_s2(FALSE)	# for suppressing issue with intersecting spherical w flat
 
 			# reading in basin specific data that has been previously loaded
-		seas5ClimateInput = readRDS(paste0(climateInputsFileLoc, 'SEAS5.RData')) # reads in a list with each [[i]] being output from a model
-		era5ClimateInput = as.data.table(readRDS(paste0(climateInputsFileLoc, 'Recent.RData')))
-		
+		seas5ClimateInput = readRDS(paste0(dataOut_location, 'SEAS5_', basinName, '.RData')) # reads in a list with each [[i]] being output from a model
+		era5ClimateInput = as.data.table(readRDS(paste0(dataOut_location, 'ERA5_', basinName, '.RData')))
+
+	
+			# reading in calibrated parameterizations and selecting a subsample based on minimum monthly bias
 		calibratedVarsAll = subset(fread(paste0(dataOut_location, "calibration_", basinName, ".csv")), !is.na(kgeAll))
-		calibratedVars = head(calibratedVarsAll[order(abs(calibratedVarsAll$mnthSumAbsBias)), ], 20)
-		calibratedVars = rbind(calibratedVars, head(calibratedVarsAll[order(abs(calibratedVarsAll$mnthSumMAE)), ], 5))
-		calibratedVars = rbind(calibratedVars, head(calibratedVarsAll[order(abs(calibratedVarsAll$mnthSumRMSE)), ], 5))
-		calibratedVars = rbind(calibratedVars, tail(calibratedVarsAll[order(calibratedVarsAll$kgeAll), ], 5)
-		calibratedVars = rbind(calibratedVars, tail(calibratedVarsAll[order(calibratedVarsAll$nseAll), ], 3))
-		calibratedVars = rbind(calibratedVars, head(calibratedVarsAll[order(calibratedVarsAll$maeAll), ], 2))	; rm(calibratedVarsAll)
+		calibratedVars = head(calibratedVarsAll[order(abs(calibratedVarsAll$mnthSumAbsBias)), ], 40)
+		rm(calibratedVarsAll)
 
-
-		historicStreamflow = as.data.table(read.csv(paste0(historicStreamflowFileLoc)))
 			# reading in and reformatting streamflow input 
+		historicStreamflow = as.data.table(read.csv(paste0(historicStreamflowFileLoc)))
 		if(dataSource == 1)	{
 			historicStreamflow$Date = ymd(unlist(strsplit(historicStreamflow$DATE.TIME, " "))[seq(1,nrow(historicStreamflow)*2,2)])
 			historicStreamflow$historicQinOriginalUnits = as.numeric(historicStreamflow$VALUE)
-			basinArea = sum(st_read(paste0(pathToWatershedsGPKG))$SUB_AREA)
+			basinArea = sum(st_read(paste0(dataOut_location, "HydroBASINSdata_", basinName, ".gpkg"))$SUB_AREA)
 			flowUnitConversion = 4.08735e-13 # cubic mm / day in cfs
 			areaUnitConversion = (1000000)^2     # sq mm per sq km
 			historicStreamflow$historicQinmm = (historicStreamflow$historicQinOriginalUnits / flowUnitConversion) / (areaUnitConversion * basinArea)
@@ -583,6 +588,7 @@ seasonalForecast_f = function(
 		}
 
 
+			# identifying which time periods will use historic data before replacing with forecast data
 		lastHistData = last(era5ClimateInput$Date)
 		seas5Rows = (1 + which(as.character(seas5ClimateInput[[1]]$Date) == as.character(lastHistData))):length(seas5ClimateInput[[1]]$Date)
 		allForecastsOutput = list()
@@ -610,18 +616,20 @@ seasonalForecast_f = function(
 					uz1  = calibratedVars$uz1[numCalibs], #max flux rate from STZ to SUZ in mm/d
 					perc = calibratedVars$perc[numCalibs])  # max flux rate from SUZ to SLZ in mm/d
 
-				# merging historic streamflow record onto climate inputs data
+					# merging historic streamflow record onto climate inputs data
 				climateAndStreamflowOutput = historicStreamflow[allHBVoutput, on='Date']
+					# quick plots for visual confirmation
 				plot(climateAndStreamflowOutput$Date, climateAndStreamflowOutput$historicQinmm, type='l')
 				lines(climateAndStreamflowOutput$Date, climateAndStreamflowOutput$Qg, col='red2')
 
 				if(dataSource == 1)	{
-					climateAndStreamflowOutput$historicQinOriginalUnits
+#					climateAndStreamflowOutput$historicQinOriginalUnits
 					climateAndStreamflowOutput$projectedQinOriginalUnits = climateAndStreamflowOutput$Qg * flowUnitConversion * areaUnitConversion * basinArea
 				}	else	{ 
 					return("we need to figure out how to read in and normalize this streamflow data")
 				}
 				
+					# compiling all forecasts into a list
 				allForecastsOutput[[iter]] = climateAndStreamflowOutput
 			}
 		}
@@ -640,8 +648,6 @@ seasonalForecast_f = function(
 	## Validation and plot generation
 validationAndPlotGeneration_f = function(
 	basinName = 'inster_basin_or_outlet_name',
-	climateInputsFileLoc = 'file_location_and_name',	# seas5 / cfs / era5 / Recent .RData is appended in the function
-	pathToWatershedsGPKG = 'file_location_and_name.gpkg',
 	historicStreamflowFileLoc = 'https://someplace.gov',
 	dataOut_location = 'save_file_location',
 	dataSource = 1)							# 1 for FNF from cal.gov,
@@ -656,24 +662,20 @@ validationAndPlotGeneration_f = function(
 		sf::sf_use_s2(FALSE)	# for suppressing issue with intersecting spherical w flat
 
 			# reading in basin specific data that has been previously loaded
-		climateInput = as.data.table(readRDS(paste0(climateInputsFileLoc, 'Historical.RData')))
+		climateInput = as.data.table(readRDS(paste0(dataOut_location, 'ERA5_', basinName, '.RData')))
 
-		
+			# reading in calibrated parameterizations and selecting a subsample based on minimum monthly bias
 		calibratedVarsAll = subset(fread(paste0(dataOut_location, "calibration_", basinName, ".csv")), !is.na(kgeAll))
-		calibratedVars = head(calibratedVarsAll[order(abs(calibratedVarsAll$mnthSumAbsBias)), ], 20)
-		calibratedVars = rbind(calibratedVars, head(calibratedVarsAll[order(abs(calibratedVarsAll$mnthSumMAE)), ], 5))
-		calibratedVars = rbind(calibratedVars, head(calibratedVarsAll[order(abs(calibratedVarsAll$mnthSumRMSE)), ], 5))
-		calibratedVars = rbind(calibratedVars, tail(calibratedVarsAll[order(calibratedVarsAll$kgeAll), ], 5)
-		calibratedVars = rbind(calibratedVars, tail(calibratedVarsAll[order(calibratedVarsAll$nseAll), ], 3))
-		calibratedVars = rbind(calibratedVars, head(calibratedVarsAll[order(calibratedVarsAll$maeAll), ], 2))	; rm(calibratedVarsAll)
+		calibratedVars = head(calibratedVarsAll[order(abs(calibratedVarsAll$mnthSumAbsBias)), ], 40)
+		#calibratedVars = tail(calibratedVarsAll[order(abs(calibratedVarsAll$kgeAll)), ], 40)
+		rm(calibratedVarsAll)
 
-
-		historicStreamflow = as.data.table(read.csv(paste0(historicStreamflowFileLoc)))
 			# reading in and reformatting streamflow input 
+		historicStreamflow = as.data.table(read.csv(paste0(historicStreamflowFileLoc)))
 		if(dataSource == 1)	{
 			historicStreamflow$Date = ymd(unlist(strsplit(historicStreamflow$DATE.TIME, " "))[seq(1,nrow(historicStreamflow)*2,2)])
 			historicStreamflow$historicQinOriginalUnits = as.numeric(historicStreamflow$VALUE)
-			basinArea = sum(st_read(paste0(pathToWatershedsGPKG))$SUB_AREA)
+			basinArea = sum(st_read(paste0(dataOut_location, "HydroBASINSdata_", basinName, ".gpkg"))$SUB_AREA)
 			flowUnitConversion = 4.08735e-13 # cubic mm / day in cfs
 			areaUnitConversion = (1000000)^2     # sq mm per sq km
 			historicStreamflow$historicQinmm = (historicStreamflow$historicQinOriginalUnits / flowUnitConversion) / (areaUnitConversion * basinArea)
@@ -681,9 +683,8 @@ validationAndPlotGeneration_f = function(
 			return("we need to figure out how to read in and normalize this streamflow data")
 		}
 
+			# merging climate and streamflow data
 		climateAndStreamflowInput = historicStreamflow[climateInput, on='Date']
-
-
 		allStreamflows = data.frame(Date = climateAndStreamflowInput$Date, GageQ = climateAndStreamflowInput$historicQinmm)
 		iter = 0
 		for(numCalibs in 1:nrow(calibratedVars))	{
@@ -865,8 +866,8 @@ validationAndPlotGeneration_f = function(
 	historicalValidation = list()
 	historicalValidation[[1]] = nonaAllQs
 	historicalValidation[[2]] = monthsQsBias
+	saveRDS(historicalValidation, paste0(dataOut_location, 'historicalValidationData_', basinName, '.RData'))
 	}	else	{print("Ya gotta calibrate the model first you big ole dummy!")}
-	return(historicalValidation)
 }
 
 
@@ -875,6 +876,8 @@ validationAndPlotGeneration_f = function(
 
 reservoirOutflowCalVal_f = function(
 	dataOut_location = 'save_file_location',
+	historicReservoirFileLoc = 'insert_file_loc_here.com',
+	historicStreamflowFileLoc = 'insert_file_loc_here.com',
 	basinName = 'inster_basin_or_outlet_name',
 	basinSymbol = 'EXC',
 	infOrFNF = 'inflow',
@@ -896,15 +899,8 @@ reservoirOutflowCalVal_f = function(
 	library(zoo)
 
 	if(dataSource == 1)	{
-		if(infOrFNF == 'fnf')	{
-			inflow = as.data.table(read.csv(paste0(
-				"https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=", basinSymbol, "&SensorNums=8&dur_code=D&Start=1900-01-01&End=2022-08-05")))
-			}	else	{
-			if(infOrFNF == 'inflow')	{
-			inflow = as.data.table(read.csv(paste0(
-						"https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=", basinSymbol, "&SensorNums=76&dur_code=D&Start=1900-01-01&End=2022-08-05")))
-			}}
-		stor = read.csv(paste0("https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=", basinSymbol, "&SensorNums=15&dur_code=D&Start=1900-01-01&End=2022-08-05"))
+		inflow = as.data.table(read.csv(paste0(historicStreamflowFileLoc)))
+		stor = read.csv(paste0(historicStreamflowFileLoc))
 		#outflow = read.csv("https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=EXC&SensorNums=23&dur_code=D&Start=1900-01-01&End=2022-08-05")
 
 		stor$Date = ymd(unlist(strsplit(stor$DATE.TIME, " "))[seq(1,nrow(stor)*2,2)])
@@ -913,6 +909,7 @@ reservoirOutflowCalVal_f = function(
 		inflow$inflow = inflow$VALUE
 		allDat = inflow[stor[c('Date','stor')], on = 'Date']
 		allDat$AcFtPDay_inflow =  as.numeric(allDat$inflow)  * (60*60*24) / 43559.9
+			# resLoss = Outflow + AET + Withdrawals = dS - Inflow
 		allDat$resLoss = c(diff(allDat$stor) - allDat$AcFtPDay_inflow[-1], NA) * -1
 	} else	{print("need to figure out how to handle these data")}
 	
@@ -1120,8 +1117,6 @@ reservoirOutflowCalVal_f = function(
 
 projectionValidationAndPlotGeneration_f = function(
 	basinName = 'inster_basin_or_outlet_name',
-	climateInputsFileLoc = 'file_location_and_name',	# seas5 / cfs / era5 / Recent .RData is appended in the function
-	pathToWatershedsGPKG = 'file_location_and_name.gpkg',
 	historicStreamflowFileLoc = 'https://someplace.gov',
 	dataOut_location = 'save_file_location',
 	dataSource = 1)							# 1 for FNF from cal.gov,
@@ -1141,24 +1136,22 @@ projectionValidationAndPlotGeneration_f = function(
 		library(sf)				# for geospatial data
 		sf::sf_use_s2(FALSE)	# for suppressing issue with intersecting spherical w flat
 
-		seas5ClimateInputFileNames = list.files(paste0(dataOut_location, basinName, '_seas5MultiOutput'))
+			# read in climate data
+		seas5ClimateInputFileNames = list.files(paste0(dataOut_location, 'seas5MultiOutput'))
+		era5ClimateInput = as.data.table(readRDS(paste0(dataOut_location, 'ERA5_', basinName, '.RData')))
 
-		# reading in basin specific data that has been previously loaded
-		era5ClimateInput = as.data.table(readRDS(paste0(climateInputsFileLoc, 'Historical.RData')))
-			
+			# reading in calibrated parameterizations and selecting a subsample based on minimum monthly bias
 		calibratedVarsAll = subset(fread(paste0(dataOut_location, "calibration_", basinName, ".csv")), !is.na(kgeAll))
-		calibratedVars = tail(calibratedVarsAll[order(calibratedVarsAll$kgeAll), ], 20)
-		calibratedVars = rbind(calibratedVars, head(calibratedVarsAll[order(abs(calibratedVarsAll$biasAll)), ], 10))
-		calibratedVars = rbind(calibratedVars, tail(calibratedVarsAll[order(calibratedVarsAll$nseAll), ], 4))
-		calibratedVars = rbind(calibratedVars, head(calibratedVarsAll[order(calibratedVarsAll$maeAll), ], 4))
-		calibratedVars = rbind(calibratedVars, head(calibratedVarsAll[order(calibratedVarsAll$rmseAll), ], 2))	; rm(calibratedVarsAll)
+		calibratedVars = head(calibratedVarsAll[order(abs(calibratedVarsAll$mnthSumAbsBias)), ], 40)
+		#calibratedVars = tail(calibratedVarsAll[order(abs(calibratedVarsAll$kgeAll)), ], 40)
+		rm(calibratedVarsAll)
 
 		historicStreamflow = as.data.table(read.csv(paste0(historicStreamflowFileLoc)))
 				# reading in and reformatting streamflow input 
 		if(dataSource == 1)	{
 			historicStreamflow$Date = ymd(unlist(strsplit(historicStreamflow$DATE.TIME, " "))[seq(1,nrow(historicStreamflow)*2,2)])
 			historicStreamflow$historicQinOriginalUnits = as.numeric(historicStreamflow$VALUE)
-			basinArea = sum(st_read(paste0(pathToWatershedsGPKG))$SUB_AREA)
+			basinArea = sum(st_read(paste0(dataOut_location, "HydroBASINSdata_", basinName, ".gpkg"))$SUB_AREA)
 			flowUnitConversion = 4.08735e-13 # cubic mm / day in cfs
 			areaUnitConversion = (1000000)^2     # sq mm per sq km
 			historicStreamflow$historicQinmm = (historicStreamflow$historicQinOriginalUnits / flowUnitConversion) / (areaUnitConversion * basinArea)
@@ -1184,7 +1177,7 @@ projectionValidationAndPlotGeneration_f = function(
 		validDF = data.frame(modelClm = NA, modelHyd = NA, days = NA, monthsOut = NA, predQ = NA, actQ = NA)
 
 		for(thisSeas5 in seas5ClimateInputFileNames)	{
-			seas5ClimateInput = readRDS(paste0(dataOut_location, basinName, '_seas5MultiOutput\\', thisSeas5))
+			seas5ClimateInput = readRDS(paste0(dataOut_location, 'seas5MultiOutput\\', thisSeas5))
 
 			# removing monthly forecasts that are not a full month
 			partialMonths = FALSE
@@ -1298,7 +1291,7 @@ projectionValidationAndPlotGeneration_f = function(
 			#validSubset$plotDate = rep(1:7, nrow(validSubset)/7) - .2
 			boxplot(validSubset$predQ ~ validSubset$Date, pch='.', lwd=1, 
 				#col=colorRampPalette(c('#F06000', '#B91863'))(length(unique(validDF$monthsOut))),
-				ylim = c(0, max(validDF$predQ)),
+				ylim = c(0, max(validDF$predQ, na.rm=TRUE)),
 				at = c(1:7) - 0.2,
 				boxwex = 0.4,
 				col = '#A9BF2C',
@@ -1320,19 +1313,19 @@ projectionValidationAndPlotGeneration_f = function(
 			axis(1, at=1:length(unique(validSubset$Date)),
 				labels =c('Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec')[month(unique(validSubset$Date))],
 				col.lab='#1A232F', col.axis='#666D74')
-			text(x=0.5, y=max(validDF$predQ) * 0.95,
+			text(x=0.5, y=max(validDF$predQ, na.rm=TRUE) * 0.95,
 				paste0(basinName),
 				adj = c(0,0), font=2, col='#1A232F', family='A', cex=1.6*1.6)
-			text(x=0.5, y=max(validDF$predQ) * 0.87,
+			text(x=0.5, y=max(validDF$predQ, na.rm=TRUE)* 0.87,
 				paste0('Forecast Beginning on ', validSubset$Date[1] - 14),
 				adj = c(0,0), font=2, col='#1A232F', family='A', cex=1.6*1.6)
-			text(x=0.5, y=max(validDF$predQ) * 0.75,
+			text(x=0.5, y=max(validDF$predQ, na.rm=TRUE) * 0.75,
 				paste0('CAi Forecast'),
 				adj = c(0,0), font=2, col='#A9BF2C', family='A', cex=1.6*1.3)
-			text(x=0.5, y=max(validDF$predQ) * 0.7,
+			text(x=0.5, y=max(validDF$predQ, na.rm=TRUE) * 0.7,
 				paste0('Climatology'),
 				adj = c(0,0), font=2, col='#FDB600', family='A', cex=1.6*1.3)
-			text(x=0.5, y=max(validDF$predQ) * 0.65,
+			text(x=0.5, y=max(validDF$predQ, na.rm=TRUE) * 0.65,
 				paste0('Actual'),
 				adj = c(0,0), font=2, col='#196CE1', family='A', cex=1.6*1.3)
 			dev.off()
@@ -1370,9 +1363,12 @@ projectionValidationAndPlotGeneration_f = function(
 	highTercHeatMap = matrix(nrow=7, ncol=12)
 	lowTercHeatMap  = matrix(nrow=7, ncol=12)
 	medTercHeatMap  = matrix(nrow=7, ncol=12)
-	tercHighBarplot = matrix(nrow=3, ncol=7)
-	tercMedBarplot  = matrix(nrow=3, ncol=7)
-	tercLowBarplot  = matrix(nrow=3, ncol=7)
+	tercPredHighBarplot = matrix(nrow=3, ncol=7)
+	tercPredMedBarplot  = matrix(nrow=3, ncol=7)
+	tercPredLowBarplot  = matrix(nrow=3, ncol=7)
+	tercActHighBarplot = matrix(nrow=3, ncol=7)
+	tercActMedBarplot  = matrix(nrow=3, ncol=7)
+	tercActLowBarplot  = matrix(nrow=3, ncol=7)
 	absMae25HeatMap = matrix(nrow=7, ncol=12)
 	absMae50HeatMap = matrix(nrow=7, ncol=12)
 	absMae75HeatMap = matrix(nrow=7, ncol=12)
@@ -1386,20 +1382,40 @@ projectionValidationAndPlotGeneration_f = function(
 		medPredTerc   = subset(sumModPerf, predTerc == 2 & leadTime == jj)
 		lowPredTerc   = subset(sumModPerf, predTerc == 1 & leadTime == jj)
 		
-		tercHighBarplot[1:3,jj] = c(
+		highActTerc = subset(sumModPerf, actTerc == 3 & leadTime == jj)
+		medActTerc  = subset(sumModPerf, actTerc == 2 & leadTime == jj)
+		lowActTerc  = subset(sumModPerf, actTerc == 1 & leadTime == jj)
+		
+		tercPredHighBarplot[1:3,jj] = c(
 			length(which(highPredTerc$actTerc == 3)) / nrow(highPredTerc), 
 			length(which(highPredTerc$actTerc == 2)) / nrow(highPredTerc),
 			length(which(highPredTerc$actTerc == 1)) / nrow(highPredTerc))
 		
-		tercMedBarplot[1:3,jj] = c(
+		tercPredMedBarplot[1:3,jj] = c(
 			length(which(medPredTerc$actTerc == 3)) / nrow(medPredTerc), 
 			length(which(medPredTerc$actTerc == 2)) / nrow(medPredTerc),
 			length(which(medPredTerc$actTerc == 1)) / nrow(medPredTerc))
 
-		tercLowBarplot[1:3,jj] = c(
+		tercPredLowBarplot[1:3,jj] = c(
 			length(which(lowPredTerc$actTerc == 3)) / nrow(lowPredTerc), 
 			length(which(lowPredTerc$actTerc == 2)) / nrow(lowPredTerc),
 			length(which(lowPredTerc$actTerc == 1)) / nrow(lowPredTerc))
+
+		tercActHighBarplot[1:3,jj] = c(
+			length(which(highActTerc$predTerc == 3)) / nrow(highActTerc), 
+			length(which(highActTerc$predTerc == 2)) / nrow(highActTerc),
+			length(which(highActTerc$predTerc == 1)) / nrow(highActTerc))
+		
+		tercActMedBarplot[1:3,jj] = c(
+			length(which(medActTerc$predTerc == 3)) / nrow(medActTerc), 
+			length(which(medActTerc$predTerc == 2)) / nrow(medActTerc),
+			length(which(medActTerc$predTerc == 1)) / nrow(medActTerc))
+
+		tercActLowBarplot[1:3,jj] = c(
+			length(which(lowActTerc$predTerc == 3)) / nrow(lowActTerc), 
+			length(which(lowActTerc$predTerc == 2)) / nrow(lowActTerc),
+			length(which(lowActTerc$predTerc == 1)) / nrow(lowActTerc))
+
 
 		for(ii in 1:12)	{
 			subModPerf = subset(sumModPerf, month == ii & leadTime == jj)
@@ -1482,7 +1498,7 @@ projectionValidationAndPlotGeneration_f = function(
 
 	rampcols = colorRampPalette(c('#B91863','white', '#196CE1'))(11)# colors are 'blue' to 'red' but in CAi scheme
 	rampbreaks = c(seq(0,0.30, length.out = 6), seq(0.34,1,length.out=6))
-	png(paste0(dataOut_location, basinName, '_projectedOutputFigures\\tercileSummaryPlot_high.png'), width = 720, height = 720)
+	png(paste0(dataOut_location, basinName, '_projectedOutputFigures\\tercileHeatMap_high.png'), width = 720, height = 720)
 	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
 	image(t(highTercHeatMap),
 		col = rampcols, breaks = rampbreaks,
@@ -1501,7 +1517,7 @@ projectionValidationAndPlotGeneration_f = function(
 
 	rampcols = colorRampPalette(c('#B91863','white', '#196CE1'))(11)# colors are 'blue' to 'red' but in CAi scheme
 	rampbreaks = c(seq(0,0.30, length.out = 6), seq(0.34,1,length.out=6))
-	png(paste0(dataOut_location, basinName, '_projectedOutputFigures\\tercileSummaryPlot_med.png'), width = 720, height = 720)
+	png(paste0(dataOut_location, basinName, '_projectedOutputFigures\\tercileHeatMap_med.png'), width = 720, height = 720)
 	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
 	image(t(medTercHeatMap),
 		col = rampcols, breaks = rampbreaks,
@@ -1520,7 +1536,7 @@ projectionValidationAndPlotGeneration_f = function(
 
 	rampcols = colorRampPalette(c('#B91863','white', '#196CE1'))(11)# colors are 'blue' to 'red' but in CAi scheme
 	rampbreaks = c(seq(0,0.30, length.out = 6), seq(0.34,1,length.out=6))
-	png(paste0(dataOut_location, basinName, '_projectedOutputFigures\\tercileSummaryPlot_low.png'), width = 720, height = 720)
+	png(paste0(dataOut_location, basinName, '_projectedOutputFigures\\tercileHeatMap_low.png'), width = 720, height = 720)
 	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
 	image(t(lowTercHeatMap),
 		col = rampcols, breaks = rampbreaks,
@@ -1537,11 +1553,12 @@ projectionValidationAndPlotGeneration_f = function(
 	dev.off()
 	
 	
-	png(paste0(dataOut_location, basinName, '_projectedOutputFigures\\tercileSummaryPlot_high.png'), width = 900, height = 720)
+		# terciles based on prediction values
+	png(paste0(dataOut_location, basinName, '_projectedOutputFigures\\tercilePredBarPlot_high.png'), width = 900, height = 720)
 	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
-	barplot(tercHighBarplot * 100, beside=TRUE, ylim=c(0,100),
+	barplot(tercPredHighBarplot * 100, beside=TRUE, ylim=c(0,100),
 		col = c('#B91863', '#A9BF2C', '#039CE2'), 
-		main='High Tercile', ylab='% Tercile Correct', xlab='Lead Time', xaxt='n', yaxt='n',
+		main='High Tercile', ylab='% Tercile Correct by Forecast', xlab='Lead Time', xaxt='n', yaxt='n',
 		col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
 		family='A')
 	axis(2, at=seq(0,100,20) ,
@@ -1553,11 +1570,11 @@ projectionValidationAndPlotGeneration_f = function(
 	abline(h=100/3, col = '#666D74', lwd = 3, cex=1.5)
 	dev.off()
 	
-	png(paste0(dataOut_location, basinName, '_projectedOutputFigures\\tercileSummaryPlot_med.png'), width = 900, height = 720)
+	png(paste0(dataOut_location, basinName, '_projectedOutputFigures\\tercilePredBarPlot_med.png'), width = 900, height = 720)
 	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
-	barplot(tercMedBarplot * 100, beside=TRUE, ylim=c(0,100),
+	barplot(tercPredMedBarplot * 100, beside=TRUE, ylim=c(0,100),
 		col = c('#B91863', '#A9BF2C', '#039CE2'), 
-		main='Med Tercile', ylab='% Tercile Correct', xlab='Lead Time', xaxt='n', yaxt='n',
+		main='Med Tercile', ylab='% Tercile Correct by Forecast', xlab='Lead Time', xaxt='n', yaxt='n',
 		col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
 		family='A')
 	axis(2, at=seq(0,100,20) ,
@@ -1569,11 +1586,61 @@ projectionValidationAndPlotGeneration_f = function(
 	abline(h=100/3, col = '#666D74', lwd = 3, cex=1.5)
 	dev.off()
 
-	png(paste0(dataOut_location, basinName, '_projectedOutputFigures\\tercileSummaryPlot_low.png'), width = 900, height = 720)
+	png(paste0(dataOut_location, basinName, '_projectedOutputFigures\\tercilePredBarPlot_low.png'), width = 900, height = 720)
 	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
-	barplot(tercLowBarplot * 100, beside=TRUE, ylim=c(0,100),
+	barplot(tercPredLowBarplot * 100, beside=TRUE, ylim=c(0,100),
 		col = c('#B91863', '#A9BF2C', '#039CE2'), 
-		main='Low Tercile', ylab='% Tercile Correct', xlab='Lead Time', xaxt='n', yaxt='n',
+		main='Low Tercile', ylab='% Tercile Correct by Forecast', xlab='Lead Time', xaxt='n', yaxt='n',
+		col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
+		family='A')
+	axis(2, at=seq(0,100,20) ,
+		#labels = 3*(1:7),
+		col.lab='#1A232F', col.axis='#666D74')
+	axis(1, at=seq(3,(7*4), 4) -1.5 ,
+		labels = 1:7,
+		col.lab='#1A232F', col.axis='#666D74')
+	abline(h=100/3, col = '#666D74', lwd = 3, cex=1.5)
+	dev.off()
+
+
+		# terciles based on actual values
+	png(paste0(dataOut_location, basinName, '_projectedOutputFigures\\tercileActBarPlot_high.png'), width = 900, height = 720)
+	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
+	barplot(tercActHighBarplot * 100, beside=TRUE, ylim=c(0,100),
+		col = c('#B91863', '#A9BF2C', '#039CE2'), 
+		main='High Tercile', ylab='% Tercile Correct by Actual', xlab='Lead Time', xaxt='n', yaxt='n',
+		col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
+		family='A')
+	axis(2, at=seq(0,100,20) ,
+		#labels = 3*(1:7),
+		col.lab='#1A232F', col.axis='#666D74')
+	axis(1, at=seq(3,(7*4), 4) -1.5 ,
+		labels = 1:7,
+		col.lab='#1A232F', col.axis='#666D74')
+	abline(h=100/3, col = '#666D74', lwd = 3, cex=1.5)
+	dev.off()
+	
+	png(paste0(dataOut_location, basinName, '_projectedOutputFigures\\tercileActBarPlot_med.png'), width = 900, height = 720)
+	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
+	barplot(tercActMedBarplot * 100, beside=TRUE, ylim=c(0,100),
+		col = c('#B91863', '#A9BF2C', '#039CE2'), 
+		main='Med Tercile', ylab='% Tercile Correct by Actual', xlab='Lead Time', xaxt='n', yaxt='n',
+		col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
+		family='A')
+	axis(2, at=seq(0,100,20) ,
+		#labels = 3*(1:7),
+		col.lab='#1A232F', col.axis='#666D74')
+	axis(1, at=seq(3,(7*4), 4) -1.5 ,
+		labels = 1:7,
+		col.lab='#1A232F', col.axis='#666D74')
+	abline(h=100/3, col = '#666D74', lwd = 3, cex=1.5)
+	dev.off()
+
+	png(paste0(dataOut_location, basinName, '_projectedOutputFigures\\tercileActBarPlot_low.png'), width = 900, height = 720)
+	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
+	barplot(tercActLowBarplot * 100, beside=TRUE, ylim=c(0,100),
+		col = c('#B91863', '#A9BF2C', '#039CE2'), 
+		main='Low Tercile', ylab='% Tercile Correct by Actual', xlab='Lead Time', xaxt='n', yaxt='n',
 		col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
 		family='A')
 	axis(2, at=seq(0,100,20) ,
@@ -1635,11 +1702,10 @@ storageProjectionValidationAndPlotGeneration_f = function(
 		# reading in historic reservoir data
 				# reading in and reformatting streamflow input 
 		if(dataSource == 1)	{
-			basinAreaInKm = sum(st_read(paste0(pathToWatershedsGPKG))$SUB_AREA)
+			basinAreaInKm = sum(st_read(paste0(dataOut_location, "HydroBASINSdata_", basinName, ".gpkg"))$SUB_AREA)
 			acrePerSqKm = 247.105
 			mmPerFoot = 304.8
 			mmToAcrFt = basinAreaInKm * acrePerSqKm / mmPerFoot
-
 
 			if(infOrFNF == 'fnf')	{
 				inflow = as.data.table(read.csv(paste0(
@@ -1744,7 +1810,7 @@ storageProjectionValidationAndPlotGeneration_f = function(
 		validDF = data.frame(modelClm = NA, modelHyd = NA, days = NA, monthsOut = NA, predStor = NA, actStor = NA)
 
 		for(thisSeas5 in seas5ClimateInputFileNames)	{
-			seas5ClimateInput = readRDS(paste0(dataOut_location, basinName, '_seas5MultiOutput\\', thisSeas5))
+			seas5ClimateInput = readRDS(paste0(dataOut_location, 'seas5MultiOutput\\', thisSeas5))
 
 			# removing monthly forecasts that are not a full month
 			partialMonths = FALSE
