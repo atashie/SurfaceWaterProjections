@@ -381,11 +381,12 @@ modelCalibration_f = function(
 		historicStreamflow = as.data.table(read.csv(paste0(historicStreamflowFileLoc)))
 		if(dataSource == 1)	{
 			historicStreamflow$Date = ymd(unlist(strsplit(historicStreamflow$DATE.TIME, " "))[seq(1,nrow(historicStreamflow)*2,2)])
+			historicStreamflow$historicQinOriginalUnits = as.numeric(historicStreamflow$VALUE)
 			basinArea = sum(st_read(paste0(dataOut_location, "HydroBASINSdata_", basinName, ".gpkg"))$SUB_AREA)
 			flowUnitConversion = 4.08735e-13 # cubic mm / day in cfs
 			areaUnitConversion = (1000000)^2     # sq mm per sq km
-			historicStreamflow$historicQinmm = (as.numeric(historicStreamflow$VALUE) / flowUnitConversion) / (areaUnitConversion * basinArea)
-			
+			historicStreamflow$historicQinmm = (historicStreamflow$historicQinOriginalUnits / flowUnitConversion) / (areaUnitConversion * basinArea)
+				
 		}	else	{ 
 			return("we need to figure out how to read in and normalize this streamflow data")
 		}
@@ -429,7 +430,19 @@ modelCalibration_f = function(
 			maeAll = rep(NA,minGoodRuns),
 			rmseAll = rep(NA,minGoodRuns),
 			biasAll = rep(NA,minGoodRuns),
-			mnthSumAbsBias = rep(NA,minGoodRuns)
+			mnthSumAbsBias = rep(NA,minGoodRuns),
+			mnthBias_1 = rep(NA,minGoodRuns),
+			mnthBias_2 = rep(NA,minGoodRuns),
+			mnthBias_3 = rep(NA,minGoodRuns),
+			mnthBias_4 = rep(NA,minGoodRuns),
+			mnthBias_5 = rep(NA,minGoodRuns),
+			mnthBias_6 = rep(NA,minGoodRuns),
+			mnthBias_7 = rep(NA,minGoodRuns),
+			mnthBias_8 = rep(NA,minGoodRuns),
+			mnthBias_9 = rep(NA,minGoodRuns),
+			mnthBias_10 = rep(NA,minGoodRuns),
+			mnthBias_11 = rep(NA,minGoodRuns),
+			mnthBias_12 = rep(NA,minGoodRuns)
 		)
 
 		iter = 0
@@ -527,15 +540,17 @@ modelCalibration_f = function(
 					cal_out$maeAll[iter] = mae(HBVoutput$Qg, HBVoutput$historicQinmm)
 					cal_out$rmseAll[iter] = rmse(HBVoutput$Qg, HBVoutput$historicQinmm)
 					cal_out$biasAll[iter] = pbias(HBVoutput$Qg, HBVoutput$historicQinmm)
-						# calculating monthly mean bias
+						# calculating monthly biases
 					HBVoutput$month = month(HBVoutput$Date)
 					HBVoutputMonth = subset(HBVoutput, month == 1)
-					cal_out$mnthSumAbsBias[iter] = abs(pbias(HBVoutputMonth$Qg, HBVoutputMonth$historicQinmm))
+					cal_out$mnthBias_1[iter] = pbias(HBVoutputMonth$Qg, HBVoutputMonth$historicQinmm)
+#					cal_out$mnthSumAbsBias[iter] = abs(cal_out$mnthBias_1[iter])
 					for(thisMonth in 2:12)	{
 						HBVoutputMonth = subset(HBVoutput, month == thisMonth)
-						cal_out$mnthSumAbsBias[iter] = cal_out$mnthSumAbsBias[iter] + abs(pbias(HBVoutputMonth$Qg, HBVoutputMonth$historicQinmm))
+						cal_out[iter, paste0('mnthBias_', thisMonth)] = pbias(HBVoutputMonth$Qg, HBVoutputMonth$historicQinmm)
 					}
-					cal_out$mnthSumAbsBias[iter] = cal_out$mnthSumAbsBias[iter] / 12
+					mnthBiasCols = which(names(cal_out) == 'mnthBias_1'):which(names(cal_out) == 'mnthBias_12')
+					cal_out$mnthSumAbsBias[iter] = apply(abs(cal_out[iter, mnthBiasCols]), 1, mean)
 					
 					fwrite(cal_out, paste0(dataOut_location, "calibration_", basinName, ".csv"), append=FALSE)
 				}
@@ -550,11 +565,14 @@ modelCalibration_f = function(
 
 ##########################################################################################################
 	## Running the Model for Seasonal Forecasts 
-seasonalForecast_f = function(
+seasonalStreamflowForecast_f = function(
 	basinName = 'inster_basin_or_outlet_name',
 	historicStreamflowFileLoc = 'https://someplace.gov',
 	dataOut_location = 'save_file_location',
-	dataSource = 1)							# 1 for FNF from cal.gov,
+	dataSource = 1,							# 1 for FNF from cal.gov,
+	waterYearStart = as.Date('yyyy-mm-dd'),
+	forecastDate = as.Date('yyyy-mm-dd'),
+	gageLonLat = c(1,1))
 	{
 
 	if(file.exists(paste0(dataOut_location, "calibration_", basinName, ".csv")))	{
@@ -583,21 +601,41 @@ seasonalForecast_f = function(
 			flowUnitConversion = 4.08735e-13 # cubic mm / day in cfs
 			areaUnitConversion = (1000000)^2     # sq mm per sq km
 			historicStreamflow$historicQinmm = (historicStreamflow$historicQinOriginalUnits / flowUnitConversion) / (areaUnitConversion * basinArea)
+			
+				# routine for calculating climatolology of streamflow
+			historicStreamflow$year = year(historicStreamflow$Date)
+			historicStreamflow$doy = yday(historicStreamflow$Date)
+			startWYs = which(historicStreamflow$doy == yday(waterYearStart))
+			
+			climatologyDF = data.frame(dayOfWY = 1:365)
+			for(thisWY in startWYs[1:(length(startWYs) - 1)])	{
+				histSubset = historicStreamflow[thisWY:(thisWY+364)]
+				if(histSubset$Date[365] - histSubset$Date[1] <= 366)	{	# ensuring we aren't using years with large data gaps
+					# backfilling for missing data
+					if(any(is.na(histSubset$historicQinOriginalUnits)))	{
+						histSubset$historicQinOriginalUnits[is.na(histSubset$historicQinOriginalUnits)] = mean(histSubset$historicQinOriginalUnits, na.rm=TRUE)
+					}
+					climatologyDF = cbind(climatologyDF, cumsum(histSubset$historicQinOriginalUnits))
+				}
+			}
 		}	else	{ 
 			return("we need to figure out how to read in and normalize this streamflow data")
 		}
+		
+			# building a record of historical streamflow for comparison
 
-
+	
 			# identifying which time periods will use historic data before replacing with forecast data
 		lastHistData = last(era5ClimateInput$Date)
 		seas5Rows = (1 + which(as.character(seas5ClimateInput[[1]]$Date) == as.character(lastHistData))):length(seas5ClimateInput[[1]]$Date)
-		allForecastsOutput = list()
+
+		allForecastsOutput = data.frame(Date = c(era5ClimateInput$Date, seas5ClimateInput[[1]]$Date[seas5Rows]))
 		iter = 0
 		for(numModels in 1:length(seas5ClimateInput))	{
 			for(numCalibs in 1:nrow(calibratedVars))	{	
 				iter = iter + 1
 				climateInput = rbind(era5ClimateInput,seas5ClimateInput[[numModels]][seas5Rows,])
-
+				
 
 				allHBVoutput = runHBV_f(
 					climateInput = climateInput,
@@ -615,26 +653,48 @@ seasonalForecast_f = function(
 					k2   = calibratedVars$k2[numCalibs],	# storage constant of bottom bucket	
 					uz1  = calibratedVars$uz1[numCalibs], #max flux rate from STZ to SUZ in mm/d
 					perc = calibratedVars$perc[numCalibs])  # max flux rate from SUZ to SLZ in mm/d
-
-					# merging historic streamflow record onto climate inputs data
-				climateAndStreamflowOutput = historicStreamflow[allHBVoutput, on='Date']
-					# quick plots for visual confirmation
-				plot(climateAndStreamflowOutput$Date, climateAndStreamflowOutput$historicQinmm, type='l')
-				lines(climateAndStreamflowOutput$Date, climateAndStreamflowOutput$Qg, col='red2')
-
 				if(dataSource == 1)	{
-#					climateAndStreamflowOutput$historicQinOriginalUnits
-					climateAndStreamflowOutput$projectedQinOriginalUnits = climateAndStreamflowOutput$Qg * flowUnitConversion * areaUnitConversion * basinArea
+					allHBVoutput$projectedQinOriginalUnits = allHBVoutput$Qg * flowUnitConversion * areaUnitConversion * basinArea
 				}	else	{ 
 					return("we need to figure out how to read in and normalize this streamflow data")
 				}
 				
 					# compiling all forecasts into a list
-				allForecastsOutput[[iter]] = climateAndStreamflowOutput
+				allForecastsOutput = cbind(allForecastsOutput, allHBVoutput$projectedQinOriginalUnits)
 			}
 		}
 	}	else	{print("Ya gotta calibrate the model first you big ole dummy!")}
-	return(allForecastsOutput)
+		####			prevRecord = which(climateAndStreamflowOutput$Date < waterYearStart)
+	forecastThisWY = subset(allForecastsOutput, Date >= waterYearStart)
+	if(last(historicStreamflow$Date) >= waterYearStart)	{
+		whichRecentStreamflow = which(historicStreamflow$Date >= waterYearStart)
+		forecastThisWY[1:length(whichRecentStreamflow), -1] = historicStreamflow$historicQinOriginalUnits[whichRecentStreamflow]
+	}
+	forecastThisWY[ , -1] = apply(forecastThisWY[ , -1], 2, cumsum)
+	lnForecast = nrow(forecastThisWY)
+	lnNAs = 365 - lnForecast
+	forecastOutput = data.frame(Date = seq(as.Date(waterYearStart), by='days', length.out=365),
+		Reservoir = basinName,
+		Units = NA,
+		Lat = gageLonLat[2], Lon = gageLonLat[1],
+		Pred_Q05 = c(apply(forecastThisWY[,-1], 1, quantile, probs=0.05), rep(NA, lnNAs)),
+		Pred_Q25 = c(apply(forecastThisWY[,-1], 1, quantile, probs=0.25), rep(NA, lnNAs)),
+		Pred_Q50 = c(apply(forecastThisWY[,-1], 1, quantile, probs=0.50), rep(NA, lnNAs)),
+		Pred_Q75 = c(apply(forecastThisWY[,-1], 1, quantile, probs=0.75), rep(NA, lnNAs)),
+		Pred_Q95 = c(apply(forecastThisWY[,-1], 1, quantile, probs=0.95), rep(NA, lnNAs)),
+		Clim_Q05 = apply(climatologyDF[,-1], 1, quantile, probs=0.05),
+		Clim_Q25 = apply(climatologyDF[,-1], 1, quantile, probs=0.25),
+		Clim_Q50 = apply(climatologyDF[,-1], 1, quantile, probs=0.50),
+		Clim_Q75 = apply(climatologyDF[,-1], 1, quantile, probs=0.75),
+		Clim_Q95 = apply(climatologyDF[,-1], 1, quantile, probs=0.95))
+
+	if(dataSource == 1)	{
+		forecastOutput$Units = 'Acre Feet'
+	} else {
+		return("we need to figure out how to read in and normalize this streamflow data")
+	}
+	
+	fwrite(forecastOutput, paste0(dataOut_location, "forecast_", basinName, '_', forecastDate, ".csv"))
 }
 
 
@@ -879,8 +939,6 @@ reservoirOutflowCalVal_f = function(
 	historicReservoirFileLoc = 'insert_file_loc_here.com',
 	historicStreamflowFileLoc = 'insert_file_loc_here.com',
 	basinName = 'inster_basin_or_outlet_name',
-	basinSymbol = 'EXC',
-	infOrFNF = 'inflow',
 	dataSource = 1, 			# 1 for FNF or inflow from cal.gov,
 	nTreeModel=5000,
 	modelMetric = 'Rsquared',
@@ -890,6 +948,12 @@ reservoirOutflowCalVal_f = function(
 	numRepeats = 12)
 	{
 	
+
+		# create the folder for storing outputs
+	if(!file.exists(paste0(dataOut_location, basinName, '_reservoirModel')))	{
+			dir.create(file.path(paste0(dataOut_location, basinName, '_reservoirModel')))
+	}
+
 	############ loading libraries
 	library(data.table)
 	library(lubridate)
@@ -898,9 +962,10 @@ reservoirOutflowCalVal_f = function(
 	library(sf)
 	library(zoo)
 
+		# reading in data on reservoir inflows and storage
 	if(dataSource == 1)	{
 		inflow = as.data.table(read.csv(paste0(historicStreamflowFileLoc)))
-		stor = read.csv(paste0(historicStreamflowFileLoc))
+		stor = read.csv(paste0(historicReservoirFileLoc))
 		#outflow = read.csv("https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=EXC&SensorNums=23&dur_code=D&Start=1900-01-01&End=2022-08-05")
 
 		stor$Date = ymd(unlist(strsplit(stor$DATE.TIME, " "))[seq(1,nrow(stor)*2,2)])
@@ -908,203 +973,107 @@ reservoirOutflowCalVal_f = function(
 		inflow$Date = ymd(unlist(strsplit(inflow$DATE.TIME, " "))[seq(1,nrow(inflow)*2,2)])
 		inflow$inflow = inflow$VALUE
 		allDat = inflow[stor[c('Date','stor')], on = 'Date']
+		whichFirstNoNA = which(!is.na(allDat$stor) & !is.na(allDat$inflow))[1]
+		allDat = allDat[-c(1:(whichFirstNoNA-1)), ]
 		allDat$AcFtPDay_inflow =  as.numeric(allDat$inflow)  * (60*60*24) / 43559.9
 			# resLoss = Outflow + AET + Withdrawals = dS - Inflow
-		allDat$resLoss = c(diff(allDat$stor) - allDat$AcFtPDay_inflow[-1], NA) * -1
+		allDat$storIntrp = na.approx(allDat$stor)
+		allDat$infIntrp = na.approx(allDat$AcFtPDay_inflow)
+		allDat$resLoss = c(diff(allDat$storIntrp) - allDat$infIntrp[-nrow(allDat)], NA) * -1
+		allDat$resLoss[allDat$resLoss < 0] = 0
 	} else	{print("need to figure out how to handle these data")}
 	
-	#######################################################################################################################################
-	### for monthly estimations
 
+	resComplete = allDat[-nrow(allDat), c('Date')]
+		# rounding to help reduce overfitting
+	resComplete = cbind(resComplete, signif(allDat[-nrow(allDat), c('resLoss', 'storIntrp', 'infIntrp')], 4))
+	resComplete$month = as.factor(month(resComplete$Date))
+	
+	#resComplete$yday = as.factor(yday(resComplete$Date))
+	
+	resTest = resComplete[(floor(nrow(resComplete) * .33) + 1):nrow(resComplete), ]
+	resValid = resComplete[1:(floor(nrow(resComplete) * .33)), ]
+	
+	
+	resStorModel = train(resTest[,-c(1,2)],
+						resTest$resLoss,
+						metric=modelMetric,
+						method=modelMethod,
+						#tuneLength=?,
+						imporance=TRUE,
+						ntree=nTreeModel,
+						trControl = trainControl(
+							method = 'repeatedcv',
+							number = numFolds,
+							repeats = numRepeats))
+							#method='cv'))
+		#					index = indices$index))
+		#					p=.75))
 
-	allDat$ymonth = paste0(year(allDat$Date), month(allDat$Date))
-	monthDat = data.frame(ymonth = NA, month = NA, year = NA, stor = NA, AcFtPDay_inflow = NA, resLoss = NA)
-	k = 0
-	for(i in unique(allDat$ymonth))	{
-		k = k + 1
-		subsetDat = subset(allDat, ymonth == i)
-		monthDat = rbind(monthDat, c(i, month(subsetDat$Date[1]), year(subsetDat$Date[1]), 
-			mean(subsetDat$stor, na.rm=TRUE),
-			mean(subsetDat$AcFtPDay_inflow * 30.4375, na.rm=TRUE),
-			mean(subsetDat$resLoss * 30.4375, na.rm=TRUE)))
-	}
-	monthDat$stor = as.numeric(monthDat$stor)
-	monthDat$AcFtPDay_inflow = as.numeric(monthDat$AcFtPDay_inflow)
-	monthDat$resLoss = as.numeric(monthDat$resLoss)
+			#saving the model
+	saveRDS(resStorModel, paste0(dataOut_location, basinName, '_reservoirModel\\dailyProj.RData'))
 
-	if(!file.exists(paste0(dataOut_location, basinName, '_reservoirModel')))	{
-		dir.create(file.path(paste0(dataOut_location, basinName, '_reservoirModel')))
-	}
-
-		# saving uncertainty in I + O = dS
-	png(paste0(dataOut_location, basinName, '_reservoirModel\\', basinName, '_monthlyReservoirDstorVsLoss_historical.png'), width = 720, height = 720)
+	predValid = predict(resStorModel, newdata = resValid)
+	predCalib = predict(resStorModel, newdata = resTest)
+			
+		# save ML model performance
+	png(paste0(dataOut_location, basinName, '_reservoirModel\\', basinName, '_MLcalib_dailyProj.png'), width = 720, height = 720)
 	windowsFonts(A = windowsFont("Roboto"))
 	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
-	plot(diff(monthDat$stor), (monthDat$AcFtPDay_inflow[-1] - monthDat$resLoss[-1]), 
-		main='', xlab = 'Delta Reservoir Storage (AcFt / Month)', ylab = 'Est. Inflow - Outflow (AcFt / Month)',
+	plot(resTest$resLoss, predCalib, 
+		main='', xlab = 'Act. Reservoir Loss (AcFt / Month)', ylab = 'Est. Reservoir Loss (AcFt / Month)',
+		pch=2, lwd=1.15,  col=alpha('#0098B2', 0.5), cex=1.75)
+		
+	abline(a=0, b=1, lwd=2, col='#1A232F', cex=2)
+	abline(lm(predCalib ~ resTest$resLoss),
+		lwd=2, col=alpha('#F06000', 1), cex=2)
+	text(x=min(resTest$resLoss, na.rm=TRUE), 
+			y=max(predCalib, na.rm=TRUE) * 0.9,
+			paste0('r  = ', round(summary(lm(predCalib ~ resTest$resLoss))$r.squared, 2)),
+			adj = c(0,0), font=2, col='#F06000', family='A', cex=2*1.6)
+	text(x=min(resTest$resLoss, na.rm=TRUE), 
+			y=max(predCalib, na.rm=TRUE) * 0.92,
+			'  2',
+			adj = c(0,0), font=2, col='#F06000', family='A', cex=1.2*1.6)
+	text(x=max(resTest$resLoss, na.rm=TRUE) ,
+			y=min(predCalib, na.rm=TRUE) * .9,
+			paste0(basinName),
+			adj = c(1,0), font=2, col='#1A232F', family='A', cex=1.5*1.9)
+	text(x=min(resTest$resLoss, na.rm=TRUE) ,
+			y=max(predCalib, na.rm=TRUE) * .82,
+			paste0('Calib. Pred. Daily'),
+			adj = c(0,0), font=2, col='#F06000', family='A', cex=1.5*1.9)
+	dev.off()
+
+
+		# save validation of ML model
+	png(paste0(dataOut_location, basinName, '_reservoirModel\\', basinName, '_MLvalid_dailyProj.png'), width = 720, height = 720)
+	windowsFonts(A = windowsFont("Roboto"))
+	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
+	plot(resValid$resLoss, predValid, 
+		main='', xlab = 'Act. Reservoir Loss (AcFt / Month)', ylab = 'Est. Reservoir Loss (AcFt / Month)',
 		pch=2, lwd=1.15,  col=alpha('#0098B2', 0.5), cex=1.75)
 	
 	abline(a=0, b=1, lwd=2, col='#1A232F', cex=2)
-	abline(lm((monthDat$AcFtPDay_inflow[-1] - monthDat$resLoss[-1]) ~ diff(monthDat$stor)),
+	abline(lm(predValid ~ resValid$resLoss),
 		lwd=2, col=alpha('#F06000', 1), cex=2)
-	text(x=min(diff(monthDat$stor), na.rm=TRUE), 
-			y=max(monthDat$AcFtPDay_inflow[-1] - monthDat$resLoss[-1], na.rm=TRUE) * 0.9,
-			paste0('r  = ', round(summary(lm((30 * (monthDat$AcFtPDay_inflow[-1] - monthDat$resLoss[-1])) ~ diff(monthDat$stor)))$r.squared, 2)),
+	text(x=min(resValid$resLoss, na.rm=TRUE), 
+			y=max(predValid, na.rm=TRUE) * 0.9,
+			paste0('r  = ', round(summary(lm(predValid ~ resValid$resLoss))$r.squared, 2)),
 			adj = c(0,0), font=2, col='#F06000', family='A', cex=2*1.6)
-	text(x=min(diff(monthDat$stor), na.rm=TRUE), 
-			y=max(monthDat$AcFtPDay_inflow[-1] - monthDat$resLoss[-1], na.rm=TRUE) * 0.96,
+	text(x=min(resValid$resLoss, na.rm=TRUE), 
+			y=max(predValid, na.rm=TRUE) * 0.92,
 			'  2',
 			adj = c(0,0), font=2, col='#F06000', family='A', cex=1.2*1.6)
-	text(x=max(diff(monthDat$stor), na.rm=TRUE) ,
-			y=min(monthDat$AcFtPDay_inflow[-1] - monthDat$resLoss[-1], na.rm=TRUE) * .9,
+	text(x=max(resValid$resLoss, na.rm=TRUE) ,
+			y=min(predValid, na.rm=TRUE) * .9,
 			paste0(basinName),
 			adj = c(1,0), font=2, col='#1A232F', family='A', cex=1.5*1.9)
+	text(x=min(resValid$resLoss, na.rm=TRUE) ,
+			y=max(predValid, na.rm=TRUE) * .82,
+			paste0('Valid. Pred. Daily'),
+			adj = c(0,0), font=2, col='#F06000', family='A', cex=1.5*1.9)
 	dev.off()
-
-	
-		# initializing model predictions
-	for(h in 1:6)	{
-		recLength = nrow(monthDat)
-		lagLength = seq(1, (12*2 - h), 1)
-
-		corResults = matrix(data = NA, nrow = length(lagLength), ncol = 2)
-		k=0
-		for(i in lagLength)	{
-			k=k+1
-			storRolMn = rollmean(monthDat$stor, i)
-			storRolMnLn = length(storRolMn)
-			corResults[k, 1] = cor.test(
-				c(rep(NA, h + (i - 1)), storRolMn[-c((storRolMnLn - (h-1)):storRolMnLn)]),
-				monthDat$resLoss,
-				method='kendall')$p.value
-			infRolMn = rollmean(monthDat$AcFtPDay_inflow, i)
-			infRolMnLn = length(infRolMn)
-			corResults[k, 2] = cor.test(
-				c(rep(NA, h + (i - 1)), infRolMn[-c((infRolMnLn - (h-1)):infRolMnLn)]),
-				monthDat$resLoss,
-				method='kendall')$p.value
-		}
-	
-
-		bestStorLags = c(order(corResults[,1])[c(1:5)], max(lagLength))
-		bestInfLags = c(order(corResults[,2])[c(1:5)], max(lagLength))
-
-		resSubset = monthDat[, c('ymonth','resLoss','month')]
-
-		for(j in 1:length(bestInfLags))	{
-			storLag = bestStorLags[j]
-			storRolMn = rollmean(monthDat$stor, storLag)
-			storRolMnLn = length(storRolMn)
-			
-			infLag = bestInfLags[j]
-			infRolMn = rollmean(monthDat$AcFtPDay_inflow, infLag)
-			infRolMnLn = length(infRolMn)
-		
-			resSubset[ , paste0('stor_mn_', storLag)] = 
-				c(rep(NA, h + (storLag - 1)), 
-					storRolMn[-c((storRolMnLn - (h-1)):storRolMnLn)])
-			resSubset[ , paste0('inf_mn_', infLag)] = 
-				c(rep(NA, h + (infLag - 1)), 
-					infRolMn[-c((infRolMnLn - (h-1)):infRolMnLn)])
-		}
-
-		resComplete = resSubset[complete.cases(resSubset), ]
-		resTest = resComplete[(floor(nrow(resComplete) * .33) + 1):nrow(resComplete), ]
-		resValid = resComplete[1:(floor(nrow(resComplete) * .33)), ]
-
-		model_LLO = train(resTest[,-c(1,2)],
-							resTest$resLoss,
-							metric=modelMetric,
-							method=modelMethod,
-							#tuneLength=?,
-							imporance=TRUE,
-							ntree=nTreeModel,
-							trControl = trainControl(
-								method='repeatedcv',
-								number=numFolds,
-								repeats=numRepeats))
-								#method='cv'))
-			#					index = indices$index))
-			#					p=.75))
-
-		#model_LLO
-		#	sortVars = varImp(model_LLO)$importance	;	sortVars$tot = apply(sortVars, 1, sum)
-		#varImp(model_LLO)$importance	
-		#	sortedVars = row.names(sortVars)[rev(order(sortVars$tot))]
-		#	sortedVars
-
-			# appending the best time lags to the model for rerunning
-		model_LLO[[length(model_LLO) + 1]] = data.frame(bestStorLags = bestStorLags, bestInfLags = bestInfLags)
-
-
-			# save ML model
-		model_LLO[[length(model_LLO)+1]] = data.frame(bestStorLags = bestStorLags, bestInfLags = bestInfLags)
-		saveRDS(model_LLO, paste0(dataOut_location, basinName, '_reservoirModel\\', h, '_monthsOut.RData'))
-
-		predValid = predict(model_LLO, newdata = resValid)
-		predCalib = predict(model_LLO, newdata = resTest)
-			
-			# save ML model performance
-		png(paste0(dataOut_location, basinName, '_reservoirModel\\', basinName, '_MLcalib_', h, '_monthsOut.png'), width = 720, height = 720)
-		windowsFonts(A = windowsFont("Roboto"))
-		par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
-		plot(resTest$resLoss, predCalib, 
-			main='', xlab = 'Act. Reservoir Loss (AcFt / Month)', ylab = 'Est. Reservoir Loss (AcFt / Month)',
-			pch=2, lwd=1.15,  col=alpha('#0098B2', 0.5), cex=1.75)
-		
-		abline(a=0, b=1, lwd=2, col='#1A232F', cex=2)
-		abline(lm(predCalib ~ resTest$resLoss),
-			lwd=2, col=alpha('#F06000', 1), cex=2)
-		text(x=min(resTest$resLoss, na.rm=TRUE), 
-				y=max(predCalib, na.rm=TRUE) * 0.9,
-				paste0('r  = ', round(summary(lm(predCalib ~ resTest$resLoss))$r.squared, 2)),
-				adj = c(0,0), font=2, col='#F06000', family='A', cex=2*1.6)
-		text(x=min(resTest$resLoss, na.rm=TRUE), 
-				y=max(predCalib, na.rm=TRUE) * 0.92,
-				'  2',
-				adj = c(0,0), font=2, col='#F06000', family='A', cex=1.2*1.6)
-		text(x=max(resTest$resLoss, na.rm=TRUE) ,
-				y=min(predCalib, na.rm=TRUE) * .9,
-				paste0(basinName),
-				adj = c(1,0), font=2, col='#1A232F', family='A', cex=1.5*1.9)
-		text(x=min(resTest$resLoss, na.rm=TRUE) ,
-				y=max(predCalib, na.rm=TRUE) * .82,
-				paste0('Calib. Pred. ', h, ' Months Out'),
-				adj = c(0,0), font=2, col='#F06000', family='A', cex=1.5*1.9)
-		dev.off()
-
-
-			# save validation of ML model
-		png(paste0(dataOut_location, basinName, '_reservoirModel\\', basinName, '_MLpreds_', h, '_monthsOut.png'), width = 720, height = 720)
-		windowsFonts(A = windowsFont("Roboto"))
-		par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
-		plot(resValid$resLoss, predValid, 
-			main='', xlab = 'Act. Reservoir Loss (AcFt / Month)', ylab = 'Est. Reservoir Loss (AcFt / Month)',
-			pch=2, lwd=1.15,  col=alpha('#0098B2', 0.5), cex=1.75)
-		
-		abline(a=0, b=1, lwd=2, col='#1A232F', cex=2)
-		abline(lm(predValid ~ resValid$resLoss),
-			lwd=2, col=alpha('#F06000', 1), cex=2)
-		text(x=min(resValid$resLoss, na.rm=TRUE), 
-				y=max(predValid, na.rm=TRUE) * 0.9,
-				paste0('r  = ', round(summary(lm(predValid ~ resValid$resLoss))$r.squared, 2)),
-				adj = c(0,0), font=2, col='#F06000', family='A', cex=2*1.6)
-		text(x=min(resValid$resLoss, na.rm=TRUE), 
-				y=max(predValid, na.rm=TRUE) * 0.92,
-				'  2',
-				adj = c(0,0), font=2, col='#F06000', family='A', cex=1.2*1.6)
-		text(x=max(resValid$resLoss, na.rm=TRUE) ,
-				y=min(predValid, na.rm=TRUE) * .9,
-				paste0(basinName),
-				adj = c(1,0), font=2, col='#1A232F', family='A', cex=1.5*1.9)
-		text(x=min(resValid$resLoss, na.rm=TRUE) ,
-				y=max(predValid, na.rm=TRUE) * .82,
-				paste0('Valid. Pred. ', h, ' Months Out'),
-				adj = c(0,0), font=2, col='#F06000', family='A', cex=1.5*1.9)
-		dev.off()
-
-
-	}
 }
 
 
@@ -1119,7 +1088,8 @@ projectionValidationAndPlotGeneration_f = function(
 	basinName = 'inster_basin_or_outlet_name',
 	historicStreamflowFileLoc = 'https://someplace.gov',
 	dataOut_location = 'save_file_location',
-	dataSource = 1)							# 1 for FNF from cal.gov,
+	dataSource = 1,
+	biasCorrection = TRUE)							# 1 for FNF from cal.gov,
 	{
 	
 	if(!file.exists(paste0(dataOut_location, "calibration_", basinName, ".csv")))	{
@@ -1229,16 +1199,36 @@ projectionValidationAndPlotGeneration_f = function(
 					monthsOut = 0
 					predCumsum = 0
 					actCumsum = 0 
-					for(thisMonth in unique(climateAndStreamflowOutput$month))	{
-						monthsOut = monthsOut + 1
-						outputSubset = subset(climateAndStreamflowOutput, month == thisMonth)
-						numDays = nrow(outputSubset)
-						predCumsum = predCumsum + mean(outputSubset$Qg) * numDays
-						actCumsum = actCumsum + mean(outputSubset$historicQinmm, na.rm=TRUE) * numDays
-						validDF = rbind(validDF,
-							c(numModels, numCalibs, outputSubset$Date[1] + 14, monthsOut,
-								predCumsum, actCumsum))
+					
+					if(biasCorrection)	{
+						firstBiasMonth = which(names(calibratedVars) == 'mnthBias_1') - 1
+						for(thisMonth in unique(climateAndStreamflowOutput$month))	{
+							biasCol = firstBiasMonth + thisMonth
+							debiasVal = as.numeric(100 - calibratedVars[numCalibs, ..biasCol]) / 100
+							monthsOut = monthsOut + 1
+							outputSubset = subset(climateAndStreamflowOutput, month == thisMonth)
+							numDays = nrow(outputSubset)
+							predCumsum = predCumsum + mean(outputSubset$Qg) * numDays * debiasVal
+							actCumsum = actCumsum + mean(outputSubset$historicQinmm, na.rm=TRUE) * numDays
+							validDF = rbind(validDF,
+								c(numModels, numCalibs, outputSubset$Date[1] + 14, monthsOut,
+									predCumsum, actCumsum))
+						}
+					} else	{
+						for(thisMonth in unique(climateAndStreamflowOutput$month))	{
+							monthsOut = monthsOut + 1
+							outputSubset = subset(climateAndStreamflowOutput, month == thisMonth)
+							numDays = nrow(outputSubset)
+							predCumsum = predCumsum + mean(outputSubset$Qg) * numDays
+							actCumsum = actCumsum + mean(outputSubset$historicQinmm, na.rm=TRUE) * numDays
+							validDF = rbind(validDF,
+								c(numModels, numCalibs, outputSubset$Date[1] + 14, monthsOut,
+									predCumsum, actCumsum))
+						}
 					}
+					
+						
+					
 					
 					if(nrow(validDF) > 20000)	{
 						save_iter = save_iter + 1
@@ -1436,9 +1426,12 @@ projectionValidationAndPlotGeneration_f = function(
 			lowTercHeatMap[jj,ii] = length(which(subLowModPerf$predTerc == 1)) / nrow(subLowModPerf)
 		}
 	}
-	row.names(tercHighBarplot) = c('high', 'med', 'low')
-	row.names(tercMedBarplot) = c('high', 'med', 'low')
-	row.names(tercLowBarplot) = c('high', 'med', 'low')
+	row.names(tercActHighBarplot) = c('high', 'med', 'low')
+	row.names(tercActMedBarplot) = c('high', 'med', 'low')
+	row.names(tercActLowBarplot) = c('high', 'med', 'low')
+	row.names(tercPredHighBarplot) = c('high', 'med', 'low')
+	row.names(tercPredMedBarplot) = c('high', 'med', 'low')
+	row.names(tercPredLowBarplot) = c('high', 'med', 'low')
 	
 	rampcols = colorRampPalette(c('#B91863','white', '#196CE1'))(11) # colors are 'blue' to 'red' but in CAi scheme
 	rampbreaks = seq(-100, 100, length.out = 12)
@@ -1651,9 +1644,645 @@ projectionValidationAndPlotGeneration_f = function(
 		col.lab='#1A232F', col.axis='#666D74')
 	abline(h=100/3, col = '#666D74', lwd = 3, cex=1.5)
 	dev.off()
-
-	
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+######################
+# under construction
+
+projectedStorageValidationAndPlotGeneration_f = function(
+	basinName = 'inster_basin_or_outlet_name',
+	historicStreamflowFileLoc = 'https://someplace.gov',
+	historicReservoirFileLoc = 'insert_file_loc_here.com',
+	dataOut_location = 'save_file_location',
+	dataSource = 1,
+	biasCorrection = TRUE)							# 1 for FNF from cal.gov,
+	{
+	
+		# Confirming the hydro model and storage model have both been calibrated
+	if(!file.exists(paste0(dataOut_location, "calibration_", basinName, ".csv")))	{
+		return('gotta calibrate the model first you big ole dummy!!')
+	}	else	{
+
+		if(!file.exists(paste0(dataOut_location, basinName, '_projectedStorageOutputFigures')))	{
+			dir.create(file.path(paste0(dataOut_location, basinName, '_projectedStorageOutputFigures')))
+		}
+
+		############ loading libraries
+		library(data.table)
+		library(lubridate)
+		library(CAST)
+		library(caret)
+		library(sf)
+		library(zoo)
+
+			# reading in data on reservoir inflows and storage
+		if(dataSource == 1)	{
+			inflow = as.data.table(read.csv(paste0(historicStreamflowFileLoc)))
+			stor = read.csv(paste0(historicReservoirFileLoc))
+			#outflow = read.csv("https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=EXC&SensorNums=23&dur_code=D&Start=1900-01-01&End=2022-08-05")
+
+			stor$Date = ymd(unlist(strsplit(stor$DATE.TIME, " "))[seq(1,nrow(stor)*2,2)])
+			stor$stor = as.numeric(stor$VALUE)
+			inflow$Date = ymd(unlist(strsplit(inflow$DATE.TIME, " "))[seq(1,nrow(inflow)*2,2)])
+			inflow$inflow = inflow$VALUE
+			allDat = inflow[stor[c('Date','stor')], on = 'Date']
+			whichFirstNoNA = which(!is.na(allDat$stor) & !is.na(allDat$inflow))[1]
+			allDat = allDat[-c(1:(whichFirstNoNA-1)), ]
+			allDat$AcFtPDay_inflow =  as.numeric(allDat$inflow)  * (60*60*24) / 43559.9
+				# resLoss = Outflow + AET + Withdrawals = dS - Inflow
+			allDat$storIntrp = na.approx(allDat$stor)
+			allDat$infIntrp = na.approx(allDat$AcFtPDay_inflow)
+			allDat$resLoss = c(diff(allDat$storIntrp) - allDat$infIntrp[-nrow(allDat)], NA) * -1
+			allDat$resLoss[allDat$resLoss <= 1] = 1	# using a power law model so eliminating 0s
+			allDat$infIntrp[allDat$infIntrp <= 1] = 1	# using a power law model so eliminating 0s
+			
+				# basic models for relating storage and inflows to outflows
+			infModelLg = lm(allDat$resLoss ~ log(allDat$infIntrp))
+			infModelLn = lm(allDat$resLoss ~ allDat$infIntrp)
+			storModelLg = lm(allDat$resLoss ~ log(allDat$storIntrp))
+			storModelLn = lm(allDat$resLoss ~ allDat$storIntrp)
+				# normalizing for reweighting models for use in projections
+			infModelLg_wt = summary(infModelLg)$adj / (summary(infModelLn)$adj + summary(infModelLg)$adj)
+			infModelLn_wt = summary(infModelLn)$adj / (summary(infModelLn)$adj + summary(infModelLg)$adj)
+			storModelLg_wt = summary(storModelLg)$adj / (summary(storModelLg)$adj + summary(storModelLn)$adj)
+			storModelLn_wt = summary(storModelLn)$adj / (summary(storModelLg)$adj + summary(storModelLn)$adj)
+			infToStrWt = (summary(infModelLn)$adj + summary(infModelLg)$adj) / (summary(infModelLn)$adj + summary(infModelLg)$adj + summary(storModelLg)$adj + summary(storModelLn)$adj)
+		
+				# calculating factor to convert mm to acre feet for storage calculations
+			basinAreaInKm = sum(st_read(paste0(dataOut_location, "HydroBASINSdata_", basinName, ".gpkg"))$SUB_AREA)
+			acrePerSqKm = 247.105
+			mmPerFoot = 304.8
+			mmToAcrFt = basinAreaInKm * acrePerSqKm / mmPerFoot
+		} else	{return("need to figure out how to handle these data")}
+
+
+			# read in climate data
+		seas5ClimateInputFileNames = list.files(paste0(dataOut_location, 'seas5MultiOutput'))
+		era5ClimateInput = as.data.table(readRDS(paste0(dataOut_location, 'ERA5_', basinName, '.RData')))
+
+			# reading in calibrated parameterizations and selecting a subsample based on minimum monthly bias
+		calibratedVarsAll = subset(fread(paste0(dataOut_location, "calibration_", basinName, ".csv")), !is.na(kgeAll))
+		calibratedVars = head(calibratedVarsAll[order(abs(calibratedVarsAll$mnthSumAbsBias)), ], 40)
+		#calibratedVars = tail(calibratedVarsAll[order(abs(calibratedVarsAll$kgeAll)), ], 40)
+		rm(calibratedVarsAll)
+
+			
+			# building a record of historical streamflow for comparison
+		allDat$year = year(allDat$Date)
+		allDat$month = month(allDat$Date)
+		climatologyDF = data.frame(month = NA, year = NA, totQ = NA)
+		climIter = 0
+		for(thisYear in unique(allDat$year))	{
+			for(thisMonth in 1:12)	{
+				climIter = climIter + 1
+				histSubset = subset(allDat, year == thisYear & month == thisMonth)
+				climatologyDF[climIter, ] = c(thisMonth, thisYear, mean(histSubset$storIntrp, na.rm=TRUE) * nrow(histSubset))
+			}
+		}
+			
+
+		save_iter = 0
+		validDF = data.frame(modelClm = NA, modelHyd = NA, days = NA, monthsOut = NA, predStor = NA, actStor = NA)
+
+		for(thisSeas5 in seas5ClimateInputFileNames)	{
+			seas5ClimateInput = readRDS(paste0(dataOut_location, 'seas5MultiOutput\\', thisSeas5))
+
+			# removing monthly forecasts that are not a full month
+			partialMonths = FALSE
+			if(last(mday(seas5ClimateInput[[1]]$Date + 1)) != 1) 	{
+				partialMonths = TRUE
+				rmSEAS5DateRm = length(last(which(mday(seas5ClimateInput[[1]]$Date) == 1)):nrow(seas5ClimateInput[[1]]$Date)) - 1
+			}
+				
+			lastHistData = which(era5ClimateInput$Date == seas5ClimateInput[[1]]$Date[1])
+			allForecastsOutput = list()
+			iter = 0
+			for(numModels in 1:length(seas5ClimateInput))	{
+				for(numCalibs in 1:nrow(calibratedVars))	{	
+					iter = iter + 1
+						
+					climateInput = rbind(era5ClimateInput[1:lastHistData,], seas5ClimateInput[[numModels]])
+					if(partialMonths) 	{climateInput = climateInput[-c((nrow(climateInput)-rmSEAS5DateRm):nrow(climateInput)), ]}
+						
+					projDates = (1 + lastHistData):nrow(climateInput)
+
+
+
+					allHBVoutput = runHBV_f(
+						climateInput = climateInput,
+						sfcf = calibratedVars$sfcf[numCalibs],	#snowfall correction factor [-]
+						tr   = calibratedVars$tr[numCalibs],	#solid and liquid precipitation threshold temperature [C]
+						tt   = calibratedVars$tt[numCalibs],	#melt temperature [C]
+						fm   = calibratedVars$fm[numCalibs],	#snowmelt factor [mm/C]
+						fi   = calibratedVars$fi[numCalibs],	#icemelt factor [mm/C]
+						fic  = calibratedVars$fic[numCalibs],	#debris-covered icemelt factor [mm/C]
+						fc   = calibratedVars$fc[numCalibs], # field capacity 
+						lp   = calibratedVars$lp[numCalibs], # parameter for PET --> AET
+						beta_soils = calibratedVars$beta_soils[numCalibs], #soil moisture drainage exponent
+						k0   = calibratedVars$k0[numCalibs],	# storage constant of top bucket
+						k1   = calibratedVars$k1[numCalibs],	# storage constant of middle bucket
+						k2   = calibratedVars$k2[numCalibs],	# storage constant of bottom bucket	
+						uz1  = calibratedVars$uz1[numCalibs], #max flux rate from STZ to SUZ in mm/d
+						perc = calibratedVars$perc[numCalibs])  # max flux rate from SUZ to SLZ in mm/d
+
+					# merging historic streamflow record onto climate inputs data
+					climateAndStreamflowOutput = allDat[allHBVoutput, on='Date']#[projDates, ]  
+					modelOut = climateAndStreamflowOutput[projDates, ]
+					modelOut$inflowProj = modelOut$Qg * mmToAcrFt
+					
+					if(biasCorrection)	{
+						for(ii in 1:12)	{
+							biasCol = which(names(calibratedVars) == paste0('mnthBias_', ii))
+							debiasVal = calibratedVars[numCalibs, ..biasCol]
+							modelOut$inflowProj[modelOut$month == ii] = modelOut$inflowProj[modelOut$month == ii] *  as.numeric(100 - debiasVal) / 100
+						}
+					}
+
+					resLossEstInf = infModelLg_wt * (infModelLg$coef[1] + log(modelOut$inflowProj) * infModelLg$coef[2]) +
+						infModelLn_wt * (infModelLn$coef[1] + modelOut$inflowProj * infModelLn$coef[2])
+					storEstInf = as.numeric(climateAndStreamflowOutput[(projDates[1] - 1), 'storIntrp']) + cumsum(modelOut$inflowProj) - cumsum(resLossEstInf)
+					resLossEstStor = storModelLg_wt * (storModelLg$coef[1] + log(storEstInf) * storModelLg$coef[2]) +
+						storModelLn_wt * (storModelLn$coef[1] + storEstInf * storModelLn$coef[2])
+					modelOut$storEst = as.numeric(climateAndStreamflowOutput[(projDates[1] - 1), 'storIntrp']) + cumsum(modelOut$inflowProj) - 
+						(cumsum(resLossEstInf) * infToStrWt + cumsum(resLossEstStor) * (1-infToStrWt))
+
+					monthsOut = 0
+					for(thisMonth in unique(modelOut$month))	{
+						monthsOut = monthsOut + 1
+						outputSubset = subset(modelOut, month == thisMonth)
+						numDays = nrow(outputSubset)
+						validDF = rbind(validDF,
+							c(numModels, numCalibs, outputSubset$Date[1] + 14, monthsOut,
+								mean(outputSubset$storEst), mean(outputSubset$storIntrp)))
+					}
+					
+						
+					if(nrow(validDF) > 20000)	{
+						save_iter = save_iter + 1
+						fwrite(validDF, paste0(dataOut_location, "temp_out_stor", save_iter, ".csv"))
+						validDF = data.frame(modelClm = NA, modelHyd = NA, days = NA, monthsOut = NA, predStor = NA, actStor = NA)
+					}
+				}
+			}
+		}	
+
+			# combining saved iterations and returning the dataframe with formatted climatology
+		save_iter = save_iter + 1
+		fwrite(validDF, paste0(dataOut_location, "temp_out_stor", save_iter, ".csv"))
+			
+		validDF = fread(paste0(dataOut_location, "temp_out_stor", 1, ".csv"))
+		for(files in 2:save_iter)	{
+			validDF = rbind(validDF, fread(paste0(dataOut_location, "temp_out_stor", files, ".csv")))
+		}
+	
+		validDF = validDF[complete.cases(validDF), ]
+		validDF$Date = validDF$days + as.Date("1970-01-01")
+		validDF$startDate = validDF$Date %m-% (months(validDF$monthsOut - 1)) 
+		
+		startDates = unique(validDF$startDate) 
+			
+			# datatable for assessing error / performance over entire period for which we have data
+		sumModPerf = data.frame(month = NA, leadTime = NA, predTerc = NA, actTerc = NA, 
+			predMAE25 = NA, climMAE25 = NA, predMAE50 = NA, climMAE50 = NA, predMAE75 = NA, climMAE75 = NA)
+		
+		for(thisStartDate in startDates)	{
+			validSubset = subset(validDF, startDate == thisStartDate)
+			
+				# parsing the climatology df for plotting
+			theseMonths = unique(month(validSubset$Date))
+			numMonths = length(theseMonths)
+			climDF = data.frame(month = NA, cumsumQ = NA, plotMonth = NA)
+			for(startYear in climatologyDF$year[1]:(max(climatologyDF$year)-1))	{
+				climSubset = subset(climatologyDF, year >= startYear)
+				climStart = which(climSubset$month == month(validSubset$startDate)[1])[1]
+				
+				climDF = rbind(climDF,
+					data.table(month = theseMonths, cumsumQ = cumsum(climSubset$totQ[climStart:(climStart+numMonths-1)]), plotMonth = c(1:7)))
+			}	
+		
+			
+			
+			png(paste0(dataOut_location, basinName, '_projectedStorageOutputFigures\\streamflow_', validSubset$Date[1] - 14, '.png'), width = 1200, height = 720)
+			windowsFonts(A = windowsFont("Roboto"))
+			par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
+			#validSubset$plotDate = rep(1:7, nrow(validSubset)/7) - .2
+			boxplot(validSubset$predQ ~ validSubset$Date, pch='.', lwd=1, 
+				#col=colorRampPalette(c('#F06000', '#B91863'))(length(unique(validDF$monthsOut))),
+				ylim = c(0, max(validDF$predQ, na.rm=TRUE)),
+				at = c(1:7) - 0.2,
+				boxwex = 0.4,
+				col = '#A9BF2C',
+				border='#666D74', cex=1.5, 
+				main='', ylab='Cumulative Streamflow (mm)', xlab='Month', xaxt='n',
+				col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
+				family='A')
+			#climDF$plotDate =climDF$plotMonth + 0.2
+			boxplot(cumsumQ ~ plotMonth, data = climDF, pch='.',
+				col = '#FDB600', 
+				at = c(1:7) + 0.2,
+				boxwex = 0.4, 
+				border='#666D74', cex=1.5, 
+				main='', ylab='Cumulative Streamflow (mm)', xlab='Month', xaxt='n',
+				add=TRUE)
+			lines(1:length(unique(validSubset$Date)), unique(validSubset$actQ), type='l', col='#196CE1', lwd=1)
+			points(1:length(unique(validSubset$Date)), unique(validSubset$actQ), pch = '---', col='#F2F3F3', lwd=2, cex=9)
+			points(1:length(unique(validSubset$Date)), unique(validSubset$actQ), pch = '---', col='#196CE1', lwd=2, cex=7)
+			axis(1, at=1:length(unique(validSubset$Date)),
+				labels =c('Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec')[month(unique(validSubset$Date))],
+				col.lab='#1A232F', col.axis='#666D74')
+			text(x=0.5, y=max(validDF$predQ, na.rm=TRUE) * 0.95,
+				paste0(basinName),
+				adj = c(0,0), font=2, col='#1A232F', family='A', cex=1.6*1.6)
+			text(x=0.5, y=max(validDF$predQ, na.rm=TRUE)* 0.87,
+				paste0('Forecast Beginning on ', validSubset$Date[1] - 14),
+				adj = c(0,0), font=2, col='#1A232F', family='A', cex=1.6*1.6)
+			text(x=0.5, y=max(validDF$predQ, na.rm=TRUE) * 0.75,
+				paste0('CAi Forecast'),
+				adj = c(0,0), font=2, col='#A9BF2C', family='A', cex=1.6*1.3)
+			text(x=0.5, y=max(validDF$predQ, na.rm=TRUE) * 0.7,
+				paste0('Climatology'),
+				adj = c(0,0), font=2, col='#FDB600', family='A', cex=1.6*1.3)
+			text(x=0.5, y=max(validDF$predQ, na.rm=TRUE) * 0.65,
+				paste0('Actual'),
+				adj = c(0,0), font=2, col='#196CE1', family='A', cex=1.6*1.3)
+			dev.off()
+
+			monthsLead = 0
+			for(thisLeadTime in unique(validSubset$Date)) {
+				monthsLead = monthsLead + 1
+				validSubsetLd = subset(validSubset, Date == thisLeadTime)
+				climDFLd = subset(climDF, plotMonth == monthsLead)
+				climQuant = quantile(climDFLd$cumsumQ, c(0.333, 0.5, 0.667), na.rm=TRUE) 
+				predQuant = quantile(validSubsetLd$predQ, c(0.333, 0.5, 0.667)) 
+				
+				predTerc = 1
+				if(predQuant[2] > climQuant[1]) {predTerc = 2}
+				if(predQuant[2] > climQuant[3])	{predTerc = 3}
+				
+				actVal = validSubsetLd$actQ[1]
+				actTerc = 1
+				if(actVal > climQuant[1]) 		{actTerc = 2}
+				if(actVal > climQuant[3])		{actTerc = 3}
+
+				sumModPerf = rbind(sumModPerf, c(
+					as.numeric(climDFLd$month[1]), monthsLead, predTerc, actTerc, 
+					as.numeric(predQuant[1] - actVal), as.numeric(climQuant[1] - actVal),
+					as.numeric(predQuant[2] - actVal), as.numeric(climQuant[2] - actVal),
+					as.numeric(predQuant[3] - actVal), as.numeric(climQuant[3] - actVal)))
+			}
+		}
+	}
+	fwrite(sumModPerf, paste0(dataOut_location, basinName, '_summaryOfModelPerformance.csv'))
+
+#	sumModPerf = data.frame(month = NA, leadTime = NA, predTerc = NA, actTerc = NA, 
+#		predMAE25 = NA, climMAE25 = NA, predMAE50 = NA, climMAE50 = NA, predMAE75 = NA, climMAE75 = NA)
+
+	highTercHeatMap = matrix(nrow=7, ncol=12)
+	lowTercHeatMap  = matrix(nrow=7, ncol=12)
+	medTercHeatMap  = matrix(nrow=7, ncol=12)
+	tercPredHighBarplot = matrix(nrow=3, ncol=7)
+	tercPredMedBarplot  = matrix(nrow=3, ncol=7)
+	tercPredLowBarplot  = matrix(nrow=3, ncol=7)
+	tercActHighBarplot = matrix(nrow=3, ncol=7)
+	tercActMedBarplot  = matrix(nrow=3, ncol=7)
+	tercActLowBarplot  = matrix(nrow=3, ncol=7)
+	absMae25HeatMap = matrix(nrow=7, ncol=12)
+	absMae50HeatMap = matrix(nrow=7, ncol=12)
+	absMae75HeatMap = matrix(nrow=7, ncol=12)
+	relMae25HeatMap = matrix(nrow=7, ncol=12)
+	relMae50HeatMap = matrix(nrow=7, ncol=12)
+	relMae75HeatMap = matrix(nrow=7, ncol=12)
+	
+	
+	for(jj in 1:7)	{
+		highPredTerc  = subset(sumModPerf, predTerc == 3 & leadTime == jj)
+		medPredTerc   = subset(sumModPerf, predTerc == 2 & leadTime == jj)
+		lowPredTerc   = subset(sumModPerf, predTerc == 1 & leadTime == jj)
+		
+		highActTerc = subset(sumModPerf, actTerc == 3 & leadTime == jj)
+		medActTerc  = subset(sumModPerf, actTerc == 2 & leadTime == jj)
+		lowActTerc  = subset(sumModPerf, actTerc == 1 & leadTime == jj)
+		
+		tercPredHighBarplot[1:3,jj] = c(
+			length(which(highPredTerc$actTerc == 3)) / nrow(highPredTerc), 
+			length(which(highPredTerc$actTerc == 2)) / nrow(highPredTerc),
+			length(which(highPredTerc$actTerc == 1)) / nrow(highPredTerc))
+		
+		tercPredMedBarplot[1:3,jj] = c(
+			length(which(medPredTerc$actTerc == 3)) / nrow(medPredTerc), 
+			length(which(medPredTerc$actTerc == 2)) / nrow(medPredTerc),
+			length(which(medPredTerc$actTerc == 1)) / nrow(medPredTerc))
+
+		tercPredLowBarplot[1:3,jj] = c(
+			length(which(lowPredTerc$actTerc == 3)) / nrow(lowPredTerc), 
+			length(which(lowPredTerc$actTerc == 2)) / nrow(lowPredTerc),
+			length(which(lowPredTerc$actTerc == 1)) / nrow(lowPredTerc))
+
+		tercActHighBarplot[1:3,jj] = c(
+			length(which(highActTerc$predTerc == 3)) / nrow(highActTerc), 
+			length(which(highActTerc$predTerc == 2)) / nrow(highActTerc),
+			length(which(highActTerc$predTerc == 1)) / nrow(highActTerc))
+		
+		tercActMedBarplot[1:3,jj] = c(
+			length(which(medActTerc$predTerc == 3)) / nrow(medActTerc), 
+			length(which(medActTerc$predTerc == 2)) / nrow(medActTerc),
+			length(which(medActTerc$predTerc == 1)) / nrow(medActTerc))
+
+		tercActLowBarplot[1:3,jj] = c(
+			length(which(lowActTerc$predTerc == 3)) / nrow(lowActTerc), 
+			length(which(lowActTerc$predTerc == 2)) / nrow(lowActTerc),
+			length(which(lowActTerc$predTerc == 1)) / nrow(lowActTerc))
+
+
+		for(ii in 1:12)	{
+			subModPerf = subset(sumModPerf, month == ii & leadTime == jj)
+			
+			absMae25HeatMap[jj,ii] = median(subModPerf$predMAE25)
+			absMae50HeatMap[jj,ii] = median(subModPerf$predMAE50)
+			absMae75HeatMap[jj,ii] = median(subModPerf$predMAE75)
+
+			relMae25HeatMap[jj,ii] = median((abs(subModPerf$predMAE25) - abs(subModPerf$climMAE25)) / abs(subModPerf$climMAE25)) * 100
+			relMae50HeatMap[jj,ii] = median((abs(subModPerf$predMAE50) - abs(subModPerf$climMAE50)) / abs(subModPerf$climMAE50)) * 100 
+			relMae75HeatMap[jj,ii] = median((abs(subModPerf$predMAE75) - abs(subModPerf$climMAE75)) / abs(subModPerf$climMAE75)) * 100
+
+			subHighModPerf = subset(subModPerf, actTerc == 3)
+			subMedModPerf = subset(subModPerf, actTerc == 2)
+			subLowModPerf = subset(subModPerf, actTerc == 1)
+			highTercHeatMap[jj,ii] = length(which(subHighModPerf$predTerc == 3)) / nrow(subHighModPerf)
+			medTercHeatMap[jj,ii] = length(which(subMedModPerf$predTerc == 2)) / nrow(subMedModPerf)
+			lowTercHeatMap[jj,ii] = length(which(subLowModPerf$predTerc == 1)) / nrow(subLowModPerf)
+		}
+	}
+	row.names(tercActHighBarplot) = c('high', 'med', 'low')
+	row.names(tercActMedBarplot) = c('high', 'med', 'low')
+	row.names(tercActLowBarplot) = c('high', 'med', 'low')
+	row.names(tercPredHighBarplot) = c('high', 'med', 'low')
+	row.names(tercPredMedBarplot) = c('high', 'med', 'low')
+	row.names(tercPredLowBarplot) = c('high', 'med', 'low')
+	
+	rampcols = colorRampPalette(c('#B91863','white', '#196CE1'))(11) # colors are 'blue' to 'red' but in CAi scheme
+	rampbreaks = seq(-100, 100, length.out = 12)
+	
+	png(paste0(dataOut_location, basinName, '_projectedStorageOutputFigures\\SummaryPlot_relMAE50.png'), width = 720, height = 720)
+	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
+	if(any(relMae50HeatMap > 100))	{relMae50HeatMap[which(relMae50HeatMap > 100)] = 99.9}
+	image(t(relMae50HeatMap),# Rowv = NA, Colv = NA, scale='none',
+		col = rev(rampcols), breaks = rampbreaks,
+		main='Relative MAE (% change)', ylab='Months Out', xlab='Month', xaxt='n', yaxt='n',
+		col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
+		family='A')
+	text(x=rep(1:12,each=7)/11 - 0.09, y=rep(1:7,12)/6 - 0.18, labels = paste0(round(relMae50HeatMap, 0), '%'))
+	axis(1, at=1:12 / 11 - 0.09,
+		labels =c('Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'),
+		col.lab='#1A232F', col.axis='#666D74')
+	axis(2, at = 1:7 / 6 - 0.18,
+		labels =1:7,
+		col.lab='#1A232F', col.axis='#666D74')
+	dev.off()
+			
+	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
+	png(paste0(dataOut_location, basinName, '_projectedStorageOutputFigures\\SummaryPlot_relMAE25.png'), width = 720, height = 720)
+	if(any(relMae25HeatMap > 100))	{relMae25HeatMap[which(relMae25HeatMap > 100)] = 99.9}
+	image(t(relMae25HeatMap),# Rowv = NA, Colv = NA, scale='none',
+		col = rev(rampcols), breaks = rampbreaks,
+		main='Relative MAE (% change)', ylab='Months Out', xlab='Month', xaxt='n', yaxt='n',
+		col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
+		family='A')
+	text(x=rep(1:12,each=7)/11 - 0.09, y=rep(1:7,12)/6 - 0.18, labels = paste0(round(relMae25HeatMap, 0), '%'))
+	axis(1, at=1:12 / 11 - 0.09,
+		labels =c('Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'),
+		col.lab='#1A232F', col.axis='#666D74')
+	axis(2, at = 1:7 / 6 - 0.18,
+		labels =1:7,
+		col.lab='#1A232F', col.axis='#666D74')
+	dev.off()
+
+
+	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
+	png(paste0(dataOut_location, basinName, '_projectedStorageOutputFigures\\SummaryPlot_relMAE75.png'), width = 720, height = 720)
+	if(any(relMae75HeatMap > 100))	{relMae75HeatMap[which(relMae75HeatMap > 100)] = 99.9}
+	image(t(relMae75HeatMap),# Rowv = NA, Colv = NA, scale='none',
+		col = rev(rampcols), breaks = rampbreaks,
+		main='Relative MAE (% change)', ylab='Months Out', xlab='Month', xaxt='n', yaxt='n',
+		col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
+		family='A')
+	text(x=rep(1:12,each=7)/11 - 0.09, y=rep(1:7,12)/6 - 0.18, labels = paste0(round(relMae75HeatMap, 0), '%'))
+	axis(1, at=1:12 / 11 - 0.09,
+		labels =c('Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'),
+		col.lab='#1A232F', col.axis='#666D74')
+	axis(2, at = 1:7 / 6 - 0.18,
+		labels =1:7,
+		col.lab='#1A232F', col.axis='#666D74')
+	dev.off()
+
+
+	rampcols = colorRampPalette(c('#B91863','white', '#196CE1'))(11)# colors are 'blue' to 'red' but in CAi scheme
+	rampbreaks = c(seq(0,0.30, length.out = 6), seq(0.34,1,length.out=6))
+	png(paste0(dataOut_location, basinName, '_projectedStorageOutputFigures\\tercileHeatMap_high.png'), width = 720, height = 720)
+	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
+	image(t(highTercHeatMap),
+		col = rampcols, breaks = rampbreaks,
+		main='% High Tercile Correct', ylab='Months Out', xlab='Month', xaxt='n', yaxt='n',
+		col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
+		family='A')
+	text(x=rep(1:12,each=7)/11 - 0.09, y=rep(1:7,12)/6 - 0.18, labels = paste0(round(highTercHeatMap * 100, 0), '%'))
+	axis(1, at=1:12 / 11 - 0.09,
+		labels =c('Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'),
+		col.lab='#1A232F', col.axis='#666D74')
+	axis(2, at = 1:7 / 6 - 0.18,
+		labels =1:7,
+		col.lab='#1A232F', col.axis='#666D74')
+	dev.off()
+
+
+	rampcols = colorRampPalette(c('#B91863','white', '#196CE1'))(11)# colors are 'blue' to 'red' but in CAi scheme
+	rampbreaks = c(seq(0,0.30, length.out = 6), seq(0.34,1,length.out=6))
+	png(paste0(dataOut_location, basinName, '_projectedStorageOutputFigures\\tercileHeatMap_med.png'), width = 720, height = 720)
+	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
+	image(t(medTercHeatMap),
+		col = rampcols, breaks = rampbreaks,
+		main='% Med Tercile Correct', ylab='Months Out', xlab='Month', xaxt='n', yaxt='n',
+		col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
+		family='A')
+	text(x=rep(1:12,each=7)/11 - 0.09, y=rep(1:7,12)/6 - 0.18, labels = paste0(round(medTercHeatMap * 100, 0), '%'))
+	axis(1, at=1:12 / 11 - 0.09,
+		labels =c('Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'),
+		col.lab='#1A232F', col.axis='#666D74')
+	axis(2, at = 1:7 / 6 - 0.18,
+		labels =1:7,
+		col.lab='#1A232F', col.axis='#666D74')
+	dev.off()
+
+
+	rampcols = colorRampPalette(c('#B91863','white', '#196CE1'))(11)# colors are 'blue' to 'red' but in CAi scheme
+	rampbreaks = c(seq(0,0.30, length.out = 6), seq(0.34,1,length.out=6))
+	png(paste0(dataOut_location, basinName, '_projectedStorageOutputFigures\\tercileHeatMap_low.png'), width = 720, height = 720)
+	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
+	image(t(lowTercHeatMap),
+		col = rampcols, breaks = rampbreaks,
+		main='% Low Tercile Correct', ylab='Months Out', xlab='Month', xaxt='n', yaxt='n',
+		col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
+		family='A')
+	text(x=rep(1:12,each=7)/11 - 0.09, y=rep(1:7,12)/6 - 0.18, labels = paste0(round(lowTercHeatMap * 100, 0), '%'))
+	axis(1, at=1:12 / 11 - 0.09,
+		labels =c('Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'),
+		col.lab='#1A232F', col.axis='#666D74')
+	axis(2, at = 1:7 / 6 - 0.18,
+		labels =1:7,
+		col.lab='#1A232F', col.axis='#666D74')
+	dev.off()
+	
+	
+		# terciles based on prediction values
+	png(paste0(dataOut_location, basinName, '_projectedStorageOutputFigures\\tercilePredBarPlot_high.png'), width = 900, height = 720)
+	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
+	barplot(tercPredHighBarplot * 100, beside=TRUE, ylim=c(0,100),
+		col = c('#B91863', '#A9BF2C', '#039CE2'), 
+		main='High Tercile', ylab='% Tercile Correct by Forecast', xlab='Lead Time', xaxt='n', yaxt='n',
+		col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
+		family='A')
+	axis(2, at=seq(0,100,20) ,
+		#labels = 3*(1:7),
+		col.lab='#1A232F', col.axis='#666D74')
+	axis(1, at=seq(3,(7*4), 4) -1.5 ,
+		labels = 1:7,
+		col.lab='#1A232F', col.axis='#666D74')
+	abline(h=100/3, col = '#666D74', lwd = 3, cex=1.5)
+	dev.off()
+	
+	png(paste0(dataOut_location, basinName, '_projectedStorageOutputFigures\\tercilePredBarPlot_med.png'), width = 900, height = 720)
+	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
+	barplot(tercPredMedBarplot * 100, beside=TRUE, ylim=c(0,100),
+		col = c('#B91863', '#A9BF2C', '#039CE2'), 
+		main='Med Tercile', ylab='% Tercile Correct by Forecast', xlab='Lead Time', xaxt='n', yaxt='n',
+		col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
+		family='A')
+	axis(2, at=seq(0,100,20) ,
+		#labels = 3*(1:7),
+		col.lab='#1A232F', col.axis='#666D74')
+	axis(1, at=seq(3,(7*4), 4) -1.5 ,
+		labels = 1:7,
+		col.lab='#1A232F', col.axis='#666D74')
+	abline(h=100/3, col = '#666D74', lwd = 3, cex=1.5)
+	dev.off()
+
+	png(paste0(dataOut_location, basinName, '_projectedStorageOutputFigures\\tercilePredBarPlot_low.png'), width = 900, height = 720)
+	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
+	barplot(tercPredLowBarplot * 100, beside=TRUE, ylim=c(0,100),
+		col = c('#B91863', '#A9BF2C', '#039CE2'), 
+		main='Low Tercile', ylab='% Tercile Correct by Forecast', xlab='Lead Time', xaxt='n', yaxt='n',
+		col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
+		family='A')
+	axis(2, at=seq(0,100,20) ,
+		#labels = 3*(1:7),
+		col.lab='#1A232F', col.axis='#666D74')
+	axis(1, at=seq(3,(7*4), 4) -1.5 ,
+		labels = 1:7,
+		col.lab='#1A232F', col.axis='#666D74')
+	abline(h=100/3, col = '#666D74', lwd = 3, cex=1.5)
+	dev.off()
+
+
+		# terciles based on actual values
+	png(paste0(dataOut_location, basinName, '_projectedStorageOutputFigures\\tercileActBarPlot_high.png'), width = 900, height = 720)
+	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
+	barplot(tercActHighBarplot * 100, beside=TRUE, ylim=c(0,100),
+		col = c('#B91863', '#A9BF2C', '#039CE2'), 
+		main='High Tercile', ylab='% Tercile Correct by Actual', xlab='Lead Time', xaxt='n', yaxt='n',
+		col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
+		family='A')
+	axis(2, at=seq(0,100,20) ,
+		#labels = 3*(1:7),
+		col.lab='#1A232F', col.axis='#666D74')
+	axis(1, at=seq(3,(7*4), 4) -1.5 ,
+		labels = 1:7,
+		col.lab='#1A232F', col.axis='#666D74')
+	abline(h=100/3, col = '#666D74', lwd = 3, cex=1.5)
+	dev.off()
+	
+	png(paste0(dataOut_location, basinName, '_projectedStorageOutputFigures\\tercileActBarPlot_med.png'), width = 900, height = 720)
+	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
+	barplot(tercActMedBarplot * 100, beside=TRUE, ylim=c(0,100),
+		col = c('#B91863', '#A9BF2C', '#039CE2'), 
+		main='Med Tercile', ylab='% Tercile Correct by Actual', xlab='Lead Time', xaxt='n', yaxt='n',
+		col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
+		family='A')
+	axis(2, at=seq(0,100,20) ,
+		#labels = 3*(1:7),
+		col.lab='#1A232F', col.axis='#666D74')
+	axis(1, at=seq(3,(7*4), 4) -1.5 ,
+		labels = 1:7,
+		col.lab='#1A232F', col.axis='#666D74')
+	abline(h=100/3, col = '#666D74', lwd = 3, cex=1.5)
+	dev.off()
+
+	png(paste0(dataOut_location, basinName, '_projectedStorageOutputFigures\\tercileActBarPlot_low.png'), width = 900, height = 720)
+	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
+	barplot(tercActLowBarplot * 100, beside=TRUE, ylim=c(0,100),
+		col = c('#B91863', '#A9BF2C', '#039CE2'), 
+		main='Low Tercile', ylab='% Tercile Correct by Actual', xlab='Lead Time', xaxt='n', yaxt='n',
+		col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
+		family='A')
+	axis(2, at=seq(0,100,20) ,
+		#labels = 3*(1:7),
+		col.lab='#1A232F', col.axis='#666D74')
+	axis(1, at=seq(3,(7*4), 4) -1.5 ,
+		labels = 1:7,
+		col.lab='#1A232F', col.axis='#666D74')
+	abline(h=100/3, col = '#666D74', lwd = 3, cex=1.5)
+	dev.off()
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1743,13 +2372,13 @@ storageProjectionValidationAndPlotGeneration_f = function(
 			allDat$ymonth = paste0(year(allDat$Date), month(allDat$Date))
 			monthDat = data.frame(ymonth = NA, month = NA, year = NA, stor = NA, AcFtPDay_inflow = NA, resLoss = NA)
 			k = 0
-			for(i in unique(allDat$ymonth))	{
+		for(i in unique(allDat$ymonth))	{
 				k = k + 1
 				subsetDat = subset(allDat, ymonth == i)
 				monthDat = rbind(monthDat, c(i, month(subsetDat$Date[1]), year(subsetDat$Date[1]), 
-					mean(subset(subsetDat, !is.na(stor))$stor),
-					mean(subsetDat$AcFtPDay_inflow * 30.4375, na.rm=TRUE),
-					mean(subsetDat$resLoss * 30.4375, na.rm=TRUE)))
+					last(subsetDat$stor[!is.na(subsetDat$stor)]),
+					mean(subsetDat$AcFtPDay_inflow * nrow(subsetDat), na.rm=TRUE),	# getting a sum even for months with missing data
+					mean(subsetDat$resLoss * nrow(subsetDat), na.rm=TRUE)))  		# getting a sum even for months with missing data
 			}
 			monthDat$stor = as.numeric(monthDat$stor)
 			monthDat$AcFtPDay_inflow = as.numeric(monthDat$AcFtPDay_inflow)
@@ -1985,4 +2614,303 @@ storageProjectionValidationAndPlotGeneration_f = function(
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+####################################
+## old functions no longer in use
+
+
+#original reservoir model outflow model
+OLD_reservoirOutflowCalVal_f = function(
+	dataOut_location = 'save_file_location',
+	historicReservoirFileLoc = 'insert_file_loc_here.com',
+	historicStreamflowFileLoc = 'insert_file_loc_here.com',
+	basinName = 'inster_basin_or_outlet_name',
+	basinSymbol = 'EXC',
+	infOrFNF = 'inflow',
+	dataSource = 1, 			# 1 for FNF or inflow from cal.gov,
+	nTreeModel=5000,
+	modelMetric = 'Rsquared',
+	modelMethod = 'rf',
+	metric="Rsquared",
+	numFolds = 5,
+	numRepeats = 12)
+	{
+	
+	############ loading libraries
+	library(data.table)
+	library(lubridate)
+	library(CAST)
+	library(caret)
+	library(sf)
+	library(zoo)
+
+	if(dataSource == 1)	{
+		inflow = as.data.table(read.csv(paste0(historicStreamflowFileLoc)))
+		stor = read.csv(paste0(historicStreamflowFileLoc))
+		#outflow = read.csv("https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=EXC&SensorNums=23&dur_code=D&Start=1900-01-01&End=2022-08-05")
+
+		stor$Date = ymd(unlist(strsplit(stor$DATE.TIME, " "))[seq(1,nrow(stor)*2,2)])
+		stor$stor = as.numeric(stor$VALUE)
+		inflow$Date = ymd(unlist(strsplit(inflow$DATE.TIME, " "))[seq(1,nrow(inflow)*2,2)])
+		inflow$inflow = inflow$VALUE
+		allDat = inflow[stor[c('Date','stor')], on = 'Date']
+		allDat$AcFtPDay_inflow =  as.numeric(allDat$inflow)  * (60*60*24) / 43559.9
+			# resLoss = Outflow + AET + Withdrawals = dS - Inflow
+		allDat$resLoss = c(diff(allDat$stor) - allDat$AcFtPDay_inflow[-1], NA) * -1
+	} else	{print("need to figure out how to handle these data")}
+	
+	#######################################################################################################################################
+	### for monthly estimations
+
+
+	allDat$ymonth = paste0(year(allDat$Date), month(allDat$Date))
+	monthDat = data.frame(ymonth = NA, month = NA, year = NA, stor = NA, AcFtPDay_inflow = NA, resLoss = NA)
+	k = 0
+	for(i in unique(allDat$ymonth))	{
+		k = k + 1
+		subsetDat = subset(allDat, ymonth == i)
+		monthDat = rbind(monthDat, c(i, month(subsetDat$Date[1]), year(subsetDat$Date[1]), 
+			mean(subsetDat$stor, na.rm=TRUE),
+			mean(subsetDat$AcFtPDay_inflow * 30.4375, na.rm=TRUE),
+			mean(subsetDat$resLoss * 30.4375, na.rm=TRUE)))
+	}
+	monthDat$stor = as.numeric(monthDat$stor)
+	monthDat$AcFtPDay_inflow = as.numeric(monthDat$AcFtPDay_inflow)
+	monthDat$resLoss = as.numeric(monthDat$resLoss)
+
+	if(!file.exists(paste0(dataOut_location, basinName, '_reservoirModel')))	{
+		dir.create(file.path(paste0(dataOut_location, basinName, '_reservoirModel')))
+	}
+
+		# saving uncertainty in I + O = dS
+	png(paste0(dataOut_location, basinName, '_reservoirModel\\', basinName, '_monthlyReservoirDstorVsLoss_historical.png'), width = 720, height = 720)
+	windowsFonts(A = windowsFont("Roboto"))
+	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
+	plot(diff(monthDat$stor), (monthDat$AcFtPDay_inflow[-1] - monthDat$resLoss[-1]), 
+		main='', xlab = 'Delta Reservoir Storage (AcFt / Month)', ylab = 'Est. Inflow - Outflow (AcFt / Month)',
+		pch=2, lwd=1.15,  col=alpha('#0098B2', 0.5), cex=1.75)
+	
+	abline(a=0, b=1, lwd=2, col='#1A232F', cex=2)
+	abline(lm((monthDat$AcFtPDay_inflow[-1] - monthDat$resLoss[-1]) ~ diff(monthDat$stor)),
+		lwd=2, col=alpha('#F06000', 1), cex=2)
+	text(x=min(diff(monthDat$stor), na.rm=TRUE), 
+			y=max(monthDat$AcFtPDay_inflow[-1] - monthDat$resLoss[-1], na.rm=TRUE) * 0.9,
+			paste0('r  = ', round(summary(lm((30 * (monthDat$AcFtPDay_inflow[-1] - monthDat$resLoss[-1])) ~ diff(monthDat$stor)))$r.squared, 2)),
+			adj = c(0,0), font=2, col='#F06000', family='A', cex=2*1.6)
+	text(x=min(diff(monthDat$stor), na.rm=TRUE), 
+			y=max(monthDat$AcFtPDay_inflow[-1] - monthDat$resLoss[-1], na.rm=TRUE) * 0.96,
+			'  2',
+			adj = c(0,0), font=2, col='#F06000', family='A', cex=1.2*1.6)
+	text(x=max(diff(monthDat$stor), na.rm=TRUE) ,
+			y=min(monthDat$AcFtPDay_inflow[-1] - monthDat$resLoss[-1], na.rm=TRUE) * .9,
+			paste0(basinName),
+			adj = c(1,0), font=2, col='#1A232F', family='A', cex=1.5*1.9)
+	dev.off()
+
+	
+		# initializing model predictions
+	for(h in 1:6)	{
+		recLength = nrow(monthDat)
+		lagLength = seq(1, (12*2 - h), 1)
+
+		corResults = matrix(data = NA, nrow = length(lagLength), ncol = 2)
+		k=0
+		for(i in lagLength)	{
+			k=k+1
+			storRolMn = rollmean(monthDat$stor, i)
+			storRolMnLn = length(storRolMn)
+			corResults[k, 1] = cor.test(
+				c(rep(NA, h + (i - 1)), storRolMn[-c((storRolMnLn - (h-1)):storRolMnLn)]),
+				monthDat$resLoss,
+				method='kendall')$p.value
+			infRolMn = rollmean(monthDat$AcFtPDay_inflow, i)
+			infRolMnLn = length(infRolMn)
+			corResults[k, 2] = cor.test(
+				c(rep(NA, h + (i - 1)), infRolMn[-c((infRolMnLn - (h-1)):infRolMnLn)]),
+				monthDat$resLoss,
+				method='kendall')$p.value
+		}
+	
+
+		bestStorLags = c(order(corResults[,1])[c(1:5)], max(lagLength))
+		bestInfLags = c(order(corResults[,2])[c(1:5)], max(lagLength))
+
+		resSubset = monthDat[, c('ymonth','resLoss','month')]
+
+		for(j in 1:length(bestInfLags))	{
+			storLag = bestStorLags[j]
+			storRolMn = rollmean(monthDat$stor, storLag)
+			storRolMnLn = length(storRolMn)
+			
+			infLag = bestInfLags[j]
+			infRolMn = rollmean(monthDat$AcFtPDay_inflow, infLag)
+			infRolMnLn = length(infRolMn)
+		
+			resSubset[ , paste0('stor_mn_', storLag)] = 
+				c(rep(NA, h + (storLag - 1)), 
+					storRolMn[-c((storRolMnLn - (h-1)):storRolMnLn)])
+			resSubset[ , paste0('inf_mn_', infLag)] = 
+				c(rep(NA, h + (infLag - 1)), 
+					infRolMn[-c((infRolMnLn - (h-1)):infRolMnLn)])
+		}
+
+		resComplete = resSubset[complete.cases(resSubset), ]
+		resTest = resComplete[(floor(nrow(resComplete) * .33) + 1):nrow(resComplete), ]
+		resValid = resComplete[1:(floor(nrow(resComplete) * .33)), ]
+
+		model_LLO = train(resTest[,-c(1,2)],
+							resTest$resLoss,
+							metric=modelMetric,
+							method=modelMethod,
+							#tuneLength=?,
+							imporance=TRUE,
+							ntree=nTreeModel,
+							trControl = trainControl(
+								method='repeatedcv',
+								number=numFolds,
+								repeats=numRepeats))
+								#method='cv'))
+			#					index = indices$index))
+			#					p=.75))
+
+		#model_LLO
+		#	sortVars = varImp(model_LLO)$importance	;	sortVars$tot = apply(sortVars, 1, sum)
+		#varImp(model_LLO)$importance	
+		#	sortedVars = row.names(sortVars)[rev(order(sortVars$tot))]
+		#	sortedVars
+
+			# appending the best time lags to the model for rerunning
+		model_LLO[[length(model_LLO) + 1]] = data.frame(bestStorLags = bestStorLags, bestInfLags = bestInfLags)
+
+
+			# save ML model
+		model_LLO[[length(model_LLO)+1]] = data.frame(bestStorLags = bestStorLags, bestInfLags = bestInfLags)
+		saveRDS(model_LLO, paste0(dataOut_location, basinName, '_reservoirModel\\', h, '_monthsOut.RData'))
+
+		predValid = predict(model_LLO, newdata = resValid)
+		predCalib = predict(model_LLO, newdata = resTest)
+			
+			# save ML model performance
+		png(paste0(dataOut_location, basinName, '_reservoirModel\\', basinName, '_MLcalib_', h, '_monthsOut.png'), width = 720, height = 720)
+		windowsFonts(A = windowsFont("Roboto"))
+		par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
+		plot(resTest$resLoss, predCalib, 
+			main='', xlab = 'Act. Reservoir Loss (AcFt / Month)', ylab = 'Est. Reservoir Loss (AcFt / Month)',
+			pch=2, lwd=1.15,  col=alpha('#0098B2', 0.5), cex=1.75)
+		
+		abline(a=0, b=1, lwd=2, col='#1A232F', cex=2)
+		abline(lm(predCalib ~ resTest$resLoss),
+			lwd=2, col=alpha('#F06000', 1), cex=2)
+		text(x=min(resTest$resLoss, na.rm=TRUE), 
+				y=max(predCalib, na.rm=TRUE) * 0.9,
+				paste0('r  = ', round(summary(lm(predCalib ~ resTest$resLoss))$r.squared, 2)),
+				adj = c(0,0), font=2, col='#F06000', family='A', cex=2*1.6)
+		text(x=min(resTest$resLoss, na.rm=TRUE), 
+				y=max(predCalib, na.rm=TRUE) * 0.92,
+				'  2',
+				adj = c(0,0), font=2, col='#F06000', family='A', cex=1.2*1.6)
+		text(x=max(resTest$resLoss, na.rm=TRUE) ,
+				y=min(predCalib, na.rm=TRUE) * .9,
+				paste0(basinName),
+				adj = c(1,0), font=2, col='#1A232F', family='A', cex=1.5*1.9)
+		text(x=min(resTest$resLoss, na.rm=TRUE) ,
+				y=max(predCalib, na.rm=TRUE) * .82,
+				paste0('Calib. Pred. ', h, ' Months Out'),
+				adj = c(0,0), font=2, col='#F06000', family='A', cex=1.5*1.9)
+		dev.off()
+
+
+			# save validation of ML model
+		png(paste0(dataOut_location, basinName, '_reservoirModel\\', basinName, '_MLpreds_', h, '_monthsOut.png'), width = 720, height = 720)
+		windowsFonts(A = windowsFont("Roboto"))
+		par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
+		plot(resValid$resLoss, predValid, 
+			main='', xlab = 'Act. Reservoir Loss (AcFt / Month)', ylab = 'Est. Reservoir Loss (AcFt / Month)',
+			pch=2, lwd=1.15,  col=alpha('#0098B2', 0.5), cex=1.75)
+		
+		abline(a=0, b=1, lwd=2, col='#1A232F', cex=2)
+		abline(lm(predValid ~ resValid$resLoss),
+			lwd=2, col=alpha('#F06000', 1), cex=2)
+		text(x=min(resValid$resLoss, na.rm=TRUE), 
+				y=max(predValid, na.rm=TRUE) * 0.9,
+				paste0('r  = ', round(summary(lm(predValid ~ resValid$resLoss))$r.squared, 2)),
+				adj = c(0,0), font=2, col='#F06000', family='A', cex=2*1.6)
+		text(x=min(resValid$resLoss, na.rm=TRUE), 
+				y=max(predValid, na.rm=TRUE) * 0.92,
+				'  2',
+				adj = c(0,0), font=2, col='#F06000', family='A', cex=1.2*1.6)
+		text(x=max(resValid$resLoss, na.rm=TRUE) ,
+				y=min(predValid, na.rm=TRUE) * .9,
+				paste0(basinName),
+				adj = c(1,0), font=2, col='#1A232F', family='A', cex=1.5*1.9)
+		text(x=min(resValid$resLoss, na.rm=TRUE) ,
+				y=max(predValid, na.rm=TRUE) * .82,
+				paste0('Valid. Pred. ', h, ' Months Out'),
+				adj = c(0,0), font=2, col='#F06000', family='A', cex=1.5*1.9)
+		dev.off()
+
+
+	}
+}
 

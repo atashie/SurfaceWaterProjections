@@ -1,8 +1,10 @@
 	# example input data
-basinSymbol = 'EXC'
+basinSymbol = 'ENG'
 basinName = basinSymbol # paste0(basinSymbol, '_atOutlet')
-infOrFNF = 'inflow' # fnf or inflow	
-gageLonLat =  c(-120.264, 37.591) 
+gageLonLat =    c(-121.270278, 39.240278)
+infOrFnf = 76 #8 for fnf, 76 for inflow
+	# list of basins by symbol and lon / lat
+	# webpage to search for Cali reservoirs: https://cdec.water.ca.gov/dynamicapp/wsSensorData
 				# for ENG: c(-121.270278, 39.240278)
 				# for ISB: c(-118.479, 35.650) 
 				# for PNF: c(-119.318, 36.845)
@@ -11,44 +13,31 @@ gageLonLat =  c(-120.264, 37.591)
 				# for ORO: c(-121.480, 39.540) 
 				# for CLE: c(-122.765, 40.8225)
 				# for MIL: c(-119.6545, 37.0425)
-				# for BND: c(-122.185556, 40.288611) 
-				# for SHA: c(-122.417, 40.720)
+				# for SHA: c(-122.417, 40.720)		
 				# for FOL: c(-121.155, 38.710)
-
+					# these reservoirs are problematic, e.g. are immediately downstream of another reservoir
 				# for SJF: c(-119.697,37.004) 
 				# for YRS: c(-121.292500, 39.223611) 
 				# for LEW: c(-122.800, 40.732)
-historicStreamflowFileLoc =   paste0("https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=", basinSymbol, "&SensorNums=76&dur_code=D&Start=1900-01-01&End=2022-08-01")
-historicReservoirFileLoc = paste0("https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=", basinSymbol, "&SensorNums=15&dur_code=D&Start=1900-01-01&End=2022-08-01")
-	# for ENG: "https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=ENG&SensorNums=76&dur_code=D&Start=1900-01-01&End=2022-08-01"
-	# for ORO: "https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=ORO&SensorNums=8&dur_code=D&Start=1900-01-01&End=2022-08-01" # also has fnf
-	# for EXC: "https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=EXC&SensorNums=8&dur_code=D&Start=1900-01-01&End=2022-08-01"
-	# for TRM: "https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=TRM&SensorNums=8&dur_code=D&Start=1900-01-01&End=2022-08-01"
-	# for PNF: "https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=PNF&SensorNums=8&dur_code=D&Start=1900-01-01&End=2022-08-01"
-	# for ISB: "https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=ISB&SensorNums=8&dur_code=D&Start=1900-01-01&End=2022-08-01"
-	# for BND: "https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=BND&SensorNums=8&dur_code=D&Start=1900-01-01&End=2022-08-01"
-	# for SHA: 'https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=SHA&SensorNums=8&dur_code=D&Start=1900-01-01&End=2022-08-01'
-	# for CLE: "https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=CLE&SensorNums=8&dur_code=D&Start=1906-01-01&End=2022-08-01"
-	# for MIL: "https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=MIL&SensorNums=76&dur_code=D&Start=1906-01-01&End=2022-08-01"
-	# for FOL: 'https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=FOL&SensorNums=76&dur_code=D&Start=1900-01-01&End=2022-08-01'
-		# baddies
-	# for YRS: "https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=YRS&SensorNums=8&dur_code=D&Start=1906-01-01&End=2022-08-01"
-	# for SJF: 'https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=SJF&SensorNums=8&dur_code=D&Start=1900-01-01&End=2022-08-01'
-	# for LEW: 'https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=LEW&SensorNums=76&dur_code=D&Start=1900-01-01&End=2022-08-01'
-		# to search for Cali reservoirs: https://cdec.water.ca.gov/dynamicapp/wsSensorData
+					# this loc only has fnf, no inflow 
+				# for BND: c(-122.185556, 40.288611) 
+
+yesterdaysDate = '2022-09-07'
+historicStreamflowFileLoc =   paste0("https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=", basinSymbol, "&SensorNums=", infOrFnf, "&dur_code=D&Start=1900-01-01&End=", yesterdaysDate)
+historicReservoirFileLoc = paste0("https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=", basinSymbol, "&SensorNums=15&dur_code=D&Start=1900-01-01&End=", yesterdaysDate)
 
 	# defining pathways to basin-specific files
 dataOut_location = paste0('J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\', basinName, '\\')
-#pathToBasinBoundaryGPKG = paste0(dataOut_location, "watershedBoundaries_", basinName, ".gpkg")
-#pathToWatershedsGPKG =  paste0(dataOut_location, "HydroBASINSdata_", basinName, ".gpkg")
-#climateInputsFileLoc = paste0(dataOut_location, 'processedClimateData')
-forecastDate = '28JUL2022'
+forecastDate = '7SEP2022'
+waterYearStart = as.Date('2022-10-01')
+
 	# these file locations remain the same for all watersheds
-seas5DataNCDF = 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\cali-seas5.nc'
+seas5DataNCDF = 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\cali-recent-seas5.nc'
 cfsDataNCDF = 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\cali-cfs.nc'
-era5DataHistoricalNCDF = 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\cali-hist-era5.nc'
-era5DataRecentNCDF = 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\cali-recent-era5.nc'
-seas5MultiDataNCDF = 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\testing-multiple-forecasts-seas5-wy2019.nc'
+	# no longer separating historical from recent era5... may revisit
+#era5DataHistoricalNCDF = 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\cali-hist-era5.nc'
+era5DataNCDF = 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\cali-era.nc'
+#seas5MultiDataNCDF = 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\testing-multiple-forecasts-seas5-wy2019.nc'
 basinATLAS_locationAndFile = 'C:\\Users\\arik\\Documents\\PhD Research\\D4\\BasinATLAS_Data_v10\\BasinATLAS_v10.gdb'
 
 	
@@ -60,22 +49,22 @@ library(data.table)		# for data.table
 	### this section is purely for inspecting data before running models
 #########################################################################
 ncin_cfs = nc_open(cfsDataNCDF)		;	ncin_cfs
-ncin_era5 = nc_open(era5DataHistoricalNCDF)	;	ncin_era5
-ncin_recentEra5 = nc_open(era5DataRecentNCDF)	;	ncin_recentEra5
+ncin_era5 = nc_open(era5DataNCDF)	;	ncin_era5
+#ncin_recentEra5 = nc_open(era5DataRecentNCDF)	;	ncin_recentEra5
 ncin_seas5 = nc_open(seas5DataNCDF)	;	ncin_seas5
 
 ncatt_get(ncin_cfs, 'time','units')$value	# says hours but seems to be in days
 ncatt_get(ncin_era5, 'time','units')$value
-ncatt_get(ncin_recentEra5, 'time','units')$value
+#ncatt_get(ncin_recentEra5, 'time','units')$value
 ncatt_get(ncin_seas5, 'valid_time','units')$value
 #########################################################################
 
 	# correct dates must be manually selected for now
 cfsStartDate = as.Date('2022-02-28') #  + ncvar_get(ncin_cfs, 'time')/24 for calculating actual dates
-era5StartDate =  as.Date('2001-06-01') # + ncvar_get(ncin_era5, 'time') for calculating actual dates 
-era5RecentStartDate =  as.Date('2020-06-01') # + ncvar_get(ncin_recentEra5, 'time') for calculating actual dates 
+era5StartDate =  as.Date('2001-07-01') # + ncvar_get(ncin_era5, 'time') for calculating actual dates 
+#era5RecentStartDate =  as.Date('2001-07-01') # + ncvar_get(ncin_recentEra5, 'time') for calculating actual dates 
 	# seas5 is incorrectly showing the second of the month, but should be the first
-seas5StartDate = as.Date('2022-06-02') - 2 # + ncvar_get(ncin_seas5, 'lead_time') for calculating actual dates
+seas5StartDate = as.Date('2022-08-02') - 2 # + ncvar_get(ncin_seas5, 'lead_time') for calculating actual dates
 seas5MultiStartDate = as.Date('1993-01-02') - 2 # + ncvar_get(ncin_seas5, 'lead_time') for calculating actual dates
 
 
@@ -96,11 +85,10 @@ climateInputConversion_f(
 #	pathToBasinBoundaryGPKG = pathToBasinBoundaryGPKG,
 #	pathToWatershedsGPKG = pathToWatershedsGPKG,
 	basinName = basinName,
-	climateDataNCDF = era5DataHistoricalNCDF,
+	climateDataNCDF = era5DataNCDF,
 	tempConversionFactor = NA,
 	pptConversionFactor = NA,
 	avgTempGiven = FALSE, 
-	multipleModels = FALSE,	# are there multiple models that need to be stored?
 	startDate = era5StartDate, 	# when does the clock of the netcdf start?
 	timeToDaysConversion = 1,	# convert time increments to days if necessary
 	dataOut_location = dataOut_location,
@@ -137,9 +125,6 @@ modelCalibration_f(
 
 
 
-
-
-
 #########################################################################################################
 ####	This section is for validating model performance 
 ####
@@ -149,7 +134,7 @@ modelCalibration_f(
 	# validate historical data and generate plots
 validationHistoricalOutput = validationAndPlotGeneration_f(
 	basinName = basinName,
-	climateInputsFileLoc = climateInputsFileLoc,	# seas5 / cfs / era5 / Recent .RData is appended in the function
+#	climateInputsFileLoc = climateInputsFileLoc,	# seas5 / cfs / era5 / Recent .RData is appended in the function
 	historicStreamflowFileLoc = historicStreamflowFileLoc,
 	dataOut_location = dataOut_location,
 	dataSource = 1)							# 1 for FNF from cal.gov,
@@ -177,12 +162,12 @@ for(thisWY in allWYs)	{
 
 	# step 6
 	# validate streamflow projection data and generate plots
-validationProjectionOutput = projectionValidationAndPlotGeneration_f(
+projectionValidationAndPlotGeneration_f(
 	basinName = basinName,
 	historicStreamflowFileLoc = historicStreamflowFileLoc,
 	dataOut_location = dataOut_location,
-	dataSource = 1)							# 1 for cal.gov,
-
+	dataSource = 1,							# 1 for cal.gov,
+	biasCorrection = FALSE)							
 
 
 #########################################################################################################
@@ -191,12 +176,11 @@ validationProjectionOutput = projectionValidationAndPlotGeneration_f(
 #########################################################################################################
 	# step 7
 	# ML for predicting reservoir outflows
-reservoirOutflowCalVal = reservoirOutflowCalVal_f(
+reservoirOutflowCalVal_f(
 	dataOut_location = dataOut_location,
-	historicReservoirFileLoc = 'insert_file_loc_here.com',
-	historicStreamflowFileLoc = 'insert_file_loc_here.com',
+	historicReservoirFileLoc = historicReservoirFileLoc,
+	historicStreamflowFileLoc = historicStreamflowFileLoc,
 	basinName = basinName,
-	basinSymbol = basinSymbol,
 	dataSource = 1, 			# 1 for cal.gov,
 	nTreeModel=500,
 	modelMetric = 'Rsquared',
@@ -229,12 +213,11 @@ climateInputConversion_f(
 #	pathToBasinBoundaryGPKG = pathToBasinBoundaryGPKG,
 #	pathToWatershedsGPKG = pathToWatershedsGPKG,
 	basinName = basinName,
-	climateDataNCDF = era5DataRecentNCDF,	####!!!!! change btw cfs and seas5
+	climateDataNCDF = era5DataNCDF,	####!!!!! change btw cfs and seas5
 	tempConversionFactor = NA,
 	pptConversionFactor = NA,
 	avgTempGiven = FALSE, 
-	multipleModels = FALSE,	# are there multiple models that need to be stored?
-	startDate = era5RecentStartDate, 	# when does the clock of the netcdf start?
+	startDate = era5StartDate, 	# when does the clock of the netcdf start?
 	timeToDaysConversion = 1,	# convert time increments to days if necessary
 	dataOut_location = dataOut_location,
 	optionForPET = 1, 	# 1 = PET_fromTemp modified Pen-Mon, 
@@ -268,7 +251,6 @@ climateInputConversion_f(
 	tempConversionFactor = NA,
 	pptConversionFactor = NA,
 	avgTempGiven = FALSE, 
-	multipleModels = FALSE,	# are there multiple models that need to be stored?
 	startDate = seas5StartDate, 	# when does the clock of the netcdf start?
 	timeToDaysConversion = 1,	# convert time increments to days if necessary
 	dataOut_location = dataOut_location,
@@ -280,13 +262,14 @@ climateInputConversion_f(
 	# step 10 
 	# run the model with forecasting data
 	## Running the Model for Seasonal Forecasts 
-allForecastsOutput = seasonalForecast_f(
+allForecastsOutput = seasonalStreamflowForecast_f(
 	basinName = basinName,
 	historicStreamflowFileLoc = historicStreamflowFileLoc,
 	dataOut_location = dataOut_location,
-	dataSource = 1)							# 1 for FNF from cal.gov,
-
-saveRDS(allForecastsOutput, paste0(climateInputsFileLoc, 'ForecastsFor_', forecastDate, '.RData'))
+	dataSource = 1,							# 1 for FNF from cal.gov,
+	waterYearStart = waterYearStart,
+	forecastDate = forecastDate,
+	gageLonLat = gageLonLat)
 
 
 
@@ -1946,6 +1929,10 @@ validationProjectionOutput = projectionValidationAndPlotGeneration_f(
 #########################################################################################################
 	# step 9
 	# ML for predicting reservoir outflows
+	
+	# note: plans to remove infOrFNF and only use 'inflow' going forward
+	infOrFNF = 'inflow' # fnf or inflow	
+
 reservoirOutflowCalVal = reservoirOutflowCalVal_f(
 	dataOut_location = dataOut_location,
 	basinName = basinName,
