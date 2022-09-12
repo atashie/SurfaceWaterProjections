@@ -26,6 +26,7 @@ basinDelineation_f = function(
 	
 	##################################################
 	#### reading basinATLAS data and intersecting with gage location
+		#BasinATLAS available via hydrosheds.org
 	basinAt12 = st_read(dsn=basinATLAS_locationAndFile, layer="BasinATLAS_v10_lev12")
 	gageLocation_asSF = st_sfc(st_point(gageLonLat))
 	st_crs(gageLocation_asSF) = 4326
@@ -78,7 +79,8 @@ climateInputConversion_f = function(
 	dataOut_location = 'save_file_location',
 	optionForPET = 1, 	# 1 = PET_fromTemp modified Pen-Mon, 
 	variableOrderOption = NA, # 'seas5' or 'era5' or 'seas5Multi'
-	precipName = 'tp')	# other options include: tp, tp_sum	
+	precipName = 'tp',	# other options include: tp, tp_sum	
+	limitedModels = 25)	# the full seas5 multi only goes back to ~ 2017, so for hindcasting we may want to limit analysis to the first 25 models (which seem to be present for the whole record)
 	{
 	# load relevant libraries
 	library(sf)				# for geospatial data
@@ -105,6 +107,7 @@ climateInputConversion_f = function(
 			ncin = nc_open(climateDataNCDF)
 
 				# current post processing of ncdfs results in some nas, so must remove these before proceeding
+					# na removal by mdeian value needs to be revisited... a linear interp would probably be better
 			ncTmin = ncvar_get(ncin, 't2m_min'); if(any(is.na(ncTmin)))	{ncTmin[is.na(ncTmin)] = median(ncTmin, na.rm=TRUE)} 
 			ncTmax = ncvar_get(ncin, 't2m_max'); if(any(is.na(ncTmax)))	{ncTmax[is.na(ncTmax)] = median(ncTmax, na.rm=TRUE)} 
 			ncPPT = ncvar_get(ncin, precipName); if(any(is.na(ncPPT)))	{ncPPT[is.na(ncPPT)] = median(ncPPT, na.rm=TRUE)} 
@@ -135,6 +138,7 @@ climateInputConversion_f = function(
 					}
 					
 						# summing all climate variables; they normalized by basin area below
+							# ultimately, subbasins should be disaggregated and the model run on subcomponents, but this will take time to implement
 					allTmin = allTmin +  theseTmin *  basinWatersheds$SUB_AREA[numberOfWatersheds]
 					allTmax = allTmax + theseTmax *  basinWatersheds$SUB_AREA[numberOfWatersheds]
 					allPPT = allPPT + ncPPT[ , nearestLon, nearestLat, numModels] *  basinWatersheds$SUB_AREA[numberOfWatersheds]
@@ -186,6 +190,7 @@ climateInputConversion_f = function(
 				nearestLat = which.min(abs(thisLonLat[2] - nc_lat))
 						
 					# summing all climate variables; they normalized by basin area below
+						# ultimately, subbasins should be disaggregated and the model run on subcomponents, but this will take time to implement
 				allTmin = allTmin + ncTmin[nearestLon, nearestLat, ] *  basinWatersheds$SUB_AREA[numberOfWatersheds]
 				allTmax = allTmax + ncTmax[nearestLon, nearestLat, ] *  basinWatersheds$SUB_AREA[numberOfWatersheds]
 				allPPT = allPPT + ncPPT[nearestLon, nearestLat, ] *  basinWatersheds$SUB_AREA[numberOfWatersheds]
@@ -240,7 +245,15 @@ climateInputConversion_f = function(
 				nc_date = startDate + timeToDaysConversion * leadTimes + timeToDaysConversion * initTimes[thisInitTime] # time is days after jan 1 
 
 				allClimateData = list()
-				for(numModels in 1:length(ncvar_get(ncin, 'member')))	{
+				
+					# the full seas5 multi only goes back to ~ 2017, so for hindcasting we may want to limit analysis to the first 25 models (which seem to be present for the whole record) 
+				if(limitedModels) 	{
+					totModels = 1:limitedModels
+				} else	{
+					totModels = 1:length(ncvar_get(ncin, 'member'))
+				}
+				
+				for(numModels in totModels)	{
 					allPPT = 0	; allTmin = 0	; allTmax = 0	; allPET = 0
 					for(numberOfWatersheds in 1:nrow(basinWatersheds))	{
 							#identify climate data closest to the centroid of the subbasin of interest
@@ -249,6 +262,7 @@ climateInputConversion_f = function(
 						nearestLat = which.min(abs(thisLonLat[2] - nc_lat))
 					
 							# Tmax is sometimes < Tmin, so need to adjust before running for PET
+							# this step can be removed when the bias correction / post processing is standardized
 						theseTmin = ncTmin[nearestLon, nearestLat, numModels, , thisInitTime]
 						theseTmax = ncTmax[nearestLon, nearestLat, numModels, , thisInitTime]
 						if(any(theseTmin >= theseTmax))	{
@@ -256,6 +270,7 @@ climateInputConversion_f = function(
 						}
 						
 							# summing all climate variables; they normalized by basin area below
+							# ultimately, subbasins should be disaggregated and the model run on subcomponents, but this will take time to implement
 						allTmin = allTmin +  theseTmin *  basinWatersheds$SUB_AREA[numberOfWatersheds]
 						allTmax = allTmax + theseTmax *  basinWatersheds$SUB_AREA[numberOfWatersheds]
 						allPPT = allPPT + ncPPT[ , nearestLon, nearestLat, numModels, thisInitTime] *  basinWatersheds$SUB_AREA[numberOfWatersheds]
@@ -934,156 +949,6 @@ validationAndPlotGeneration_f = function(
 
 
 
-reservoirOutflowCalVal_f = function(
-	dataOut_location = 'save_file_location',
-	historicReservoirFileLoc = 'insert_file_loc_here.com',
-	historicStreamflowFileLoc = 'insert_file_loc_here.com',
-	basinName = 'inster_basin_or_outlet_name',
-	dataSource = 1, 			# 1 for FNF or inflow from cal.gov,
-	nTreeModel=5000,
-	modelMetric = 'Rsquared',
-	modelMethod = 'rf',
-	metric="Rsquared",
-	numFolds = 5,
-	numRepeats = 12)
-	{
-	
-
-		# create the folder for storing outputs
-	if(!file.exists(paste0(dataOut_location, basinName, '_reservoirModel')))	{
-			dir.create(file.path(paste0(dataOut_location, basinName, '_reservoirModel')))
-	}
-
-	############ loading libraries
-	library(data.table)
-	library(lubridate)
-	library(CAST)
-	library(caret)
-	library(sf)
-	library(zoo)
-
-		# reading in data on reservoir inflows and storage
-	if(dataSource == 1)	{
-		inflow = as.data.table(read.csv(paste0(historicStreamflowFileLoc)))
-		stor = read.csv(paste0(historicReservoirFileLoc))
-		#outflow = read.csv("https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=EXC&SensorNums=23&dur_code=D&Start=1900-01-01&End=2022-08-05")
-
-		stor$Date = ymd(unlist(strsplit(stor$DATE.TIME, " "))[seq(1,nrow(stor)*2,2)])
-		stor$stor = as.numeric(stor$VALUE)
-		inflow$Date = ymd(unlist(strsplit(inflow$DATE.TIME, " "))[seq(1,nrow(inflow)*2,2)])
-		inflow$inflow = inflow$VALUE
-		allDat = inflow[stor[c('Date','stor')], on = 'Date']
-		whichFirstNoNA = which(!is.na(allDat$stor) & !is.na(allDat$inflow))[1]
-		allDat = allDat[-c(1:(whichFirstNoNA-1)), ]
-		allDat$AcFtPDay_inflow =  as.numeric(allDat$inflow)  * (60*60*24) / 43559.9
-			# resLoss = Outflow + AET + Withdrawals = dS - Inflow
-		allDat$storIntrp = na.approx(allDat$stor)
-		allDat$infIntrp = na.approx(allDat$AcFtPDay_inflow)
-		allDat$resLoss = c(diff(allDat$storIntrp) - allDat$infIntrp[-nrow(allDat)], NA) * -1
-		allDat$resLoss[allDat$resLoss < 0] = 0
-	} else	{print("need to figure out how to handle these data")}
-	
-
-	resComplete = allDat[-nrow(allDat), c('Date')]
-		# rounding to help reduce overfitting
-	resComplete = cbind(resComplete, signif(allDat[-nrow(allDat), c('resLoss', 'storIntrp', 'infIntrp')], 4))
-	resComplete$month = as.factor(month(resComplete$Date))
-	
-	#resComplete$yday = as.factor(yday(resComplete$Date))
-	
-	resTest = resComplete[(floor(nrow(resComplete) * .33) + 1):nrow(resComplete), ]
-	resValid = resComplete[1:(floor(nrow(resComplete) * .33)), ]
-	
-	
-	resStorModel = train(resTest[,-c(1,2)],
-						resTest$resLoss,
-						metric=modelMetric,
-						method=modelMethod,
-						#tuneLength=?,
-						imporance=TRUE,
-						ntree=nTreeModel,
-						trControl = trainControl(
-							method = 'repeatedcv',
-							number = numFolds,
-							repeats = numRepeats))
-							#method='cv'))
-		#					index = indices$index))
-		#					p=.75))
-
-			#saving the model
-	saveRDS(resStorModel, paste0(dataOut_location, basinName, '_reservoirModel\\dailyProj.RData'))
-
-	predValid = predict(resStorModel, newdata = resValid)
-	predCalib = predict(resStorModel, newdata = resTest)
-			
-		# save ML model performance
-	png(paste0(dataOut_location, basinName, '_reservoirModel\\', basinName, '_MLcalib_dailyProj.png'), width = 720, height = 720)
-	windowsFonts(A = windowsFont("Roboto"))
-	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
-	plot(resTest$resLoss, predCalib, 
-		main='', xlab = 'Act. Reservoir Loss (AcFt / Month)', ylab = 'Est. Reservoir Loss (AcFt / Month)',
-		pch=2, lwd=1.15,  col=alpha('#0098B2', 0.5), cex=1.75)
-		
-	abline(a=0, b=1, lwd=2, col='#1A232F', cex=2)
-	abline(lm(predCalib ~ resTest$resLoss),
-		lwd=2, col=alpha('#F06000', 1), cex=2)
-	text(x=min(resTest$resLoss, na.rm=TRUE), 
-			y=max(predCalib, na.rm=TRUE) * 0.9,
-			paste0('r  = ', round(summary(lm(predCalib ~ resTest$resLoss))$r.squared, 2)),
-			adj = c(0,0), font=2, col='#F06000', family='A', cex=2*1.6)
-	text(x=min(resTest$resLoss, na.rm=TRUE), 
-			y=max(predCalib, na.rm=TRUE) * 0.92,
-			'  2',
-			adj = c(0,0), font=2, col='#F06000', family='A', cex=1.2*1.6)
-	text(x=max(resTest$resLoss, na.rm=TRUE) ,
-			y=min(predCalib, na.rm=TRUE) * .9,
-			paste0(basinName),
-			adj = c(1,0), font=2, col='#1A232F', family='A', cex=1.5*1.9)
-	text(x=min(resTest$resLoss, na.rm=TRUE) ,
-			y=max(predCalib, na.rm=TRUE) * .82,
-			paste0('Calib. Pred. Daily'),
-			adj = c(0,0), font=2, col='#F06000', family='A', cex=1.5*1.9)
-	dev.off()
-
-
-		# save validation of ML model
-	png(paste0(dataOut_location, basinName, '_reservoirModel\\', basinName, '_MLvalid_dailyProj.png'), width = 720, height = 720)
-	windowsFonts(A = windowsFont("Roboto"))
-	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
-	plot(resValid$resLoss, predValid, 
-		main='', xlab = 'Act. Reservoir Loss (AcFt / Month)', ylab = 'Est. Reservoir Loss (AcFt / Month)',
-		pch=2, lwd=1.15,  col=alpha('#0098B2', 0.5), cex=1.75)
-	
-	abline(a=0, b=1, lwd=2, col='#1A232F', cex=2)
-	abline(lm(predValid ~ resValid$resLoss),
-		lwd=2, col=alpha('#F06000', 1), cex=2)
-	text(x=min(resValid$resLoss, na.rm=TRUE), 
-			y=max(predValid, na.rm=TRUE) * 0.9,
-			paste0('r  = ', round(summary(lm(predValid ~ resValid$resLoss))$r.squared, 2)),
-			adj = c(0,0), font=2, col='#F06000', family='A', cex=2*1.6)
-	text(x=min(resValid$resLoss, na.rm=TRUE), 
-			y=max(predValid, na.rm=TRUE) * 0.92,
-			'  2',
-			adj = c(0,0), font=2, col='#F06000', family='A', cex=1.2*1.6)
-	text(x=max(resValid$resLoss, na.rm=TRUE) ,
-			y=min(predValid, na.rm=TRUE) * .9,
-			paste0(basinName),
-			adj = c(1,0), font=2, col='#1A232F', family='A', cex=1.5*1.9)
-	text(x=min(resValid$resLoss, na.rm=TRUE) ,
-			y=max(predValid, na.rm=TRUE) * .82,
-			paste0('Valid. Pred. Daily'),
-			adj = c(0,0), font=2, col='#F06000', family='A', cex=1.5*1.9)
-	dev.off()
-}
-
-
-
-
-
-
-
-
-
 projectionValidationAndPlotGeneration_f = function(
 	basinName = 'inster_basin_or_outlet_name',
 	historicStreamflowFileLoc = 'https://someplace.gov',
@@ -1658,6 +1523,179 @@ projectionValidationAndPlotGeneration_f = function(
 
 
 
+#############################################################################################################################
+## everything under this line is still in progress
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+reservoirOutflowCalVal_f = function(
+	dataOut_location = 'save_file_location',
+	historicReservoirFileLoc = 'insert_file_loc_here.com',
+	historicStreamflowFileLoc = 'insert_file_loc_here.com',
+	basinName = 'inster_basin_or_outlet_name',
+	dataSource = 1, 			# 1 for FNF or inflow from cal.gov,
+	nTreeModel=5000,
+	modelMetric = 'Rsquared',
+	modelMethod = 'rf',
+	metric="Rsquared",
+	numFolds = 5,
+	numRepeats = 12)
+	{
+	
+
+		# create the folder for storing outputs
+	if(!file.exists(paste0(dataOut_location, basinName, '_reservoirModel')))	{
+			dir.create(file.path(paste0(dataOut_location, basinName, '_reservoirModel')))
+	}
+
+	############ loading libraries
+	library(data.table)
+	library(lubridate)
+	library(CAST)
+	library(caret)
+	library(sf)
+	library(zoo)
+
+		# reading in data on reservoir inflows and storage
+	if(dataSource == 1)	{
+		inflow = as.data.table(read.csv(paste0(historicStreamflowFileLoc)))
+		stor = read.csv(paste0(historicReservoirFileLoc))
+		#outflow = read.csv("https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=EXC&SensorNums=23&dur_code=D&Start=1900-01-01&End=2022-08-05")
+
+		stor$Date = ymd(unlist(strsplit(stor$DATE.TIME, " "))[seq(1,nrow(stor)*2,2)])
+		stor$stor = as.numeric(stor$VALUE)
+		inflow$Date = ymd(unlist(strsplit(inflow$DATE.TIME, " "))[seq(1,nrow(inflow)*2,2)])
+		inflow$inflow = inflow$VALUE
+		allDat = inflow[stor[c('Date','stor')], on = 'Date']
+		whichFirstNoNA = which(!is.na(allDat$stor) & !is.na(allDat$inflow))[1]
+		allDat = allDat[-c(1:(whichFirstNoNA-1)), ]
+		allDat$AcFtPDay_inflow =  as.numeric(allDat$inflow)  * (60*60*24) / 43559.9
+			# resLoss = Outflow + AET + Withdrawals = dS - Inflow
+		allDat$storIntrp = na.approx(allDat$stor)
+		allDat$infIntrp = na.approx(allDat$AcFtPDay_inflow)
+		allDat$resLoss = c(diff(allDat$storIntrp) - allDat$infIntrp[-nrow(allDat)], NA) * -1
+		allDat$resLoss[allDat$resLoss < 0] = 0
+	} else	{print("need to figure out how to handle these data")}
+	
+
+	resComplete = allDat[-nrow(allDat), c('Date')]
+		# rounding to help reduce overfitting
+	resComplete = cbind(resComplete, signif(allDat[-nrow(allDat), c('resLoss', 'storIntrp', 'infIntrp')], 4))
+	resComplete$month = as.factor(month(resComplete$Date))
+	
+	#resComplete$yday = as.factor(yday(resComplete$Date))
+	
+	resTest = resComplete[(floor(nrow(resComplete) * .33) + 1):nrow(resComplete), ]
+	resValid = resComplete[1:(floor(nrow(resComplete) * .33)), ]
+	
+	
+	resStorModel = train(resTest[,-c(1,2)],
+						resTest$resLoss,
+						metric=modelMetric,
+						method=modelMethod,
+						#tuneLength=?,
+						imporance=TRUE,
+						ntree=nTreeModel,
+						trControl = trainControl(
+							method = 'repeatedcv',
+							number = numFolds,
+							repeats = numRepeats))
+							#method='cv'))
+		#					index = indices$index))
+		#					p=.75))
+
+			#saving the model
+	saveRDS(resStorModel, paste0(dataOut_location, basinName, '_reservoirModel\\dailyProj.RData'))
+
+	predValid = predict(resStorModel, newdata = resValid)
+	predCalib = predict(resStorModel, newdata = resTest)
+			
+		# save ML model performance
+	png(paste0(dataOut_location, basinName, '_reservoirModel\\', basinName, '_MLcalib_dailyProj.png'), width = 720, height = 720)
+	windowsFonts(A = windowsFont("Roboto"))
+	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
+	plot(resTest$resLoss, predCalib, 
+		main='', xlab = 'Act. Reservoir Loss (AcFt / Month)', ylab = 'Est. Reservoir Loss (AcFt / Month)',
+		pch=2, lwd=1.15,  col=alpha('#0098B2', 0.5), cex=1.75)
+		
+	abline(a=0, b=1, lwd=2, col='#1A232F', cex=2)
+	abline(lm(predCalib ~ resTest$resLoss),
+		lwd=2, col=alpha('#F06000', 1), cex=2)
+	text(x=min(resTest$resLoss, na.rm=TRUE), 
+			y=max(predCalib, na.rm=TRUE) * 0.9,
+			paste0('r  = ', round(summary(lm(predCalib ~ resTest$resLoss))$r.squared, 2)),
+			adj = c(0,0), font=2, col='#F06000', family='A', cex=2*1.6)
+	text(x=min(resTest$resLoss, na.rm=TRUE), 
+			y=max(predCalib, na.rm=TRUE) * 0.92,
+			'  2',
+			adj = c(0,0), font=2, col='#F06000', family='A', cex=1.2*1.6)
+	text(x=max(resTest$resLoss, na.rm=TRUE) ,
+			y=min(predCalib, na.rm=TRUE) * .9,
+			paste0(basinName),
+			adj = c(1,0), font=2, col='#1A232F', family='A', cex=1.5*1.9)
+	text(x=min(resTest$resLoss, na.rm=TRUE) ,
+			y=max(predCalib, na.rm=TRUE) * .82,
+			paste0('Calib. Pred. Daily'),
+			adj = c(0,0), font=2, col='#F06000', family='A', cex=1.5*1.9)
+	dev.off()
+
+
+		# save validation of ML model
+	png(paste0(dataOut_location, basinName, '_reservoirModel\\', basinName, '_MLvalid_dailyProj.png'), width = 720, height = 720)
+	windowsFonts(A = windowsFont("Roboto"))
+	par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
+	plot(resValid$resLoss, predValid, 
+		main='', xlab = 'Act. Reservoir Loss (AcFt / Month)', ylab = 'Est. Reservoir Loss (AcFt / Month)',
+		pch=2, lwd=1.15,  col=alpha('#0098B2', 0.5), cex=1.75)
+	
+	abline(a=0, b=1, lwd=2, col='#1A232F', cex=2)
+	abline(lm(predValid ~ resValid$resLoss),
+		lwd=2, col=alpha('#F06000', 1), cex=2)
+	text(x=min(resValid$resLoss, na.rm=TRUE), 
+			y=max(predValid, na.rm=TRUE) * 0.9,
+			paste0('r  = ', round(summary(lm(predValid ~ resValid$resLoss))$r.squared, 2)),
+			adj = c(0,0), font=2, col='#F06000', family='A', cex=2*1.6)
+	text(x=min(resValid$resLoss, na.rm=TRUE), 
+			y=max(predValid, na.rm=TRUE) * 0.92,
+			'  2',
+			adj = c(0,0), font=2, col='#F06000', family='A', cex=1.2*1.6)
+	text(x=max(resValid$resLoss, na.rm=TRUE) ,
+			y=min(predValid, na.rm=TRUE) * .9,
+			paste0(basinName),
+			adj = c(1,0), font=2, col='#1A232F', family='A', cex=1.5*1.9)
+	text(x=min(resValid$resLoss, na.rm=TRUE) ,
+			y=max(predValid, na.rm=TRUE) * .82,
+			paste0('Valid. Pred. Daily'),
+			adj = c(0,0), font=2, col='#F06000', family='A', cex=1.5*1.9)
+	dev.off()
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1733,9 +1771,23 @@ projectedStorageValidationAndPlotGeneration_f = function(
 			acrePerSqKm = 247.105
 			mmPerFoot = 304.8
 			mmToAcrFt = basinAreaInKm * acrePerSqKm / mmPerFoot
+
+			allDat$yday = yday(allDat$Date)
+			infModelPoly = lm(resLoss ~ poly(infIntrp, 2), data = allDat)
+			storModelPoly = lm(resLoss ~ poly(storIntrp, 2), data = allDat)
+			ydayModelPoly = lm(resLoss ~ poly(yday, 2), data = allDat)
+			
+			infModelPoly_wt = summary(infModelPoly)$adj / (summary(infModelPoly)$adj + summary(storModelPoly)$adj + summary(ydayModelPoly)$adj)
+			storModelPoly_wt = summary(storModelPoly)$adj / (summary(infModelPoly)$adj + summary(storModelPoly)$adj + summary(ydayModelPoly)$adj)
+			ydayModelPoly_wt = summary(ydayModelPoly)$adj / (summary(infModelPoly)$adj + summary(storModelPoly)$adj + summary(ydayModelPoly)$adj)
+
+#			plot(fitted(infModelPoly), residuals(infModelPoly))
+#			plot(fitted(storModelPoly), residuals(infModelPoly))
+#			plot(fitted(ydayModelPoly), residuals(infModelPoly))
 		} else	{return("need to figure out how to handle these data")}
 
 
+			# read in climate data
 			# read in climate data
 		seas5ClimateInputFileNames = list.files(paste0(dataOut_location, 'seas5MultiOutput'))
 		era5ClimateInput = as.data.table(readRDS(paste0(dataOut_location, 'ERA5_', basinName, '.RData')))
@@ -1750,15 +1802,18 @@ projectedStorageValidationAndPlotGeneration_f = function(
 			# building a record of historical streamflow for comparison
 		allDat$year = year(allDat$Date)
 		allDat$month = month(allDat$Date)
-		climatologyDF = data.frame(month = NA, year = NA, totQ = NA)
+		climatologyDF = data.frame(month = NA, year = NA, Stor = NA)
 		climIter = 0
-		for(thisYear in unique(allDat$year))	{
+		for(thisYear in unique(allDat$year)[-length(unique(allDat$year))])	{
 			for(thisMonth in 1:12)	{
 				climIter = climIter + 1
 				histSubset = subset(allDat, year == thisYear & month == thisMonth)
-				climatologyDF[climIter, ] = c(thisMonth, thisYear, mean(histSubset$storIntrp, na.rm=TRUE) * nrow(histSubset))
+				climatologyDF[climIter, ] = c(thisMonth, thisYear, last(histSubset$storIntrp))
 			}
 		}
+	
+
+			
 			
 
 		save_iter = 0
@@ -1809,7 +1864,8 @@ projectedStorageValidationAndPlotGeneration_f = function(
 					climateAndStreamflowOutput = allDat[allHBVoutput, on='Date']#[projDates, ]  
 					modelOut = climateAndStreamflowOutput[projDates, ]
 					modelOut$inflowProj = modelOut$Qg * mmToAcrFt
-					
+	
+					#optional bias correction by month
 					if(biasCorrection)	{
 						for(ii in 1:12)	{
 							biasCol = which(names(calibratedVars) == paste0('mnthBias_', ii))
@@ -1817,6 +1873,24 @@ projectedStorageValidationAndPlotGeneration_f = function(
 							modelOut$inflowProj[modelOut$month == ii] = modelOut$inflowProj[modelOut$month == ii] *  as.numeric(100 - debiasVal) / 100
 						}
 					}
+
+	
+				# first estimating storage using only inflow
+#			storEstInf = as.numeric(climateAndStreamflowOutput[(projDates[1] - 1), 'storIntrp']) + cumsum(modelOut$inflowProj) - cumsum(predict(infModelPoly, newdata = list(infIntrp = modelOut$inflowProj)))
+				# then estimating resLoss (and rescaling) from the above models 
+#			resLossEstInf = predict(infModelPoly, newdata = list(infIntrp = modelOut$inflowProj)) * infModelPoly_wt
+#			resLossEstStor = predict(storModelPoly, newdata = list(storIntrp = storEstInf)) * storModelPoly_wt
+#			resLossEstYday = predict(ydayModelPoly, newdata = list(yday = modelOut$yday)) * ydayModelPoly_wt
+#			resLossTot = resLossEstInf + resLossEstStor + resLossEstYday
+#			storEstAvg = as.numeric(climateAndStreamflowOutput[(projDates[1] - 1), 'storIntrp']) + cumsum(modelOut$inflowProj) - cumsum(resLossTot)
+#			resLossEstStor = predict(storModelPoly, newdata = list(storIntrp = storEstAvg)) * storModelPoly_wt
+#			resLossTot = resLossEstInf + resLossEstStor + resLossEstYday
+			
+#			resLossEstStor = predict(storModelPoly, newdata = list(storIntrp = storEstInf)) * storModelPoly_wt
+			
+
+#			modelOut$storEst = as.numeric(climateAndStreamflowOutput[(projDates[1] - 1), 'storIntrp']) + cumsum(modelOut$inflowProj) - 
+#				cumsum(resLossTot)
 
 					resLossEstInf = infModelLg_wt * (infModelLg$coef[1] + log(modelOut$inflowProj) * infModelLg$coef[2]) +
 						infModelLn_wt * (infModelLn$coef[1] + modelOut$inflowProj * infModelLn$coef[2])
@@ -1859,7 +1933,7 @@ projectedStorageValidationAndPlotGeneration_f = function(
 		validDF$Date = validDF$days + as.Date("1970-01-01")
 		validDF$startDate = validDF$Date %m-% (months(validDF$monthsOut - 1)) 
 		
-		startDates = unique(validDF$startDate) 
+		startDates = unique(validDF$startDate)
 			
 			# datatable for assessing error / performance over entire period for which we have data
 		sumModPerf = data.frame(month = NA, leadTime = NA, predTerc = NA, actTerc = NA, 
@@ -1871,58 +1945,51 @@ projectedStorageValidationAndPlotGeneration_f = function(
 				# parsing the climatology df for plotting
 			theseMonths = unique(month(validSubset$Date))
 			numMonths = length(theseMonths)
-			climDF = data.frame(month = NA, cumsumQ = NA, plotMonth = NA)
-			for(startYear in climatologyDF$year[1]:(max(climatologyDF$year)-1))	{
-				climSubset = subset(climatologyDF, year >= startYear)
-				climStart = which(climSubset$month == month(validSubset$startDate)[1])[1]
-				
-				climDF = rbind(climDF,
-					data.table(month = theseMonths, cumsumQ = cumsum(climSubset$totQ[climStart:(climStart+numMonths-1)]), plotMonth = c(1:7)))
-			}	
-		
+			
+			climDF = subset(climatologyDF, month %in% theseMonths)
 			
 			
 			png(paste0(dataOut_location, basinName, '_projectedStorageOutputFigures\\streamflow_', validSubset$Date[1] - 14, '.png'), width = 1200, height = 720)
 			windowsFonts(A = windowsFont("Roboto"))
 			par(mar=1.6*c(5,5,2,2), mgp=1.5*c(3,1.3,0), font.lab=2, bty='l', cex.lab=1.5*1.8, cex.axis=1.5*1.4, cex.main=1.5*1.8, col='#1A232F')
 			#validSubset$plotDate = rep(1:7, nrow(validSubset)/7) - .2
-			boxplot(validSubset$predQ ~ validSubset$Date, pch='.', lwd=1, 
+			boxplot(validSubset$predStor ~ validSubset$Date, pch='.', lwd=1, 
 				#col=colorRampPalette(c('#F06000', '#B91863'))(length(unique(validDF$monthsOut))),
-				ylim = c(0, max(validDF$predQ, na.rm=TRUE)),
+				ylim = c(0, max(validDF$predStor, na.rm=TRUE)),
 				at = c(1:7) - 0.2,
 				boxwex = 0.4,
 				col = '#A9BF2C',
 				border='#666D74', cex=1.5, 
-				main='', ylab='Cumulative Streamflow (mm)', xlab='Month', xaxt='n',
+				main='', ylab='Storage (Acre Feet)', xlab='Month', xaxt='n',
 				col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
 				family='A')
 			#climDF$plotDate =climDF$plotMonth + 0.2
-			boxplot(cumsumQ ~ plotMonth, data = climDF, pch='.',
+			boxplot(Stor ~ month, data = climDF, pch='.',
 				col = '#FDB600', 
-				at = c(1:7) + 0.2,
+				at = c(1:7)[order(theseMonths)] + 0.2,
 				boxwex = 0.4, 
 				border='#666D74', cex=1.5, 
-				main='', ylab='Cumulative Streamflow (mm)', xlab='Month', xaxt='n',
+				main='', ylab='Storage (Acre Feet)', xlab='Month', xaxt='n',
 				add=TRUE)
-			lines(1:length(unique(validSubset$Date)), unique(validSubset$actQ), type='l', col='#196CE1', lwd=1)
-			points(1:length(unique(validSubset$Date)), unique(validSubset$actQ), pch = '---', col='#F2F3F3', lwd=2, cex=9)
-			points(1:length(unique(validSubset$Date)), unique(validSubset$actQ), pch = '---', col='#196CE1', lwd=2, cex=7)
+			lines(1:length(unique(validSubset$Date)), unique(validSubset$actStor), type='l', col='#196CE1', lwd=1)
+			points(1:length(unique(validSubset$Date)), unique(validSubset$actStor), pch = '---', col='#F2F3F3', lwd=2, cex=9)
+			points(1:length(unique(validSubset$Date)), unique(validSubset$actStor), pch = '---', col='#196CE1', lwd=2, cex=7)
 			axis(1, at=1:length(unique(validSubset$Date)),
 				labels =c('Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec')[month(unique(validSubset$Date))],
 				col.lab='#1A232F', col.axis='#666D74')
-			text(x=0.5, y=max(validDF$predQ, na.rm=TRUE) * 0.95,
+			text(x=0.5, y=max(validDF$predStor, na.rm=TRUE) * 0.95,
 				paste0(basinName),
 				adj = c(0,0), font=2, col='#1A232F', family='A', cex=1.6*1.6)
-			text(x=0.5, y=max(validDF$predQ, na.rm=TRUE)* 0.87,
+			text(x=0.5, y=max(validDF$predStor, na.rm=TRUE)* 0.87,
 				paste0('Forecast Beginning on ', validSubset$Date[1] - 14),
 				adj = c(0,0), font=2, col='#1A232F', family='A', cex=1.6*1.6)
-			text(x=0.5, y=max(validDF$predQ, na.rm=TRUE) * 0.75,
+			text(x=0.5, y=max(validDF$predStor, na.rm=TRUE) * 0.75,
 				paste0('CAi Forecast'),
 				adj = c(0,0), font=2, col='#A9BF2C', family='A', cex=1.6*1.3)
-			text(x=0.5, y=max(validDF$predQ, na.rm=TRUE) * 0.7,
+			text(x=0.5, y=max(validDF$predStor, na.rm=TRUE) * 0.7,
 				paste0('Climatology'),
 				adj = c(0,0), font=2, col='#FDB600', family='A', cex=1.6*1.3)
-			text(x=0.5, y=max(validDF$predQ, na.rm=TRUE) * 0.65,
+			text(x=0.5, y=max(validDF$predStor, na.rm=TRUE) * 0.65,
 				paste0('Actual'),
 				adj = c(0,0), font=2, col='#196CE1', family='A', cex=1.6*1.3)
 			dev.off()
@@ -1931,28 +1998,28 @@ projectedStorageValidationAndPlotGeneration_f = function(
 			for(thisLeadTime in unique(validSubset$Date)) {
 				monthsLead = monthsLead + 1
 				validSubsetLd = subset(validSubset, Date == thisLeadTime)
-				climDFLd = subset(climDF, plotMonth == monthsLead)
-				climQuant = quantile(climDFLd$cumsumQ, c(0.333, 0.5, 0.667), na.rm=TRUE) 
-				predQuant = quantile(validSubsetLd$predQ, c(0.333, 0.5, 0.667)) 
+				climDFLd = subset(climatologyDF, month == monthsLead)
+				climQuant = quantile(climDFLd$Stor, c(0.333, 0.5, 0.667), na.rm=TRUE) 
+				predQuant = quantile(validSubsetLd$predStor, c(0.333, 0.5, 0.667)) 
 				
 				predTerc = 1
 				if(predQuant[2] > climQuant[1]) {predTerc = 2}
 				if(predQuant[2] > climQuant[3])	{predTerc = 3}
 				
-				actVal = validSubsetLd$actQ[1]
+				actVal = validSubsetLd$actStor[1]
 				actTerc = 1
 				if(actVal > climQuant[1]) 		{actTerc = 2}
 				if(actVal > climQuant[3])		{actTerc = 3}
 
 				sumModPerf = rbind(sumModPerf, c(
-					as.numeric(climDFLd$month[1]), monthsLead, predTerc, actTerc, 
+					as.numeric(month(validSubsetLd$Date[1])), monthsLead, predTerc, actTerc, 
 					as.numeric(predQuant[1] - actVal), as.numeric(climQuant[1] - actVal),
 					as.numeric(predQuant[2] - actVal), as.numeric(climQuant[2] - actVal),
 					as.numeric(predQuant[3] - actVal), as.numeric(climQuant[3] - actVal)))
 			}
 		}
 	}
-	fwrite(sumModPerf, paste0(dataOut_location, basinName, '_summaryOfModelPerformance.csv'))
+	fwrite(sumModPerf, paste0(dataOut_location, basinName, '_summaryOfStorageModelPerformance.csv'))
 
 #	sumModPerf = data.frame(month = NA, leadTime = NA, predTerc = NA, actTerc = NA, 
 #		predMAE25 = NA, climMAE25 = NA, predMAE50 = NA, climMAE50 = NA, predMAE75 = NA, climMAE75 = NA)

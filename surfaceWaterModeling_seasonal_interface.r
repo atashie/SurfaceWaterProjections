@@ -1,7 +1,7 @@
 	# example input data
-basinSymbol = 'ENG'
+basinSymbol = 'ISB'
 basinName = basinSymbol # paste0(basinSymbol, '_atOutlet')
-gageLonLat =    c(-121.270278, 39.240278)
+gageLonLat =    c(-118.479, 35.650) 
 infOrFnf = 76 #8 for fnf, 76 for inflow
 	# list of basins by symbol and lon / lat
 	# webpage to search for Cali reservoirs: https://cdec.water.ca.gov/dynamicapp/wsSensorData
@@ -167,7 +167,7 @@ projectionValidationAndPlotGeneration_f(
 	historicStreamflowFileLoc = historicStreamflowFileLoc,
 	dataOut_location = dataOut_location,
 	dataSource = 1,							# 1 for cal.gov,
-	biasCorrection = FALSE)							
+	biasCorrection = TRUE)							
 
 
 #########################################################################################################
