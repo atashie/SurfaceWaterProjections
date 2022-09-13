@@ -1749,10 +1749,12 @@ projectedStorageValidationAndPlotGeneration_f = function(
 			allDat$AcFtPDay_inflow =  as.numeric(allDat$inflow)  * (60*60*24) / 43559.9
 				# resLoss = Outflow + AET + Withdrawals = dS - Inflow
 			allDat$storIntrp = na.approx(allDat$stor)
-			allDat$infIntrp = na.approx(allDat$AcFtPDay_inflow)
+			allDat$infIntrp = allDat$AcFtPDay_inflow
+			allDat$infIntrp[is.na(allDat$infIntrp)] = mean(allDat$infIntrp, na.rm=TRUE)
+			
 			allDat$resLoss = c(diff(allDat$storIntrp) - allDat$infIntrp[-nrow(allDat)], NA) * -1
-			allDat$resLoss[allDat$resLoss <= 1] = 1	# using a power law model so eliminating 0s
-			allDat$infIntrp[allDat$infIntrp <= 1] = 1	# using a power law model so eliminating 0s
+			if(any(allDat$resLoss <= 1)) {allDat$resLoss[allDat$resLoss <= 1] = 1}	# using a power law model so eliminating 0s
+			if(any(allDat$infIntrp <= 1)) {allDat$infIntrp[allDat$infIntrp <= 1] = 1}	# using a power law model so eliminating 0s
 			
 				# basic models for relating storage and inflows to outflows
 			infModelLg = lm(allDat$resLoss ~ log(allDat$infIntrp))
@@ -1772,20 +1774,19 @@ projectedStorageValidationAndPlotGeneration_f = function(
 			mmPerFoot = 304.8
 			mmToAcrFt = basinAreaInKm * acrePerSqKm / mmPerFoot
 
-			allDat$yday = yday(allDat$Date)
-			infModelPoly = lm(resLoss ~ poly(infIntrp, 2), data = allDat)
-			storModelPoly = lm(resLoss ~ poly(storIntrp, 2), data = allDat)
-			ydayModelPoly = lm(resLoss ~ poly(yday, 2), data = allDat)
+#			allDat$yday = yday(allDat$Date)
+#			infModelPoly = lm(resLoss ~ poly(infIntrp, 2), data = allDat)
+#			storModelPoly = lm(resLoss ~ poly(storIntrp, 2), data = allDat)
+#			ydayModelPoly = lm(resLoss ~ poly(yday, 2), data = allDat)
 			
-			infModelPoly_wt = summary(infModelPoly)$adj / (summary(infModelPoly)$adj + summary(storModelPoly)$adj + summary(ydayModelPoly)$adj)
-			storModelPoly_wt = summary(storModelPoly)$adj / (summary(infModelPoly)$adj + summary(storModelPoly)$adj + summary(ydayModelPoly)$adj)
-			ydayModelPoly_wt = summary(ydayModelPoly)$adj / (summary(infModelPoly)$adj + summary(storModelPoly)$adj + summary(ydayModelPoly)$adj)
+#			infModelPoly_wt = summary(infModelPoly)$adj / (summary(infModelPoly)$adj + summary(storModelPoly)$adj + summary(ydayModelPoly)$adj)
+#			storModelPoly_wt = summary(storModelPoly)$adj / (summary(infModelPoly)$adj + summary(storModelPoly)$adj + summary(ydayModelPoly)$adj)
+#			ydayModelPoly_wt = summary(ydayModelPoly)$adj / (summary(infModelPoly)$adj + summary(storModelPoly)$adj + summary(ydayModelPoly)$adj)
 
 #			plot(fitted(infModelPoly), residuals(infModelPoly))
 #			plot(fitted(storModelPoly), residuals(infModelPoly))
 #			plot(fitted(ydayModelPoly), residuals(infModelPoly))
 		} else	{return("need to figure out how to handle these data")}
-
 
 			# read in climate data
 			# read in climate data
@@ -1892,13 +1893,40 @@ projectedStorageValidationAndPlotGeneration_f = function(
 #			modelOut$storEst = as.numeric(climateAndStreamflowOutput[(projDates[1] - 1), 'storIntrp']) + cumsum(modelOut$inflowProj) - 
 #				cumsum(resLossTot)
 
+#					resLossEstInf = infModelLg_wt * (infModelLg$coef[1] + log(modelOut$inflowProj) * infModelLg$coef[2]) +
+#						infModelLn_wt * (infModelLn$coef[1] + modelOut$inflowProj * infModelLn$coef[2])
+#					storEstInf = as.numeric(climateAndStreamflowOutput[(projDates[1] - 1), 'storIntrp']) + cumsum(modelOut$inflowProj) - cumsum(resLossEstInf)
+#					resLossEstStor = storModelLg_wt * (storModelLg$coef[1] + log(storEstInf) * storModelLg$coef[2]) +
+#						storModelLn_wt * (storModelLn$coef[1] + storEstInf * storModelLn$coef[2])
+#					modelOut$storEst = as.numeric(climateAndStreamflowOutput[(projDates[1] - 1), 'storIntrp']) + cumsum(modelOut$inflowProj) - 
+#						(cumsum(resLossEstInf) * infToStrWt + cumsum(resLossEstStor) * (1-infToStrWt))
+
+
+						# estimating reservoir losses as a function of inflows and storage
 					resLossEstInf = infModelLg_wt * (infModelLg$coef[1] + log(modelOut$inflowProj) * infModelLg$coef[2]) +
 						infModelLn_wt * (infModelLn$coef[1] + modelOut$inflowProj * infModelLn$coef[2])
+					if(any(resLossEstInf <= 1))	{resLossEstInf[resLossEstInf <= 1] = 1}
+					
 					storEstInf = as.numeric(climateAndStreamflowOutput[(projDates[1] - 1), 'storIntrp']) + cumsum(modelOut$inflowProj) - cumsum(resLossEstInf)
+					if(any(storEstInf <= 1))	{storEstInf[storEstInf <= 1] = 1}
+
+						# smoothing initial estimates of storage before running final function of reservoir loss ~ storage
+					storSmoother = 0
+					while(storSmoother < 10)	{
+						resLossEstStor = storModelLg_wt * (storModelLg$coef[1] + log(storEstInf) * storModelLg$coef[2]) +
+							storModelLn_wt * (storModelLn$coef[1] + storEstInf * storModelLn$coef[2])
+						storEstInfStor =as.numeric(climateAndStreamflowOutput[(projDates[1] - 1), 'storIntrp']) + cumsum(modelOut$inflowProj) - 
+							(cumsum(resLossEstInf) * infToStrWt + cumsum(resLossEstStor) * (1-infToStrWt))
+						if(any(storEstInfStor <= 1))	{storEstInfStor[storEstInfStor <= 1] = 1}
+						storSmoother = storSmoother + 1
+					}
+					
 					resLossEstStor = storModelLg_wt * (storModelLg$coef[1] + log(storEstInf) * storModelLg$coef[2]) +
 						storModelLn_wt * (storModelLn$coef[1] + storEstInf * storModelLn$coef[2])
 					modelOut$storEst = as.numeric(climateAndStreamflowOutput[(projDates[1] - 1), 'storIntrp']) + cumsum(modelOut$inflowProj) - 
 						(cumsum(resLossEstInf) * infToStrWt + cumsum(resLossEstStor) * (1-infToStrWt))
+					
+					
 
 					monthsOut = 0
 					for(thisMonth in unique(modelOut$month))	{

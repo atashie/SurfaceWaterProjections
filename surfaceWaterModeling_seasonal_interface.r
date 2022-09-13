@@ -1,7 +1,7 @@
 	# example input data
-basinSymbol = 'ISB'
+basinSymbol = 'SHA'
 basinName = basinSymbol # paste0(basinSymbol, '_atOutlet')
-gageLonLat =    c(-118.479, 35.650) 
+gageLonLat =      c(-122.417, 40.720)
 infOrFnf = 76 #8 for fnf, 76 for inflow
 	# list of basins by symbol and lon / lat
 	# webpage to search for Cali reservoirs: https://cdec.water.ca.gov/dynamicapp/wsSensorData
@@ -22,7 +22,7 @@ infOrFnf = 76 #8 for fnf, 76 for inflow
 					# this loc only has fnf, no inflow 
 				# for BND: c(-122.185556, 40.288611) 
 
-yesterdaysDate = '2022-09-07'
+yesterdaysDate = '2022-09-11'	# historic data is released every day for the day prior
 historicStreamflowFileLoc =   paste0("https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=", basinSymbol, "&SensorNums=", infOrFnf, "&dur_code=D&Start=1900-01-01&End=", yesterdaysDate)
 historicReservoirFileLoc = paste0("https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=", basinSymbol, "&SensorNums=15&dur_code=D&Start=1900-01-01&End=", yesterdaysDate)
 
@@ -156,7 +156,8 @@ for(thisWY in allWYs)	{
 		dataOut_location = dataOut_location,
 		optionForPET = 1, 	# 1 = PET_fromTemp modified Pen-Mon, 
 		variableOrderOption = 'seas5Multi', 
-		precipName = 'tp_sum')	# other options include: tp, tp_sum	
+		precipName = 'tp_sum',
+		limitedModels = 25)	# other options include: tp, tp_sum	
 }
 
 
@@ -176,29 +177,28 @@ projectionValidationAndPlotGeneration_f(
 #########################################################################################################
 	# step 7
 	# ML for predicting reservoir outflows
-reservoirOutflowCalVal_f(
-	dataOut_location = dataOut_location,
-	historicReservoirFileLoc = historicReservoirFileLoc,
-	historicStreamflowFileLoc = historicStreamflowFileLoc,
-	basinName = basinName,
-	dataSource = 1, 			# 1 for cal.gov,
-	nTreeModel=500,
-	modelMetric = 'Rsquared',
-	modelMethod = 'rf',
-	metric="Rsquared",
-	numFolds = 5,
-	numRepeats = 30)
+#reservoirOutflowCalVal_f(
+#	dataOut_location = dataOut_location,
+#	historicReservoirFileLoc = historicReservoirFileLoc,
+#	historicStreamflowFileLoc = historicStreamflowFileLoc,
+#	basinName = basinName,
+#	dataSource = 1, 			# 1 for cal.gov,
+#	nTreeModel=500,
+##	modelMetric = 'Rsquared',
+#	modelMethod = 'rf',
+#	metric="Rsquared",
+#	numFolds = 5,
+#	numRepeats = 30)
 
 	# step 8
 	# validation of combined model projections of total storage
-validationProjectedStorageOutput = storageProjectionValidationAndPlotGeneration_f(
+validationProjectedStorageOutput = projectedStorageValidationAndPlotGeneration_f(
 	basinName = basinName,
-	climateInputsFileLoc = climateInputsFileLoc,	# seas5 / cfs / era5 / Recent .RData is appended in the function
-	pathToWatershedsGPKG = pathToWatershedsGPKG,
 	historicStreamflowFileLoc = historicStreamflowFileLoc,
+	historicReservoirFileLoc = historicReservoirFileLoc,
 	dataOut_location = dataOut_location,
-	dataSource = 1)							# 1 for FNF from cal.gov,
-
+	dataSource = 1,
+	biasCorrection = TRUE)							# 1 for FNF from cal.gov,
 	
 	
 #########################################################################################################
