@@ -1755,7 +1755,9 @@ projectedStorageValidationAndPlotGeneration_f = function(
 			allDat$resLoss = c(diff(allDat$storIntrp) - allDat$infIntrp[-nrow(allDat)], NA) * -1
 			if(any(allDat$resLoss <= 1)) {allDat$resLoss[allDat$resLoss <= 1] = 1}	# using a power law model so eliminating 0s
 			if(any(allDat$infIntrp <= 1)) {allDat$infIntrp[allDat$infIntrp <= 1] = 1}	# using a power law model so eliminating 0s
-			
+				# debiasing resLoss
+			allDat$resLoss = allDat$resLoss * (1 - (mean(allDat$resLoss, na.rm=TRUE) - mean(allDat$infIntrp)) / mean(allDat$resLoss, na.rm=TRUE))
+
 				# basic models for relating storage and inflows to outflows
 			infModelLg = lm(allDat$resLoss ~ log(allDat$infIntrp))
 			infModelLn = lm(allDat$resLoss ~ allDat$infIntrp)
@@ -1767,6 +1769,8 @@ projectedStorageValidationAndPlotGeneration_f = function(
 			storModelLg_wt = summary(storModelLg)$adj / (summary(storModelLg)$adj + summary(storModelLn)$adj)
 			storModelLn_wt = summary(storModelLn)$adj / (summary(storModelLg)$adj + summary(storModelLn)$adj)
 			infToStrWt = (summary(infModelLn)$adj + summary(infModelLg)$adj) / (summary(infModelLn)$adj + summary(infModelLg)$adj + summary(storModelLg)$adj + summary(storModelLn)$adj)
+				#
+			
 		
 				# calculating factor to convert mm to acre feet for storage calculations
 			basinAreaInKm = sum(st_read(paste0(dataOut_location, "HydroBASINSdata_", basinName, ".gpkg"))$SUB_AREA)
