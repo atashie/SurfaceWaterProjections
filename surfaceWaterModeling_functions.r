@@ -2030,7 +2030,7 @@ projectedStorageValidationAndPlotGeneration_f = function(
 			for(thisLeadTime in unique(validSubset$Date)) {
 				monthsLead = monthsLead + 1
 				validSubsetLd = subset(validSubset, Date == thisLeadTime)
-				climDFLd = subset(climatologyDF, month == monthsLead)
+				climDFLd = subset(climatologyDF, month == month(validSubsetLd$Date[1]))
 				climQuant = quantile(climDFLd$Stor, c(0.333, 0.5, 0.667), na.rm=TRUE) 
 				predQuant = quantile(validSubsetLd$predStor, c(0.333, 0.5, 0.667)) 
 				
