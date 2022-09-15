@@ -397,6 +397,8 @@ modelCalibration_f = function(
 		if(dataSource == 1)	{
 			historicStreamflow$Date = ymd(unlist(strsplit(historicStreamflow$DATE.TIME, " "))[seq(1,nrow(historicStreamflow)*2,2)])
 			historicStreamflow$historicQinOriginalUnits = as.numeric(historicStreamflow$VALUE)
+				# removing negative streamflow
+			if(any(historicStreamflow$historicQinOriginalUnits < 0))	{historicStreamflow$historicQinOriginalUnits[historicStreamflow$historicQinOriginalUnits < 0] = NA}
 			basinArea = sum(st_read(paste0(dataOut_location, "HydroBASINSdata_", basinName, ".gpkg"))$SUB_AREA)
 			flowUnitConversion = 4.08735e-13 # cubic mm / day in cfs
 			areaUnitConversion = (1000000)^2     # sq mm per sq km
@@ -587,7 +589,8 @@ seasonalStreamflowForecast_f = function(
 	dataSource = 1,							# 1 for FNF from cal.gov,
 	waterYearStart = as.Date('yyyy-mm-dd'),
 	forecastDate = as.Date('yyyy-mm-dd'),
-	gageLonLat = c(1,1))
+	gageLonLat = c(1,1),
+	biasCorrection = TRUE)
 	{
 
 	if(file.exists(paste0(dataOut_location, "calibration_", basinName, ".csv")))	{
@@ -612,6 +615,8 @@ seasonalStreamflowForecast_f = function(
 		if(dataSource == 1)	{
 			historicStreamflow$Date = ymd(unlist(strsplit(historicStreamflow$DATE.TIME, " "))[seq(1,nrow(historicStreamflow)*2,2)])
 			historicStreamflow$historicQinOriginalUnits = as.numeric(historicStreamflow$VALUE)
+				# removing negative streamflow
+			if(any(historicStreamflow$historicQinOriginalUnits < 0))	{historicStreamflow$historicQinOriginalUnits[historicStreamflow$historicQinOriginalUnits < 0] = NA}
 			basinArea = sum(st_read(paste0(dataOut_location, "HydroBASINSdata_", basinName, ".gpkg"))$SUB_AREA)
 			flowUnitConversion = 4.08735e-13 # cubic mm / day in cfs
 			areaUnitConversion = (1000000)^2     # sq mm per sq km
@@ -645,6 +650,7 @@ seasonalStreamflowForecast_f = function(
 		seas5Rows = (1 + which(as.character(seas5ClimateInput[[1]]$Date) == as.character(lastHistData))):length(seas5ClimateInput[[1]]$Date)
 
 		allForecastsOutput = data.frame(Date = c(era5ClimateInput$Date, seas5ClimateInput[[1]]$Date[seas5Rows]))
+
 		iter = 0
 		for(numModels in 1:length(seas5ClimateInput))	{
 			for(numCalibs in 1:nrow(calibratedVars))	{	
@@ -674,8 +680,22 @@ seasonalStreamflowForecast_f = function(
 					return("we need to figure out how to read in and normalize this streamflow data")
 				}
 				
+				#optional bias correction by month
+				if(biasCorrection)	{
+					allHBVoutput$month =  month(allHBVoutput$Date)
+					for(ii in 1:12)	{
+						biasCol = which(names(calibratedVars) == paste0('mnthBias_', ii))
+						debiasVal = calibratedVars[numCalibs, ..biasCol]
+						allHBVoutput$projectedQinOriginalUnits[allHBVoutput$month == ii] = allHBVoutput$projectedQinOriginalUnits[allHBVoutput$month == ii] *  as.numeric(100 - debiasVal) / 100
+					}
+				}
+	
+	
 					# compiling all forecasts into a list
 				allForecastsOutput = cbind(allForecastsOutput, allHBVoutput$projectedQinOriginalUnits)
+	
+
+
 			}
 		}
 	}	else	{print("Ya gotta calibrate the model first you big ole dummy!")}
@@ -708,8 +728,76 @@ seasonalStreamflowForecast_f = function(
 	} else {
 		return("we need to figure out how to read in and normalize this streamflow data")
 	}
-	
+		#saving output
 	fwrite(forecastOutput, paste0(dataOut_location, "forecast_", basinName, '_', forecastDate, ".csv"))
+	
+		#cumulative streamflow forecast figure
+	fstOfMnths = forecastOutput$Date[which(mday(forecastOutput$Date) == 1)]
+	mnthNms = c('Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep')
+	png(paste0(dataOut_location, basinName, '_streamflowForecast_', forecastDate, '.png'), width=1920, height=960)
+	windowsFonts(A = windowsFont("Roboto"))
+	par(mar=2*c(5,5,2,2), mgp=2*c(3,1.3,0), font.lab=2, bty='l', cex.lab=2*1.8, cex.axis=2*1.4, cex.main=2*1.8, col='#1A232F')
+	plot(forecastOutput$Date, forecastOutput$Clim_Q95, ylim = c(0,max(forecastOutput$Clim_Q95)*1.05),
+		type='l', lwd=1, col='white', xaxt = 'n', #log='y',
+		main='', ylab='Cumulative Streamflow (Acre Feet)', xlab='',
+		col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
+		family='A')
+	axis(1, at = fstOfMnths,col.lab='#1A232F', col.axis='#666D74', 
+		labels = mnthNms)
+	abline(v=fstOfMnths, lwd=1, col=adjustcolor('#666D74', alpha.f=0.1))
+	polygon(x=c(forecastOutput$Date, rev(forecastOutput$Date)), y=c(forecastOutput$Clim_Q95, rev(forecastOutput$Clim_Q05)),
+		col=adjustcolor('#666D74', alpha.f=0.1), border=NA)
+	polygon(x=c(forecastOutput$Date, rev(forecastOutput$Date)), y=c(forecastOutput$Clim_Q25, rev(forecastOutput$Clim_Q75)),
+		col=adjustcolor('#666D74', alpha.f=0.2), border=NA)
+	lines(forecastOutput$Date, forecastOutput$Clim_Q50, 
+		col=adjustcolor('#666D74', alpha.f=0.2), lwd=2.5)
+	forecastCompletes = forecastOutput[complete.cases(forecastOutput),]
+	polygon(x=c(forecastCompletes$Date, rev(forecastCompletes$Date)), y=c(forecastCompletes$Pred_Q05, rev(forecastCompletes$Pred_Q95)),
+		col=adjustcolor('#0098B2', alpha.f=0.1), border=NA)
+	polygon(x=c(forecastCompletes$Date, rev(forecastCompletes$Date)), y=c(forecastCompletes$Pred_Q25, rev(forecastCompletes$Pred_Q75)),
+		col=adjustcolor('#0098B2', alpha.f=0.2), border=NA)
+	lines(forecastOutput$Date, forecastOutput$Pred_Q50, 
+		col='#0098B2', lwd=2)
+	text(x=forecastOutput$Date[1], y=max(forecastOutput$Clim_Q95)*0.95,
+		paste0('Forecast for ', basinName),
+		adj = c(0,0), font=2, col='#F06000', family='A', cex=2*1.3)
+	text(x=forecastOutput$Date[1], y=max(forecastOutput$Clim_Q95)*0.87,
+		paste0('Issued on ', forecastDate),
+		adj = c(0,0), font=2, col='#F06000', family='A', cex=2*1.3)
+	dev.off()
+	
+			# log of cumulative streamflow forecast figure 
+	png(paste0(dataOut_location, basinName, '_logStreamflowForecast_', forecastDate, '.png'), width=1920, height=960)
+	windowsFonts(A = windowsFont("Roboto"))
+	par(mar=2*c(5,5,2,2), mgp=2*c(3,1.3,0), font.lab=2, bty='l', cex.lab=2*1.8, cex.axis=2*1.4, cex.main=2*1.8, col='#1A232F')
+	plot(forecastOutput$Date, forecastOutput$Clim_Q95, ylim = c(min(forecastOutput$Clim_Q05),max(forecastOutput$Clim_Q95)*1.05),
+		type='l', lwd=1, col='white', log='y', yaxt='n', xaxt='n',
+		main='', ylab='Cumulative Streamflow (Acre Feet)', xlab='',
+		col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
+		family='A')
+	abline(v=fstOfMnths, lwd=1, col=adjustcolor('#666D74', alpha.f=0.1))
+	axis(2, at = c(1, 10, 100, 1000, 10000,100000, 1000000, 10000000), col.lab='#1A232F', col.axis='#666D74', 
+		labels = c('1', '10', '100', '1,000', '10,000', '100,000', '1,000,000', '10,000,000'))
+	axis(1, at = fstOfMnths, col.lab='#1A232F', col.axis='#666D74', 
+		labels = mnthNms)
+	polygon(x=c(forecastOutput$Date, rev(forecastOutput$Date)), y=c(forecastOutput$Clim_Q95, rev(forecastOutput$Clim_Q05)),
+		col=adjustcolor('#666D74', alpha.f=0.1), border=NA)
+	polygon(x=c(forecastOutput$Date, rev(forecastOutput$Date)), y=c(forecastOutput$Clim_Q25, rev(forecastOutput$Clim_Q75)),
+		col=adjustcolor('#666D74', alpha.f=0.2), border=NA)
+	lines(forecastOutput$Date, forecastOutput$Clim_Q50, 
+		col=adjustcolor('#666D74', alpha.f=0.2), lwd=2.5)
+	polygon(x=c(forecastCompletes$Date, rev(forecastCompletes$Date)), y=c(forecastCompletes$Pred_Q05, rev(forecastCompletes$Pred_Q95)),
+		col=adjustcolor('#0098B2', alpha.f=0.1), border=NA)
+	polygon(x=c(forecastCompletes$Date, rev(forecastCompletes$Date)), y=c(forecastCompletes$Pred_Q25, rev(forecastCompletes$Pred_Q75)),
+		col=adjustcolor('#0098B2', alpha.f=0.2), border=NA)
+	lines(forecastOutput$Date, forecastOutput$Pred_Q50, 
+		col='#0098B2', lwd=2)
+	text(x=forecastOutput$Date[1], y=max(forecastOutput$Clim_Q95)*0.95,
+		paste0('Forecast for ', basinName, ' Issued on ', forecastDate),
+		adj = c(0,0), font=2, col='#F06000', family='A', cex=2*1.3)
+	dev.off()
+
+		
 }
 
 
@@ -750,6 +838,8 @@ validationAndPlotGeneration_f = function(
 		if(dataSource == 1)	{
 			historicStreamflow$Date = ymd(unlist(strsplit(historicStreamflow$DATE.TIME, " "))[seq(1,nrow(historicStreamflow)*2,2)])
 			historicStreamflow$historicQinOriginalUnits = as.numeric(historicStreamflow$VALUE)
+				# removing negative streamflow
+			if(any(historicStreamflow$historicQinOriginalUnits < 0))	{historicStreamflow$historicQinOriginalUnits[historicStreamflow$historicQinOriginalUnits < 0] = NA}
 			basinArea = sum(st_read(paste0(dataOut_location, "HydroBASINSdata_", basinName, ".gpkg"))$SUB_AREA)
 			flowUnitConversion = 4.08735e-13 # cubic mm / day in cfs
 			areaUnitConversion = (1000000)^2     # sq mm per sq km
@@ -986,6 +1076,8 @@ projectionValidationAndPlotGeneration_f = function(
 		if(dataSource == 1)	{
 			historicStreamflow$Date = ymd(unlist(strsplit(historicStreamflow$DATE.TIME, " "))[seq(1,nrow(historicStreamflow)*2,2)])
 			historicStreamflow$historicQinOriginalUnits = as.numeric(historicStreamflow$VALUE)
+				# removing negative streamflow
+			if(any(historicStreamflow$historicQinOriginalUnits < 0))	{historicStreamflow$historicQinOriginalUnits[historicStreamflow$historicQinOriginalUnits < 0] = NA}
 			basinArea = sum(st_read(paste0(dataOut_location, "HydroBASINSdata_", basinName, ".gpkg"))$SUB_AREA)
 			flowUnitConversion = 4.08735e-13 # cubic mm / day in cfs
 			areaUnitConversion = (1000000)^2     # sq mm per sq km
@@ -1054,43 +1146,34 @@ projectionValidationAndPlotGeneration_f = function(
 
 					# merging historic streamflow record onto climate inputs data
 					climateAndStreamflowOutput = historicStreamflow[allHBVoutput, on='Date'][projDates, ]  
-					plotRows = (lastHistData-365):nrow(climateAndStreamflowOutput)
-#					plot(climateAndStreamflowOutput$Date[plotRows], climateAndStreamflowOutput$historicQinmm[plotRows], type='l')
-#					lines(climateAndStreamflowOutput$Date[plotRows], climateAndStreamflowOutput$Qg[plotRows], col='red2')
-#					abline(v=climateAndStreamflowOutput$Date[lastHistData])
-
 					climateAndStreamflowOutput$month = month(climateAndStreamflowOutput$Date)
+
+					#optional bias correction by month
+					if(biasCorrection)	{
+						for(ii in 1:12)	{
+							biasCol = which(names(calibratedVars) == paste0('mnthBias_', ii))
+							debiasVal = calibratedVars[numCalibs, ..biasCol]
+							climateAndStreamflowOutput$Qg[climateAndStreamflowOutput$month == ii] = climateAndStreamflowOutput$Qg[climateAndStreamflowOutput$month == ii] *  as.numeric(100 - debiasVal) / 100
+						}
+					}
+					
+
 					climateAndStreamflowOutput$year = year(climateAndStreamflowOutput$Date)
 					monthsOut = 0
 					predCumsum = 0
 					actCumsum = 0 
 					
-					if(biasCorrection)	{
-						firstBiasMonth = which(names(calibratedVars) == 'mnthBias_1') - 1
-						for(thisMonth in unique(climateAndStreamflowOutput$month))	{
-							biasCol = firstBiasMonth + thisMonth
-							debiasVal = as.numeric(100 - calibratedVars[numCalibs, ..biasCol]) / 100
-							monthsOut = monthsOut + 1
-							outputSubset = subset(climateAndStreamflowOutput, month == thisMonth)
-							numDays = nrow(outputSubset)
-							predCumsum = predCumsum + mean(outputSubset$Qg) * numDays * debiasVal
-							actCumsum = actCumsum + mean(outputSubset$historicQinmm, na.rm=TRUE) * numDays
-							validDF = rbind(validDF,
-								c(numModels, numCalibs, outputSubset$Date[1] + 14, monthsOut,
-									predCumsum, actCumsum))
-						}
-					} else	{
-						for(thisMonth in unique(climateAndStreamflowOutput$month))	{
-							monthsOut = monthsOut + 1
-							outputSubset = subset(climateAndStreamflowOutput, month == thisMonth)
-							numDays = nrow(outputSubset)
-							predCumsum = predCumsum + mean(outputSubset$Qg) * numDays
-							actCumsum = actCumsum + mean(outputSubset$historicQinmm, na.rm=TRUE) * numDays
-							validDF = rbind(validDF,
-								c(numModels, numCalibs, outputSubset$Date[1] + 14, monthsOut,
-									predCumsum, actCumsum))
-						}
+					for(thisMonth in unique(climateAndStreamflowOutput$month))	{
+						monthsOut = monthsOut + 1
+						outputSubset = subset(climateAndStreamflowOutput, month == thisMonth)
+						numDays = nrow(outputSubset)
+						predCumsum = predCumsum + mean(outputSubset$Qg) * numDays
+						actCumsum = actCumsum + mean(outputSubset$historicQinmm, na.rm=TRUE) * numDays
+						validDF = rbind(validDF,
+							c(numModels, numCalibs, outputSubset$Date[1] + 14, monthsOut,
+								predCumsum, actCumsum))
 					}
+					
 					
 						
 					
@@ -1753,6 +1836,7 @@ projectedStorageValidationAndPlotGeneration_f = function(
 			allDat$infIntrp[is.na(allDat$infIntrp)] = mean(allDat$infIntrp, na.rm=TRUE)
 			
 			allDat$resLoss = c(diff(allDat$storIntrp) - allDat$infIntrp[-nrow(allDat)], NA) * -1
+			if(any(allDat$storIntrp <= 1)) {allDat$storIntrp[allDat$storIntrp <= 1] = 1}	# using a power law model so eliminating 0s
 			if(any(allDat$resLoss <= 1)) {allDat$resLoss[allDat$resLoss <= 1] = 1}	# using a power law model so eliminating 0s
 			if(any(allDat$infIntrp <= 1)) {allDat$infIntrp[allDat$infIntrp <= 1] = 1}	# using a power law model so eliminating 0s
 				# debiasing resLoss
@@ -1787,9 +1871,9 @@ projectedStorageValidationAndPlotGeneration_f = function(
 #			storModelPoly_wt = summary(storModelPoly)$adj / (summary(infModelPoly)$adj + summary(storModelPoly)$adj + summary(ydayModelPoly)$adj)
 #			ydayModelPoly_wt = summary(ydayModelPoly)$adj / (summary(infModelPoly)$adj + summary(storModelPoly)$adj + summary(ydayModelPoly)$adj)
 
-#			plot(fitted(infModelPoly), residuals(infModelPoly))
-#			plot(fitted(storModelPoly), residuals(infModelPoly))
-#			plot(fitted(ydayModelPoly), residuals(infModelPoly))
+#			plot(allDat$resLoss[-1], fitted(infModelPoly))
+#			plot(allDat$resLoss[-1], fitted(storModelPoly))
+#			plot(allDat$resLoss[-1], fitted(ydayModelPoly))
 		} else	{return("need to figure out how to handle these data")}
 
 			# read in climate data
@@ -1810,7 +1894,7 @@ projectedStorageValidationAndPlotGeneration_f = function(
 		climatologyDF = data.frame(month = NA, year = NA, Stor = NA)
 		climIter = 0
 		for(thisYear in unique(allDat$year)[-length(unique(allDat$year))])	{
-			for(thisMonth in 1:12)	{
+			for(thisMonth in unique(month(subset(allDat, year == thisYear)$Date)))	{
 				climIter = climIter + 1
 				histSubset = subset(allDat, year == thisYear & month == thisMonth)
 				climatologyDF[climIter, ] = c(thisMonth, thisYear, last(histSubset$storIntrp))
@@ -1907,6 +1991,7 @@ projectedStorageValidationAndPlotGeneration_f = function(
 
 
 						# estimating reservoir losses as a function of inflows and storage
+					if(any(modelOut$inflowProj <=1))	{modelOut$inflowProj[modelOut$inflowProj <= 1] = 1}	# climate debiasing generates some negative precip, which generates negative streamflow, which must be eliminated for log transformation
 					resLossEstInf = infModelLg_wt * (infModelLg$coef[1] + log(modelOut$inflowProj) * infModelLg$coef[2]) +
 						infModelLn_wt * (infModelLn$coef[1] + modelOut$inflowProj * infModelLn$coef[2])
 					if(any(resLossEstInf <= 1))	{resLossEstInf[resLossEstInf <= 1] = 1}

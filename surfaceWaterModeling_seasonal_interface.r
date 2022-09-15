@@ -1,7 +1,7 @@
 	# example input data
-basinSymbol = 'SHA'
+basinSymbol = 'EXC'
 basinName = basinSymbol # paste0(basinSymbol, '_atOutlet')
-gageLonLat =      c(-122.417, 40.720)
+gageLonLat =       c(-120.264, 37.591)
 infOrFnf = 76 #8 for fnf, 76 for inflow
 	# list of basins by symbol and lon / lat
 	# webpage to search for Cali reservoirs: https://cdec.water.ca.gov/dynamicapp/wsSensorData
@@ -22,7 +22,7 @@ infOrFnf = 76 #8 for fnf, 76 for inflow
 					# this loc only has fnf, no inflow 
 				# for BND: c(-122.185556, 40.288611) 
 
-yesterdaysDate = '2022-09-11'	# historic data is released every day for the day prior
+yesterdaysDate = '2022-09-13'	# historic data is released every day for the day prior
 historicStreamflowFileLoc =   paste0("https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=", basinSymbol, "&SensorNums=", infOrFnf, "&dur_code=D&Start=1900-01-01&End=", yesterdaysDate)
 historicReservoirFileLoc = paste0("https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=", basinSymbol, "&SensorNums=15&dur_code=D&Start=1900-01-01&End=", yesterdaysDate)
 
@@ -192,7 +192,7 @@ projectionValidationAndPlotGeneration_f(
 
 	# step 8
 	# validation of combined model projections of total storage
-validationProjectedStorageOutput = projectedStorageValidationAndPlotGeneration_f(
+projectedStorageValidationAndPlotGeneration_f(
 	basinName = basinName,
 	historicStreamflowFileLoc = historicStreamflowFileLoc,
 	historicReservoirFileLoc = historicReservoirFileLoc,
@@ -262,7 +262,7 @@ climateInputConversion_f(
 	# step 10 
 	# run the model with forecasting data
 	## Running the Model for Seasonal Forecasts 
-allForecastsOutput = seasonalStreamflowForecast_f(
+seasonalStreamflowForecast_f(
 	basinName = basinName,
 	historicStreamflowFileLoc = historicStreamflowFileLoc,
 	dataOut_location = dataOut_location,
