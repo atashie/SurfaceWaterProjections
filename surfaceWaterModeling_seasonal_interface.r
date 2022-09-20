@@ -1,7 +1,7 @@
 	# example input data
-basinSymbol = 'EXC'
+basinSymbol = 'ENG'
 basinName = basinSymbol # paste0(basinSymbol, '_atOutlet')
-gageLonLat =       c(-120.264, 37.591)
+gageLonLat =      c(-121.270278, 39.240278)
 infOrFnf = 76 #8 for fnf, 76 for inflow
 	# list of basins by symbol and lon / lat
 	# webpage to search for Cali reservoirs: https://cdec.water.ca.gov/dynamicapp/wsSensorData
@@ -22,13 +22,13 @@ infOrFnf = 76 #8 for fnf, 76 for inflow
 					# this loc only has fnf, no inflow 
 				# for BND: c(-122.185556, 40.288611) 
 
-yesterdaysDate = '2022-09-13'	# historic data is released every day for the day prior
+yesterdaysDate = '2022-09-18'	# historic data is released every day for the day prior
 historicStreamflowFileLoc =   paste0("https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=", basinSymbol, "&SensorNums=", infOrFnf, "&dur_code=D&Start=1900-01-01&End=", yesterdaysDate)
 historicReservoirFileLoc = paste0("https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=", basinSymbol, "&SensorNums=15&dur_code=D&Start=1900-01-01&End=", yesterdaysDate)
 
 	# defining pathways to basin-specific files
 dataOut_location = paste0('J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\', basinName, '\\')
-forecastDate = '7SEP2022'
+forecastDate = '19SEP2022'
 waterYearStart = as.Date('2022-10-01')
 
 	# these file locations remain the same for all watersheds

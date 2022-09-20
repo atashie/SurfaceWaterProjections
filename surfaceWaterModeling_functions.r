@@ -615,7 +615,7 @@ seasonalStreamflowForecast_f = function(
 		if(dataSource == 1)	{
 			historicStreamflow$Date = ymd(unlist(strsplit(historicStreamflow$DATE.TIME, " "))[seq(1,nrow(historicStreamflow)*2,2)])
 			historicStreamflow$historicQinOriginalUnits = as.numeric(historicStreamflow$VALUE)
-				# removing negative streamflow
+				# removing negative streamflow and zero streamflow for later log transformation
 			if(any(historicStreamflow$historicQinOriginalUnits < 0))	{historicStreamflow$historicQinOriginalUnits[historicStreamflow$historicQinOriginalUnits < 0] = NA}
 			basinArea = sum(st_read(paste0(dataOut_location, "HydroBASINSdata_", basinName, ".gpkg"))$SUB_AREA)
 			flowUnitConversion = 4.08735e-13 # cubic mm / day in cfs
@@ -635,6 +635,7 @@ seasonalStreamflowForecast_f = function(
 					if(any(is.na(histSubset$historicQinOriginalUnits)))	{
 						histSubset$historicQinOriginalUnits[is.na(histSubset$historicQinOriginalUnits)] = mean(histSubset$historicQinOriginalUnits, na.rm=TRUE)
 					}
+					if(histSubset$historicQinOriginalUnits[1] < 1)	{histSubset$historicQinOriginalUnits[1] = 1}
 					climatologyDF = cbind(climatologyDF, cumsum(histSubset$historicQinOriginalUnits))
 				}
 			}
