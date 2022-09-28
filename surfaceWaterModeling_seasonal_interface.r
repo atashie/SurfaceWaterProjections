@@ -1,46 +1,47 @@
 	# example input data
-basinSymbol = 'ENG'
+basinSymbol = 'PNF'
 basinName = basinSymbol # paste0(basinSymbol, '_atOutlet')
-gageLonLat =      c(-121.270278, 39.240278)
+gageLonLat = c(-119.318, 36.845)
 infOrFnf = 76 #8 for fnf, 76 for inflow
 	# list of basins by symbol and lon / lat
 	# webpage to search for Cali reservoirs: https://cdec.water.ca.gov/dynamicapp/wsSensorData
-				# for ENG: c(-121.270278, 39.240278)
+				# for CLE: c(-122.765, 40.8225)
 				# for ISB: c(-118.479, 35.650) 
-				# for PNF: c(-119.318, 36.845)
-				# for TRM: c(-118.998, 36.416) 
 				# for EXC: c(-120.264, 37.591) 
 				# for ORO: c(-121.480, 39.540) 
-				# for CLE: c(-122.765, 40.8225)
-				# for MIL: c(-119.6545, 37.0425)
 				# for SHA: c(-122.417, 40.720)		
 				# for FOL: c(-121.155, 38.710)
-					# these reservoirs are problematic, e.g. are immediately downstream of another reservoir
+				# for PNF: c(-119.318, 36.845) [[[[double check]]]]] only has period of record to 1988 for stor, and 1995 for inflow
+					# problematic for period of record
+					
+					# these reservoirs are problematic for storage projections
+				# for MIL: c(-119.6545, 37.0425)
+				# for TRM: c(-118.998, 36.416) 
+				# for LEW: c(-122.800, 40.732) Daily inflows may exceed storage capacity, and average storage is at capacity, so storage modeling not realistic or useful
+				# for ENG: c(-121.270, 39.240) Daily inflows may exceed storage capacity, and average storage is at capacity, so storage modeling not realistic or useful
 				# for SJF: c(-119.697,37.004) 
 				# for YRS: c(-121.292500, 39.223611) 
-				# for LEW: c(-122.800, 40.732)
 					# this loc only has fnf, no inflow 
 				# for BND: c(-122.185556, 40.288611) 
 
-yesterdaysDate = '2022-09-18'	# historic data is released every day for the day prior
+yesterdaysDate = '2022-09-26'	# historic data is released every day for the day prior
 historicStreamflowFileLoc =   paste0("https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=", basinSymbol, "&SensorNums=", infOrFnf, "&dur_code=D&Start=1900-01-01&End=", yesterdaysDate)
 historicReservoirFileLoc = paste0("https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=", basinSymbol, "&SensorNums=15&dur_code=D&Start=1900-01-01&End=", yesterdaysDate)
 
 	# defining pathways to basin-specific files
 dataOut_location = paste0('J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\', basinName, '\\')
-forecastDate = '19SEP2022'
+forecastDate = '26SEP2022'
 waterYearStart = as.Date('2022-10-01')
 
-	# these file locations remain the same for all watersheds
-seas5DataNCDF = 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\cali-recent-seas5.nc'
-cfsDataNCDF = 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\cali-cfs.nc'
+	# these file locations remain the same for all watersheds of a region
+seas5DataNCDF = 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\norCali-seas5.nc' # 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\soCali-recent-seas5.nc'
+#cfsDataNCDF =   'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\norCali-cfs.nc'			 # 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\soCali-cfs.nc'
 	# no longer separating historical from recent era5... may revisit
 #era5DataHistoricalNCDF = 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\cali-hist-era5.nc'
-era5DataNCDF = 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\cali-era.nc'
+era5DataNCDF =  'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\norCali-era.nc'			# 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\soCali-era.nc'
 #seas5MultiDataNCDF = 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\testing-multiple-forecasts-seas5-wy2019.nc'
 basinATLAS_locationAndFile = 'C:\\Users\\arik\\Documents\\PhD Research\\D4\\BasinATLAS_Data_v10\\BasinATLAS_v10.gdb'
 
-	
 	
 	# reading in the ncdfs to ensure timing / structure 
 library(ncdf4)			# for loading netcdf that contains lat-lons of climate data
@@ -48,12 +49,12 @@ library(data.table)		# for data.table
 
 	### this section is purely for inspecting data before running models
 #########################################################################
-ncin_cfs = nc_open(cfsDataNCDF)		;	ncin_cfs
+#ncin_cfs = nc_open(cfsDataNCDF)		;	ncin_cfs
 ncin_era5 = nc_open(era5DataNCDF)	;	ncin_era5
 #ncin_recentEra5 = nc_open(era5DataRecentNCDF)	;	ncin_recentEra5
 ncin_seas5 = nc_open(seas5DataNCDF)	;	ncin_seas5
 
-ncatt_get(ncin_cfs, 'time','units')$value	# says hours but seems to be in days
+#ncatt_get(ncin_cfs, 'time','units')$value	# says hours but seems to be in days
 ncatt_get(ncin_era5, 'time','units')$value
 #ncatt_get(ncin_recentEra5, 'time','units')$value
 ncatt_get(ncin_seas5, 'valid_time','units')$value
@@ -61,10 +62,10 @@ ncatt_get(ncin_seas5, 'valid_time','units')$value
 
 	# correct dates must be manually selected for now
 cfsStartDate = as.Date('2022-02-28') #  + ncvar_get(ncin_cfs, 'time')/24 for calculating actual dates
-era5StartDate =  as.Date('2001-07-01') # + ncvar_get(ncin_era5, 'time') for calculating actual dates 
+era5StartDate =  as.Date('2000-07-01') # + ncvar_get(ncin_era5, 'time') for calculating actual dates 
 #era5RecentStartDate =  as.Date('2001-07-01') # + ncvar_get(ncin_recentEra5, 'time') for calculating actual dates 
 	# seas5 is incorrectly showing the second of the month, but should be the first
-seas5StartDate = as.Date('2022-08-02') - 2 # + ncvar_get(ncin_seas5, 'lead_time') for calculating actual dates
+seas5StartDate = as.Date('2022-09-02') - 2 # + ncvar_get(ncin_seas5, 'lead_time') for calculating actual dates
 seas5MultiStartDate = as.Date('1993-01-02') - 2 # + ncvar_get(ncin_seas5, 'lead_time') for calculating actual dates
 
 
@@ -266,14 +267,25 @@ seasonalStreamflowForecast_f(
 	basinName = basinName,
 	historicStreamflowFileLoc = historicStreamflowFileLoc,
 	dataOut_location = dataOut_location,
-	dataSource = 1,							# 1 for FNF from cal.gov,
+	dataSource = 1,							# 1 for cal.gov,
+	waterYearStart = waterYearStart,
+	forecastDate = forecastDate,
+	gageLonLat = gageLonLat)
+
+	# step 10 
+	# run the model with forecasting data
+	## Running the Model for Seasonal Forecasts 
+seasonalStorageForecast_f(
+	basinName = basinName,
+	historicStreamflowFileLoc = historicStreamflowFileLoc,
+	historicReservoirFileLoc = historicReservoirFileLoc,
+	dataOut_location = dataOut_location,
+	dataSource = 1,							# 1 for cal.gov,
 	waterYearStart = waterYearStart,
 	forecastDate = forecastDate,
 	gageLonLat = gageLonLat)
 
 
-
-	
 	
 	
 	
