@@ -590,7 +590,8 @@ seasonalStreamflowForecast_f = function(
 	waterYearStart = as.Date('yyyy-mm-dd'),
 	forecastDate = as.Date('yyyy-mm-dd'),
 	gageLonLat = c(1,1),
-	biasCorrection = TRUE)
+	biasCorrection = TRUE,
+	uploadToGCS = TRUE)
 	{
 
 	if(file.exists(paste0(dataOut_location, "calibration_", basinName, ".csv")))	{
@@ -623,6 +624,12 @@ seasonalStreamflowForecast_f = function(
 			areaUnitConversion = (1000000)^2     # sq mm per sq km
 				# converting cfs to af / day
 			historicStreamflow$AcFtPDay_inflow =  as.numeric(historicStreamflow$historicQinOriginalUnits)  * (60*60*24) / 43559.9
+				# interpolating nas if necessary)
+			if(any(is.na(historicStreamflow$AcFtPDay_inflow)))	{
+				historicStreamflow$AcFtPDay_inflow[1] = historicStreamflow$AcFtPDay_inflow[which(!is.na(historicStreamflow$AcFtPDay_inflow))][1]
+				historicStreamflow$AcFtPDay_inflow[nrow(historicStreamflow)] = last(historicStreamflow$AcFtPDay_inflow[which(!is.na(historicStreamflow$AcFtPDay_inflow))])
+				historicStreamflow$AcFtPDay_inflow = na.approx(historicStreamflow$AcFtPDay_inflow)
+			}
 		
 			
 				# routine for calculating climatolology of streamflow
@@ -719,12 +726,14 @@ seasonalStreamflowForecast_f = function(
 		historicStreamflow$AcFtPDay_inflow[nrow(historicStreamflow)] = last(historicStreamflow$AcFtPDay_inflow[!is.na(historicStreamflow$AcFtPDay_inflow)])
 	}
 	historicStreamflow$strmIntrp = na.approx(historicStreamflow$AcFtPDay_inflow)
+	currWY = subset(historicStreamflow, Date >= waterYearStart)
 	prevWY = subset(historicStreamflow, Date < waterYearStart & Date >= waterYearStart %m-% years(1))
 	prev2WY = subset(historicStreamflow, Date < waterYearStart %m-% years(1) & Date >= waterYearStart %m-% years(2))
 	prev3WY = subset(historicStreamflow, Date < waterYearStart %m-% years(2) & Date >= waterYearStart %m-% years(3))
 
 	lnForecast = nrow(forecastThisWY)
 	lnNAs = 365 - lnForecast
+	currWYNAs = max(365 - nrow(currWY), 0)
 	prevWYNAs = max(365 - nrow(prevWY), 0)
 	forecastOutput = data.frame(Date = seq(as.Date(waterYearStart), by='days', length.out=365),
 		Reservoir = basinName,
@@ -740,6 +749,7 @@ seasonalStreamflowForecast_f = function(
 		Clim_Q50 = apply(climatologyDF[,-1], 1, quantile, probs=0.50),
 		Clim_Q75 = apply(climatologyDF[,-1], 1, quantile, probs=0.75),
 		Clim_Q95 = apply(climatologyDF[,-1], 1, quantile, probs=0.95),
+		WaterYear_Curr = c(cumsum(currWY$strmIntrp), rep(NA, currWYNAs)),
 		WaterYear_1YrAgo = c(cumsum(prevWY$strmIntrp), rep(NA, prevWYNAs)),
 		WaterYear_2YrAgo = cumsum(prev2WY$strmIntrp[-366]),
 		WaterYear_3YrAgo = cumsum(prev3WY$strmIntrp[-366]))
@@ -750,13 +760,23 @@ seasonalStreamflowForecast_f = function(
 	} else {
 		return("we need to figure out how to read in and normalize this streamflow data")
 	}
+
+
+	# create the folder for storing outputs
+	dataOut_fileLoc = paste0(dataOut_location, 'strmflwForecastsFor_', forecastDate)
+	if(!file.exists(dataOut_fileLoc))	{
+			dir.create(file.path(paste0(dataOut_fileLoc, '\\')))
+	}
+
+
+
 		#saving output
-	fwrite(forecastOutput, paste0(dataOut_location, "forecastStrmCumSum_", basinName, '_', forecastDate, ".csv"))
+	fwrite(forecastOutput, paste0(dataOut_fileLoc, "forecastStrmCumSum_", basinName, '_', forecastDate, ".csv"))
 	
 		#cumulative streamflow forecast figure
 	fstOfMnths = forecastOutput$Date[which(mday(forecastOutput$Date) == 1)]
 	mnthNms = c('Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep')
-	png(paste0(dataOut_location, basinName, '_streamflowForecast_', forecastDate, '.png'), width=1920, height=960)
+	png(paste0(dataOut_fileLoc, '\\', 'streamflowForecast.png'), width=1920, height=960)
 	windowsFonts(A = windowsFont("Roboto"))
 	par(mar=2*c(5,5,2,2), mgp=2*c(3,1.3,0), font.lab=2, bty='l', cex.lab=2*1.8, cex.axis=2*1.4, cex.main=2*1.8, col='#1A232F')
 	plot(forecastOutput$Date, forecastOutput$Clim_Q95, ylim = c(0,max(forecastOutput$Clim_Q95)*1.05),
@@ -777,7 +797,7 @@ seasonalStreamflowForecast_f = function(
 		col=adjustcolor('#666D74', alpha.f=0.2), border=NA)
 	lines(forecastOutput$Date, forecastOutput$Clim_Q50, 
 		col=adjustcolor('#666D74', alpha.f=0.2), lwd=2.5)
-	forecastCompletes = forecastOutput[complete.cases(forecastOutput),]
+	forecastCompletes = forecastOutput[!is.na(forecastOutput$Pred_Q50),]
 	polygon(x=c(forecastCompletes$Date, rev(forecastCompletes$Date)), y=c(forecastCompletes$Pred_Q05, rev(forecastCompletes$Pred_Q95)),
 		col=adjustcolor('#0098B2', alpha.f=0.1), border=NA)
 	polygon(x=c(forecastCompletes$Date, rev(forecastCompletes$Date)), y=c(forecastCompletes$Pred_Q25, rev(forecastCompletes$Pred_Q75)),
@@ -793,7 +813,7 @@ seasonalStreamflowForecast_f = function(
 	dev.off()
 	
 			# log of cumulative streamflow forecast figure 
-	png(paste0(dataOut_location, basinName, '_logStreamflowForecast_', forecastDate, '.png'), width=1920, height=960)
+	png(paste0(dataOut_fileLoc, '\\', 'logStreamflowForecast.png'), width=1920, height=960)
 	windowsFonts(A = windowsFont("Roboto"))
 	par(mar=2*c(5,5,2,2), mgp=2*c(3,1.3,0), font.lab=2, bty='l', cex.lab=2*1.8, cex.axis=2*1.4, cex.main=2*1.8, col='#1A232F')
 	plot(forecastOutput$Date, forecastOutput$Clim_Q95, ylim = c(min(forecastOutput$Clim_Q05),max(forecastOutput$Clim_Q95)*1.05),
@@ -829,10 +849,15 @@ seasonalStreamflowForecast_f = function(
 
 	######################################################################################
 	## prevWY figures
+	if(Sys.Date() > waterYearStart)	{
+		forecastOutput$WaterYear_3YrAgo = forecastOutput$WaterYear_2YrAgo
+		forecastOutput$WaterYear_2YrAgo = forecastOutput$WaterYear_1YrAgo
+		forecastOutput$WaterYear_1YrAgo = forecastOutput$WaterYear_Curr
+	}
 		#cumulative streamflow WY record figure
 	fstOfMnths = forecastOutput$Date[which(mday(forecastOutput$Date) == 1)]
 	mnthNms = c('Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep')
-	png(paste0(dataOut_location, basinName, '_streamflowWYcurrent_', forecastDate, '.png'), width=1920, height=960)
+	png(paste0(dataOut_fileLoc, '\\','streamflowWYcurrent.png'), width=1920, height=960)
 	windowsFonts(A = windowsFont("Roboto"))
 	par(mar=2*c(5,5,2,2), mgp=2*c(3,1.3,0), font.lab=2, bty='l', cex.lab=2*1.8, cex.axis=2*1.4, cex.main=2*1.8, col='#1A232F')
 	plot(forecastOutput$Date, forecastOutput$Clim_Q95, ylim = c(0,max(forecastOutput$Clim_Q95)*1.05),
@@ -871,7 +896,7 @@ seasonalStreamflowForecast_f = function(
 	dev.off()
 	
 			# log of cumulative streamflow WY record figure 
-	png(paste0(dataOut_location, basinName, '_logStreamflowWYcurrent_', forecastDate, '.png'), width=1920, height=960)
+	png(paste0(dataOut_fileLoc, '\\', 'logStreamflowWYcurrent.png'), width=1920, height=960)
 	windowsFonts(A = windowsFont("Roboto"))
 	par(mar=2*c(5,5,2,2), mgp=2*c(3,1.3,0), font.lab=2, bty='l', cex.lab=2*1.8, cex.axis=2*1.4, cex.main=2*1.8, col='#1A232F')
 	plot(forecastOutput$Date, forecastOutput$Clim_Q95, ylim = c(min(forecastOutput$Clim_Q05),max(forecastOutput$Clim_Q95)*1.05),
@@ -905,6 +930,12 @@ seasonalStreamflowForecast_f = function(
 		adj = c(0,0), font=2, col='#F06000', family='A', cex=2*1.3)
 	dev.off()
 		
+	# uploading figs to GCStorage
+	if(uploadToGCS == TRUE)	{
+		setwd(paste0(dataOut_fileLoc))
+		command = paste0('gsutil -m cp ', dataOut_fileLoc, '/*.png gs://seasonal_surface_water-looker_img_hosting/', basinName)
+		system(command)
+	}
 }
 
 
@@ -925,7 +956,8 @@ seasonalStorageForecast_f = function(
 	waterYearStart = as.Date('yyyy-mm-dd'),
 	forecastDate = as.Date('yyyy-mm-dd'),
 	gageLonLat = c(1,1),
-	biasCorrection = TRUE)
+	biasCorrection = TRUE,
+	uploadToGCS = TRUE)
 	{
 
 	if(file.exists(paste0(dataOut_location, "calibration_", basinName, ".csv")))	{
@@ -1088,15 +1120,21 @@ seasonalStorageForecast_f = function(
 		}
 	}	else	{print("Ya gotta calibrate the model first you big ole dummy!")}
 	
+
+
+
+
 	
 		# combining and printing storage forecasts
 	forecastThisWY = subset(allForecastsOutput, Date >= waterYearStart)
+	currWY = subset(allDat, Date >= waterYearStart)
 	prevWY = subset(allDat, Date < waterYearStart & Date >= waterYearStart %m-% years(1))
 	prev2WY = subset(allDat, Date < waterYearStart %m-% years(1) & Date >= waterYearStart %m-% years(2))
 	prev3WY = subset(allDat, Date < waterYearStart %m-% years(2) & Date >= waterYearStart %m-% years(3))
 
 	lnForecast = nrow(forecastThisWY)
 	lnNAs = max(365 - lnForecast, 0)
+	currWYNAs = max(365 - nrow(currWY), 0)
 	prevWYNAs = max(365 - nrow(prevWY), 0)
 
 	forecastOutput = data.frame(Date = seq(as.Date(waterYearStart), by='days', length.out=365),
@@ -1113,6 +1151,7 @@ seasonalStorageForecast_f = function(
 		Clim_Q50 = climatologyDF$Clim_Q50,
 		Clim_Q75 = climatologyDF$Clim_Q75,
 		Clim_Q95 = climatologyDF$Clim_Q95,
+		WaterYear_Curr = c(currWY$storIntrp, rep(NA, currWYNAs)),
 		WaterYear_1YrAgo = c(prevWY$storIntrp, rep(NA, prevWYNAs)),
 		WaterYear_2YrAgo = prev2WY$storIntrp[-366],
 		WaterYear_3YrAgo = prev3WY$storIntrp[-366])
@@ -1123,13 +1162,23 @@ seasonalStorageForecast_f = function(
 	} else {
 		return("we need to figure out how to read in and normalize this streamflow data")
 	}
+
+
+	# create the folder for storing outputs
+	dataOut_fileLoc = paste0(dataOut_location, 'storageForecastsFor_', forecastDate)
+	if(!file.exists(dataOut_fileLoc))	{
+			dir.create(file.path(paste0(dataOut_fileLoc, '\\')))
+	}
+
+
+
 		#saving output
-	fwrite(forecastOutput, paste0(dataOut_location, "forecastStorage_", basinName, '_', forecastDate, ".csv"))
+	fwrite(forecastOutput, paste0(dataOut_fileLoc, "forecastStorage_", basinName, '_', forecastDate, ".csv"))
 	
 		#storage forecast figure
 	fstOfMnths = forecastOutput$Date[which(mday(forecastOutput$Date) == 1)]
 	mnthNms = c('Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep')
-	png(paste0(dataOut_location, basinName, '_storageForecast_', forecastDate, '.png'), width=1920, height=960)
+	png(paste0(dataOut_fileLoc, '\\', 'storageForecast.png'), width=1920, height=960)
 	windowsFonts(A = windowsFont("Roboto"))
 	par(mar=2*c(5,5,2,2), mgp=2*c(3,1.3,0), font.lab=2, bty='l', cex.lab=2*1.8, cex.axis=2*1.4, cex.main=2*1.8, col='#1A232F')
 	plot(forecastOutput$Date, forecastOutput$Clim_Q95, ylim = c(0,max(forecastOutput$Clim_Q95)*1.05),
@@ -1150,7 +1199,7 @@ seasonalStorageForecast_f = function(
 		col=adjustcolor('#666D74', alpha.f=0.2), border=NA)
 	lines(forecastOutput$Date, forecastOutput$Clim_Q50, 
 		col=adjustcolor('#666D74', alpha.f=0.2), lwd=2.5)
-	forecastCompletes = forecastOutput[complete.cases(forecastOutput),]
+	forecastCompletes = forecastOutput[!is.na(forecastOutput$Pred_Q50),]
 	polygon(x=c(forecastCompletes$Date, rev(forecastCompletes$Date)), y=c(forecastCompletes$Pred_Q05, rev(forecastCompletes$Pred_Q95)),
 		col=adjustcolor('#0098B2', alpha.f=0.1), border=NA)
 	polygon(x=c(forecastCompletes$Date, rev(forecastCompletes$Date)), y=c(forecastCompletes$Pred_Q25, rev(forecastCompletes$Pred_Q75)),
@@ -1168,10 +1217,15 @@ seasonalStorageForecast_f = function(
 
 	######################################################################################
 	## prevWY figures
+	if(Sys.Date() > waterYearStart)	{
+		forecastOutput$WaterYear_3YrAgo = forecastOutput$WaterYear_2YrAgo
+		forecastOutput$WaterYear_2YrAgo = forecastOutput$WaterYear_1YrAgo
+		forecastOutput$WaterYear_1YrAgo = forecastOutput$WaterYear_Curr
+	}
 		#storage WY record figure
 	fstOfMnths = forecastOutput$Date[which(mday(forecastOutput$Date) == 1)]
 	mnthNms = c('Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep')
-	png(paste0(dataOut_location, basinName, '_storageWYcurrent_', forecastDate, '.png'), width=1920, height=960)
+	png(paste0(dataOut_fileLoc, '\\', 'storageWYcurrent.png'), width=1920, height=960)
 	windowsFonts(A = windowsFont("Roboto"))
 	par(mar=2*c(5,5,2,2), mgp=2*c(3,1.3,0), font.lab=2, bty='l', cex.lab=2*1.8, cex.axis=2*1.4, cex.main=2*1.8, col='#1A232F')
 	plot(forecastOutput$Date, forecastOutput$Clim_Q95, ylim = c(0,max(forecastOutput$Clim_Q95)*1.05),
@@ -1209,11 +1263,14 @@ seasonalStorageForecast_f = function(
 		adj = c(0,0), font=2, col='#F06000', family='A', cex=2*1.3)
 	dev.off()
 	
+	
+	# uploading figs to GCStorage
+	if(uploadToGCS == TRUE)	{
+		setwd(paste0(dataOut_fileLoc))
+		command = paste0('gsutil cp ', dataOut_fileLoc, '/*.png gs://seasonal_surface_water-looker_img_hosting/', basinName)
+		system(command)
+	}
 }
-
-
-
-
 
 
 

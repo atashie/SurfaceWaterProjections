@@ -1,7 +1,7 @@
 	# example input data
-basinSymbol = 'PNF'
+basinSymbol = 'EXC'
 basinName = basinSymbol # paste0(basinSymbol, '_atOutlet')
-gageLonLat = c(-119.318, 36.845)
+gageLonLat =  c(-120.264, 37.591) 
 infOrFnf = 76 #8 for fnf, 76 for inflow
 	# list of basins by symbol and lon / lat
 	# webpage to search for Cali reservoirs: https://cdec.water.ca.gov/dynamicapp/wsSensorData
@@ -24,13 +24,13 @@ infOrFnf = 76 #8 for fnf, 76 for inflow
 					# this loc only has fnf, no inflow 
 				# for BND: c(-122.185556, 40.288611) 
 
-yesterdaysDate = '2022-09-26'	# historic data is released every day for the day prior
+yesterdaysDate = '2022-10-02'	# historic data is released every day for the day prior
 historicStreamflowFileLoc =   paste0("https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=", basinSymbol, "&SensorNums=", infOrFnf, "&dur_code=D&Start=1900-01-01&End=", yesterdaysDate)
 historicReservoirFileLoc = paste0("https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=", basinSymbol, "&SensorNums=15&dur_code=D&Start=1900-01-01&End=", yesterdaysDate)
 
 	# defining pathways to basin-specific files
 dataOut_location = paste0('J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\', basinName, '\\')
-forecastDate = '26SEP2022'
+forecastDate = '03OCT022'
 waterYearStart = as.Date('2022-10-01')
 
 	# these file locations remain the same for all watersheds of a region
@@ -83,8 +83,6 @@ basinDelineation_f(
 	# step 2
 	# import and convert historical climate data
 climateInputConversion_f(
-#	pathToBasinBoundaryGPKG = pathToBasinBoundaryGPKG,
-#	pathToWatershedsGPKG = pathToWatershedsGPKG,
 	basinName = basinName,
 	climateDataNCDF = era5DataNCDF,
 	tempConversionFactor = NA,
@@ -145,6 +143,7 @@ validationHistoricalOutput = validationAndPlotGeneration_f(
 	# import and convert multi projection climate data for validationAndPlotGeneration_f
 allWYs = 2002:2021
 for(thisWY in allWYs)	{
+	# forecasts download in discrete water years (12 unique forecasts per netcdf), so the following loops through all years if all netcdfs are saved in the same file
 	seas5MultiDataNCDF = paste0('J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\testing-multiple-forecasts-seas5_wy', thisWY, '.nc')
 	climateInputConversion_f(
 		basinName = basinName,
@@ -158,7 +157,7 @@ for(thisWY in allWYs)	{
 		optionForPET = 1, 	# 1 = PET_fromTemp modified Pen-Mon, 
 		variableOrderOption = 'seas5Multi', 
 		precipName = 'tp_sum',
-		limitedModels = 25)	# other options include: tp, tp_sum	
+		limitedModels = 25)	# SEAS5 includes 51 models for the current era and only 25 for the entire period of record; adjusting this option allows subselection of models for hindcasting
 }
 
 
@@ -176,7 +175,7 @@ projectionValidationAndPlotGeneration_f(
 ####	This section is for linking streamflow models to reservoirs
 ####
 #########################################################################################################
-	# step 7
+	# step 7a
 	# ML for predicting reservoir outflows
 #reservoirOutflowCalVal_f(
 #	dataOut_location = dataOut_location,
@@ -191,7 +190,7 @@ projectionValidationAndPlotGeneration_f(
 #	numFolds = 5,
 #	numRepeats = 30)
 
-	# step 8
+	# step 7b
 	# validation of combined model projections of total storage
 projectedStorageValidationAndPlotGeneration_f(
 	basinName = basinName,
@@ -208,23 +207,8 @@ projectedStorageValidationAndPlotGeneration_f(
 #########################################################################################################
 					
 #########################################################################################################
-	# step 9
+	# step 8
 	# import and convert projection climate data
-climateInputConversion_f(
-#	pathToBasinBoundaryGPKG = pathToBasinBoundaryGPKG,
-#	pathToWatershedsGPKG = pathToWatershedsGPKG,
-	basinName = basinName,
-	climateDataNCDF = era5DataNCDF,	####!!!!! change btw cfs and seas5
-	tempConversionFactor = NA,
-	pptConversionFactor = NA,
-	avgTempGiven = FALSE, 
-	startDate = era5StartDate, 	# when does the clock of the netcdf start?
-	timeToDaysConversion = 1,	# convert time increments to days if necessary
-	dataOut_location = dataOut_location,
-	optionForPET = 1, 	# 1 = PET_fromTemp modified Pen-Mon, 
-	variableOrderOption = 'era5', # # 'era5' = [longitude,latitude,time]; 'cfs' = [longitude, latitude, member, step]; 'seas5' = [longitude, latitude, member, lead_time] for tmax and tmin but [lead_time, longitude, latitude, member] for tp_sum]
-	precipName = 'tp_sum')	# other options include: tp, tp_sum	
-	
 
 #cfsClimateDataframe = climateInputConversion_f(
 #	pathToBasinBoundaryGPKG = pathToBasinBoundaryGPKG,
@@ -260,7 +244,25 @@ climateInputConversion_f(
 	precipName = 'tp_sum')	# other options include: tp, tp_sum	
 
 
-	# step 10 
+
+climateInputConversion_f(
+#	pathToBasinBoundaryGPKG = pathToBasinBoundaryGPKG,
+#	pathToWatershedsGPKG = pathToWatershedsGPKG,
+	basinName = basinName,
+	climateDataNCDF = era5DataNCDF,	####!!!!! change btw cfs and seas5
+	tempConversionFactor = NA,
+	pptConversionFactor = NA,
+	avgTempGiven = FALSE, 
+	startDate = era5StartDate, 	# when does the clock of the netcdf start?
+	timeToDaysConversion = 1,	# convert time increments to days if necessary
+	dataOut_location = dataOut_location,
+	optionForPET = 1, 	# 1 = PET_fromTemp modified Pen-Mon, 
+	variableOrderOption = 'era5', # # 'era5' = [longitude,latitude,time]; 'cfs' = [longitude, latitude, member, step]; 'seas5' = [longitude, latitude, member, lead_time] for tmax and tmin but [lead_time, longitude, latitude, member] for tp_sum]
+	precipName = 'tp_sum')	# other options include: tp, tp_sum	
+	
+
+
+	# step 9a 
 	# run the model with forecasting data
 	## Running the Model for Seasonal Forecasts 
 seasonalStreamflowForecast_f(
@@ -270,9 +272,12 @@ seasonalStreamflowForecast_f(
 	dataSource = 1,							# 1 for cal.gov,
 	waterYearStart = waterYearStart,
 	forecastDate = forecastDate,
-	gageLonLat = gageLonLat)
+	gageLonLat = gageLonLat,
+	biasCorrection = TRUE,
+	uploadToGCS = TRUE)
 
-	# step 10 
+
+	# step 9b 
 	# run the model with forecasting data
 	## Running the Model for Seasonal Forecasts 
 seasonalStorageForecast_f(
@@ -283,7 +288,10 @@ seasonalStorageForecast_f(
 	dataSource = 1,							# 1 for cal.gov,
 	waterYearStart = waterYearStart,
 	forecastDate = forecastDate,
-	gageLonLat = gageLonLat)
+	gageLonLat = gageLonLat,
+	biasCorrection = TRUE,
+	uploadToGCS = TRUE)
+
 
 
 	
