@@ -73,7 +73,7 @@ climateInputConversion_f = function(
 	climateDataNCDF = 'file_location_and_name.nc',
 	tempConversionFactor = NA,
 	pptConversionFactor = NA,
-	avgTempGiven = FALSE, 
+	avgTempGiven = TRUE, 
 	startDate = as.Date("1990-01-01"), 	# when does the clock of the netcdf start?
 	timeToDaysConversion = 1,	# convert time increments to days if necessary
 	dataOut_location = 'save_file_location',
@@ -108,11 +108,11 @@ climateInputConversion_f = function(
 
 				# current post processing of ncdfs results in some nas, so must remove these before proceeding
 					# na removal by mdeian value needs to be revisited... a linear interp would probably be better
-			ncTmin = ncvar_get(ncin, 't2m_min'); if(any(is.na(ncTmin)))	{ncTmin[is.na(ncTmin)] = median(ncTmin, na.rm=TRUE)} 
-			ncTmax = ncvar_get(ncin, 't2m_max'); if(any(is.na(ncTmax)))	{ncTmax[is.na(ncTmax)] = median(ncTmax, na.rm=TRUE)} 
-			ncPPT = ncvar_get(ncin, precipName); if(any(is.na(ncPPT)))	{ncPPT[is.na(ncPPT)] = median(ncPPT, na.rm=TRUE)} 
+			ncTmin = ncvar_get(ncin, 't2m_min'); if(any(is.na(ncTmin)))	{ncTmin[is.na(ncTmin)] = median(ncTmin, na.rm=TRUE)} # [longitude,latitude,lead_time,member] 
+			ncTmax = ncvar_get(ncin, 't2m_max'); if(any(is.na(ncTmax)))	{ncTmax[is.na(ncTmax)] = median(ncTmax, na.rm=TRUE)} # [longitude,latitude,lead_time,member] 
+			ncPPT = ncvar_get(ncin, precipName); if(any(is.na(ncPPT)))	{ncPPT[is.na(ncPPT)] = median(ncPPT, na.rm=TRUE)}	 # [longitude,latitude,lead_time,member] 
 				# current CAi climate data pipeline does not include tavg, so must estimate using tmin and tmax
-			if(avgTempGiven)	{ncTavg = ncvar_get(ncin, 't2m_avg')
+			if(avgTempGiven)	{ncTavg = ncvar_get(ncin, 't2m')
 			}	else {ncTavg = (ncTmin + ncTmax) / 2}	
 
 				# assuming all lat / lon structures are the same
@@ -131,8 +131,8 @@ climateInputConversion_f = function(
 					nearestLat = which.min(abs(thisLonLat[2] - nc_lat))
 				
 						# Tmax is sometimes < Tmin, so need to adjust before running for PET
-					theseTmin = ncTmin[nearestLon, nearestLat, numModels, ]
-					theseTmax = ncTmax[nearestLon, nearestLat, numModels, ]
+					theseTmin = ncTmin[nearestLon, nearestLat, , numModels]	# [longitude,latitude,lead_time,member]
+					theseTmax = ncTmax[nearestLon, nearestLat, , numModels]	# [longitude,latitude,lead_time,member]
 					if(any(theseTmin >= theseTmax))	{
 						theseTmin[theseTmin >= theseTmax] = theseTmax[theseTmin >= theseTmax] - 0.1
 					}
@@ -141,7 +141,7 @@ climateInputConversion_f = function(
 							# ultimately, subbasins should be disaggregated and the model run on subcomponents, but this will take time to implement
 					allTmin = allTmin +  theseTmin *  basinWatersheds$SUB_AREA[numberOfWatersheds]
 					allTmax = allTmax + theseTmax *  basinWatersheds$SUB_AREA[numberOfWatersheds]
-					allPPT = allPPT + ncPPT[ , nearestLon, nearestLat, numModels] *  basinWatersheds$SUB_AREA[numberOfWatersheds]
+					allPPT = allPPT + ncPPT[nearestLon, nearestLat, , numModels] *  basinWatersheds$SUB_AREA[numberOfWatersheds]	# [longitude,latitude,lead_time,member]
 						# since we don't currently ingest PET data, we arecalculating from a penman monteith eq
 					if(optionForPET == 1)	{
 						allPET = allPET + PET_fromTemp(yday(nc_date), theseTmax , theseTmin,
@@ -171,9 +171,9 @@ climateInputConversion_f = function(
 			ncin = nc_open(climateDataNCDF)
 
 				# current post processing of ncdfs results in some nas, so must remove these before proceeding
-			ncTmin = ncvar_get(ncin, 't2m_min'); if(any(is.na(ncTmin)))	{ncTmin[is.na(ncTmin)] = median(ncTmin, na.rm=TRUE)} 
-			ncTmax = ncvar_get(ncin, 't2m_max'); if(any(is.na(ncTmax)))	{ncTmax[is.na(ncTmax)] = median(ncTmax, na.rm=TRUE)} 
-			ncPPT = ncvar_get(ncin, precipName); if(any(is.na(ncPPT)))	{ncPPT[is.na(ncPPT)] = median(ncPPT, na.rm=TRUE)} 
+			ncTmin = ncvar_get(ncin, 't2m_min'); if(any(is.na(ncTmin)))	{ncTmin[is.na(ncTmin)] = median(ncTmin, na.rm=TRUE)} 	#[longitude,latitude,time] 
+			ncTmax = ncvar_get(ncin, 't2m_max'); if(any(is.na(ncTmax)))	{ncTmax[is.na(ncTmax)] = median(ncTmax, na.rm=TRUE)}	#[longitude,latitude,time] 
+			ncPPT = ncvar_get(ncin, precipName); if(any(is.na(ncPPT)))	{ncPPT[is.na(ncPPT)] = median(ncPPT, na.rm=TRUE)} 		#[longitude,latitude,time] 
 					# current CAi climate data pipeline does not include tavg, so must estimate using tmin and tmax
 			if(avgTempGiven)	{ncTavg = ncvar_get(ncin, 't2m_avg')
 			}	else {ncTavg = (ncTmin + ncTmax) / 2}	
