@@ -1,7 +1,7 @@
 	# example input data
-basinSymbol = 'EXC'
+basinSymbol = 'SNL'
 basinName = basinSymbol # paste0(basinSymbol, '_atOutlet')
-gageLonLat =  c(-120.264, 37.591) 
+gageLonLat = c(-118.998, 36.416)
 infOrFnf = 76 #8 for fnf, 76 for inflow
 	# list of basins by symbol and lon / lat
 	# webpage to search for Cali reservoirs: https://cdec.water.ca.gov/dynamicapp/wsSensorData
@@ -11,7 +11,7 @@ infOrFnf = 76 #8 for fnf, 76 for inflow
 				# for ORO: c(-121.480, 39.540) 
 				# for SHA: c(-122.417, 40.720)		
 				# for FOL: c(-121.155, 38.710)
-				# for PNF: c(-119.318, 36.845) [[[[double check]]]]] only has period of record to 1988 for stor, and 1995 for inflow
+				# for PNF: c(-119.318, 36.845) 
 					# problematic for period of record
 					
 					# these reservoirs are problematic for storage projections
@@ -24,21 +24,21 @@ infOrFnf = 76 #8 for fnf, 76 for inflow
 					# this loc only has fnf, no inflow 
 				# for BND: c(-122.185556, 40.288611) 
 
-yesterdaysDate = '2022-10-02'	# historic data is released every day for the day prior
+yesterdaysDate = '2022-10-26'	# historic data is released every day for the day prior
 historicStreamflowFileLoc =   paste0("https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=", basinSymbol, "&SensorNums=", infOrFnf, "&dur_code=D&Start=1900-01-01&End=", yesterdaysDate)
 historicReservoirFileLoc = paste0("https://cdec.water.ca.gov/dynamicapp/req/CSVDataServlet?Stations=", basinSymbol, "&SensorNums=15&dur_code=D&Start=1900-01-01&End=", yesterdaysDate)
 
 	# defining pathways to basin-specific files
 dataOut_location = paste0('J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\', basinName, '\\')
-forecastDate = '03OCT022'
+forecastDate = '27OCT022'
 waterYearStart = as.Date('2022-10-01')
 
 	# these file locations remain the same for all watersheds of a region
-seas5DataNCDF = 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\norCali-seas5.nc' # 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\soCali-recent-seas5.nc'
-#cfsDataNCDF =   'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\norCali-cfs.nc'			 # 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\soCali-cfs.nc'
+seas5DataNCDF = 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\NuveenNorCal-testing-seas5.nc' 				# SoCal
+#cfsDataNCDF =   'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\NuveenNorCal-testing-cfs.nc'			 	# SoCal
 	# no longer separating historical from recent era5... may revisit
 #era5DataHistoricalNCDF = 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\cali-hist-era5.nc'
-era5DataNCDF =  'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\norCali-era.nc'			# 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\soCali-era.nc'
+era5DataNCDF =  'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\NuveenNorCal-testing-recent-era.nc'			# SoCal
 #seas5MultiDataNCDF = 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\testing-multiple-forecasts-seas5-wy2019.nc'
 basinATLAS_locationAndFile = 'C:\\Users\\arik\\Documents\\PhD Research\\D4\\BasinATLAS_Data_v10\\BasinATLAS_v10.gdb'
 
@@ -61,11 +61,11 @@ ncatt_get(ncin_seas5, 'valid_time','units')$value
 #########################################################################
 
 	# correct dates must be manually selected for now
-cfsStartDate = as.Date('2022-02-28') #  + ncvar_get(ncin_cfs, 'time')/24 for calculating actual dates
-era5StartDate =  as.Date('2000-07-01') # + ncvar_get(ncin_era5, 'time') for calculating actual dates 
+#cfsStartDate = as.Date('2022-02-28') #  + ncvar_get(ncin_cfs, 'time')/24 for calculating actual dates
+era5StartDate =  as.Date('2020-08-01') # + ncvar_get(ncin_era5, 'time') for calculating actual dates 
 #era5RecentStartDate =  as.Date('2001-07-01') # + ncvar_get(ncin_recentEra5, 'time') for calculating actual dates 
 	# seas5 is incorrectly showing the second of the month, but should be the first
-seas5StartDate = as.Date('2022-09-02') - 2 # + ncvar_get(ncin_seas5, 'lead_time') for calculating actual dates
+seas5StartDate = as.Date('2022-10-01') # + ncvar_get(ncin_seas5, 'lead_time') for calculating actual dates
 seas5MultiStartDate = as.Date('1993-01-02') - 2 # + ncvar_get(ncin_seas5, 'lead_time') for calculating actual dates
 
 
@@ -87,7 +87,7 @@ climateInputConversion_f(
 	climateDataNCDF = era5DataNCDF,
 	tempConversionFactor = NA,
 	pptConversionFactor = NA,
-	avgTempGiven = FALSE, 
+	avgTempGiven = TRUE, 
 	startDate = era5StartDate, 	# when does the clock of the netcdf start?
 	timeToDaysConversion = 1,	# convert time increments to days if necessary
 	dataOut_location = dataOut_location,
@@ -241,7 +241,7 @@ climateInputConversion_f(
 	dataOut_location = dataOut_location,
 	optionForPET = 1, 	# 1 = PET_fromTemp modified Pen-Mon, 
 	variableOrderOption = 'seas5', # 'era5' = [longitude,latitude,time]; 'cfs' = [longitude, latitude, member, step]; 'seas5' = [longitude, latitude, member, lead_time] for tmax and tmin but [lead_time, longitude, latitude, member] for tp_sum]
-	precipName = 'tp_sum')	# other options include: tp, tp_sum	
+	precipName = 'tp')	# other options include: tp, tp_sum	
 
 
 
@@ -290,7 +290,8 @@ seasonalStorageForecast_f(
 	forecastDate = forecastDate,
 	gageLonLat = gageLonLat,
 	biasCorrection = TRUE,
-	uploadToGCS = TRUE)
+	uploadToGCS = TRUE,
+	incldStorage = TRUE)					# should we include forecasts of storage?
 
 
 

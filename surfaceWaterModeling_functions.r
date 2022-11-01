@@ -943,8 +943,6 @@ seasonalStreamflowForecast_f = function(
 
 
 
-
-
 ##########################################################################################################
 	## Running the Model for Seasonal Forecasts for storage
 seasonalStorageForecast_f = function(
@@ -957,7 +955,8 @@ seasonalStorageForecast_f = function(
 	forecastDate = as.Date('yyyy-mm-dd'),
 	gageLonLat = c(1,1),
 	biasCorrection = TRUE,
-	uploadToGCS = TRUE)
+	uploadToGCS = TRUE,
+	incldStorage = TRUE)
 	{
 
 	if(file.exists(paste0(dataOut_location, "calibration_", basinName, ".csv")))	{
@@ -1175,46 +1174,61 @@ seasonalStorageForecast_f = function(
 		#saving output
 	fwrite(forecastOutput, paste0(dataOut_fileLoc, "forecastStorage_", basinName, '_', forecastDate, ".csv"))
 	
-		#storage forecast figure
-	fstOfMnths = forecastOutput$Date[which(mday(forecastOutput$Date) == 1)]
-	mnthNms = c('Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep')
-	png(paste0(dataOut_fileLoc, '\\', 'storageForecast.png'), width=1920, height=960)
-	windowsFonts(A = windowsFont("Roboto"))
-	par(mar=2*c(5,5,2,2), mgp=2*c(3,1.3,0), font.lab=2, bty='l', cex.lab=2*1.8, cex.axis=2*1.4, cex.main=2*1.8, col='#1A232F')
-	plot(forecastOutput$Date, forecastOutput$Clim_Q95, ylim = c(0,max(forecastOutput$Clim_Q95)*1.05),
-		type='l', lwd=1, col='white', xaxt = 'n', #log='y',
-		main='', ylab='Storage (Acre Feet)', xlab='',
-		col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
-		family='A')
-	axis(1, at = fstOfMnths,col.lab='#1A232F', col.axis='#666D74', 
-		labels = mnthNms)
-	abline(v=fstOfMnths, lwd=1, col=adjustcolor('#666D74', alpha.f=0.1))
-	lines(forecastOutput$Date, forecastOutput$WaterYear_1YrAgo, 
-		col='#FDB600', lwd=4, lty = 2)
-	lines(forecastOutput$Date, forecastOutput$WaterYear_2YrAgo, 
-		col='#FDB600', lwd=4, lty = 3)
-	polygon(x=c(forecastOutput$Date, rev(forecastOutput$Date)), y=c(forecastOutput$Clim_Q95, rev(forecastOutput$Clim_Q05)),
-		col=adjustcolor('#666D74', alpha.f=0.1), border=NA)
-	polygon(x=c(forecastOutput$Date, rev(forecastOutput$Date)), y=c(forecastOutput$Clim_Q25, rev(forecastOutput$Clim_Q75)),
-		col=adjustcolor('#666D74', alpha.f=0.2), border=NA)
-	lines(forecastOutput$Date, forecastOutput$Clim_Q50, 
-		col=adjustcolor('#666D74', alpha.f=0.2), lwd=2.5)
-	forecastCompletes = forecastOutput[!is.na(forecastOutput$Pred_Q50),]
-	polygon(x=c(forecastCompletes$Date, rev(forecastCompletes$Date)), y=c(forecastCompletes$Pred_Q05, rev(forecastCompletes$Pred_Q95)),
-		col=adjustcolor('#0098B2', alpha.f=0.1), border=NA)
-	polygon(x=c(forecastCompletes$Date, rev(forecastCompletes$Date)), y=c(forecastCompletes$Pred_Q25, rev(forecastCompletes$Pred_Q75)),
-		col=adjustcolor('#0098B2', alpha.f=0.2), border=NA)
-	lines(forecastOutput$Date, forecastOutput$Pred_Q50, 
-		col='#0098B2', lwd=5)
-	text(x=forecastOutput$Date[1], y=max(forecastOutput$Clim_Q95)*0.95,
-		paste0('Forecast for ', basinName),
-		adj = c(0,0), font=2, col='#F06000', family='A', cex=2*1.3)
-	text(x=forecastOutput$Date[1], y=max(forecastOutput$Clim_Q95)*0.87,
-		paste0('Issued on ', forecastDate),
-		adj = c(0,0), font=2, col='#F06000', family='A', cex=2*1.3)
-	dev.off()
-
-
+	if(incldStorage)	{
+			#storage forecast figure
+		fstOfMnths = forecastOutput$Date[which(mday(forecastOutput$Date) == 1)]
+		mnthNms = c('Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep')
+		png(paste0(dataOut_fileLoc, '\\', 'storageForecast.png'), width=1920, height=960)
+		windowsFonts(A = windowsFont("Roboto"))
+		par(mar=2*c(5,5,2,2), mgp=2*c(3,1.3,0), font.lab=2, bty='l', cex.lab=2*1.8, cex.axis=2*1.4, cex.main=2*1.8, col='#1A232F')
+		plot(forecastOutput$Date, forecastOutput$Clim_Q95, ylim = c(0,max(forecastOutput$Clim_Q95)*1.05),
+			type='l', lwd=1, col='white', xaxt = 'n', #log='y',
+			main='', ylab='Storage (Acre Feet)', xlab='',
+			col.lab='#1A232F', col.axis='#666D74', col.main='#1A232F',
+			family='A')
+		axis(1, at = fstOfMnths,col.lab='#1A232F', col.axis='#666D74', 
+			labels = mnthNms)
+		abline(v=fstOfMnths, lwd=1, col=adjustcolor('#666D74', alpha.f=0.1))
+		lines(forecastOutput$Date, forecastOutput$WaterYear_1YrAgo, 
+			col='#FDB600', lwd=4, lty = 2)
+		lines(forecastOutput$Date, forecastOutput$WaterYear_2YrAgo, 
+			col='#FDB600', lwd=4, lty = 3)
+		polygon(x=c(forecastOutput$Date, rev(forecastOutput$Date)), y=c(forecastOutput$Clim_Q95, rev(forecastOutput$Clim_Q05)),
+			col=adjustcolor('#666D74', alpha.f=0.1), border=NA)
+		polygon(x=c(forecastOutput$Date, rev(forecastOutput$Date)), y=c(forecastOutput$Clim_Q25, rev(forecastOutput$Clim_Q75)),
+			col=adjustcolor('#666D74', alpha.f=0.2), border=NA)
+		lines(forecastOutput$Date, forecastOutput$Clim_Q50, 
+			col=adjustcolor('#666D74', alpha.f=0.2), lwd=2.5)
+		forecastCompletes = forecastOutput[!is.na(forecastOutput$Pred_Q50),]
+		polygon(x=c(forecastCompletes$Date, rev(forecastCompletes$Date)), y=c(forecastCompletes$Pred_Q05, rev(forecastCompletes$Pred_Q95)),
+			col=adjustcolor('#0098B2', alpha.f=0.1), border=NA)
+		polygon(x=c(forecastCompletes$Date, rev(forecastCompletes$Date)), y=c(forecastCompletes$Pred_Q25, rev(forecastCompletes$Pred_Q75)),
+			col=adjustcolor('#0098B2', alpha.f=0.2), border=NA)
+		lines(forecastOutput$Date, forecastOutput$Pred_Q50, 
+			col='#0098B2', lwd=5)
+		text(x=forecastOutput$Date[1], y=max(forecastOutput$Clim_Q95)*0.95,
+			paste0('Forecast for ', basinName),
+			adj = c(0,0), font=2, col='#F06000', family='A', cex=2*1.3)
+		text(x=forecastOutput$Date[1], y=max(forecastOutput$Clim_Q95)*0.87,
+			paste0('Issued on ', forecastDate),
+			adj = c(0,0), font=2, col='#F06000', family='A', cex=2*1.3)
+		dev.off()
+	}	else	{
+		png(paste0(dataOut_fileLoc, '\\', 'storageForecast.png'), width=1920, height=960)
+		windowsFonts(A = windowsFont("Roboto"))
+		par(mar=2*c(5,5,2,2), mgp=2*c(3,1.3,0), font.lab=2, bty='l', cex.lab=2*1.8, cex.axis=2*1.4, cex.main=2*1.8, col='#1A232F')
+		plot(0:1, 0:1, xaxt = 'n', col='white',
+			main='', ylab='', xlab='',axes=FALSE)
+		text(x=0.05, y=0.55,
+			paste0('Storage Forecast Currently Unavailable'),
+			adj = c(0,0), font=2, col='#F06000', family='A', cex=5*1.3)
+		text(x=0.16, y=0.45,
+			paste0('modeled reservoir releases too uncertain for reliable forecasting'),
+			adj = c(0,0), font=2, col='#F06000', family='A', cex=2*1.3)	
+			
+		dev.off()
+	}
+	
 	######################################################################################
 	## prevWY figures
 	if(Sys.Date() > waterYearStart)	{
