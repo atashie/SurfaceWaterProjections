@@ -1,7 +1,7 @@
 	# example input data
-basinSymbol = 'SNL'
+basinSymbol = 'MIL'
 basinName = basinSymbol # paste0(basinSymbol, '_atOutlet')
-gageLonLat = c(-118.998, 36.416)
+gageLonLat = c(-119.6545, 37.0425)
 infOrFnf = 76 #8 for fnf, 76 for inflow
 	# list of basins by symbol and lon / lat
 	# webpage to search for Cali reservoirs: https://cdec.water.ca.gov/dynamicapp/wsSensorData
@@ -37,7 +37,7 @@ waterYearStart = as.Date('2022-10-01')
 seas5DataNCDF = 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\NuveenNorCal-testing-seas5.nc' 				# SoCal
 #cfsDataNCDF =   'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\NuveenNorCal-testing-cfs.nc'			 	# SoCal
 	# no longer separating historical from recent era5... may revisit
-#era5DataHistoricalNCDF = 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\cali-hist-era5.nc'
+#era5DataNCDF = 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\NuveenNorCal-testing-historic-era.nc'
 era5DataNCDF =  'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\NuveenNorCal-testing-recent-era.nc'			# SoCal
 #seas5MultiDataNCDF = 'J:\\Cai_data\\Nuveen\\surfaceWaterData_and_Output\\testing-multiple-forecasts-seas5-wy2019.nc'
 basinATLAS_locationAndFile = 'C:\\Users\\arik\\Documents\\PhD Research\\D4\\BasinATLAS_Data_v10\\BasinATLAS_v10.gdb'
@@ -62,7 +62,7 @@ ncatt_get(ncin_seas5, 'valid_time','units')$value
 
 	# correct dates must be manually selected for now
 #cfsStartDate = as.Date('2022-02-28') #  + ncvar_get(ncin_cfs, 'time')/24 for calculating actual dates
-era5StartDate =  as.Date('2020-08-01') # + ncvar_get(ncin_era5, 'time') for calculating actual dates 
+era5StartDate =  as.Date('2000-08-01') # + ncvar_get(ncin_era5, 'time') for calculating actual dates 
 #era5RecentStartDate =  as.Date('2001-07-01') # + ncvar_get(ncin_recentEra5, 'time') for calculating actual dates 
 	# seas5 is incorrectly showing the second of the month, but should be the first
 seas5StartDate = as.Date('2022-10-01') # + ncvar_get(ncin_seas5, 'lead_time') for calculating actual dates
@@ -87,7 +87,7 @@ climateInputConversion_f(
 	climateDataNCDF = era5DataNCDF,
 	tempConversionFactor = NA,
 	pptConversionFactor = NA,
-	avgTempGiven = TRUE, 
+	avgTempGiven = FALSE, 
 	startDate = era5StartDate, 	# when does the clock of the netcdf start?
 	timeToDaysConversion = 1,	# convert time increments to days if necessary
 	dataOut_location = dataOut_location,
