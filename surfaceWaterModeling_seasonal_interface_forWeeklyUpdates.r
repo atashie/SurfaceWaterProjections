@@ -9,8 +9,8 @@ theseBasins = data.frame(basinSymbol = 	c('CLE',		'ISB',		'EXC',		'ORO',		'SHA',
 						incldStorage = 	c(TRUE, 		TRUE,		TRUE,		TRUE,		TRUE,		TRUE,		TRUE,		FALSE,		FALSE),
 						maxStorage = 	c(2447650,		568000,		1024600,	3537577,	4552000,	977000,		1000000,	520500,		185600))
 
-yesterdaysDate = '2022-10-26'	# historic data is released every day for the day prior
-forecastDate = '27OCT022'		# 
+yesterdaysDate = '2022-11-13'	# historic data is released every day for the day prior
+forecastDate = '13NOV022'		# 
 waterYearStart = as.Date('2022-10-01')
 
 	# these file locations remain the same for all watersheds of a region
@@ -22,7 +22,7 @@ basinATLAS_locationAndFile = 'C:\\Users\\arik\\Documents\\PhD Research\\D4\\Basi
 
 	# correct dates must be manually selected for now
 #cfsStartDate = as.Date('2022-02-28') #  + ncvar_get(ncin_cfs, 'time')/24 for calculating actual dates
-era5StartDate =  as.Date('2020-08-01') # + ncvar_get(ncin_era5, 'time') for calculating actual dates 
+era5StartDate =  as.Date('2000-08-01') # + ncvar_get(ncin_era5, 'time') for calculating actual dates 
 #era5RecentStartDate =  as.Date('2001-07-01') # + ncvar_get(ncin_recentEra5, 'time') for calculating actual dates 
 seas5StartDate = as.Date('2022-10-01') # + ncvar_get(ncin_seas5, 'lead_time') for calculating actual dates
 
