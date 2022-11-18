@@ -9,8 +9,8 @@ theseBasins = data.frame(basinSymbol = 	c('CLE',		'ISB',		'EXC',		'ORO',		'SHA',
 						incldStorage = 	c(TRUE, 		TRUE,		TRUE,		TRUE,		TRUE,		TRUE,		TRUE,		FALSE,		FALSE),
 						maxStorage = 	c(2447650,		568000,		1024600,	3537577,	4552000,	977000,		1000000,	520500,		185600))
 
-yesterdaysDate = '2022-11-13'	# historic data is released every day for the day prior
-forecastDate = '13NOV022'		# 
+yesterdaysDate = '2022-11-16'	# historic data is released every day for the day prior
+forecastDate = '17NOV022'		# 
 waterYearStart = as.Date('2022-10-01')
 
 	# these file locations remain the same for all watersheds of a region
@@ -22,9 +22,9 @@ basinATLAS_locationAndFile = 'C:\\Users\\arik\\Documents\\PhD Research\\D4\\Basi
 
 	# correct dates must be manually selected for now
 #cfsStartDate = as.Date('2022-02-28') #  + ncvar_get(ncin_cfs, 'time')/24 for calculating actual dates
-era5StartDate =  as.Date('2000-08-01') # + ncvar_get(ncin_era5, 'time') for calculating actual dates 
+era5StartDate =  as.Date('2020-08-01') # + ncvar_get(ncin_era5, 'time') for calculating actual dates 
 #era5RecentStartDate =  as.Date('2001-07-01') # + ncvar_get(ncin_recentEra5, 'time') for calculating actual dates 
-seas5StartDate = as.Date('2022-10-01') # + ncvar_get(ncin_seas5, 'lead_time') for calculating actual dates
+seas5StartDate = as.Date('2022-11-01') # + ncvar_get(ncin_seas5, 'lead_time') for calculating actual dates
 
 		### this section is purely for inspecting data before running models
 #########################################################################
@@ -40,7 +40,7 @@ ncatt_get(ncin_seas5, 'valid_time','units')$value
 	#########################################################################
 
 	# initializing dataframe for storing outputs
-allForecasts = data.frame(Date=NA, Reservoir = NA, Units = NA, Lat = NA, Lon = NA,
+allForecasts = data.frame(Date=as.Date('1900-01-01'), Reservoir = NA, Units = NA, Lat = NA, Lon = NA,
 		Pred_Q05 = NA, Pred_Q25 = NA, Pred_Q50 = NA, Pred_Q75 = NA, Pred_Q95 = NA,
 		Clim_Q05 = NA, Clim_Q25 = NA, Clim_Q50 = NA, Clim_Q75 = NA, Clim_Q95 = NA,
 		WaterYear_Curr = NA, WaterYear_1YrAgo = NA, WaterYear_2YrAgo = NA, WaterYear_3YrAgo = NA,
@@ -145,7 +145,7 @@ for(thisBasin in 1:nrow(theseBasins))	{
 	allForecasts = rbind(allForecasts, thisForecast)
 }
 #allForecasts$Date = seq(as.Date('2022-10-01'), as.Date('2023-09-30'), by = 1)
-fwrite(allForecasts, paste0(mainFolder, "allForecasts_", forecastDate, ".csv"))
+fwrite(allForecasts[-1,], paste0(mainFolder, "allForecasts_", forecastDate, ".csv"))
 	
 
 

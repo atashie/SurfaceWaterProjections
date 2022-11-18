@@ -986,8 +986,12 @@ seasonalStorageForecast_f = function(
 
 			stor$Date = ymd(unlist(strsplit(stor$DATE.TIME, " "))[seq(1,nrow(stor)*2,2)])
 			stor$stor = as.numeric(stor$VALUE)
+			if(is.na(stor$stor[nrow(stor)]))	{ stor$stor[nrow(stor)] = stor$stor[last(which(!is.na(stor$stor)))]	}
+			
 			inflow$Date = ymd(unlist(strsplit(inflow$DATE.TIME, " "))[seq(1,nrow(inflow)*2,2)])
-			inflow$inflow = inflow$VALUE
+			inflow$inflow = as.numeric(inflow$VALUE)
+			if(is.na(inflow$inflow[nrow(inflow)]))	{ inflow$inflow[nrow(inflow)] = inflow$inflow[last(which(!is.na(inflow$inflow)))]	}
+			
 			allDat = inflow[stor[c('Date','stor')], on = 'Date']
 			whichFirstNoNA = which(!is.na(allDat$stor) & !is.na(allDat$inflow))[1]
 			allDat = allDat[-c(1:(whichFirstNoNA-1)), ]
@@ -1091,6 +1095,7 @@ seasonalStorageForecast_f = function(
 
 					# merging historic streamflow record onto climate inputs data
 				climateAndStreamflowOutput = allDat[allHBVoutput, on='Date']#[projDates, ]  
+				climateAndStreamflowOutput$doy = yday(climateAndStreamflowOutput$Date)
 				for(ydays in 1:366)	{
 						climateAndStreamflowOutput$doyEstResLoss[climateAndStreamflowOutput$doy == ydays] = mean(climateAndStreamflowOutput$resLoss[which(climateAndStreamflowOutput$doy == ydays)], na.rm=TRUE)
 					}
@@ -1120,7 +1125,7 @@ seasonalStorageForecast_f = function(
 					ydayModelLn_wt * (ydayModelLn$coef[1] + modelOut$doyEstResLoss * ydayModelLn$coef[2])
 				if(any(resLossEstInfYday < 0))	{resLossEstInfYday[resLossEstInfYday < 0] = 0}
 					
-				storEstInf = as.numeric(climateAndStreamflowOutput[(projDates[1] - 1), 'storIntrp']) + cumsum(modelOut$inflowProj) - cumsum(resLossEstInfYday / (1 - (storModelLg_wt + storModelLn_wt) / 1))
+				storEstInf = as.numeric(climateAndStreamflowOutput[lastHistStor, 'storIntrp']) + cumsum(modelOut$inflowProj) - cumsum(resLossEstInfYday / (1 - (storModelLg_wt + storModelLn_wt) / 1))
 				if(any(storEstInf <= 1))	{storEstInf[storEstInf <= 1] = 1}
 
 					# smoothing initial estimates of storage before running final function of reservoir loss ~ storage
@@ -1131,7 +1136,7 @@ seasonalStorageForecast_f = function(
 						storModelLn_wt * (storModelLn$coef[1] + storEstInf * storModelLn$coef[2])
 					resLossEstTot = resLossEstInfYday + resLossEstStor
 					if(any(resLossEstTot < 0))	{resLossEstTot[resLossEstTot < 0] = 0}
-					storEstInfStor = as.numeric(climateAndStreamflowOutput[(projDates[1] - 1), 'storIntrp']) + cumsum(modelOut$inflowProj) - 
+					storEstInfStor = as.numeric(climateAndStreamflowOutput[lastHistStor, 'storIntrp']) + cumsum(modelOut$inflowProj) - 
 						cumsum(resLossEstTot)
 					if(any(storEstInfStor < 1))	{storEstInfStor[storEstInfStor < 1] = 1}
 					storSmoother = storSmoother + 1
