@@ -591,7 +591,8 @@ seasonalStreamflowForecast_f = function(
 	forecastDate = as.Date('yyyy-mm-dd'),
 	gageLonLat = c(1,1),
 	biasCorrection = TRUE,
-	uploadToGCS = TRUE)
+	uploadToGCS = TRUE,
+	smoothClimatology = FALSE)
 	{
 
 	if(file.exists(paste0(dataOut_location, "calibration_", basinName, ".csv")))	{
@@ -773,6 +774,9 @@ seasonalStreamflowForecast_f = function(
 		#saving output
 	fwrite(forecastOutput, paste0(dataOut_fileLoc, "forecastStrmCumSum_", basinName, '_', forecastDate, ".csv"))
 	
+	if(smoothClimatology)	{
+		
+	
 		#cumulative streamflow forecast figure
 	fstOfMnths = forecastOutput$Date[which(mday(forecastOutput$Date) == 1)]
 	mnthNms = c('Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep')
@@ -787,16 +791,28 @@ seasonalStreamflowForecast_f = function(
 	axis(1, at = fstOfMnths,col.lab='#1A232F', col.axis='#666D74', 
 		labels = mnthNms)
 	abline(v=fstOfMnths, lwd=1, col=adjustcolor('#666D74', alpha.f=0.1))
+	if(smoothClimatology)	{
+		smoothedQ05 = ksmooth(time(forecastOutput$Date), forecastOutput$Clim_Q05, kernel = 'normal', bandwidth = 13)$y
+		smoothedQ50 = ksmooth(time(forecastOutput$Date), forecastOutput$Clim_Q50, kernel = 'normal', bandwidth = 13)$y
+		smoothedQ95 = ksmooth(time(forecastOutput$Date), forecastOutput$Clim_Q95, kernel = 'normal', bandwidth = 13)$y
+		for(smoother in 1:100)	{
+			ymaxvals = c(smoothedQ50 + (smoother * 0.01) * (smoothedQ95 - smoothedQ50),
+				rev(smoothedQ50 - (smoother * 0.01) * (smoothedQ50 - smoothedQ05)))
+			polygon(x=c(forecastOutput$Date, rev(forecastOutput$Date)), y=ymaxvals,
+				col=adjustcolor('#666D74', alpha.f=(0.01)), border=NA)
+		}
+	}	else	{
+		polygon(x=c(forecastOutput$Date, rev(forecastOutput$Date)), y=c(forecastOutput$Clim_Q95, rev(forecastOutput$Clim_Q05)),
+			col=adjustcolor('#666D74', alpha.f=0.1), border=NA)
+		polygon(x=c(forecastOutput$Date, rev(forecastOutput$Date)), y=c(forecastOutput$Clim_Q25, rev(forecastOutput$Clim_Q75)),
+			col=adjustcolor('#666D74', alpha.f=0.2), border=NA)
+		lines(forecastOutput$Date, forecastOutput$Clim_Q50, 
+			col=adjustcolor('#666D74', alpha.f=0.2), lwd=2.5)
+	 }
 	lines(forecastOutput$Date, forecastOutput$WaterYear_1YrAgo, 
 		col='#FDB600', lwd=4, lty = 2)
 	lines(forecastOutput$Date, forecastOutput$WaterYear_2YrAgo, 
 		col='#FDB600', lwd=4, lty = 3)
-	polygon(x=c(forecastOutput$Date, rev(forecastOutput$Date)), y=c(forecastOutput$Clim_Q95, rev(forecastOutput$Clim_Q05)),
-		col=adjustcolor('#666D74', alpha.f=0.1), border=NA)
-	polygon(x=c(forecastOutput$Date, rev(forecastOutput$Date)), y=c(forecastOutput$Clim_Q25, rev(forecastOutput$Clim_Q75)),
-		col=adjustcolor('#666D74', alpha.f=0.2), border=NA)
-	lines(forecastOutput$Date, forecastOutput$Clim_Q50, 
-		col=adjustcolor('#666D74', alpha.f=0.2), lwd=2.5)
 	forecastCompletes = forecastOutput[!is.na(forecastOutput$Pred_Q50),]
 	polygon(x=c(forecastCompletes$Date, rev(forecastCompletes$Date)), y=c(forecastCompletes$Pred_Q05, rev(forecastCompletes$Pred_Q95)),
 		col=adjustcolor('#0098B2', alpha.f=0.1), border=NA)
@@ -826,16 +842,28 @@ seasonalStreamflowForecast_f = function(
 		labels = c('1', '10', '100', '1,000', '10,000', '100,000', '1,000,000', '10,000,000'))
 	axis(1, at = fstOfMnths, col.lab='#1A232F', col.axis='#666D74', 
 		labels = mnthNms)
+	if(smoothClimatology)	{
+		smoothedQ05 = ksmooth(time(forecastOutput$Date), forecastOutput$Clim_Q05, kernel = 'normal', bandwidth = 13)$y
+		smoothedQ50 = ksmooth(time(forecastOutput$Date), forecastOutput$Clim_Q50, kernel = 'normal', bandwidth = 13)$y
+		smoothedQ95 = ksmooth(time(forecastOutput$Date), forecastOutput$Clim_Q95, kernel = 'normal', bandwidth = 13)$y
+		for(smoother in 1:100)	{
+			ymaxvals = c(smoothedQ50 + (smoother * 0.01) * (smoothedQ95 - smoothedQ50),
+				rev(smoothedQ50 - (smoother * 0.01) * (smoothedQ50 - smoothedQ05)))
+			polygon(x=c(forecastOutput$Date, rev(forecastOutput$Date)), y=ymaxvals,
+				col=adjustcolor('#666D74', alpha.f=(0.01)), border=NA)
+		}
+	}	else	{
+		polygon(x=c(forecastOutput$Date, rev(forecastOutput$Date)), y=c(forecastOutput$Clim_Q95, rev(forecastOutput$Clim_Q05)),
+			col=adjustcolor('#666D74', alpha.f=0.1), border=NA)
+		polygon(x=c(forecastOutput$Date, rev(forecastOutput$Date)), y=c(forecastOutput$Clim_Q25, rev(forecastOutput$Clim_Q75)),
+			col=adjustcolor('#666D74', alpha.f=0.2), border=NA)
+		lines(forecastOutput$Date, forecastOutput$Clim_Q50, 
+			col=adjustcolor('#666D74', alpha.f=0.2), lwd=2.5)
+	 }
 	lines(forecastOutput$Date, forecastOutput$WaterYear_1YrAgo, 
 		col='#FDB600', lwd=4, lty = 2)
 	lines(forecastOutput$Date, forecastOutput$WaterYear_2YrAgo, 
 		col='#FDB600', lwd=4, lty = 3)
-	polygon(x=c(forecastOutput$Date, rev(forecastOutput$Date)), y=c(forecastOutput$Clim_Q95, rev(forecastOutput$Clim_Q05)),
-		col=adjustcolor('#666D74', alpha.f=0.1), border=NA)
-	polygon(x=c(forecastOutput$Date, rev(forecastOutput$Date)), y=c(forecastOutput$Clim_Q25, rev(forecastOutput$Clim_Q75)),
-		col=adjustcolor('#666D74', alpha.f=0.2), border=NA)
-	lines(forecastOutput$Date, forecastOutput$Clim_Q50, 
-		col=adjustcolor('#666D74', alpha.f=0.2), lwd=2.5)
 	polygon(x=c(forecastCompletes$Date, rev(forecastCompletes$Date)), y=c(forecastCompletes$Pred_Q05, rev(forecastCompletes$Pred_Q95)),
 		col=adjustcolor('#0098B2', alpha.f=0.1), border=NA)
 	polygon(x=c(forecastCompletes$Date, rev(forecastCompletes$Date)), y=c(forecastCompletes$Pred_Q25, rev(forecastCompletes$Pred_Q75)),
@@ -1222,16 +1250,28 @@ seasonalStorageForecast_f = function(
 		axis(1, at = fstOfMnths,col.lab='#1A232F', col.axis='#666D74', 
 			labels = mnthNms)
 		abline(v=fstOfMnths, lwd=1, col=adjustcolor('#666D74', alpha.f=0.1))
+		if(smoothClimatology)	{
+			smoothedQ05 = ksmooth(time(forecastOutput$Date), forecastOutput$Clim_Q05, kernel = 'normal', bandwidth = 13)$y
+			smoothedQ50 = ksmooth(time(forecastOutput$Date), forecastOutput$Clim_Q50, kernel = 'normal', bandwidth = 13)$y
+			smoothedQ95 = ksmooth(time(forecastOutput$Date), forecastOutput$Clim_Q95, kernel = 'normal', bandwidth = 13)$y
+			for(smoother in 1:100)	{
+				ymaxvals = c(smoothedQ50 + (smoother * 0.01) * (smoothedQ95 - smoothedQ50),
+					rev(smoothedQ50 - (smoother * 0.01) * (smoothedQ50 - smoothedQ05)))
+				polygon(x=c(forecastOutput$Date, rev(forecastOutput$Date)), y=ymaxvals,
+					col=adjustcolor('#666D74', alpha.f=(0.01)), border=NA)
+			}
+		}	else	{
+			polygon(x=c(forecastOutput$Date, rev(forecastOutput$Date)), y=c(forecastOutput$Clim_Q95, rev(forecastOutput$Clim_Q05)),
+				col=adjustcolor('#666D74', alpha.f=0.1), border=NA)
+			polygon(x=c(forecastOutput$Date, rev(forecastOutput$Date)), y=c(forecastOutput$Clim_Q25, rev(forecastOutput$Clim_Q75)),
+				col=adjustcolor('#666D74', alpha.f=0.2), border=NA)
+			lines(forecastOutput$Date, forecastOutput$Clim_Q50, 
+				col=adjustcolor('#666D74', alpha.f=0.2), lwd=2.5)
+		}
 		lines(forecastOutput$Date, forecastOutput$WaterYear_1YrAgo, 
 			col='#FDB600', lwd=4, lty = 2)
 		lines(forecastOutput$Date, forecastOutput$WaterYear_2YrAgo, 
 			col='#FDB600', lwd=4, lty = 3)
-		polygon(x=c(forecastOutput$Date, rev(forecastOutput$Date)), y=c(forecastOutput$Clim_Q95, rev(forecastOutput$Clim_Q05)),
-			col=adjustcolor('#666D74', alpha.f=0.1), border=NA)
-		polygon(x=c(forecastOutput$Date, rev(forecastOutput$Date)), y=c(forecastOutput$Clim_Q25, rev(forecastOutput$Clim_Q75)),
-			col=adjustcolor('#666D74', alpha.f=0.2), border=NA)
-		lines(forecastOutput$Date, forecastOutput$Clim_Q50, 
-			col=adjustcolor('#666D74', alpha.f=0.2), lwd=2.5)
 		forecastCompletes = forecastOutput[!is.na(forecastOutput$Pred_Q50),]
 		polygon(x=c(forecastCompletes$Date, rev(forecastCompletes$Date)), y=c(forecastCompletes$Pred_Q05, rev(forecastCompletes$Pred_Q95)),
 			col=adjustcolor('#0098B2', alpha.f=0.1), border=NA)
@@ -1284,13 +1324,22 @@ seasonalStorageForecast_f = function(
 		labels = mnthNms)
 	abline(v=fstOfMnths, lwd=1, col=adjustcolor('#666D74', alpha.f=0.1))
 	abline(v=forecastOutput$Date[length(which(!is.na(forecastOutput$WaterYear_1YrAgo)))], col='black')
-	polygon(x=c(forecastOutput$Date, rev(forecastOutput$Date)), y=c(forecastOutput$Clim_Q95, rev(forecastOutput$Clim_Q05)),
-		col=adjustcolor('#666D74', alpha.f=0.1), border=NA)
-	polygon(x=c(forecastOutput$Date, rev(forecastOutput$Date)), y=c(forecastOutput$Clim_Q25, rev(forecastOutput$Clim_Q75)),
-		col=adjustcolor('#666D74', alpha.f=0.2), border=NA)
-	lines(forecastOutput$Date, forecastOutput$Clim_Q50, 
-		col=adjustcolor('#666D74', alpha.f=0.2), lwd=2.5)
-	lines(forecastOutput$Date, forecastOutput$WaterYear_1YrAgo, 
+	if(smoothClimatology)	{
+		for(smoother in 1:100)	{
+			ymaxvals = c(forecastOutput$Clim_Q50 + (smoother * 0.01) * (forecastOutput$Clim_Q95 - forecastOutput$Clim_Q50),
+				rev(forecastOutput$Clim_Q50 - (smoother * 0.01) * (forecastOutput$Clim_Q50 - forecastOutput$Clim_Q05)))
+			polygon(x=c(forecastOutput$Date, rev(forecastOutput$Date)), y=ymaxvals,
+				col=adjustcolor('#666D74', alpha.f=(0.01)), border=NA)
+		}
+	}	else	{
+		polygon(x=c(forecastOutput$Date, rev(forecastOutput$Date)), y=c(forecastOutput$Clim_Q95, rev(forecastOutput$Clim_Q05)),
+			col=adjustcolor('#666D74', alpha.f=0.1), border=NA)
+		polygon(x=c(forecastOutput$Date, rev(forecastOutput$Date)), y=c(forecastOutput$Clim_Q25, rev(forecastOutput$Clim_Q75)),
+			col=adjustcolor('#666D74', alpha.f=0.2), border=NA)
+		lines(forecastOutput$Date, forecastOutput$Clim_Q50, 
+			col=adjustcolor('#666D74', alpha.f=0.2), lwd=2.5)
+	}
+		lines(forecastOutput$Date, forecastOutput$WaterYear_1YrAgo, 
 		col='#0098B2', lwd=5, lty = 1)
 	lines(forecastOutput$Date, forecastOutput$WaterYear_2YrAgo, 
 		col='#FDB600', lwd=4, lty = 2)
