@@ -922,9 +922,9 @@ seasonalStreamflowForecast_f = function(
 	lines(forecastOutput$Date, forecastOutput$WaterYear_1YrAgo, 
 		col='#0098B2', lwd=5, lty = 1)
 	lines(forecastOutput$Date, forecastOutput$WaterYear_2YrAgo, 
-		col='#FDB600', lwd=4, lty = 2)
+		col='#B91863', lwd=4, lty = 2)
 	lines(forecastOutput$Date, forecastOutput$WaterYear_3YrAgo, 
-		col='#FDB600', lwd=4, lty = 3)
+		col='#B91863', lwd=4, lty = 3)
 	text(x=forecastOutput$Date[1], y=max(forecastOutput$Clim_Q95)*0.95,
 		paste0('Water Year Record for ', basinName),
 		adj = c(0,0), font=2, col='#F06000', family='A', cex=2*1.3)
@@ -977,9 +977,9 @@ seasonalStreamflowForecast_f = function(
 	lines(forecastOutput$Date, forecastOutput$WaterYear_1YrAgo, 
 		col='#0098B2', lwd=5, lty = 1)
 	lines(forecastOutput$Date, forecastOutput$WaterYear_2YrAgo, 
-		col='#FDB600', lwd=4, lty = 2)
+		col='#B91863', lwd=4, lty = 2)
 	lines(forecastOutput$Date, forecastOutput$WaterYear_3YrAgo, 
-		col='#FDB600', lwd=4, lty = 3)
+		col='#B91863', lwd=4, lty = 3)
 	text(x=forecastOutput$Date[20], y=min(forecastOutput$Clim_Q05)*1.05,
 		paste0('Water Year Record for ', basinName, ';   Issued on ', forecastDate,
 			';   Currently ',
@@ -1014,7 +1014,8 @@ seasonalStorageForecast_f = function(
 	gageLonLat = c(1,1),
 	biasCorrection = TRUE,
 	uploadToGCS = TRUE,
-	incldStorage = TRUE)
+	incldStorage = TRUE,
+	smoothClimatology = FALSE)
 	{
 
 	if(file.exists(paste0(dataOut_location, "calibration_", basinName, ".csv")))	{
@@ -1290,7 +1291,7 @@ seasonalStorageForecast_f = function(
 				ymaxvals = c(smoothedQ50 + (smoother * 0.01) * (smoothedQ95 - smoothedQ50),
 					rev(smoothedQ50 - (smoother * 0.01) * (smoothedQ50 - smoothedQ05)))
 				polygon(x=c(forecastOutput$Date, rev(forecastOutput$Date)), y=ymaxvals,
-					col=adjustcolor('#A9BF2C', alpha.f=(0.01)), border=NA)
+					col=adjustcolor('#666D74', alpha.f=(0.01)), border=NA)
 			}
 		}	else	{
 			polygon(x=c(forecastOutput$Date, rev(forecastOutput$Date)), y=c(smoothedQ05, rev(smoothedQ95)),
@@ -1374,9 +1375,9 @@ seasonalStorageForecast_f = function(
 	lines(forecastOutput$Date, forecastOutput$WaterYear_1YrAgo, 
 		col='#0098B2', lwd=5, lty = 1)
 	lines(forecastOutput$Date, forecastOutput$WaterYear_2YrAgo, 
-		col='#FDB600', lwd=4, lty = 2)
+		col='#B91863', lwd=4, lty = 2)
 	lines(forecastOutput$Date, forecastOutput$WaterYear_3YrAgo, 
-		col='#FDB600', lwd=4, lty = 3)
+		col='#B91863', lwd=4, lty = 3)
 	text(x=forecastOutput$Date[1], y=max(forecastOutput$Clim_Q95)*0.95,
 		paste0('Water Year Record for ', basinName),
 		adj = c(0,0), font=2, col='#F06000', family='A', cex=2*1.3)
