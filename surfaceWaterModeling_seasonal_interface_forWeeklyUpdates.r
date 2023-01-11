@@ -9,8 +9,8 @@ theseBasins = data.frame(basinSymbol = 	c('CLE',		'ISB',		'EXC',		'ORO',		'SHA',
 						incldStorage = 	c(TRUE, 		TRUE,		TRUE,		TRUE,		TRUE,		TRUE,		TRUE,		FALSE,		FALSE),
 						maxStorage = 	c(2447650,		568000,		1024600,	3537577,	4552000,	977000,		1000000,	520500,		185600))
 
-yesterdaysDate = '2023-01-02'	# historic data is released every day for the day prior
-forecastDate = '03JAN2023'		# 
+yesterdaysDate = '2023-01-08'	# historic data is released every day for the day prior
+forecastDate = '09JAN2023'		# 
 waterYearStart = as.Date('2022-10-01')
 
 	# these file locations remain the same for all watersheds of a region
