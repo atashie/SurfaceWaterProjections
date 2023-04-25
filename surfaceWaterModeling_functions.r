@@ -607,7 +607,6 @@ seasonalStreamflowForecast_f = function(
 		seas5ClimateInput = readRDS(paste0(dataOut_location, 'SEAS5_', basinName, '.RData')) # reads in a list with each [[i]] being output from a model
 		era5ClimateInput = as.data.table(readRDS(paste0(dataOut_location, 'ERA5_', basinName, '.RData')))
 
-	
 			# reading in calibrated parameterizations and selecting a subsample based on minimum monthly bias
 		calibratedVarsAll = subset(fread(paste0(dataOut_location, "calibration_", basinName, ".csv")), !is.na(kgeAll))
 		calibratedVars = head(calibratedVarsAll[order(abs(calibratedVarsAll$mnthSumAbsBias)), ], 40)
@@ -713,13 +712,12 @@ seasonalStreamflowForecast_f = function(
 		}
 	}	else	{print("Ya gotta calibrate the model first you big ole dummy!")}
 		####			prevRecord = which(climateAndStreamflowOutput$Date < waterYearStart)
-	forecastThisWY = subset(allForecastsOutput, Date >= waterYearStart)
+	forecastThisWY = subset(allForecastsOutput, Date >= waterYearStart & Date < waterYearStart + years(1))
 	if(last(historicStreamflow$Date) >= waterYearStart)	{
 		whichRecentStreamflow = which(historicStreamflow$Date >= waterYearStart)
 		forecastThisWY[1:length(whichRecentStreamflow), -1] = historicStreamflow$AcFtPDay_inflow[whichRecentStreamflow]
 	}
 	forecastThisWY[ , -1] = apply(forecastThisWY[ , -1], 2, cumsum)
-		
 	
 		# cleaning hist data by interpolation
 	if(is.na(historicStreamflow$AcFtPDay_inflow[1]) | is.na(last(historicStreamflow$AcFtPDay_inflow)))	{
