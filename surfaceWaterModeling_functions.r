@@ -5,6 +5,7 @@
 basinDelineation_f = function(
 	gageLonLat = c(-79,36),
 	basinATLAS_locationAndFile = 'basinATLAS_location.gdb',
+	simpleBasinAtlas = TRUE, # if we are not using layers
 	dataOut_location = 'save_file_location',
 	basinName = 'inster_basin_or_outlet_name')
 	{
@@ -27,7 +28,11 @@ basinDelineation_f = function(
 	##################################################
 	#### reading basinATLAS data and intersecting with gage location
 		#BasinATLAS available via hydrosheds.org
+	if(simpleBasinAtlas) {
+	basinAt12 = st_read(dsn=basinATLAS_locationAndFile)
+	} else {
 	basinAt12 = st_read(dsn=basinATLAS_locationAndFile, layer="BasinATLAS_v10_lev12")
+	}
 	gageLocation_asSF = st_sfc(st_point(gageLonLat))
 	st_crs(gageLocation_asSF) = 4326
 	gageIntersection = as.numeric(st_intersects(gageLocation_asSF, st_buffer(basinAt12,0))) # keeps points
