@@ -16,6 +16,7 @@ require(sf)
 sf::sf_use_s2(FALSE)
 require(ecmwfr)  # For accessing ERA5 data
 require(terra)   # For spatial operations
+require(ncdf4)
 
 
 ##### Streamflow signatures
@@ -814,8 +815,6 @@ analyze_flow_timing_trends <- function(streamflow_data) {
 
 
 
-#############################################################
-### as yet unimplemented code
 
 calculate_median_flow_dates <- function(streamflow_data) {
   # Check if required columns exist
@@ -876,6 +875,259 @@ calculate_median_flow_dates <- function(streamflow_data) {
 
 
 
+# -----------------------------------------------------------------------------
+# Helper function to generate streamflow data.table from Caravan NetCDF files
+# -----------------------------------------------------------------------------
+generate_streamflow_dt_caravan <- function(nc_file_path, 
+                                           min_num_years_data = 20, # Renamed to avoid conflict with outer scope min_num_years
+                                           start_date_filter = as.Date("1900-01-01"), 
+                                           end_date_filter = as.Date("2024-12-31")) {
+  
+  if (!file.exists(nc_file_path)) {
+    warning("NetCDF file not found: ", nc_file_path)
+    return(NULL)
+  }
+  
+  tryCatch({
+    nc_data <- nc_open(nc_file_path)
+    
+    # Extract streamflow data
+    streamflow_raw <- ncvar_get(nc_data, "streamflow")
+
+    #####!!!!!!
+    #####!!!!!!
+    # Extract other dimensions as needed here
+    #####!!!!!!
+    #####!!!!!!
+    
+    # Extract date dimension
+    # 'date' is the dimension name and units are "days since 1951-01-01"
+    time_raw <- ncvar_get(nc_data, "date")
+    time_units <- ncatt_get(nc_data, "date", "units")$value
+    
+    nc_close(nc_data)
+    
+    if (is.null(streamflow_raw) || is.null(time_raw)) {
+      warning("Streamflow or date variable not found in: ", nc_file_path)
+      return(NULL)
+    }
+    
+    # Convert time to Date objects
+    # Expected format: "days since YYYY-MM-DD HH:MM:SS"
+    origin_date_str <- sub("days since ", "", time_units)
+    origin_date <- as.Date(origin_date_str, format="%Y-%m-%d %H:%M:%S")
+    if (is.na(origin_date)) { # Try without time if first parse fails
+      origin_date <- as.Date(sub("days since ", "", time_units))
+    }
+    if (is.na(origin_date)) {
+      warning("Could not parse origin date from units: ", time_units, " in file: ", nc_file_path)
+      return(NULL)
+    }
+    
+    dates <- as.Date(time_raw, origin = origin_date)
+    
+    stream_dt <- data.table(Date = dates, Q = as.numeric(streamflow_raw))
+    
+    # Filter by overall start and end date
+    stream_dt <- stream_dt[Date >= start_date_filter & Date <= end_date_filter]
+    
+    if (nrow(stream_dt) == 0) {
+      message("No data within the specified date range for: ", basename(nc_file_path))
+      return(NULL)
+    }
+    
+    # Add year, month, doy
+    stream_dt[, year := year(Date)]
+    stream_dt[, month := month(Date)]
+    stream_dt[, doy := yday(Date)]
+    
+    # Check for minimum number of years of data
+    if (length(unique(stream_dt$year)) < min_num_years_data) {
+      message("Insufficient years of data (", length(unique(stream_dt$year)), 
+              " years) after date filtering for: ", basename(nc_file_path), 
+              " (min_num_years_data: ", min_num_years_data, ")")
+      return(NULL)
+    }
+    
+    # Assuming Caravan 'streamflow' is already in desired units (e.g., mm/day)
+    # If conversion is needed, it would be done here.
+    # For consistency with generate_streamflow_dt, ensure Q is numeric.
+    stream_dt[, Q := as.numeric(Q)]
+    
+    return(stream_dt)
+    
+  }, error = function(e) {
+    warning("Error processing NetCDF file ", nc_file_path, ": ", e$message)
+    return(NULL)
+  })
+}
+
+
+# -----------------------------------------------------------------------------
+# Main wrapper function to process Caravan data for a given data_project
+# -----------------------------------------------------------------------------
+process_caravan_gages <- function(data_project_arg, caravan_base_dir, 
+                                  min_num_years, start_date, end_date, 
+                                  min_Q_value_and_days, output_file) {
+  
+  # Construct path to the data_project directory
+  project_data_path <- file.path(caravan_base_dir, "timeseries", "netcdf", data_project_arg)
+  
+  if (!dir.exists(project_data_path)) {
+    stop("Caravan project data directory not found: ", project_data_path)
+  }
+  
+  # List all NetCDF files for the data_project
+  nc_files <- list.files(project_data_path, pattern = paste0("^", data_project_arg, "_.*\\.nc$"), full.names = TRUE)
+  
+  if (length(nc_files) == 0) {
+    cat("No NetCDF files found for data_project '", data_project_arg, "' in ", project_data_path, "\n")
+    return(data.table()) # Return empty data.table
+  }
+  
+  # Check if output file exists; if so, read it.
+  if (file.exists(output_file)) {
+    summary_output <- fread(output_file, colClasses = list(character = c("watershed_id", "data_project")))
+    # Ensure types after reading, especially if integer64 might occur
+    if ("watershed_id" %in% names(summary_output)) summary_output[, watershed_id := as.character(watershed_id)]
+    if ("data_project" %in% names(summary_output)) summary_output[, data_project := as.character(data_project)]
+    cat("Loaded existing summary data with", nrow(summary_output), "rows from '", output_file, "'\n")
+  } else {
+    summary_output <- data.table(
+      watershed_id = character(),
+      data_project = character(),
+      latitude = numeric(),      # Will be NA for Caravan unless metadata is sourced elsewhere
+      longitude = numeric(),     # Will be NA for Caravan
+      basin_area = numeric()     # Will be NA for Caravan
+      # Metric columns will be added by rbind with fill=TRUE
+    )
+    cat("Created new summary data table for '", output_file, "'\n")
+    # fwrite(summary_output, output_file) # Write header only if file is new
+  }
+  
+  # Create a unique identifier for already processed watersheds in the current output file
+  if (nrow(summary_output) > 0 && all(c("watershed_id", "data_project") %in% names(summary_output))) {
+    processed_identifiers <- paste(summary_output$watershed_id, summary_output$data_project, sep = "_")
+  } else {
+    processed_identifiers <- character(0)
+  }
+  
+  # Process each NetCDF file (watershed)
+  for (i in 1:length(nc_files)) {
+    nc_file_path <- nc_files[i]
+    filename_base <- tools::file_path_sans_ext(basename(nc_file_path))
+    
+    # Extract watershed_id from filename (e.g., "camels_01013500" -> "01013500")
+    watershed_id <- sub(paste0("^", data_project_arg, "_"), "", filename_base)
+    
+    current_identifier <- paste(watershed_id, data_project_arg, sep = "_")
+    if (current_identifier %in% processed_identifiers) {
+      cat("Skipping watershed", watershed_id, "(data_project:", data_project_arg, ") as it's already in the output\n")
+        # note: there are redundancies between the camels and hysets datasets, so redundancy is expected
+      next
+    }
+    
+    cat("Processing watershed", watershed_id, "(data_project:", data_project_arg, ") (", i, "of", length(nc_files), ")\n")
+    
+    tryCatch({
+      streamflow_data <- generate_streamflow_dt_caravan(
+        nc_file_path = nc_file_path,
+        min_num_years_data = min_num_years, # Pass the overall min_num_years for the internal check
+        start_date_filter = start_date,
+        end_date_filter = end_date
+      )
+      
+      if (is.null(streamflow_data) || !is.data.frame(streamflow_data) || nrow(streamflow_data) == 0) {
+        cat("No valid streamflow data for watershed", watershed_id, "(data_project:", data_project_arg, ")\n")
+        next
+      }
+      
+      # Ensure required columns from generate_streamflow_dt_caravan are present
+      required_cols_from_generation <- c("Date", "Q", "year", "month", "doy")
+      if (!all(required_cols_from_generation %in% colnames(streamflow_data))) {
+        cat("Missing required columns (Date, Q, year, month, doy) from generate_streamflow_dt_caravan for watershed", watershed_id, "\n")
+        next
+      }
+      
+      # Apply min_Q_value_and_days filter (similar to process_gages)
+      years_to_use <- NULL
+      for (this_year in unique(streamflow_data$year)) {
+        test_year <- subset(streamflow_data, year == this_year)
+        # Ensure Q is numeric for comparison
+        if(!is.numeric(test_year$Q)) test_year$Q <- as.numeric(test_year$Q)
+        
+        # Handle potential NAs in Q before comparison
+        valid_q_values <- test_year$Q[!is.na(test_year$Q)]
+        nonzero_rows <- which(valid_q_values > min_Q_value_and_days[1])
+        
+        if (length(nonzero_rows) >= min_Q_value_and_days[2]) { # Use >= to match intent
+          years_to_use <- c(years_to_use, this_year)
+        }
+      }
+      
+      # This check for min_num_years is applied *after* the min_Q_value_and_days filter per year
+      if (length(years_to_use) < min_num_years) { # Use <, if 20 years are required, 19 is not enough
+        cat("Insufficient years (", length(years_to_use), ") with valid data after Q filter for watershed", watershed_id, 
+            "(data_project:", data_project_arg, "). Required:", min_num_years, "\n")
+        next
+      }
+      
+      streamflow_data_filtered <- streamflow_data[streamflow_data$year %in% years_to_use, ]
+      
+      if (nrow(streamflow_data_filtered) == 0) {
+        cat("No data remaining after year filtering for watershed", watershed_id, "\n")
+        next
+      }
+      
+      # Calculate metrics using existing functions
+      # Ensure streamflow_data_filtered has the columns expected by these functions
+      # (Date, Q, year, month, doy)
+      
+      cat("Calculating metrics for watershed", watershed_id, "...\n")
+      metrics_flow_vols <- calculate_flow_vols_by_year(streamflow_data_filtered)
+      metrics_fdc_trends <- analyze_fdc_trends_from_streamflow(streamflow_data_filtered)
+      metrics_flashiness <- analyze_flashiness_trends(streamflow_data_filtered)
+      metrics_flow_timing <- analyze_flow_timing_trends(streamflow_data_filtered)
+      # Add other metric calculations here if needed
+      
+      # Create a row for this watershed
+      watershed_row <- data.table(
+        watershed_id = watershed_id,
+        data_project = data_project_arg,
+        latitude = NA_real_,  # Caravan .nc files for timeseries don't typically store this
+        longitude = NA_real_, # Caravan .nc files for timeseries don't typically store this
+        basin_area = NA_real_,# Caravan .nc files for timeseries don't typically store this
+        num_years = length(years_to_use),
+        start_year = min(years_to_use),
+        end_year = max(years_to_use)
+      )
+      
+      # Combine base watershed info with calculated metrics
+      # Ensure metric results are data.tables or can be coerced
+      watershed_row <- cbind(watershed_row, 
+                             as.data.table(metrics_flow_vols),
+                             as.data.table(metrics_fdc_trends),
+                             as.data.table(metrics_flashiness),
+                             as.data.table(metrics_flow_timing))
+      
+      summary_output <- rbind(summary_output, watershed_row, fill = TRUE)
+      fwrite(summary_output, output_file) # Write after each successful processing
+      cat("Successfully processed and saved watershed", watershed_id, "(data_project:", data_project_arg, ")\n")
+      
+    }, error = function(e) {
+      cat("Error processing watershed", watershed_id, "(data_project:", data_project_arg, "):", e$message, "\n")
+    })
+  }
+  
+  cat("Finished processing all files for data_project '", data_project_arg, "'.\n")
+  return(summary_output)
+}
+
+
+
+
+####################################################################
+## not yet implemented
 
 get_era5land_for_basins <- function(basin_ids, basin_polygons, 
                                     start_year = 1980, end_year = 2021,
