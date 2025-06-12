@@ -172,6 +172,8 @@ process_gages_rawData <- function(gages_df, gage_type, min_num_years, start_date
       metrics_flow_timing <- NULL
       metrics_pulses <- NULL
       metrics_baseflow <- NULL
+      metrics_recession <- NULL
+      
       
       # Calculate each metric with error handling
       tryCatch({
@@ -210,6 +212,13 @@ process_gages_rawData <- function(gages_df, gage_type, min_num_years, start_date
         cat("Error calculating baseflow indices for gage", gage_id, ":", e$message, "\n")
       })
       
+      tryCatch({
+        metrics_recession <- analyze_recession_parameters(streamflow_data_filtered)
+      }, error = function(e) {
+        cat("Error calculating recession indices for gage", gage_id, ":", e$message, "\n")
+      })
+      
+      
       # Note: We skip analyze_Q_PPT_relationships() for USGS/Canadian gages 
       # because PPT data is not available in the current data retrieval setup
       
@@ -246,7 +255,9 @@ process_gages_rawData <- function(gages_df, gage_type, min_num_years, start_date
       if (!is.null(metrics_baseflow)) {
         gage_row <- cbind(gage_row, as.data.table(metrics_baseflow))
       }
-      
+      if (!is.null(metrics_recession)) {
+        gage_row <- cbind(gage_row, as.data.table(metrics_recession))
+      }
       # Add NA columns for Q-PPT metrics that we can't calculate
       q_ppt_cols <- c("annual_runoff_ratio_slp", "annual_runoff_ratio_rho", 
                       "annual_runoff_ratio_pval", "annual_runoff_ratio_mean", 
@@ -1754,6 +1765,435 @@ analyze_baseflow_indices <- function(streamflow_data) {
 
 
 
+analyze_recession_parameters <- function(streamflow_data) {
+  # Check if required columns exist
+  required_cols <- c("year", "Q", "doy")
+  if (!all(required_cols %in% colnames(streamflow_data))) {
+    missing <- required_cols[!required_cols %in% colnames(streamflow_data)]
+    stop(paste("Missing required columns:", paste(missing, collapse=", ")))
+  }
+  
+  # Check if zyp package is available
+  if (!requireNamespace("zyp", quietly = TRUE)) {
+    stop("Package 'zyp' is needed for this function. Please install it with install.packages('zyp')")
+  }
+  
+  # Define signatures that will have standard stats
+  # Note: now using log_a instead of a
+  signatures_with_stats <- c("log_a_pointcloud", "log_a_events", "b_pointcloud", "b_events", "concavity")
+  stats <- c("slp", "rho", "pval", "mean", "median")
+  
+  # Define seasonality signatures (these will only have values, no stats)
+  seasonality_signatures <- c("log_a_seasonality_amplitude_all", "log_a_seasonality_minimum_all",
+                              "log_a_seasonality_amplitude_first_half", "log_a_seasonality_minimum_first_half",
+                              "log_a_seasonality_amplitude_last_half", "log_a_seasonality_minimum_last_half")
+  
+  # Initialize results data frame
+  n_cols <- length(signatures_with_stats) * length(stats) + length(seasonality_signatures)
+  result <- data.frame(matrix(NA, nrow=1, ncol=n_cols))
+  
+  # Set column names
+  col_names <- c()
+  # Add columns for signatures with stats
+  for (sig in signatures_with_stats) {
+    for (stat in stats) {
+      col_names <- c(col_names, paste0(sig, "_", stat))
+    }
+  }
+  # Add columns for seasonality signatures (no stats)
+  col_names <- c(col_names, seasonality_signatures)
+  colnames(result) <- col_names
+  
+  # Function to identify recession events (unchanged)
+  identify_recession_events <- function(Q_vector, min_length = 5) {
+    n <- length(Q_vector)
+    if (n < min_length + 1) return(list())
+    
+    # Calculate dQ/dt (using forward difference)
+    dQ_dt <- c(diff(Q_vector), NA)
+    
+    # Initialize list to store recession events
+    recession_events <- list()
+    
+    # Track current recession
+    in_recession <- FALSE
+    start_idx <- NA
+    
+    for (i in 1:(n-min_length)) {
+      # Check if we have valid data
+      if (is.na(Q_vector[i]) || is.na(dQ_dt[i])) {
+        if (in_recession) {
+          # End current recession if we hit NA
+          if (!is.na(start_idx) && (i - start_idx) >= min_length) {
+            recession_events[[length(recession_events) + 1]] <- list(
+              start = start_idx,
+              end = i - 1,
+              indices = start_idx:(i-1)
+            )
+          }
+          in_recession <- FALSE
+          start_idx <- NA
+        }
+        next
+      }
+      
+      # Check for monotonic decrease in both Q and |dQ/dt|
+      if (i < n - 1) {
+        # Need at least min_length consecutive days
+        is_recession <- TRUE
+        
+        # Check next min_length days
+        for (j in 0:(min_length-2)) {
+          if (i+j+1 > n || is.na(Q_vector[i+j]) || is.na(Q_vector[i+j+1]) || 
+              is.na(dQ_dt[i+j]) || is.na(dQ_dt[i+j+1])) {
+            is_recession <- FALSE
+            break
+          }
+          
+          # Check if Q is decreasing
+          if (Q_vector[i+j+1] >= Q_vector[i+j]) {
+            is_recession <- FALSE
+            break
+          }
+          
+          # Check if |dQ/dt| is decreasing (becoming less negative)
+          if (abs(dQ_dt[i+j+1]) >= abs(dQ_dt[i+j])) {
+            is_recession <- FALSE
+            break
+          }
+        }
+        
+        if (is_recession && !in_recession) {
+          # Start new recession
+          in_recession <- TRUE
+          start_idx <- i
+        } else if (!is_recession && in_recession) {
+          # End current recession
+          if (!is.na(start_idx) && (i - start_idx) >= min_length) {
+            recession_events[[length(recession_events) + 1]] <- list(
+              start = start_idx,
+              end = i - 1,
+              indices = start_idx:(i-1)
+            )
+          }
+          in_recession <- FALSE
+          start_idx <- NA
+        }
+      }
+    }
+    
+    # Check if we ended in a recession
+    if (in_recession && !is.na(start_idx) && (n - start_idx) >= min_length) {
+      recession_events[[length(recession_events) + 1]] <- list(
+        start = start_idx,
+        end = n,
+        indices = start_idx:n
+      )
+    }
+    
+    return(recession_events)
+  }
+  
+  # Function to fit recession parameters for a single event (now returning log_a)
+  fit_recession_event <- function(Q_values, remove_first_day = TRUE) {
+    if (remove_first_day && length(Q_values) > 1) {
+      Q_values <- Q_values[-1]
+    }
+    
+    n <- length(Q_values)
+    if (n < 3) return(list(log_a = NA, b = NA))
+    
+    # Calculate -dQ/dt
+    dQ_dt <- -diff(Q_values)
+    Q_subset <- Q_values[-length(Q_values)]
+    
+    # Remove any non-positive values for log transformation
+    valid_idx <- which(Q_subset > 0 & dQ_dt > 0)
+    if (length(valid_idx) < 2) return(list(log_a = NA, b = NA))
+    
+    Q_valid <- Q_subset[valid_idx]
+    dQ_dt_valid <- dQ_dt[valid_idx]
+    
+    # Fit in log-log space: log(-dQ/dt) = log(a) + b*log(Q)
+    tryCatch({
+      fit <- lm(log(dQ_dt_valid) ~ log(Q_valid))
+      b_est <- coef(fit)[2]
+      log_a_est <- coef(fit)[1]  # This is already log(a)
+      
+      return(list(log_a = log_a_est, b = b_est))
+    }, error = function(e) {
+      return(list(log_a = NA, b = NA))
+    })
+  }
+  
+  # Function to fit sinusoidal model to log(a) values
+  fit_sinusoidal_model <- function(doy_values, log_a_values) {
+    # Remove NA values
+    valid_idx <- which(!is.na(log_a_values) & !is.na(doy_values))
+    if (length(valid_idx) < 10) {
+      return(list(amplitude = NA, minimum_doy = NA))
+    }
+    
+    doy_clean <- doy_values[valid_idx]
+    log_a_clean <- log_a_values[valid_idx]
+    
+    # Fit sinusoidal model: log(a) = A * sin(2π/365 * (doy - φ)) + C
+    tryCatch({
+      # Create design matrix
+      X <- cbind(
+        sin(2 * pi * doy_clean / 365),
+        cos(2 * pi * doy_clean / 365),
+        1  # intercept
+      )
+      
+      # Fit linear model
+      fit <- lm(log_a_clean ~ X - 1)  # -1 because X already includes intercept
+      
+      B1 <- coef(fit)[1]
+      B2 <- coef(fit)[2]
+      C <- coef(fit)[3]
+      
+      # Calculate amplitude and phase
+      amplitude <- sqrt(B1^2 + B2^2)
+      
+      # Calculate phase (in days)
+      phase_rad <- atan2(-B2, B1)
+      phase_days <- phase_rad * 365 / (2 * pi)
+      
+      # Ensure phase is between 0 and 365
+      if (phase_days < 0) phase_days <- phase_days + 365
+      
+      # Minimum occurs at phase + 273.75 days
+      minimum_doy <- phase_days + 273.75
+      if (minimum_doy > 365) minimum_doy <- minimum_doy - 365
+      
+      return(list(amplitude = amplitude, minimum_doy = minimum_doy))
+      
+    }, error = function(e) {
+      return(list(amplitude = NA, minimum_doy = NA))
+    })
+  }
+  
+  # Initialize storage for annual metrics
+  years <- unique(streamflow_data$year)
+  annual_metrics <- data.frame(
+    year = years,
+    log_a_pointcloud = NA,
+    log_a_events = NA,
+    b_pointcloud = NA,
+    b_events = NA,
+    concavity = NA
+  )
+  
+  # Store all recession events with their timing
+  all_recession_events <- list()
+  
+  # Process entire dataset to identify all recession events
+  # Sort by year and doy
+  streamflow_data <- streamflow_data[order(streamflow_data$year, streamflow_data$doy), ]
+  
+  # Process each year
+  for (yr in years) {
+    year_data <- streamflow_data[streamflow_data$year == yr, ]
+    
+    # Sort by day of year
+    year_data <- year_data[order(year_data$doy), ]
+    
+    # Identify recession events
+    recession_events <- identify_recession_events(year_data$Q)
+    
+    # Collect all recession data for point cloud analysis
+    all_Q <- numeric()
+    all_dQ_dt <- numeric()
+    
+    # Store individual event parameters
+    event_log_a_values <- numeric()
+    event_b_values <- numeric()
+    event_concavities <- numeric()
+    
+    # Process each recession event
+    for (event in recession_events) {
+      Q_event <- year_data$Q[event$indices]
+      
+      # Get the middle day of the recession event for timing
+      mid_idx <- event$indices[ceiling(length(event$indices)/2)]
+      event_doy <- year_data$doy[mid_idx]
+      
+      # Fit parameters for this event
+      event_params <- fit_recession_event(Q_event, remove_first_day = TRUE)
+      
+      if (!is.na(event_params$log_a) && !is.na(event_params$b)) {
+        event_log_a_values <- c(event_log_a_values, event_params$log_a)
+        event_b_values <- c(event_b_values, event_params$b)
+        
+        # Store event with its timing
+        all_recession_events[[length(all_recession_events) + 1]] <- list(
+          year = yr,
+          doy = event_doy,
+          log_a = event_params$log_a,
+          b = event_params$b
+        )
+        
+        # Calculate concavity (difference in b between first and second half)
+        if (length(Q_event) >= 6) {  # Need at least 6 points
+          mid_point <- floor(length(Q_event) / 2)
+          first_half <- Q_event[1:mid_point]
+          second_half <- Q_event[mid_point:length(Q_event)]
+          
+          params_first <- fit_recession_event(first_half, remove_first_day = FALSE)
+          params_second <- fit_recession_event(second_half, remove_first_day = FALSE)
+          
+          if (!is.na(params_first$b) && !is.na(params_second$b)) {
+            concavity <- params_second$b - params_first$b
+            event_concavities <- c(event_concavities, concavity)
+          }
+        }
+        
+        # Add to point cloud data (removing first day)
+        if (length(Q_event) > 1) {
+          Q_subset <- Q_event[-1]
+          dQ_subset <- -diff(Q_event[-1])
+          
+          valid_idx <- which(Q_subset[-length(Q_subset)] > 0 & dQ_subset > 0)
+          if (length(valid_idx) > 0) {
+            all_Q <- c(all_Q, Q_subset[-length(Q_subset)][valid_idx])
+            all_dQ_dt <- c(all_dQ_dt, dQ_subset[valid_idx])
+          }
+        }
+      }
+    }
+    
+
+    # Calculate median b for use in calculating log(a)
+    median_b <- median(event_b_values, na.rm = TRUE)
+    
+    # Point cloud analysis
+    if (length(all_Q) > 10) {
+      tryCatch({
+        # Fit b using point cloud
+        pc_fit <- lm(log(all_dQ_dt) ~ log(all_Q))
+        b_pointcloud <- coef(pc_fit)[2]
+        
+        # Calculate log(a) using median b
+        # For each point: log(a) = log(-dQ/dt) - b*log(Q)
+        log_a_values_pc <- log(all_dQ_dt) - median_b * log(all_Q)
+        log_a_pointcloud <- median(log_a_values_pc, na.rm = TRUE)
+        
+        annual_metrics$b_pointcloud[annual_metrics$year == yr] <- b_pointcloud
+        annual_metrics$log_a_pointcloud[annual_metrics$year == yr] <- log_a_pointcloud
+      }, error = function(e) {
+        # Leave as NA
+      })
+    }
+    
+    # Individual events analysis
+    if (length(event_log_a_values) > 0) {
+      # Calculate log(a) for events using median b
+      log_a_events_recalc <- numeric()
+      for (i in 1:length(recession_events)) {
+        if (i <= length(event_b_values) && !is.na(event_b_values[i])) {
+          event <- recession_events[[i]]
+          Q_event <- year_data$Q[event$indices]
+          if (length(Q_event) > 1) {
+            Q_subset <- Q_event[-1]  # Remove first day
+            dQ_subset <- -diff(Q_event[-1])
+            valid_idx <- which(Q_subset[-length(Q_subset)] > 0 & dQ_subset > 0)
+            if (length(valid_idx) > 0) {
+              log_a_vals <- log(dQ_subset[valid_idx]) - median_b * log(Q_subset[-length(Q_subset)][valid_idx])
+              log_a_events_recalc <- c(log_a_events_recalc, median(log_a_vals, na.rm = TRUE))
+            }
+          }
+        }
+      }
+      
+      if (length(log_a_events_recalc) > 0) {
+        annual_metrics$log_a_events[annual_metrics$year == yr] <- median(log_a_events_recalc, na.rm = TRUE)
+      }
+      
+      annual_metrics$b_events[annual_metrics$year == yr] <- median(event_b_values, na.rm = TRUE)
+    }
+    
+    # Concavity
+    if (length(event_concavities) > 0) {
+      annual_metrics$concavity[annual_metrics$year == yr] <- mean(event_concavities, na.rm = TRUE)
+    }
+  }
+  
+  # Check if we have enough data overall
+  total_valid_years <- sum(!is.na(annual_metrics$b_events))
+  if (total_valid_years < 3) {
+    # Not enough data, return all NAs
+    return(result)
+  }
+  
+  # Calculate trends for each signature with stats
+  for (sig in signatures_with_stats) {
+    valid_data <- annual_metrics[!is.na(annual_metrics[[sig]]), ]
+    
+    if (nrow(valid_data) >= 3) {
+      # Theil-Sen slope
+      formula <- as.formula(paste(sig, "~ year"))
+      sen_mod <- try(zyp::zyp.sen(formula, data=valid_data), silent=TRUE)
+      if (!inherits(sen_mod, "try-error")) {
+        result[[paste0(sig, "_slp")]] <- sen_mod$coeff[2]
+      }
+      
+      # Spearman correlation
+      spearmans <- try(cor.test(valid_data$year, valid_data[[sig]], method="spearman"), silent=TRUE)
+      if (!inherits(spearmans, "try-error")) {
+        result[[paste0(sig, "_rho")]] <- spearmans$estimate
+        result[[paste0(sig, "_pval")]] <- spearmans$p.value
+      }
+      
+      # Mean and median
+      result[[paste0(sig, "_mean")]] <- mean(valid_data[[sig]], na.rm=TRUE)
+      result[[paste0(sig, "_median")]] <- median(valid_data[[sig]], na.rm=TRUE)
+    }
+  }
+  
+  # Calculate seasonality of recession parameter log(a)
+  if (length(all_recession_events) >= 10) {
+    # Extract DOY and log(a) values from all events
+    event_doys <- sapply(all_recession_events, function(x) x$doy)
+    event_log_a_values <- sapply(all_recession_events, function(x) x$log_a)
+    event_years <- sapply(all_recession_events, function(x) x$year)
+    
+    # Fit sinusoidal model to all data
+    seasonality_all <- fit_sinusoidal_model(event_doys, event_log_a_values)
+    result$log_a_seasonality_amplitude_all <- seasonality_all$amplitude
+    result$log_a_seasonality_minimum_all <- seasonality_all$minimum_doy
+    
+    # Split into first and last half of years
+    median_year <- median(unique(event_years))
+    first_half_idx <- which(event_years <= median_year)
+    last_half_idx <- which(event_years > median_year)
+    
+    # Fit sinusoidal model to first half
+    if (length(first_half_idx) >= 10) {
+      seasonality_first <- fit_sinusoidal_model(event_doys[first_half_idx], 
+                                                event_log_a_values[first_half_idx])
+      result$log_a_seasonality_amplitude_first_half <- seasonality_first$amplitude
+      result$log_a_seasonality_minimum_first_half <- seasonality_first$minimum_doy
+    }
+    
+    # Fit sinusoidal model to last half
+    if (length(last_half_idx) >= 10) {
+      seasonality_last <- fit_sinusoidal_model(event_doys[last_half_idx], 
+                                               event_log_a_values[last_half_idx])
+      result$log_a_seasonality_amplitude_last_half <- seasonality_last$amplitude
+      result$log_a_seasonality_minimum_last_half <- seasonality_last$minimum_doy
+    }
+  }
+  
+  # Add annual_metrics as an attribute
+  attr(result, "recession_metrics_by_year") <- annual_metrics
+  attr(result, "recession_events") <- all_recession_events
+  
+  return(result)
+}
+
+
+
 
 
 
@@ -1974,6 +2414,7 @@ process_caravan_gages <- function(data_project_arg, caravan_base_dir,
       metrics_pulses <- calculate_pulse_metrics(streamflow_data_filtered)
       metrics_QtoPPT <- analyze_Q_PPT_relationships(streamflow_data_filtered)
       metrics_baseflow <- analyze_baseflow_indices(streamflow_data_filtered)
+      metrics_recession <- analyze_recession_parameters(streamflow_data_filtered)
       # Add other metric calculations here if needed
       
       # Create a row for this watershed
@@ -1997,7 +2438,8 @@ process_caravan_gages <- function(data_project_arg, caravan_base_dir,
                              as.data.table(metrics_flow_timing),
                              as.data.table(metrics_pulses),
                              as.data.table(metrics_QtoPPT),
-                             as.data.table(metrics_baseflow))
+                             as.data.table(metrics_baseflow),
+                             as.data.table(metrics_recession))
       
       summary_output <- rbind(summary_output, watershed_row, fill = TRUE)
       fwrite(summary_output, output_file) # Write after each successful processing

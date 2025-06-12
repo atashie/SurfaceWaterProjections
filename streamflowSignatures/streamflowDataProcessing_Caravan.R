@@ -13,7 +13,7 @@ caravan_main_dir = "D:/Caravan-nc/usr/local/google/home/kratzert/Data/Caravan-Ja
 caravan_output_file_camels = file.path(main_dir, "summary_data_caravan_hysets.csv") 
 
 # User configuration 
-start_date_analysis = as.Date("1973-01-01") 
+start_date_analysis = as.Date("1970-01-01") 
 end_date_analysis = as.Date("2024-12-31")   
 min_num_years_analysis = 20   # minimum period of record (years) required for inclusion in analysis
 min_Q_val_days = c(0.0001, 30) # minimum flow (mm) required before setting to NA; minimum number of non-NA days required to count a year 
