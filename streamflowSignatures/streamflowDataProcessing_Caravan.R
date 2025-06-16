@@ -1,5 +1,5 @@
 # Set the main directory
-main_dir = "C:/Users/arikt/Documents/GitHub/SurfaceWaterProjections/streamflowSignatures"
+main_dir = "C:\\Users\\18033\\Documents\\GitHub\\SurfaceWaterProjections\\streamflowSignatures"#"C:/Users/arikt/Documents/GitHub/SurfaceWaterProjections/streamflowSignatures"
 
 source(file.path(main_dir, "helperFunctions.R"), local=FALSE)
 
