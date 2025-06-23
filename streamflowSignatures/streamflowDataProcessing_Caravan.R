@@ -1,5 +1,5 @@
 # Set the main directory
-main_dir = "C:/Users/arikt/Documents/GitHub/SurfaceWaterProjections/streamflowSignatures"
+main_dir = "C:\\Users\\18033\\Documents\\GitHub\\SurfaceWaterProjections\\streamflowSignatures"#"C:/Users/arikt/Documents/GitHub/SurfaceWaterProjections/streamflowSignatures"
 
 source(file.path(main_dir, "helperFunctions.R"), local=FALSE)
 
@@ -36,5 +36,4 @@ if (exists("summary_camels_caravan") && nrow(summary_camels_caravan) > 0) {
   cat("Completed processing Caravan 'camels' project. Final summary data has", nrow(summary_camels_caravan), "rows\n")
   cat("Results saved to:", caravan_output_file_camels, "\n")
 }
-
 
