@@ -5,7 +5,7 @@
 # hydrological signatures and trends. It analyzes flow volumes, flow duration curves,
 # flashiness, and flow timing.
 #
-# Last updated: 4-MAR-2025
+# Last updated: 19-JUL-2025
 ################################################################################################
 
 # Set the main directory where data and results will be stored
@@ -20,12 +20,12 @@ source(file.path(main_dir, "helperFunctions.R"), local=FALSE)
 
 
 # Analysis period
-start_date = as.Date("1973-01-01")  # Modern data period
-end_date = as.Date("2024-12-31")    # End of analysis period
+start_date = as.Date("1979-10-01")  # Modern data period
+end_date = as.Date("2025-06-01")    # End of analysis period
 
 # Data quality thresholds
-min_num_years = 20    # Minimum number of years required for analysis
-min_nona_days = 250   # Minimum number of non-NA days per year
+min_num_years = 30    # Minimum number of years required for analysis
+min_nona_days = floor(365*.9)   # Minimum number of non-NA days per year
 min_Q_value_and_days = c(0.0001, 30)  # Min flow value (mm) and days above this value
 
 # Output file for results
@@ -45,9 +45,15 @@ if (!dir.exists(file.path(main_dir, "metadata"))) {
 tryCatch({
   conus_gages_raw = fread(file.path(metadata_dir, "gagesMetadata", "conterm_bas_classif.txt"),
                            colClasses = c("STAID" = "character", "AGGECOREGION" = "character")
-  )[CLASS=="Ref"]
+  )#[CLASS=="Ref"]
   conus_basinid = fread(file.path(metadata_dir, "gagesMetadata", "conterm_basinid.txt"), 
                          colClasses = c("STAID" = "character"))
+  conus_gages_raw = fread(file.path(metadata_dir, "gagesMetadata", "conterm_bas_classif.txt"),
+                          colClasses = c("STAID" = "character", "AGGECOREGION" = "character")
+  )#[-c(1:8860),]#[CLASS=="Ref"]
+  conus_basinid = fread(file.path(metadata_dir, "gagesMetadata", "conterm_basinid.txt"), 
+                        colClasses = c("STAID" = "character"))#[-c(1:8860),]
+  
   conus_gages = merge(conus_gages_raw, conus_basinid, by="STAID", all.x=TRUE)
   cat("Loaded", nrow(conus_gages), "CONUS reference gages\n")
 }, error = function(e) {
@@ -58,7 +64,7 @@ tryCatch({
 tryCatch({
   AK_gages_all = fread(file.path(metadata_dir, "gagesMetadata", "AKHIPR_bas_classif.txt"),
                         colClasses = c("STAID" = "character", "AGGECOREGION" = "character")
-  )[AGGECOREGION == 'Alaska' & CLASS == 'Ref']
+  )[AGGECOREGION == 'Alaska']# & CLASS == 'Ref']
   AK_basinid = fread(file.path(metadata_dir, "gagesMetadata", "AKHIPR_basinid.txt"), 
                       colClasses = c("STAID" = "character"))
   AK_gages = merge(AK_gages_all, AK_basinid, by="STAID", all.x=TRUE)
@@ -72,7 +78,7 @@ tryCatch({
   canadian_gages_goodData = fread(file.path(metadata_dir, "gagesMetadata", "Canadian_gages_goodones.csv"))
   regulation_info = as.data.table(hy_stn_regulation(canadian_gages_goodData$STATION_NUMBER))
   canadian_gages = merge(canadian_gages_goodData, regulation_info, 
-                          by = "STATION_NUMBER", all.x = TRUE)[REGULATED != TRUE]
+                          by = "STATION_NUMBER", all.x = TRUE)#[REGULATED != TRUE]
   cat("Loaded", nrow(canadian_gages), "Canadian reference gages\n")
 }, error = function(e) {
   stop("Error loading Canadian gage data: ", e$message, 

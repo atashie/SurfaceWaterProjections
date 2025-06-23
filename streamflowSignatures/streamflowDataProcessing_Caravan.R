@@ -37,4 +37,3 @@ if (exists("summary_camels_caravan") && nrow(summary_camels_caravan) > 0) {
   cat("Results saved to:", caravan_output_file_camels, "\n")
 }
 
-
