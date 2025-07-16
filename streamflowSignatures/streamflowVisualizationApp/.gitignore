@@ -1,0 +1,10 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+.Renviron
+calculatedVals
+ne_10m_land.shp
+tiffOuts
+rawCsvs
+www
