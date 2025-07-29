@@ -17,10 +17,8 @@ import pandas as pd
 
 import boto3
 import re
-import pandas as pd
 import xarray as xr
 import s3fs  # Required by xarray to open S3 files directly
-import numpy as np
 import warnings
 import gc
 
@@ -90,13 +88,7 @@ def identify_all_available_watersheds(bucket_name, base_directory):
 
 
 
-import pandas as pd
-import xarray as xr
-import s3fs # Required
 import scipy # Required for the engine
-import numpy as np
-import warnings
-import boto3
 import traceback # For detailed error reporting
 
 def load_and_process_watershed_data(bucket_name, base_directory, subdirectory_name, watershedID, variables_to_extract=None):
@@ -285,9 +277,6 @@ def load_and_process_watershed_data(bucket_name, base_directory, subdirectory_na
     return processed_df
 
 
-import pandas as pd
-import s3fs # Required for pandas to read directly from S3
-import warnings
 
 def get_watershed_attributes(bucket_name, base_attributes_directory, subdirectory_name, watershedID, hydroatlas_cols_to_extract=None, caravan_cols_to_extract=None):
     """
@@ -314,10 +303,20 @@ def get_watershed_attributes(bucket_name, base_attributes_directory, subdirector
                        or if required files/columns are missing.
     """
     # --- Construct Paths and Target ID ---
-    base_path = f"s3://{bucket_name}/{base_attributes_directory.strip('/')}/{subdirectory_name}"
-    file1_path = f"{base_path}/attributes_hydroatlas_{subdirectory_name}.csv" # HydroATLAS
-    file2_path = f"{base_path}/attributes_other_{subdirectory_name}.csv"      # Other
-    file3_path = f"{base_path}/attributes_caravan_{subdirectory_name}.csv"    # Caravan (Optional)
+    # Check if base_attributes_directory is a local path or S3 path
+    if base_attributes_directory.startswith('/'):  # Local path
+        # For local paths, construct direct file paths
+        base_path = f"{base_attributes_directory}/{subdirectory_name}"
+        file1_path = f"{base_path}/attributes_hydroatlas_{subdirectory_name}.csv"
+        file2_path = f"{base_path}/attributes_other_{subdirectory_name}.csv"
+        file3_path = f"{base_path}/attributes_caravan_{subdirectory_name}.csv"
+    else:  # S3 path
+        # For S3 paths, construct S3 URLs
+        base_path = f"s3://{bucket_name}/{base_attributes_directory.strip('/')}/{subdirectory_name}"
+        file1_path = f"{base_path}/attributes_hydroatlas_{subdirectory_name}.csv"
+        file2_path = f"{base_path}/attributes_other_{subdirectory_name}.csv"
+        file3_path = f"{base_path}/attributes_caravan_{subdirectory_name}.csv"
+    
     target_gauge_id = f"{subdirectory_name}_{watershedID}"
 
     print(f"Searching for attributes for gauge_id: {target_gauge_id}")
@@ -491,10 +490,6 @@ def get_watershed_attributes(bucket_name, base_attributes_directory, subdirector
 #########################################################################################################################
 # Modeling - Helper Functions
 #########################################################################################################################
-
-import numpy as np
-import pandas as pd
-import warnings
 
 def calculate_kge(observed: np.ndarray, simulated: np.ndarray) -> float:
     """
@@ -760,8 +755,7 @@ class WarmupCosineScheduler:
 # Assume load_and_process_watershed_data and get_watershed_attributes
 # functions from previous steps are defined and imported here.
 # from your_module import load_and_process_watershed_data, get_watershed_attributes
-
-def prepare_ptf_dataframe(
+def prepare_ptf_dataframe_old(
     watershed_subset_df,
     bucket_name,
     base_data_dir,
@@ -819,6 +813,15 @@ def prepare_ptf_dataframe(
                 'total_precipitation_sum'
             ]
             target_col = 'streamflow'
+            
+            # streamflow validataion (check for unrealistic values, or values of 0 that will be problematic for log transformation)
+            invalid_mask = timeseries_df[target_col] <= 0
+            if invalid_mask.any():
+                n_invalid = invalid_mask.sum()
+                print(f"WARNING: Found {n_invalid} non-positive streamflow values in {group_id}")
+                timeseries_df.loc[invalid_mask, target_col] = 1e-6
+            
+            
             date_col = 'date'
             keep_cols = [date_col, target_col] + weather_cols
             timeseries_df = timeseries_df[keep_cols]
@@ -975,22 +978,296 @@ def prepare_ptf_dataframe(
 
     return combined_df, static_attribute_names, time_varying_cols, norm_params
 
+def prepare_ptf_dataframe(
+    watershed_subset_df,
+    bucket_name,
+    base_data_dir,
+    base_attr_dir,
+    include_static_attributes=True,
+    norm_params=None,  
+    compute_norm_params=False 
+    ):
+    """
+    Loads data for multiple watersheds and prepares a single DataFrame suitable
+    for pytorch-forecasting's TimeSeriesDataSet.
+
+    Args:
+        watershed_subset_df (pd.DataFrame): DataFrame with 'subdirectory_name' and 'watershedID'.
+        bucket_name (str): S3 bucket name.
+        base_data_dir (str): S3 base directory for timeseries NetCDF files.
+        base_attr_dir (str): S3 base directory for attribute CSV files.
+        include_static_attributes (bool): Whether to load and include static attributes.
+
+    Returns:
+        pd.DataFrame: A single DataFrame containing timeseries data, static attributes (if included),
+                      a 'group_id' column, and an integer 'time_idx' column.
+                      Returns an empty DataFrame if loading fails for all watersheds.
+        list: List of column names identified as static real attributes.
+        list: List of column names identified as time-varying real attributes (covariates).
+    """
+    # Define these at the start to avoid undefined variable errors if the loop is skipped
+    weather_cols = [
+        'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean',
+        'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min',
+        'total_precipitation_sum'
+    ]
+    # ADD: Include new aridity features in weather columns
+    aridity_cols = ['Aridity_instantaneous', 'Aridity_smoothed']
+    time_varying_cols = weather_cols + aridity_cols  # Modified to include aridity
+    
+    all_data_list = []
+    static_attribute_names = []
+
+    for _, row in watershed_subset_df.iterrows():
+        subdir = row['subdirectory_name']
+        ws_id = row['watershedID']
+        group_id = f"{subdir}_{ws_id}"
+        print(f"  Loading data for {group_id}...")
+
+        try:
+            # 1. Load Timeseries Data
+            timeseries_df = load_and_process_watershed_data(
+                bucket_name, base_data_dir, subdir, ws_id
+            )
+            if timeseries_df.empty:
+                print(f"  Warning: No timeseries data loaded for {group_id}. Skipping.")
+                continue
+                
+            weather_cols = [
+                'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean',
+                'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min',
+                'total_precipitation_sum'
+            ]
+            target_col = 'streamflow'
+            
+            # streamflow validataion (check for unrealistic values, or values of 0 that will be problematic for log transformation)
+            invalid_mask = timeseries_df[target_col] <= 0
+            if invalid_mask.any():
+                n_invalid = invalid_mask.sum()
+                print(f"WARNING: Found {n_invalid} non-positive streamflow values in {group_id}")
+                timeseries_df.loc[invalid_mask, target_col] = 1e-6
+            
+            
+            
+
+            # Calculate aridity features BEFORE subsetting columns
+            # Ensure we have the required columns
+            if 'total_precipitation_sum' in timeseries_df.columns and 'potential_evaporation_sum_ERA5_LAND' in timeseries_df.columns:
+                # Calculate Aridity_instantaneous
+                # Add small epsilon to avoid division by zero
+                epsilon = 1e-6
+                timeseries_df['Aridity_instantaneous'] = (
+                    timeseries_df['total_precipitation_sum'] / 
+                    (timeseries_df['potential_evaporation_sum_ERA5_LAND'] + epsilon)
+                )
+                
+                # Calculate Aridity_smoothed (90-day trailing mean)
+                # Use min_periods=1 to handle start of series
+                timeseries_df['Aridity_smoothed'] = (
+                    timeseries_df['Aridity_instantaneous']
+                    .rolling(window=90, min_periods=1, center=False)
+                    .mean()
+                )
+                
+                # Handle any potential infinities or extreme values
+                timeseries_df['Aridity_instantaneous'] = timeseries_df['Aridity_instantaneous'].replace([np.inf, -np.inf], np.nan)
+                timeseries_df['Aridity_smoothed'] = timeseries_df['Aridity_smoothed'].replace([np.inf, -np.inf], np.nan)
+                
+                # Fill NaN values in aridity features
+                # For instantaneous: forward fill then backward fill
+                timeseries_df['Aridity_instantaneous'] = timeseries_df['Aridity_instantaneous'].ffill().bfill()
+                # For smoothed: this should have fewer NaNs due to min_periods=1
+                timeseries_df['Aridity_smoothed'] = timeseries_df['Aridity_smoothed'].ffill().bfill()
+                
+                # Log extreme values if any
+                for col in aridity_cols:
+                    col_max = timeseries_df[col].max()
+                    col_min = timeseries_df[col].min()
+                    col_mean = timeseries_df[col].mean()
+                    if col_max > 10 or col_min < 0:
+                        print(f"  Warning: Extreme {col} values in {group_id}: min={col_min:.3f}, max={col_max:.3f}, mean={col_mean:.3f}")
+            else:
+                print(f"  Warning: Missing required columns for aridity calculation in {group_id}")
+                # Create dummy columns with appropriate default values
+                timeseries_df['Aridity_instantaneous'] = 0.8  # Neutral aridity
+                timeseries_df['Aridity_smoothed'] = 0.8
+            
+            # Now update the columns to keep
+            date_col = 'date'
+            target_col = 'streamflow'
+            keep_cols = [date_col, target_col] + weather_cols + aridity_cols
+            timeseries_df = timeseries_df[keep_cols]
+
+            
+            
+
+            timeseries_df[date_col] = pd.to_datetime(timeseries_df[date_col])
+            timeseries_df = timeseries_df.sort_values(by=date_col)
+
+            # Create full date range and reindex BEFORE filling NaNs
+            if not timeseries_df.empty:
+                date_range = pd.date_range(start=timeseries_df[date_col].min(),
+                                           end=timeseries_df[date_col].max(), freq='D')
+                timeseries_df = timeseries_df.set_index(date_col).reindex(date_range)
+
+                # --- Fill NaNs ---
+                # Forward fill is often suitable for time series
+                # Fill target first
+                timeseries_df[target_col] = timeseries_df[target_col].ffill()
+                # Fill covariates
+                for col in weather_cols:
+                    timeseries_df[col] = timeseries_df[col].ffill()
+                # Optional: Backward fill any remaining NaNs at the beginning
+                timeseries_df = timeseries_df.bfill()
+                # Check for extreme values that could cause instability
+                for col in weather_cols + [target_col]:
+                    if timeseries_df[col].max() > 1e6 or timeseries_df[col].abs().mean() > 1e4:
+                        warnings.warn(f"Potential outlier detected in {group_id} for column {col}. Max: {timeseries_df[col].max()}, Mean: {timeseries_df[col].mean()}")
+
+                # Check if any NaNs remain after filling (shouldn't happen with ffill+bfill unless all were NaN)
+                if timeseries_df[[target_col] + weather_cols].isnull().any().any():
+                     print(f"  Warning: NaNs still present in timeseries for {group_id} after filling. Skipping.")
+                     continue
+
+                timeseries_df = timeseries_df.reset_index().rename(columns={'index': date_col})
+            else:
+                # Handle case where timeseries_df was empty after loading/trimming
+                 print(f"  Warning: Empty timeseries after loading/trimming for {group_id}. Skipping.")
+                 continue
+
+
+            timeseries_df['time_idx'] = (timeseries_df[date_col] - timeseries_df[date_col].min()).dt.days
+            timeseries_df['group_id'] = group_id
+
+            # 2. Load and Merge Static Attributes
+            if include_static_attributes:
+                # (Static attribute loading logic remains the same)
+                print(f"  Searching for attributes for gage_id: {group_id}")
+                static_attrs = get_watershed_attributes(
+                    bucket_name, base_attr_dir, subdir, ws_id
+                )
+                if not static_attrs.empty:
+                    current_static_names = []
+                    for col_name, value in static_attrs.items():
+                        col_name_str = str(col_name)
+                        try:
+                            timeseries_df[col_name_str] = pd.to_numeric(value)
+                            current_static_names.append(col_name_str)
+                        except (ValueError, TypeError):
+                             print(f"  Warning: Skipping non-numeric static attribute '{col_name_str}'.")
+                    if not static_attribute_names:
+                        static_attribute_names = current_static_names
+                    elif set(static_attribute_names) != set(current_static_names):
+                        warnings.warn(f"Inconsistent static attributes found for {group_id}. Using attributes from the first watershed.")
+                        timeseries_df = timeseries_df.drop(columns=[c for c in current_static_names if c not in static_attribute_names])
+                else:
+                    print(f"  Warning: Could not load static attributes for {group_id}. Filling with NaN.")
+                    for col_name_str in static_attribute_names:
+                         timeseries_df[col_name_str] = np.nan
+                 # Fill NaNs potentially introduced in static columns if some groups lacked them
+#                for col in static_attribute_names:
+#                     timeseries_df[col] = timeseries_df[col].ffill().bfill()
+                for col in static_attribute_names:
+                    if timeseries_df[col].isnull().any():
+                        # Use a domain-appropriate default or median from all watersheds
+                        default_val = 0.0
+                        timeseries_df[col] = timeseries_df[col].fillna(default_val)
+
+            all_data_list.append(timeseries_df)
+
+        except Exception as e:
+            print(f"  Error processing watershed {group_id}: {e}")
+            traceback.print_exc()
+            continue
+
+    if not all_data_list:
+        print("Error: No data loaded successfully.")
+        return pd.DataFrame(), [], []
+
+    combined_df = pd.concat(all_data_list, ignore_index=True)
+    time_varying_cols = weather_cols
+
+
+    # In prepare_ptf_dataframe, after loading data:
+    # Check for extreme values
+    for col in weather_cols + [target_col]:
+        q99 = timeseries_df[col].quantile(0.99)
+        q01 = timeseries_df[col].quantile(0.01)
+        if q99 / (q01 + 1e-6) > 1000:  # Huge range
+            print(f"WARNING: Extreme values in {col} for {group_id}")
+            # Consider winsorizing or robust scaling
+
+
+    
+    # NORMALIZE FEATURES
+     # Compute or apply normalization parameters
+    if compute_norm_params:
+        # Only compute params, don't normalize yet
+        # Update time_varying_cols to include aridity
+        all_time_varying_cols = weather_cols + aridity_cols
+        
+        norm_params = {
+            'static_means': {col: combined_df[col].mean() for col in static_attribute_names},
+            'static_stds': {col: combined_df[col].std() for col in static_attribute_names},
+            'dynamic_means': {col: combined_df[col].mean() for col in all_time_varying_cols},
+            'dynamic_stds': {col: combined_df[col].std() for col in all_time_varying_cols},
+            'target_mean': np.mean(np.log1p(combined_df[target_col])),
+            'target_std': np.std(np.log1p(combined_df[target_col]))
+        }
+    
+    if norm_params is not None:
+        # Apply normalization using provided parameters
+        # Static features
+        for col in static_attribute_names:
+            if col in norm_params['static_means']:
+                mean_val = norm_params['static_means'][col]
+                std_val = norm_params['static_stds'][col]
+                if std_val > 0:
+                    combined_df[col] = (combined_df[col] - mean_val) / std_val
+                else:
+                    combined_df[col] = 0.0
+        
+        # Dynamic features (including aridity)
+        all_time_varying_cols = weather_cols + aridity_cols
+        for col in all_time_varying_cols:
+            if col in norm_params['dynamic_means']:
+                mean_val = norm_params['dynamic_means'][col]
+                std_val = norm_params['dynamic_stds'][col]
+                if std_val > 0:
+                    combined_df[col] = (combined_df[col] - mean_val) / std_val
+                else:
+                    combined_df[col] = 0.0
+        
+        # Target (log-transform first, then normalize)
+        combined_df[target_col] = np.log1p(combined_df[target_col])
+        mean_target = norm_params['target_mean']
+        std_target = norm_params['target_std']
+        combined_df[target_col] = (combined_df[target_col] - mean_target) / std_target
+            
+    # Ensure correct types
+    combined_df[target_col] = combined_df[target_col].astype(float)
+    for col in time_varying_cols:
+        combined_df[col] = combined_df[col].astype(float)
+    for col in static_attribute_names:
+        combined_df[col] = combined_df[col].astype(float)
+
+    time_varying_cols = weather_cols + aridity_cols
+    
+    print(f"Successfully prepared combined DataFrame with shape: {combined_df.shape}")
+    print(f"Identified static reals: {static_attribute_names}")
+    print(f"Identified time-varying reals: {time_varying_cols}")
+
+    return combined_df, static_attribute_names, time_varying_cols, norm_params
 
 
 
-import torch
+
 #torch.set_num_threads(16)  # Limit PyTorch threads
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
-import numpy as np
-import pandas as pd
 from sklearn.model_selection import train_test_split
-import warnings
 from datetime import datetime
-import json
-import gc
-import os
 #os.environ["OMP_NUM_THREADS"] = "4"  # Limit OpenMP threads
 #os.environ["MKL_NUM_THREADS"] = "4"   # Limit MKL threads
 #os.environ["NUMEXPR_NUM_THREADS"] = "4"  # Limit NumExpr threads
@@ -1046,8 +1323,124 @@ class WatershedDataset(Dataset):
 
 
 
-
 class EntityAwareLSTM(nn.Module):
+    """Entity-Aware LSTM with optional Time Modulation"""
+    def __init__(self, dynamic_input_size, static_input_size, hidden_size=256, 
+                 num_layers=1, dropout=0.2, use_time_modulation=False):
+        super().__init__()
+        
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+        self.use_time_modulation = use_time_modulation
+        
+        # Standard LSTM with dynamic inputs
+        self.lstm = nn.LSTM(
+            input_size=dynamic_input_size,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            batch_first=True,
+            dropout=dropout if num_layers > 1 else 0
+        )
+        
+        # Static feature processing for input gate modulation
+        self.static_encoder = nn.Sequential(
+            nn.Linear(static_input_size, hidden_size),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_size, hidden_size),
+            nn.Sigmoid()  # Output between 0 and 1 for gate modulation
+        )
+        
+        # Optional: Additional static feature integration
+        self.static_hidden_init = nn.Sequential(
+            nn.Linear(static_input_size, hidden_size * num_layers),
+            nn.ReLU()
+        )
+        
+        # Time Modulation Network (NEW)
+        if self.use_time_modulation:
+            self.time_modulator = nn.Sequential(
+                nn.Conv1d(hidden_size, hidden_size, kernel_size=1),
+                nn.ReLU(),
+                nn.Dropout(dropout),
+                nn.Conv1d(hidden_size, hidden_size, kernel_size=1),
+                nn.Sigmoid()  # Output between 0 and 1 for temporal gating
+            )
+        
+        # Output layers
+        self.output_layer = nn.Sequential(
+            nn.Linear(hidden_size + static_input_size, hidden_size),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_size, 1)
+        )
+        
+        self._initialize_weights()
+        
+    def forward(self, dynamic_inputs, static_inputs):
+        batch_size = dynamic_inputs.size(0)
+        
+        # Initialize hidden state with static features
+        h_0 = self.static_hidden_init(static_inputs)
+        h_0 = h_0.view(self.num_layers, batch_size, self.hidden_size)
+        c_0 = torch.zeros_like(h_0)
+        
+        # Generate input gate modulation from static features
+        input_gate_modulation = self.static_encoder(static_inputs)
+        
+        # Run LSTM
+        lstm_out, (h_n, c_n) = self.lstm(dynamic_inputs, (h_0, c_0))
+        
+        # Apply time modulation if enabled
+        if self.use_time_modulation:
+            # Reshape for Conv1d: (batch, channels, length)
+            lstm_out_reshaped = lstm_out.transpose(1, 2)  # (batch, hidden_size, seq_len)
+            
+            # Apply temporal modulation
+            time_modulation = self.time_modulator(lstm_out_reshaped)
+            
+            # Reshape back: (batch, seq_len, hidden_size)
+            time_modulation = time_modulation.transpose(1, 2)
+            
+            # Combine static and temporal modulation
+            # This allows the model to learn both entity-specific and time-varying patterns
+            combined_modulation = input_gate_modulation.unsqueeze(1) * time_modulation
+            lstm_out = lstm_out * combined_modulation
+        else:
+            # Original entity-aware modulation only
+            lstm_out = lstm_out * input_gate_modulation.unsqueeze(1)
+        
+        # Take last timestep output
+        last_output = lstm_out[:, -1, :]
+        
+        # Concatenate with static features for final prediction
+        combined = torch.cat([last_output, static_inputs], dim=1)
+        prediction = self.output_layer(combined)
+        
+        return prediction
+    
+    def _initialize_weights(self):  
+        """Initialize weights with smaller values to prevent gradient explosion"""
+        for name, param in self.named_parameters():
+            if 'weight' in name:
+                if 'lstm' in name:
+                    # Use Xavier initialization for LSTM weights
+                    nn.init.xavier_uniform_(param, gain=0.5)  # Small gain
+                elif 'conv' in name:
+                    # Use He initialization for convolutional layers
+                    nn.init.kaiming_uniform_(param, a=0, mode='fan_in', nonlinearity='relu')
+                    param.data *= 0.5  # Scale down for stability
+                else:
+                    # Use He initialization for other layers
+                    nn.init.kaiming_uniform_(param, a=0, mode='fan_in', nonlinearity='relu')
+                    param.data *= 0.1  # Scale down
+            elif 'bias' in name:
+                nn.init.constant_(param, 0.0)
+
+
+
+
+class EntityAwareLSTM_old(nn.Module):
     """Entity-Aware LSTM following Kratzert et al. (2019) approach"""
     def __init__(self, dynamic_input_size, static_input_size, hidden_size=256, 
                  num_layers=1, dropout=0.2):
@@ -1087,6 +1480,9 @@ class EntityAwareLSTM(nn.Module):
             nn.Dropout(dropout),
             nn.Linear(hidden_size, 1)
         )
+        
+        
+        
         self._initialize_weights()
         
     def forward(self, dynamic_inputs, static_inputs):
@@ -1132,37 +1528,12 @@ class EntityAwareLSTM(nn.Module):
 
 
 
-def print_gpu_memory(context_message="Current GPU Usage"):
-    """
-    Prints current GPU memory usage statistics.
-    """
-    if torch.cuda.is_available():
-        # Get current GPU memory stats
-        allocated = torch.cuda.memory_allocated() / (1024**3)  # GB
-        reserved = torch.cuda.memory_reserved() / (1024**3)    # GB
-        max_allocated = torch.cuda.max_memory_allocated() / (1024**3)  # GB
-        
-        print(f"--- {context_message} ---")
-        print(f"  GPU Memory Allocated: {allocated:.2f} GB")
-        print(f"  GPU Memory Reserved:  {reserved:.2f} GB")
-        print(f"  Max GPU Memory Used:  {max_allocated:.2f} GB")
-        print("--------------------------------------")
-        
-        # Optional: Print per-GPU stats if multiple GPUs
-        if torch.cuda.device_count() > 1:
-            for i in range(torch.cuda.device_count()):
-                print(f"  GPU {i}: {torch.cuda.memory_allocated(i)/(1024**3):.2f} GB")
-    else:
-        print(f"--- {context_message} ---")
-        print("  No GPU available")
-        print("--------------------------------------")
 
 def print_memory_usage(context_message="Current Memory Usage"):
     """
     Prints current CPU memory usage and process information.
     """
     import psutil
-    import os
     
     # System-wide memory
     virtual_mem = psutil.virtual_memory()
@@ -1236,7 +1607,7 @@ def train_ea_lstm_model_with_scheduling(
     epochs_per_chunk=10,
     device='cpu',
     random_seed=42,
-    gradient_accumulation_steps=8,
+    gradient_accumulation_steps=2,#8,
     memory_cleanup_frequency=5,
     # New parameters for early stopping and LR scheduling
     early_stopping_patience=15,
@@ -1446,12 +1817,12 @@ def train_ea_lstm_model_with_scheduling(
     # Setup default LR scheduler parameters if not provided
     if lr_scheduler_params is None:
         lr_scheduler_params = {
-            'factor': 0.5,
-            'patience': 5,
-            'min_lr': 1e-6,
-            'T_max': total_epochs,
-            'warmup_epochs': 5,
-            'max_epochs': total_epochs
+            'factor': 0.5,  # Reduce LR by half when triggered
+            'patience': 2,  # Wait for 2 validation checks without improvement (20 epochs with validation every 10)
+            'min_lr': 1e-7,  # Lower minimum
+            'threshold': 0.001,  # More sensitive threshold for detecting improvement
+            'cooldown': 1,  # Cooldown period after reduction (10 epochs)
+            'verbose': True  # Enable verbose output to see when scheduler triggers
         }
     
     # Save all hyperparameters
@@ -1517,7 +1888,8 @@ def train_ea_lstm_model_with_scheduling(
         static_input_size=static_input_size,
         hidden_size=hidden_size,
         num_layers=num_layers,
-        dropout=dropout
+        dropout=dropout,
+        use_time_modulation=False 
     ).to(device)
     
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
@@ -1685,9 +2057,11 @@ def train_ea_lstm_model_with_scheduling(
                     train_dataset, 
                     batch_size=batch_size, 
                     shuffle=True, 
-                    num_workers=4,  # Reduce from 8 to 4 for GPU
+                    num_workers=4,#8,#4,  # Reduce from 8 to 4 for GPU
                     pin_memory=True,  # Important for GPU!
-                    persistent_workers=True
+                    persistent_workers=True,
+                    prefetch_factor=2,#4,#2,  # Added for speed
+                    drop_last=True  # Add this to avoid variable batch sizes
                 )
                 
                 # Train for epochs_per_chunk
@@ -1781,6 +2155,10 @@ def train_ea_lstm_model_with_scheduling(
                         if show_progress and hasattr(progress_bar, 'set_postfix'):
                             progress_bar.set_postfix({'loss': np.mean(chunk_losses[-100:]) if len(chunk_losses) > 100 else np.mean(chunk_losses)})
                     
+                        if batch_idx % 10 == 0 and device == 'cuda':
+                            torch.cuda.empty_cache()
+
+                    
                     # Handle remaining gradients
                     if (batch_idx + 1) % gradient_accumulation_steps != 0:
                         total_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
@@ -1821,7 +2199,7 @@ def train_ea_lstm_model_with_scheduling(
                 continue
         
         # Validation and scheduler step
-        if (epoch + epochs_per_chunk) % 5 == 0 or early_stopping.early_stop:
+        if (epoch + epochs_per_chunk) % 10 == 0 or early_stopping.early_stop:
             log_message("\nRunning validation...", force_flush=True)
             gc.collect()
             
@@ -2008,7 +2386,7 @@ def evaluate_model_gpu_optimized(model, watersheds_df, bucket_name, base_data_di
                 loader = DataLoader(
                     dataset, batch_size=batch_size, 
                     shuffle=False, 
-                    num_workers=4,  # Reduced for GPU
+                    num_workers=4,#8,#4,  # Reduced for GPU
                     pin_memory=True  # Important for GPU
                 )
                 
@@ -2074,94 +2452,6 @@ def evaluate_model_gpu_optimized(model, watersheds_df, bucket_name, base_data_di
 
 
 
-
-
-
-
-
-
-
-
-
-def evaluate_model_cpu_optimized(model, watersheds_df, bucket_name, base_data_dir, base_attr_dir,
-                   static_cols, dynamic_cols, sequence_length, batch_size, 
-                   device, chunk_size=50, norm_params=None):
-    """Evaluate model with CPU-optimized memory management"""
-    model.eval()
-    all_losses = []
-    all_predictions = []
-    all_targets = []
-    
-    # Process in chunks
-    chunks = [watersheds_df[i:i+chunk_size] 
-              for i in range(0, len(watersheds_df), chunk_size)]
-    
-    with torch.no_grad():  # Disable gradient computation
-        for chunk_idx, chunk_watersheds in enumerate(chunks):
-            try:
-                # Load chunk data
-                chunk_df, _, _, _ = prepare_ptf_dataframe(
-                    chunk_watersheds, bucket_name, base_data_dir, base_attr_dir, norm_params=norm_params
-                )
-                
-                if chunk_df.empty:
-                    continue
-                
-                # Create dataset
-                dataset = WatershedDataset(
-                    chunk_df, static_cols, dynamic_cols, 
-                    'streamflow', sequence_length
-                )
-                
-                # Delete chunk_df immediately
-                del chunk_df
-                gc.collect()
-                
-                if len(dataset) == 0:
-                    del dataset
-                    continue
-                
-                loader = DataLoader(
-                    dataset, batch_size=batch_size, 
-                    shuffle=False, num_workers=8  # Important: 0 workers on CPU
-                )
-                
-                # Evaluate
-                chunk_losses = []
-                for batch_idx, (dynamic_seq, static_feat, target) in enumerate(loader):
-                    predictions = model(dynamic_seq, static_feat)
-                    loss = nn.MSELoss()(predictions, target)
-                    
-                    chunk_losses.append(loss.item())
-                    all_predictions.extend(predictions.numpy())  # No need for .cpu() on CPU
-                    all_targets.extend(target.numpy())
-                    
-                    # Clean up
-                    del predictions, loss
-                    
-                    # Periodic cleanup
-                    if batch_idx % 20 == 0:
-                        gc.collect()
-                
-                all_losses.extend(chunk_losses)
-                
-                # Clear memory
-                del dataset, loader
-                gc.collect()
-                
-            except Exception as e:
-                print(f"Error evaluating chunk {chunk_idx}: {str(e)}")
-                gc.collect()
-                continue
-    
-    # Calculate metrics
-    mean_loss = np.mean(all_losses) if all_losses else float('inf')
-    kge = calculate_kge(
-        np.array(all_targets).flatten(), 
-        np.array(all_predictions).flatten()
-    ) if all_targets else float('-inf')
-    
-    return mean_loss, kge
 
 
 
@@ -2277,6 +2567,17 @@ def plot_training_history_with_lr(history, save_dir):
 ################################################################
 
 def main():
+
+    # Enable CUDNN optimizations
+    torch.backends.cudnn.benchmark = True
+    torch.backends.cudnn.enabled = True
+
+    # Enable TF32 on Ampere GPUs (A10G in g5.2xlarge)
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
+
+    
+    
     # Parse arguments
     parser = argparse.ArgumentParser()
     
@@ -2315,20 +2616,23 @@ def main():
         'total_epochs': args.total_epochs
     }
     
+    
     lr_scheduler_params = {
-        'factor': 0.1,  # More aggressive reduction (was 0.5)
-        'patience': 3,  # Less patience (was 5)
-        'min_lr': 1e-7,  # Lower minimum (was 1e-6)
-        'threshold': 0.01,  # Add threshold for significant improvement
-        'cooldown': 5  # Add cooldown period after reduction
+        'factor': 0.5,  # Reduce LR by half when triggered
+        'patience': 2,  # Wait for 2 validation checks without improvement (20 epochs with validation every 10)
+        'min_lr': 1e-7,  # Lower minimum
+        'threshold': 0.001,  # More sensitive threshold for detecting improvement
+        'cooldown': 1,  # Cooldown period after reduction (10 epochs)
+        'verbose': True  # Enable verbose output to see when scheduler triggers
     }
+
 
     
     # Load watersheds data
     # You'll need to modify this to load from S3 or pass as argument
     watershed_df = identify_all_available_watersheds(args.bucket_name, args.base_data_dir)
     watershed_df = watershed_df[watershed_df['subdirectory_name'] == 'camels']
-    watershed_df = watershed_df.iloc[0:20]
+    watershed_df = watershed_df.iloc[0:60]
     
     # Use the output directory for saving (this persists after training)
     save_dir = args.output_data_dir
@@ -2353,7 +2657,7 @@ def main():
         save_dir=save_dir,
         chunk_size=args.chunk_size,
         epochs_per_chunk=args.epochs_per_chunk,
-        gradient_accumulation_steps=8,#2
+        gradient_accumulation_steps=1,#2,#8,#2
         early_stopping_patience=10,
         lr_scheduler_type='reduce_on_plateau',
         lr_scheduler_params=lr_scheduler_params,
