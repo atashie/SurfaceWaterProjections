@@ -1160,24 +1160,9 @@ class WatershedDataset(Dataset):
                 torch.FloatTensor([target]))
 
 
-class CausalConv1d(nn.Module):
-    """Causal convolution with dilation for capturing long-range dependencies"""
-    def __init__(self, in_channels, out_channels, kernel_size, dilation=1):
-        super().__init__()
-        self.padding = (kernel_size - 1) * dilation
-        self.conv = nn.Conv1d(in_channels, out_channels, kernel_size, 
-                             padding=self.padding, dilation=dilation)
-    
-    def forward(self, x):
-        # Fix: Handle edge case when padding = 0
-        if self.padding == 0:
-            return self.conv(x)
-        # Remove future timesteps that were added by padding
-        return self.conv(x)[:, :, :-self.padding]
-    
 
 class EntityAwareLSTM(nn.Module):
-    """Entity-Aware LSTM with optional Time Modulation using TCN"""
+    """Entity-Aware LSTM with optional Time Modulation"""
     def __init__(self, dynamic_input_size, static_input_size, hidden_size=256, 
                  num_layers=1, dropout=0.2, use_time_modulation=True):
         super().__init__()
@@ -1201,7 +1186,7 @@ class EntityAwareLSTM(nn.Module):
             nn.GELU(),
             nn.Dropout(dropout),
             nn.Linear(hidden_size, hidden_size),
-            # Remove sigmoid here - we'll apply it after combining with temporal
+            nn.Sigmoid()  # Output between 0 and 1 for gate modulation
         )
         
         # Optional: Additional static feature integration
@@ -1210,35 +1195,14 @@ class EntityAwareLSTM(nn.Module):
             nn.GELU()
         )
         
-        # Time Modulation Network with TCN
+        # Time Modulation Network (NEW)
         if self.use_time_modulation:
-            # Fix: Calculate channel sizes for 4 branches
-            num_branches = 4  # You have 4 dilations
-            base_channels = hidden_size // num_branches
-            remainder = hidden_size % num_branches
-            channel_sizes = [base_channels] * num_branches
-            # Distribute remainder across branches
-            for i in range(remainder):
-                channel_sizes[i] += 1
-            
-            # Multi-scale temporal convolutions with different dilations
-            self.time_modulator = nn.ModuleList([
-                CausalConv1d(hidden_size, channel_sizes[0], kernel_size=3, dilation=1),    # 3 days
-                CausalConv1d(hidden_size, channel_sizes[1], kernel_size=3, dilation=4),    # 9 days
-                CausalConv1d(hidden_size, channel_sizes[2], kernel_size=3, dilation=16),   # 33 days
-                CausalConv1d(hidden_size, channel_sizes[3], kernel_size=3, dilation=64),   # 129 days
-            ])
-            
-            # Fix: LayerNorm for stabilization (per timestep)
-            self.temporal_norm = nn.LayerNorm(hidden_size)
-            
-            # Fix: Use exact concatenated size for time_gate
-            self.time_gate = nn.Sequential(
-                nn.Linear(hidden_size, hidden_size),  # sum(channel_sizes) = hidden_size
+            self.time_modulator = nn.Sequential(
+                nn.Conv1d(hidden_size, hidden_size, kernel_size=1),
                 nn.GELU(),
                 nn.Dropout(dropout),
-                nn.Linear(hidden_size, hidden_size),
-                # Remove sigmoid - we'll combine in logit space
+                nn.Conv1d(hidden_size, hidden_size, kernel_size=1),
+                nn.Sigmoid()  # Output between 0 and 1 for temporal gating
             )
         
         # Output layers
@@ -1250,7 +1214,7 @@ class EntityAwareLSTM(nn.Module):
         )
         
         self._initialize_weights()
-    
+        
     def forward(self, dynamic_inputs, static_inputs):
         batch_size = dynamic_inputs.size(0)
         
@@ -1259,44 +1223,30 @@ class EntityAwareLSTM(nn.Module):
         h_0 = h_0.view(self.num_layers, batch_size, self.hidden_size)
         c_0 = torch.zeros_like(h_0)
         
-        # Generate static modulation logits (no sigmoid yet)
-        static_logits = self.static_encoder(static_inputs)
+        # Generate input gate modulation from static features
+        input_gate_modulation = self.static_encoder(static_inputs)
         
         # Run LSTM
         lstm_out, (h_n, c_n) = self.lstm(dynamic_inputs, (h_0, c_0))
         
-        # Apply modulation
+        # Apply time modulation if enabled
         if self.use_time_modulation:
             # Reshape for Conv1d: (batch, channels, length)
             lstm_out_reshaped = lstm_out.transpose(1, 2)  # (batch, hidden_size, seq_len)
             
-            # Apply multi-scale temporal convolutions
-            multi_scale_features = []
-            for conv in self.time_modulator:
-                multi_scale_features.append(conv(lstm_out_reshaped))
+            # Apply temporal modulation
+            time_modulation = self.time_modulator(lstm_out_reshaped)
             
-            # Concatenate multi-scale features along channel dimension
-            combined_features = torch.cat(multi_scale_features, dim=1)  # (batch, hidden_size, seq_len)
+            # Reshape back: (batch, seq_len, hidden_size)
+            time_modulation = time_modulation.transpose(1, 2)
             
-            # Transpose back to (batch, seq_len, hidden_size)
-            combined_features = combined_features.transpose(1, 2)
-            
-            # Apply layer norm for stability
-            combined_features = self.temporal_norm(combined_features)
-            
-            # Generate time-varying logits
-            temporal_logits = self.time_gate(combined_features)
-            
-            # Fix: Combine gates additively in logit space, then apply sigmoid
-            combined_logits = static_logits.unsqueeze(1) + temporal_logits
-            combined_modulation = torch.sigmoid(combined_logits)
-            
-            # Apply combined modulation
+            # Combine static and temporal modulation
+            # This allows the model to learn both entity-specific and time-varying patterns
+            combined_modulation = input_gate_modulation.unsqueeze(1) * time_modulation
             lstm_out = lstm_out * combined_modulation
         else:
             # Original entity-aware modulation only
-            static_modulation = torch.sigmoid(static_logits)
-            lstm_out = lstm_out * static_modulation.unsqueeze(1)
+            lstm_out = lstm_out * input_gate_modulation.unsqueeze(1)
         
         # Take last timestep output
         last_output = lstm_out[:, -1, :]
@@ -1307,73 +1257,23 @@ class EntityAwareLSTM(nn.Module):
         
         return prediction
     
-    def _initialize_weights(self):
-        """
-        Robust weight initialization following best practices:
-        - LSTM: Xavier for input weights, orthogonal for recurrent weights, forget bias = 1
-        - LayerNorm: Keep default initialization (weight=1, bias=0)
-        - Conv/Linear: Appropriate initialization for GELU activation
-        """
-        # Wrap in no_grad to avoid polluting autograd history
-        with torch.no_grad():
-            # First, handle LSTM special initialization
-            if hasattr(self, 'lstm'):
-                for name, param in self.lstm.named_parameters():
-                    if 'weight_ih' in name:
-                        # Input-hidden weights: Xavier uniform with small gain
-                        nn.init.xavier_uniform_(param, gain=0.5)
-                    elif 'weight_hh' in name:
-                        # Hidden-hidden (recurrent) weights: Orthogonal
-                        nn.init.orthogonal_(param)
-                    elif 'bias_ih' in name:
-                        # This avoids effective bias of 2.0
-                        param.data.zero_()
-                        # LSTM bias is concatenated as [input, forget, cell, output]
-                        # So forget gate bias is the second quarter
-                        n = param.size(0)
-                        param.data[n//4:n//2] = 1.0  # Set forget gate bias to 1
-                    elif 'bias_hh' in name:
-                        # Keep bias_hh at zero (PyTorch's default)
-                        param.data.zero_()
-            
-            # Then handle other modules
-            for module in self.modules():
-                # Skip the top-level module (self)
-                if module is self:
-                    continue
-                    
-                # Skip LSTM (already handled above)
-                if isinstance(module, nn.LSTM):
-                    continue
-                
-                # LayerNorm: Keep default initialization
-                if isinstance(module, nn.LayerNorm):
-                    # Explicitly set to defaults to be sure
-                    if module.weight is not None:
-                        nn.init.constant_(module.weight, 1.0)
-                    if module.bias is not None:
-                        nn.init.constant_(module.bias, 0.0)
-                    continue
-                
-                # Conv1d layers
-                if isinstance(module, nn.Conv1d):
-                    # Kaiming uniform is fine for GELU, but use correct mode
-                    nn.init.kaiming_uniform_(module.weight, a=0, mode='fan_in', nonlinearity='relu')
-                    if module.bias is not None:
-                        nn.init.constant_(module.bias, 0.0)
-                    # Scale down for stability
-                    module.weight.data *= 0.5
-                
-                # Linear layers
-                elif isinstance(module, nn.Linear):
-                    # Check if this is part of a GELU-activated layer
-                    # Xavier uniform with gain appropriate for GELU (~sqrt(2))
-                    nn.init.xavier_uniform_(module.weight, gain=1.414)
-                    if module.bias is not None:
-                        nn.init.constant_(module.bias, 0.0)
-                    # Scale down for stability, but less aggressively than before
-                    module.weight.data *= 0.5
-
+    def _initialize_weights(self):  
+        """Initialize weights with smaller values to prevent gradient explosion"""
+        for name, param in self.named_parameters():
+            if 'weight' in name:
+                if 'lstm' in name:
+                    # Use Xavier initialization for LSTM weights
+                    nn.init.xavier_uniform_(param, gain=0.5)  # Small gain
+                elif 'conv' in name:
+                    # Use He initialization for convolutional layers
+                    nn.init.kaiming_uniform_(param, a=0, mode='fan_in', nonlinearity='leaky_relu')
+                    param.data *= 0.5  # Scale down for stability
+                else:
+                    # Use He initialization for other layers
+                    nn.init.kaiming_uniform_(param, a=0, mode='fan_in', nonlinearity='leaky_relu')
+                    param.data *= 0.1  # Scale down
+            elif 'bias' in name:
+                nn.init.constant_(param, 0.0)
 
 
 
@@ -1394,7 +1294,7 @@ class StreamflowLightningModule(pl.LightningModule):
         use_time_modulation: bool = True,
         # Training parameters
         target_noise_std: float = 0.1,
-        target_noise_type: str = 'multiplicative',
+        target_noise_type: str = 'log-normal',
         gradient_clip_val: float = 5.0,
         # LR scheduler parameters
         lr_scheduler_params: Optional[Dict[str, Any]] = None,
@@ -1466,7 +1366,7 @@ class StreamflowLightningModule(pl.LightningModule):
         mse_loss = self.mse_criterion(predictions, noisy_target)
         
         # Calculate MSE weight: ramp from 0 to 0.5 over first 50 epochs
-        mse_weight = 1#min(0.5, self.current_epoch / 2000.0)
+        mse_weight = min(0.5, self.current_epoch / 50.0)
         
         # Combined loss: (1-weight)*KGE + weight*MSE
         loss = (1 - mse_weight) * kge_loss + mse_weight * mse_loss
@@ -1512,35 +1412,35 @@ class StreamflowLightningModule(pl.LightningModule):
         target_var = torch.var(noisy_target)
         
         # Add safety check for very small variance
-#        if target_var < 1e-6:
-#            # If variance is too small, use standard deviation instead
-#            target_std = torch.std(noisy_target) + 1e-6
-#            normalized_mse = mse_loss / (target_std ** 2)
-#        else:
-#            normalized_mse = mse_loss / target_var
+        if target_var < 1e-6:
+            # If variance is too small, use standard deviation instead
+            target_std = torch.std(noisy_target) + 1e-6
+            normalized_mse = mse_loss / (target_std ** 2)
+        else:
+            normalized_mse = mse_loss / target_var
         
         # Additional safety: clamp normalized MSE to reasonable range
-#        normalized_mse = torch.clamp(normalized_mse, min=0.0, max=10.0)
+        normalized_mse = torch.clamp(normalized_mse, min=0.0, max=10.0)
         
         # Calculate MSE weight: ramp from 0 to 0.5 over first 1000 epochs
-        mse_weight = 1#min(0.5, self.current_epoch / 2000.0)
+        mse_weight = min(0.5, self.current_epoch / 1000.0)
         
         # Combined loss
-        loss = (1 - mse_weight) * kge_loss + mse_weight * mse_loss
+        loss = (1 - mse_weight) * kge_loss + mse_weight * normalized_mse
         
         # Check for NaN/Inf
         if torch.isnan(loss) or torch.isinf(loss):
             self.log('train_nan_count', 1.0, on_step=True, prog_bar=False)
             # Log debug info
             print(f"NaN/Inf in loss. KGE: {kge_loss.item()}, MSE: {mse_loss.item()}, "
-                  f"Var: {target_var.item()}, Normalized MSE: {mse_loss.item()}")
-            return torch.zeros(1, device=loss.device, requires_grad=True)
+                  f"Var: {target_var.item()}, Normalized MSE: {normalized_mse.item()}")
+            return None  # Skip this batch
         
         # Log metrics
         self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         self.log('train_kge_loss', kge_loss, on_step=True, on_epoch=True, prog_bar=False, logger=True)
         self.log('train_mse_loss', mse_loss, on_step=True, on_epoch=True, prog_bar=False, logger=True)
-#        self.log('train_normalized_mse', normalized_mse, on_step=True, on_epoch=True, prog_bar=False, logger=True)
+        self.log('train_normalized_mse', normalized_mse, on_step=True, on_epoch=True, prog_bar=False, logger=True)
         self.log('train_target_var', target_var, on_step=True, on_epoch=True, prog_bar=False, logger=True)
         self.log('mse_weight', mse_weight, on_step=False, on_epoch=True, prog_bar=False, logger=True)
         
@@ -1568,25 +1468,25 @@ class StreamflowLightningModule(pl.LightningModule):
         mse_loss = self.mse_criterion(predictions, target)
         
         # Normalize MSE by target variance (same as training)
-#        target_var = torch.var(target)
-#        if target_var < 1e-6:
-#            target_std = torch.std(target) + 1e-6
-#            normalized_mse = mse_loss / (target_std ** 2)
-#        else:
-#            normalized_mse = mse_loss / target_var
+        target_var = torch.var(target)
+        if target_var < 1e-6:
+            target_std = torch.std(target) + 1e-6
+            normalized_mse = mse_loss / (target_std ** 2)
+        else:
+            normalized_mse = mse_loss / target_var
         
-#        normalized_mse = torch.clamp(normalized_mse, min=0.0, max=10.0)
+        normalized_mse = torch.clamp(normalized_mse, min=0.0, max=10.0)
         
         # Calculate MSE weight: ramp from 0 to 0.5 over first 1000 epochs
-        mse_weight = 1#min(0.5, self.current_epoch / 2000.0)
-        loss = (1 - mse_weight) * kge_loss + mse_weight * mse_loss
+        mse_weight = min(0.5, self.current_epoch / 1000.0)
+        loss = (1 - mse_weight) * kge_loss + mse_weight * normalized_mse
         
         # Store outputs for epoch-level metrics calculation
         self.validation_step_outputs.append({
             'loss': loss,
             'kge_loss': kge_loss,
             'mse_loss': mse_loss,
-#            'normalized_mse': normalized_mse,
+            'normalized_mse': normalized_mse,
             'predictions': predictions.detach().cpu(),
             'targets': target.detach().cpu()
         })
@@ -1652,7 +1552,7 @@ class StreamflowLightningModule(pl.LightningModule):
         mse_loss = self.mse_criterion(predictions, target)
         
         # Use same weighting as training
-        mse_weight = 1#min(0.5, self.current_epoch / 2000.0)
+        mse_weight = min(0.5, self.current_epoch / 50.0)
         loss = (1 - mse_weight) * kge_loss + mse_weight * mse_loss
         
         # Store outputs for metrics calculation

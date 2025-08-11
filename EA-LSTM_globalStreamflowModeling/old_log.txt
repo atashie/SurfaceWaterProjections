@@ -1,0 +1,1319 @@
+Searching for log streams for job: pytorch-training-2025-08-04-12-49-46-023
+Found log stream: pytorch-training-2025-08-04-12-49-46-023/algo-1-1754311828
+------------------------------------------------------------
+bash: cannot set terminal process group (-1): Inappropriate ioctl for device
+bash: no job control in this shell
+2025-08-04 12:53:57,700 sagemaker-training-toolkit INFO     Imported framework sagemaker_pytorch_container.training
+2025-08-04 12:53:57,719 sagemaker-training-toolkit INFO     No Neurons detected (normal if no neurons installed)
+2025-08-04 12:53:57,729 sagemaker_pytorch_container.training INFO     Block until all host DNS lookups succeed.
+2025-08-04 12:53:57,731 sagemaker_pytorch_container.training INFO     Invoking user training script.
+2025-08-04 12:53:59,216 sagemaker-training-toolkit INFO     Installing dependencies from requirements.txt:
+/opt/conda/bin/python3.10 -m pip install -r requirements.txt
+Requirement already satisfied: torch==2.0.1 in /opt/conda/lib/python3.10/site-packages (from -r requirements.txt (line 1)) (2.0.1)
+Collecting numpy==1.24.3 (from -r requirements.txt (line 2))
+Downloading numpy-1.24.3-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.6 kB)
+Collecting pandas==2.0.3 (from -r requirements.txt (line 3))
+Downloading pandas-2.0.3-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (18 kB)
+Collecting scikit-learn==1.3.0 (from -r requirements.txt (line 4))
+Downloading scikit_learn-1.3.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (11 kB)
+Collecting matplotlib==3.7.2 (from -r requirements.txt (line 5))
+Downloading matplotlib-3.7.2-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.6 kB)
+Collecting seaborn==0.12.2 (from -r requirements.txt (line 6))
+Downloading seaborn-0.12.2-py3-none-any.whl.metadata (5.4 kB)
+Requirement already satisfied: tqdm==4.65.0 in /opt/conda/lib/python3.10/site-packages (from -r requirements.txt (line 7)) (4.65.0)
+Collecting s3fs==2023.6.0 (from -r requirements.txt (line 8))
+Downloading s3fs-2023.6.0-py3-none-any.whl.metadata (1.6 kB)
+Collecting xarray==2023.6.0 (from -r requirements.txt (line 9))
+Downloading xarray-2023.6.0-py3-none-any.whl.metadata (6.0 kB)
+Collecting scipy==1.11.1 (from -r requirements.txt (line 10))
+Downloading scipy-1.11.1-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (59 kB)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 59.1/59.1 kB 3.4 MB/s eta 0:00:00
+Requirement already satisfied: psutil==5.9.5 in /opt/conda/lib/python3.10/site-packages (from -r requirements.txt (line 11)) (5.9.5)
+Collecting boto3==1.28.0 (from -r requirements.txt (line 12))
+Downloading boto3-1.28.0-py3-none-any.whl.metadata (6.6 kB)
+Requirement already satisfied: pytorch-lightning>=2.0.0 in /opt/conda/lib/python3.10/site-packages (from -r requirements.txt (line 13)) (2.1.2)
+Collecting tensorboard>=2.11.0 (from -r requirements.txt (line 14))
+Downloading tensorboard-2.20.0-py3-none-any.whl.metadata (1.8 kB)
+Requirement already satisfied: filelock in /opt/conda/lib/python3.10/site-packages (from torch==2.0.1->-r requirements.txt (line 1)) (3.13.1)
+Requirement already satisfied: typing-extensions in /opt/conda/lib/python3.10/site-packages (from torch==2.0.1->-r requirements.txt (line 1)) (4.8.0)
+Requirement already satisfied: sympy in /opt/conda/lib/python3.10/site-packages (from torch==2.0.1->-r requirements.txt (line 1)) (1.12)
+Requirement already satisfied: networkx in /opt/conda/lib/python3.10/site-packages (from torch==2.0.1->-r requirements.txt (line 1)) (3.2.1)
+Requirement already satisfied: jinja2 in /opt/conda/lib/python3.10/site-packages (from torch==2.0.1->-r requirements.txt (line 1)) (3.1.3)
+Requirement already satisfied: python-dateutil>=2.8.2 in /opt/conda/lib/python3.10/site-packages (from pandas==2.0.3->-r requirements.txt (line 3)) (2.8.2)
+Requirement already satisfied: pytz>=2020.1 in /opt/conda/lib/python3.10/site-packages (from pandas==2.0.3->-r requirements.txt (line 3)) (2023.3.post1)
+Requirement already satisfied: tzdata>=2022.1 in /opt/conda/lib/python3.10/site-packages (from pandas==2.0.3->-r requirements.txt (line 3)) (2023.3)
+Requirement already satisfied: joblib>=1.1.1 in /opt/conda/lib/python3.10/site-packages (from scikit-learn==1.3.0->-r requirements.txt (line 4)) (1.3.2)
+Requirement already satisfied: threadpoolctl>=2.0.0 in /opt/conda/lib/python3.10/site-packages (from scikit-learn==1.3.0->-r requirements.txt (line 4)) (3.2.0)
+Requirement already satisfied: contourpy>=1.0.1 in /opt/conda/lib/python3.10/site-packages (from matplotlib==3.7.2->-r requirements.txt (line 5)) (1.2.0)
+Requirement already satisfied: cycler>=0.10 in /opt/conda/lib/python3.10/site-packages (from matplotlib==3.7.2->-r requirements.txt (line 5)) (0.12.1)
+Requirement already satisfied: fonttools>=4.22.0 in /opt/conda/lib/python3.10/site-packages (from matplotlib==3.7.2->-r requirements.txt (line 5)) (4.45.1)
+Requirement already satisfied: kiwisolver>=1.0.1 in /opt/conda/lib/python3.10/site-packages (from matplotlib==3.7.2->-r requirements.txt (line 5)) (1.4.5)
+Requirement already satisfied: packaging>=20.0 in /opt/conda/lib/python3.10/site-packages (from matplotlib==3.7.2->-r requirements.txt (line 5)) (23.2)
+Requirement already satisfied: pillow>=6.2.0 in /opt/conda/lib/python3.10/site-packages (from matplotlib==3.7.2->-r requirements.txt (line 5)) (10.2.0)
+Collecting pyparsing<3.1,>=2.3.1 (from matplotlib==3.7.2->-r requirements.txt (line 5))
+Downloading pyparsing-3.0.9-py3-none-any.whl.metadata (4.2 kB)
+Collecting aiobotocore~=2.5.0 (from s3fs==2023.6.0->-r requirements.txt (line 8))
+Downloading aiobotocore-2.5.4-py3-none-any.whl.metadata (19 kB)
+Collecting fsspec==2023.6.0 (from s3fs==2023.6.0->-r requirements.txt (line 8))
+Downloading fsspec-2023.6.0-py3-none-any.whl.metadata (6.7 kB)
+Requirement already satisfied: aiohttp!=4.0.0a0,!=4.0.0a1 in /opt/conda/lib/python3.10/site-packages (from s3fs==2023.6.0->-r requirements.txt (line 8)) (3.9.3)
+Collecting botocore<1.32.0,>=1.31.0 (from boto3==1.28.0->-r requirements.txt (line 12))
+Downloading botocore-1.31.85-py3-none-any.whl.metadata (6.1 kB)
+Requirement already satisfied: jmespath<2.0.0,>=0.7.1 in /opt/conda/lib/python3.10/site-packages (from boto3==1.28.0->-r requirements.txt (line 12)) (1.0.1)
+Collecting s3transfer<0.7.0,>=0.6.0 (from boto3==1.28.0->-r requirements.txt (line 12))
+Downloading s3transfer-0.6.2-py3-none-any.whl.metadata (1.8 kB)
+Requirement already satisfied: PyYAML>=5.4 in /opt/conda/lib/python3.10/site-packages (from pytorch-lightning>=2.0.0->-r requirements.txt (line 13)) (6.0.1)
+Requirement already satisfied: torchmetrics>=0.7.0 in /opt/conda/lib/python3.10/site-packages (from pytorch-lightning>=2.0.0->-r requirements.txt (line 13)) (1.2.0)
+Requirement already satisfied: lightning-utilities>=0.8.0 in /opt/conda/lib/python3.10/site-packages (from pytorch-lightning>=2.0.0->-r requirements.txt (line 13)) (0.10.0)
+Collecting absl-py>=0.4 (from tensorboard>=2.11.0->-r requirements.txt (line 14))
+Downloading absl_py-2.3.1-py3-none-any.whl.metadata (3.3 kB)
+Collecting grpcio>=1.48.2 (from tensorboard>=2.11.0->-r requirements.txt (line 14))
+Downloading grpcio-1.74.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (3.8 kB)
+Collecting markdown>=2.6.8 (from tensorboard>=2.11.0->-r requirements.txt (line 14))
+Downloading markdown-3.8.2-py3-none-any.whl.metadata (5.1 kB)
+Requirement already satisfied: protobuf!=4.24.0,>=3.19.6 in /opt/conda/lib/python3.10/site-packages (from tensorboard>=2.11.0->-r requirements.txt (line 14)) (3.20.3)
+Requirement already satisfied: setuptools>=41.0.0 in /opt/conda/lib/python3.10/site-packages (from tensorboard>=2.11.0->-r requirements.txt (line 14)) (65.6.3)
+Collecting tensorboard-data-server<0.8.0,>=0.7.0 (from tensorboard>=2.11.0->-r requirements.txt (line 14))
+Downloading tensorboard_data_server-0.7.2-py3-none-manylinux_2_31_x86_64.whl.metadata (1.1 kB)
+Requirement already satisfied: werkzeug>=1.0.1 in /opt/conda/lib/python3.10/site-packages (from tensorboard>=2.11.0->-r requirements.txt (line 14)) (3.0.1)
+Collecting botocore<1.32.0,>=1.31.0 (from boto3==1.28.0->-r requirements.txt (line 12))
+Downloading botocore-1.31.17-py3-none-any.whl.metadata (5.9 kB)
+Collecting wrapt<2.0.0,>=1.10.10 (from aiobotocore~=2.5.0->s3fs==2023.6.0->-r requirements.txt (line 8))
+Downloading wrapt-1.17.2-cp310-cp310-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.4 kB)
+Collecting aioitertools<1.0.0,>=0.5.1 (from aiobotocore~=2.5.0->s3fs==2023.6.0->-r requirements.txt (line 8))
+Downloading aioitertools-0.12.0-py3-none-any.whl.metadata (3.8 kB)
+Requirement already satisfied: aiosignal>=1.1.2 in /opt/conda/lib/python3.10/site-packages (from aiohttp!=4.0.0a0,!=4.0.0a1->s3fs==2023.6.0->-r requirements.txt (line 8)) (1.3.1)
+Requirement already satisfied: attrs>=17.3.0 in /opt/conda/lib/python3.10/site-packages (from aiohttp!=4.0.0a0,!=4.0.0a1->s3fs==2023.6.0->-r requirements.txt (line 8)) (23.1.0)
+Requirement already satisfied: frozenlist>=1.1.1 in /opt/conda/lib/python3.10/site-packages (from aiohttp!=4.0.0a0,!=4.0.0a1->s3fs==2023.6.0->-r requirements.txt (line 8)) (1.4.0)
+Requirement already satisfied: multidict<7.0,>=4.5 in /opt/conda/lib/python3.10/site-packages (from aiohttp!=4.0.0a0,!=4.0.0a1->s3fs==2023.6.0->-r requirements.txt (line 8)) (6.0.4)
+Requirement already satisfied: yarl<2.0,>=1.0 in /opt/conda/lib/python3.10/site-packages (from aiohttp!=4.0.0a0,!=4.0.0a1->s3fs==2023.6.0->-r requirements.txt (line 8)) (1.9.3)
+Requirement already satisfied: async-timeout<5.0,>=4.0 in /opt/conda/lib/python3.10/site-packages (from aiohttp!=4.0.0a0,!=4.0.0a1->s3fs==2023.6.0->-r requirements.txt (line 8)) (4.0.3)
+Requirement already satisfied: urllib3<1.27,>=1.25.4 in /opt/conda/lib/python3.10/site-packages (from botocore<1.32.0,>=1.31.0->boto3==1.28.0->-r requirements.txt (line 12)) (1.26.18)
+Requirement already satisfied: requests in /opt/conda/lib/python3.10/site-packages (from fsspec[http]>2021.06.0->pytorch-lightning>=2.0.0->-r requirements.txt (line 13)) (2.31.0)
+Requirement already satisfied: six>=1.5 in /opt/conda/lib/python3.10/site-packages (from python-dateutil>=2.8.2->pandas==2.0.3->-r requirements.txt (line 3)) (1.16.0)
+Requirement already satisfied: MarkupSafe>=2.1.1 in /opt/conda/lib/python3.10/site-packages (from werkzeug>=1.0.1->tensorboard>=2.11.0->-r requirements.txt (line 14)) (2.1.3)
+Requirement already satisfied: mpmath>=0.19 in /opt/conda/lib/python3.10/site-packages (from sympy->torch==2.0.1->-r requirements.txt (line 1)) (1.3.0)
+Requirement already satisfied: idna>=2.0 in /opt/conda/lib/python3.10/site-packages (from yarl<2.0,>=1.0->aiohttp!=4.0.0a0,!=4.0.0a1->s3fs==2023.6.0->-r requirements.txt (line 8)) (3.4)
+Requirement already satisfied: charset-normalizer<4,>=2 in /opt/conda/lib/python3.10/site-packages (from requests->fsspec[http]>2021.06.0->pytorch-lightning>=2.0.0->-r requirements.txt (line 13)) (3.1.0)
+Requirement already satisfied: certifi>=2017.4.17 in /opt/conda/lib/python3.10/site-packages (from requests->fsspec[http]>2021.06.0->pytorch-lightning>=2.0.0->-r requirements.txt (line 13)) (2023.11.17)
+Downloading numpy-1.24.3-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (17.3 MB)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 17.3/17.3 MB 120.0 MB/s eta 0:00:00
+Downloading pandas-2.0.3-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (12.3 MB)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 12.3/12.3 MB 149.8 MB/s eta 0:00:00
+Downloading scikit_learn-1.3.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (10.8 MB)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 10.8/10.8 MB 149.9 MB/s eta 0:00:00
+Downloading matplotlib-3.7.2-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (11.6 MB)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 11.6/11.6 MB 144.5 MB/s eta 0:00:00
+Downloading seaborn-0.12.2-py3-none-any.whl (293 kB)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 293.3/293.3 kB 58.7 MB/s eta 0:00:00
+Downloading s3fs-2023.6.0-py3-none-any.whl (28 kB)
+Downloading xarray-2023.6.0-py3-none-any.whl (999 kB)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 999.1/999.1 kB 115.5 MB/s eta 0:00:00
+Downloading scipy-1.11.1-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (36.3 MB)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 36.3/36.3 MB 73.2 MB/s eta 0:00:00
+Downloading boto3-1.28.0-py3-none-any.whl (135 kB)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 135.7/135.7 kB 8.3 MB/s eta 0:00:00
+Downloading fsspec-2023.6.0-py3-none-any.whl (163 kB)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 163.8/163.8 kB 16.1 MB/s eta 0:00:00
+Downloading tensorboard-2.20.0-py3-none-any.whl (5.5 MB)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.5/5.5 MB 133.7 MB/s eta 0:00:00
+Downloading absl_py-2.3.1-py3-none-any.whl (135 kB)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 135.8/135.8 kB 15.5 MB/s eta 0:00:00
+Downloading aiobotocore-2.5.4-py3-none-any.whl (73 kB)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 73.4/73.4 kB 11.5 MB/s eta 0:00:00
+Downloading botocore-1.31.17-py3-none-any.whl (11.1 MB)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 11.1/11.1 MB 126.3 MB/s eta 0:00:00
+Downloading grpcio-1.74.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (6.2 MB)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.2/6.2 MB 124.7 MB/s eta 0:00:00
+Downloading markdown-3.8.2-py3-none-any.whl (106 kB)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 106.8/106.8 kB 12.0 MB/s eta 0:00:00
+Downloading pyparsing-3.0.9-py3-none-any.whl (98 kB)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 98.3/98.3 kB 12.4 MB/s eta 0:00:00
+Downloading s3transfer-0.6.2-py3-none-any.whl (79 kB)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 79.8/79.8 kB 24.7 MB/s eta 0:00:00
+Downloading tensorboard_data_server-0.7.2-py3-none-manylinux_2_31_x86_64.whl (6.6 MB)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.6/6.6 MB 148.8 MB/s eta 0:00:00
+Downloading aioitertools-0.12.0-py3-none-any.whl (24 kB)
+Downloading wrapt-1.17.2-cp310-cp310-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl (82 kB)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 82.8/82.8 kB 24.7 MB/s eta 0:00:00
+Installing collected packages: wrapt, tensorboard-data-server, pyparsing, numpy, markdown, grpcio, fsspec, aioitertools, absl-py, tensorboard, scipy, pandas, botocore, xarray, scikit-learn, s3transfer, matplotlib, aiobotocore, seaborn, s3fs, boto3
+Attempting uninstall: pyparsing
+Found existing installation: pyparsing 3.1.1
+Uninstalling pyparsing-3.1.1:
+Successfully uninstalled pyparsing-3.1.1
+Attempting uninstall: numpy
+Found existing installation: numpy 1.26.2
+Uninstalling numpy-1.26.2:
+Successfully uninstalled numpy-1.26.2
+Attempting uninstall: fsspec
+Found existing installation: fsspec 2023.10.0
+Uninstalling fsspec-2023.10.0:
+Successfully uninstalled fsspec-2023.10.0
+Attempting uninstall: scipy
+Found existing installation: SciPy 1.11.4
+Uninstalling SciPy-1.11.4:
+Successfully uninstalled SciPy-1.11.4
+Attempting uninstall: pandas
+Found existing installation: pandas 2.1.3
+Uninstalling pandas-2.1.3:
+Successfully uninstalled pandas-2.1.3
+Attempting uninstall: botocore
+Found existing installation: botocore 1.32.7
+Uninstalling botocore-1.32.7:
+Successfully uninstalled botocore-1.32.7
+Attempting uninstall: scikit-learn
+Found existing installation: scikit-learn 1.3.2
+Uninstalling scikit-learn-1.3.2:
+Successfully uninstalled scikit-learn-1.3.2
+Attempting uninstall: s3transfer
+Found existing installation: s3transfer 0.8.0
+Uninstalling s3transfer-0.8.0:
+Successfully uninstalled s3transfer-0.8.0
+Attempting uninstall: matplotlib
+Found existing installation: matplotlib 3.8.0
+Uninstalling matplotlib-3.8.0:
+Successfully uninstalled matplotlib-3.8.0
+Attempting uninstall: seaborn
+Found existing installation: seaborn 0.13.0
+Uninstalling seaborn-0.13.0:
+Successfully uninstalled seaborn-0.13.0
+Attempting uninstall: s3fs
+Found existing installation: s3fs 0.4.2
+Uninstalling s3fs-0.4.2:
+Successfully uninstalled s3fs-0.4.2
+Attempting uninstall: boto3
+Found existing installation: boto3 1.29.7
+Uninstalling boto3-1.29.7:
+Successfully uninstalled boto3-1.29.7
+ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
+awscli 1.30.7 requires botocore==1.32.7, but you have botocore 1.31.17 which is incompatible.
+awscli 1.30.7 requires s3transfer<0.9.0,>=0.8.0, but you have s3transfer 0.6.2 which is incompatible.
+sagemaker 2.198.0 requires boto3<2.0,>=1.29.6, but you have boto3 1.28.0 which is incompatible.
+sagemaker-training 4.7.4 requires boto3>=1.28.57, but you have boto3 1.28.0 which is incompatible.
+sagemaker-training 4.7.4 requires botocore>=1.31.57, but you have botocore 1.31.17 which is incompatible.
+Successfully installed absl-py-2.3.1 aiobotocore-2.5.4 aioitertools-0.12.0 boto3-1.28.0 botocore-1.31.17 fsspec-2023.6.0 grpcio-1.74.0 markdown-3.8.2 matplotlib-3.7.2 numpy-1.24.3 pandas-2.0.3 pyparsing-3.0.9 s3fs-2023.6.0 s3transfer-0.6.2 scikit-learn-1.3.0 scipy-1.11.1 seaborn-0.12.2 tensorboard-2.20.0 tensorboard-data-server-0.7.2 wrapt-1.17.2 xarray-2023.6.0
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv
+[notice] A new release of pip is available: 23.3.1 -> 25.2
+[notice] To update, run: pip install --upgrade pip
+2025-08-04 12:54:25,376 sagemaker-training-toolkit INFO     Waiting for the process to finish and give a return code.
+2025-08-04 12:54:25,376 sagemaker-training-toolkit INFO     Done waiting for a return code. Received 0 from exiting process.
+2025-08-04 12:54:25,417 sagemaker-training-toolkit INFO     No Neurons detected (normal if no neurons installed)
+2025-08-04 12:54:25,446 sagemaker-training-toolkit INFO     No Neurons detected (normal if no neurons installed)
+2025-08-04 12:54:25,476 sagemaker-training-toolkit INFO     No Neurons detected (normal if no neurons installed)
+2025-08-04 12:54:25,486 sagemaker-training-toolkit INFO     Invoking user script
+Training Env:
+{
+    "additional_framework_parameters": {},
+    "channel_input_dirs": {},
+    "current_host": "algo-1",
+    "current_instance_group": "homogeneousCluster",
+    "current_instance_group_hosts": [
+        "algo-1"
+    ],
+    "current_instance_type": "ml.g4dn.2xlarge",
+    "distribution_hosts": [],
+    "distribution_instance_groups": [],
+    "framework_module": "sagemaker_pytorch_container.training:main",
+    "hosts": [
+        "algo-1"
+    ],
+    "hyperparameters": {
+        "base-attr-dir": "Caravan-Jan25-nc/attributes",
+        "base-data-dir": "Caravan-Jan25-nc/timeseries/netcdf",
+        "batch-size": 2048,
+        "bucket-name": "climate-ai-data-science-shiny-app-data",
+        "chunk-size": 200,
+        "dropout": 0.3,
+        "experiment-name": "experiment_lightning_73",
+        "hidden-size": 256,
+        "learning-rate": 0.0001,
+        "num-layers": 2,
+        "total-epochs": 5
+    },
+    "input_config_dir": "/opt/ml/input/config",
+    "input_data_config": {},
+    "input_dir": "/opt/ml/input",
+    "instance_groups": [
+        "homogeneousCluster"
+    ],
+    "instance_groups_dict": {
+        "homogeneousCluster": {
+            "instance_group_name": "homogeneousCluster",
+            "instance_type": "ml.g4dn.2xlarge",
+            "hosts": [
+                "algo-1"
+            ]
+        }
+    },
+    "is_hetero": false,
+    "is_master": true,
+    "is_modelparallel_enabled": null,
+    "is_smddpmprun_installed": false,
+    "is_smddprun_installed": true,
+    "job_name": "pytorch-training-2025-08-04-12-49-46-023",
+    "log_level": 20,
+    "master_hostname": "algo-1",
+    "model_dir": "/opt/ml/model",
+    "module_dir": "s3://sagemaker-us-east-2-672980278503/pytorch-training-2025-08-04-12-49-46-023/source/sourcedir.tar.gz",
+    "module_name": "train",
+    "network_interface_name": "eth0",
+    "num_cpus": 8,
+    "num_gpus": 1,
+    "num_neurons": 0,
+    "output_data_dir": "/opt/ml/output/data",
+    "output_dir": "/opt/ml/output",
+    "output_intermediate_dir": "/opt/ml/output/intermediate",
+    "resource_config": {
+        "current_host": "algo-1",
+        "current_instance_type": "ml.g4dn.2xlarge",
+        "current_group_name": "homogeneousCluster",
+        "hosts": [
+            "algo-1"
+        ],
+        "instance_groups": [
+            {
+                "instance_group_name": "homogeneousCluster",
+                "instance_type": "ml.g4dn.2xlarge",
+                "hosts": [
+                    "algo-1"
+                ]
+            }
+        ],
+        "network_interface_name": "eth0",
+        "topology": null
+    },
+    "user_entry_point": "train.py"
+}
+Environment variables:
+SM_HOSTS=["algo-1"]
+SM_NETWORK_INTERFACE_NAME=eth0
+SM_HPS={"base-attr-dir":"Caravan-Jan25-nc/attributes","base-data-dir":"Caravan-Jan25-nc/timeseries/netcdf","batch-size":2048,"bucket-name":"climate-ai-data-science-shiny-app-data","chunk-size":200,"dropout":0.3,"experiment-name":"experiment_lightning_73","hidden-size":256,"learning-rate":0.0001,"num-layers":2,"total-epochs":5}
+SM_USER_ENTRY_POINT=train.py
+SM_FRAMEWORK_PARAMS={}
+SM_RESOURCE_CONFIG={"current_group_name":"homogeneousCluster","current_host":"algo-1","current_instance_type":"ml.g4dn.2xlarge","hosts":["algo-1"],"instance_groups":[{"hosts":["algo-1"],"instance_group_name":"homogeneousCluster","instance_type":"ml.g4dn.2xlarge"}],"network_interface_name":"eth0","topology":null}
+SM_INPUT_DATA_CONFIG={}
+SM_OUTPUT_DATA_DIR=/opt/ml/output/data
+SM_CHANNELS=[]
+SM_CURRENT_HOST=algo-1
+SM_CURRENT_INSTANCE_TYPE=ml.g4dn.2xlarge
+SM_CURRENT_INSTANCE_GROUP=homogeneousCluster
+SM_CURRENT_INSTANCE_GROUP_HOSTS=["algo-1"]
+SM_INSTANCE_GROUPS=["homogeneousCluster"]
+SM_INSTANCE_GROUPS_DICT={"homogeneousCluster":{"hosts":["algo-1"],"instance_group_name":"homogeneousCluster","instance_type":"ml.g4dn.2xlarge"}}
+SM_DISTRIBUTION_INSTANCE_GROUPS=[]
+SM_IS_HETERO=false
+SM_MODULE_NAME=train
+SM_LOG_LEVEL=20
+SM_FRAMEWORK_MODULE=sagemaker_pytorch_container.training:main
+SM_INPUT_DIR=/opt/ml/input
+SM_INPUT_CONFIG_DIR=/opt/ml/input/config
+SM_OUTPUT_DIR=/opt/ml/output
+SM_NUM_CPUS=8
+SM_NUM_GPUS=1
+SM_NUM_NEURONS=0
+SM_MODEL_DIR=/opt/ml/model
+SM_MODULE_DIR=s3://sagemaker-us-east-2-672980278503/pytorch-training-2025-08-04-12-49-46-023/source/sourcedir.tar.gz
+SM_TRAINING_ENV={"additional_framework_parameters":{},"channel_input_dirs":{},"current_host":"algo-1","current_instance_group":"homogeneousCluster","current_instance_group_hosts":["algo-1"],"current_instance_type":"ml.g4dn.2xlarge","distribution_hosts":[],"distribution_instance_groups":[],"framework_module":"sagemaker_pytorch_container.training:main","hosts":["algo-1"],"hyperparameters":{"base-attr-dir":"Caravan-Jan25-nc/attributes","base-data-dir":"Caravan-Jan25-nc/timeseries/netcdf","batch-size":2048,"bucket-name":"climate-ai-data-science-shiny-app-data","chunk-size":200,"dropout":0.3,"experiment-name":"experiment_lightning_73","hidden-size":256,"learning-rate":0.0001,"num-layers":2,"total-epochs":5},"input_config_dir":"/opt/ml/input/config","input_data_config":{},"input_dir":"/opt/ml/input","instance_groups":["homogeneousCluster"],"instance_groups_dict":{"homogeneousCluster":{"hosts":["algo-1"],"instance_group_name":"homogeneousCluster","instance_type":"ml.g4dn.2xlarge"}},"is_hetero":false,"is_master":true,"is_modelparallel_enabled":null,"is_smddpmprun_installed":false,"is_smddprun_installed":true,"job_name":"pytorch-training-2025-08-04-12-49-46-023","log_level":20,"master_hostname":"algo-1","model_dir":"/opt/ml/model","module_dir":"s3://sagemaker-us-east-2-672980278503/pytorch-training-2025-08-04-12-49-46-023/source/sourcedir.tar.gz","module_name":"train","network_interface_name":"eth0","num_cpus":8,"num_gpus":1,"num_neurons":0,"output_data_dir":"/opt/ml/output/data","output_dir":"/opt/ml/output","output_intermediate_dir":"/opt/ml/output/intermediate","resource_config":{"current_group_name":"homogeneousCluster","current_host":"algo-1","current_instance_type":"ml.g4dn.2xlarge","hosts":["algo-1"],"instance_groups":[{"hosts":["algo-1"],"instance_group_name":"homogeneousCluster","instance_type":"ml.g4dn.2xlarge"}],"network_interface_name":"eth0","topology":null},"user_entry_point":"train.py"}
+SM_USER_ARGS=["--base-attr-dir","Caravan-Jan25-nc/attributes","--base-data-dir","Caravan-Jan25-nc/timeseries/netcdf","--batch-size","2048","--bucket-name","climate-ai-data-science-shiny-app-data","--chunk-size","200","--dropout","0.3","--experiment-name","experiment_lightning_73","--hidden-size","256","--learning-rate","0.0001","--num-layers","2","--total-epochs","5"]
+SM_OUTPUT_INTERMEDIATE_DIR=/opt/ml/output/intermediate
+SM_HP_BASE-ATTR-DIR=Caravan-Jan25-nc/attributes
+SM_HP_BASE-DATA-DIR=Caravan-Jan25-nc/timeseries/netcdf
+SM_HP_BATCH-SIZE=2048
+SM_HP_BUCKET-NAME=climate-ai-data-science-shiny-app-data
+SM_HP_CHUNK-SIZE=200
+SM_HP_DROPOUT=0.3
+SM_HP_EXPERIMENT-NAME=experiment_lightning_73
+SM_HP_HIDDEN-SIZE=256
+SM_HP_LEARNING-RATE=0.0001
+SM_HP_NUM-LAYERS=2
+SM_HP_TOTAL-EPOCHS=5
+PYTHONPATH=/opt/ml/code:/opt/conda/bin:/opt/conda/lib/python310.zip:/opt/conda/lib/python3.10:/opt/conda/lib/python3.10/lib-dynload:/opt/conda/lib/python3.10/site-packages
+Invoking script with the following command:
+/opt/conda/bin/python3.10 train.py --base-attr-dir Caravan-Jan25-nc/attributes --base-data-dir Caravan-Jan25-nc/timeseries/netcdf --batch-size 2048 --bucket-name climate-ai-data-science-shiny-app-data --chunk-size 200 --dropout 0.3 --experiment-name experiment_lightning_73 --hidden-size 256 --learning-rate 0.0001 --num-layers 2 --total-epochs 5
+2025-08-04 12:54:25,509 sagemaker-training-toolkit INFO     Exceptions not imported for SageMaker TF as Tensorflow is not installed.
+Starting PyTorch Lightning training with experiment: experiment_lightning_73
+Model directory: /opt/ml/model
+Output directory: /opt/ml/output/data
+Checkpoint directory: /opt/ml/checkpoints
+Using device: cuda
+GPU: Tesla T4
+GPU Memory: 15.83 GB
+Loading watershed data...
+Searching for watershed files in s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf...
+Found 4925 unique watershed files.
+Found 20 watersheds
+Creating Lightning DataModule...
+Setting up data splits and computing normalization parameters...
+Train watersheds: 12
+Val watersheds: 4
+Test watersheds: 4
+Computing normalization parameters from training data...
+Loading data for camels_02096846...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02096846.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02096846.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 13819, Last valid at index 23283
+Data shape after trimming: (9465, 8)
+No remaining NaNs found in the trimmed data.
+WARNING: Found 931 non-positive streamflow values in camels_02096846
+Searching for attributes for gage_id: camels_02096846
+Searching for attributes for gauge_id: camels_02096846
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+Loading data for camels_02082950...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02082950.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02082950.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 10958, Last valid at index 23283
+Data shape after trimming: (12326, 8)
+No remaining NaNs found in the trimmed data.
+WARNING: Found 102 non-positive streamflow values in camels_02082950
+Searching for attributes for gage_id: camels_02082950
+Searching for attributes for gauge_id: camels_02082950
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+Loading data for camels_02074500...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02074500.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02074500.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 10958, Last valid at index 23290
+Data shape after trimming: (12333, 8)
+No remaining NaNs found in the trimmed data.
+Searching for attributes for gage_id: camels_02074500
+Searching for attributes for gauge_id: camels_02074500
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+Loading data for camels_02051000...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02051000.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02051000.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 11231, Last valid at index 23347
+Data shape after trimming: (12117, 8)
+No remaining NaNs found in the trimmed data.
+WARNING: Found 99 non-positive streamflow values in camels_02051000
+Searching for attributes for gage_id: camels_02051000
+Searching for attributes for gauge_id: camels_02051000
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+Loading data for camels_02064000...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02064000.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02064000.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 10958, Last valid at index 23358
+Data shape after trimming: (12401, 8)
+No remaining NaNs found in the trimmed data.
+Searching for attributes for gage_id: camels_02064000
+Searching for attributes for gauge_id: camels_02064000
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+Loading data for camels_02102908...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02102908.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02102908.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 10592, Last valid at index 23283
+Data shape after trimming: (12692, 8)
+No remaining NaNs found in the trimmed data.
+Searching for attributes for gage_id: camels_02102908
+Searching for attributes for gauge_id: camels_02102908
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+Loading data for camels_02053200...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02053200.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02053200.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 10958, Last valid at index 23375
+Data shape after trimming: (12418, 8)
+No remaining NaNs found in the trimmed data.
+WARNING: Found 146 non-positive streamflow values in camels_02053200
+Searching for attributes for gage_id: camels_02053200
+Searching for attributes for gauge_id: camels_02053200
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+Loading data for camels_02070000...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02070000.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02070000.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 10958, Last valid at index 23353
+Data shape after trimming: (12396, 8)
+No remaining NaNs found in the trimmed data.
+Searching for attributes for gage_id: camels_02070000
+Searching for attributes for gauge_id: camels_02070000
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+Loading data for camels_02056900...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02056900.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02056900.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 10958, Last valid at index 23351
+Data shape after trimming: (12394, 8)
+No remaining NaNs found in the trimmed data.
+Searching for attributes for gage_id: camels_02056900
+Searching for attributes for gauge_id: camels_02056900
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+Loading data for camels_02065500...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02065500.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02065500.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 10958, Last valid at index 23354
+Data shape after trimming: (12397, 8)
+No remaining NaNs found in the trimmed data.
+WARNING: Found 15 non-positive streamflow values in camels_02065500
+Searching for attributes for gage_id: camels_02065500
+Searching for attributes for gauge_id: camels_02065500
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+Loading data for camels_02077200...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02077200.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02077200.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 10958, Last valid at index 23283
+Data shape after trimming: (12326, 8)
+No remaining NaNs found in the trimmed data.
+WARNING: Found 884 non-positive streamflow values in camels_02077200
+Searching for attributes for gage_id: camels_02077200
+Searching for attributes for gauge_id: camels_02077200
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+Loading data for camels_02055100...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02055100.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02055100.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 10592, Last valid at index 23283
+Data shape after trimming: (12692, 8)
+No remaining NaNs found in the trimmed data.
+Searching for attributes for gage_id: camels_02055100
+Searching for attributes for gauge_id: camels_02055100
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+WARNING: Extreme values in total_precipitation_sum for camels_02055100
+Checking for extreme normalized values...
+WARNING: Extreme normalized target values detected!
+Min: -1.20, Max: 11.00
+Mean: 0.00, Std: 1.00
+Clipped target values to [-10, 10]
+WARNING: Extreme normalized values in total_precipitation_sum!
+Min: -0.43, Max: 29.91
+Successfully prepared combined DataFrame with shape: (145957, 59)
+Identified static reals: ['pet_mm_syr', 'aet_mm_syr', 'pre_mm_syr', 'tmp_dc_syr', 'tmp_dc_smn', 'tmp_dc_smx', 'snw_pc_syr', 'snw_pc_smx', 'swc_pc_syr', 'gdp_ud_sav', 'gdp_ud_ssu', 'inu_pc_slt', 'inu_pc_smn', 'inu_pc_smx', 'run_mm_syr', 'dis_m3_pmn', 'dis_m3_pmx', 'dis_m3_pyr', 'lka_pc_sse', 'lkv_mc_usu', 'rev_mc_usu', 'ria_ha_usu', 'riv_tc_usu', 'dor_pc_pva', 'gwt_cm_sav', 'ele_mt_sav', 'slp_dg_sav', 'sgr_dk_sav', 'ari_ix_sav', 'glc_cl_smj', 'for_pc_sse', 'crp_pc_sse', 'ire_pc_sse', 'gla_pc_sse', 'prm_pc_sse', 'cly_pc_sav', 'slt_pc_sav', 'snd_pc_sav', 'soc_th_sav', 'lit_cl_smj', 'kar_pc_sse', 'pop_ct_usu', 'rdd_mk_sav', 'urb_pc_sse', 'gauge_lat', 'gauge_lon', 'area']
+Identified time-varying reals: ['potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum', 'Aridity_instantaneous', 'Aridity_smoothed']
+Loading data for camels_02096846...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02096846.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02096846.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 13819, Last valid at index 23283
+Data shape after trimming: (9465, 8)
+No remaining NaNs found in the trimmed data.
+WARNING: Found 931 non-positive streamflow values in camels_02096846
+Searching for attributes for gage_id: camels_02096846
+Searching for attributes for gauge_id: camels_02096846
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+Loading data for camels_02082950...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02082950.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02082950.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 10958, Last valid at index 23283
+Data shape after trimming: (12326, 8)
+No remaining NaNs found in the trimmed data.
+WARNING: Found 102 non-positive streamflow values in camels_02082950
+Searching for attributes for gage_id: camels_02082950
+Searching for attributes for gauge_id: camels_02082950
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+Loading data for camels_02074500...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02074500.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02074500.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 10958, Last valid at index 23290
+Data shape after trimming: (12333, 8)
+No remaining NaNs found in the trimmed data.
+Searching for attributes for gage_id: camels_02074500
+Searching for attributes for gauge_id: camels_02074500
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+Loading data for camels_02051000...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02051000.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02051000.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 11231, Last valid at index 23347
+Data shape after trimming: (12117, 8)
+No remaining NaNs found in the trimmed data.
+WARNING: Found 99 non-positive streamflow values in camels_02051000
+Searching for attributes for gage_id: camels_02051000
+Searching for attributes for gauge_id: camels_02051000
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+Loading data for camels_02064000...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02064000.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02064000.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 10958, Last valid at index 23358
+Data shape after trimming: (12401, 8)
+No remaining NaNs found in the trimmed data.
+Searching for attributes for gage_id: camels_02064000
+Searching for attributes for gauge_id: camels_02064000
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+WARNING: Extreme values in total_precipitation_sum for camels_02064000
+Checking for extreme normalized values...
+WARNING: Extreme normalized values in total_precipitation_sum!
+Min: -0.43, Max: 18.05
+Successfully prepared combined DataFrame with shape: (58642, 59)
+Identified static reals: ['pet_mm_syr', 'aet_mm_syr', 'pre_mm_syr', 'tmp_dc_syr', 'tmp_dc_smn', 'tmp_dc_smx', 'snw_pc_syr', 'snw_pc_smx', 'swc_pc_syr', 'gdp_ud_sav', 'gdp_ud_ssu', 'inu_pc_slt', 'inu_pc_smn', 'inu_pc_smx', 'run_mm_syr', 'dis_m3_pmn', 'dis_m3_pmx', 'dis_m3_pyr', 'lka_pc_sse', 'lkv_mc_usu', 'rev_mc_usu', 'ria_ha_usu', 'riv_tc_usu', 'dor_pc_pva', 'gwt_cm_sav', 'ele_mt_sav', 'slp_dg_sav', 'sgr_dk_sav', 'ari_ix_sav', 'glc_cl_smj', 'for_pc_sse', 'crp_pc_sse', 'ire_pc_sse', 'gla_pc_sse', 'prm_pc_sse', 'cly_pc_sav', 'slt_pc_sav', 'snd_pc_sav', 'soc_th_sav', 'lit_cl_smj', 'kar_pc_sse', 'pop_ct_usu', 'rdd_mk_sav', 'urb_pc_sse', 'gauge_lat', 'gauge_lon', 'area']
+Identified time-varying reals: ['potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum', 'Aridity_instantaneous', 'Aridity_smoothed']
+Saved normalization parameters to /opt/ml/output/data/normalization_params.json
+Creating Lightning model...
+/opt/conda/lib/python3.10/site-packages/lightning_fabric/connector.py:565: `precision=16` is supported for historical reasons but its usage is discouraged. Please set your precision to 16-mixed instead!
+Using 16bit Automatic Mixed Precision (AMP)
+GPU available: True (cuda), used: True
+TPU available: False, using: 0 TPU cores
+IPU available: False, using: 0 IPUs
+HPU available: False, using: 0 HPUs
+`Trainer(limit_val_batches=1.0)` was configured so 100% of the batches will be used..
+No checkpoint files found, starting fresh training
+Starting training...
+Train watersheds: 12
+Val watersheds: 4
+Test watersheds: 4
+Loading data for camels_02096846...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02096846.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02096846.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 13819, Last valid at index 23283
+Data shape after trimming: (9465, 8)
+No remaining NaNs found in the trimmed data.
+WARNING: Found 931 non-positive streamflow values in camels_02096846
+Searching for attributes for gage_id: camels_02096846
+Searching for attributes for gauge_id: camels_02096846
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+Loading data for camels_02082950...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02082950.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02082950.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 10958, Last valid at index 23283
+Data shape after trimming: (12326, 8)
+No remaining NaNs found in the trimmed data.
+WARNING: Found 102 non-positive streamflow values in camels_02082950
+Searching for attributes for gage_id: camels_02082950
+Searching for attributes for gauge_id: camels_02082950
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+Loading data for camels_02074500...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02074500.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02074500.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 10958, Last valid at index 23290
+Data shape after trimming: (12333, 8)
+No remaining NaNs found in the trimmed data.
+Searching for attributes for gage_id: camels_02074500
+Searching for attributes for gauge_id: camels_02074500
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+Loading data for camels_02051000...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02051000.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02051000.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 11231, Last valid at index 23347
+Data shape after trimming: (12117, 8)
+No remaining NaNs found in the trimmed data.
+WARNING: Found 99 non-positive streamflow values in camels_02051000
+Searching for attributes for gage_id: camels_02051000
+Searching for attributes for gauge_id: camels_02051000
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+Loading data for camels_02064000...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02064000.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02064000.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 10958, Last valid at index 23358
+Data shape after trimming: (12401, 8)
+No remaining NaNs found in the trimmed data.
+Searching for attributes for gage_id: camels_02064000
+Searching for attributes for gauge_id: camels_02064000
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+WARNING: Extreme values in total_precipitation_sum for camels_02064000
+Checking for extreme normalized values...
+WARNING: Extreme normalized values in total_precipitation_sum!
+Min: -0.43, Max: 18.05
+Successfully prepared combined DataFrame with shape: (58642, 59)
+Identified static reals: ['pet_mm_syr', 'aet_mm_syr', 'pre_mm_syr', 'tmp_dc_syr', 'tmp_dc_smn', 'tmp_dc_smx', 'snw_pc_syr', 'snw_pc_smx', 'swc_pc_syr', 'gdp_ud_sav', 'gdp_ud_ssu', 'inu_pc_slt', 'inu_pc_smn', 'inu_pc_smx', 'run_mm_syr', 'dis_m3_pmn', 'dis_m3_pmx', 'dis_m3_pyr', 'lka_pc_sse', 'lkv_mc_usu', 'rev_mc_usu', 'ria_ha_usu', 'riv_tc_usu', 'dor_pc_pva', 'gwt_cm_sav', 'ele_mt_sav', 'slp_dg_sav', 'sgr_dk_sav', 'ari_ix_sav', 'glc_cl_smj', 'for_pc_sse', 'crp_pc_sse', 'ire_pc_sse', 'gla_pc_sse', 'prm_pc_sse', 'cly_pc_sav', 'slt_pc_sav', 'snd_pc_sav', 'soc_th_sav', 'lit_cl_smj', 'kar_pc_sse', 'pop_ct_usu', 'rdd_mk_sav', 'urb_pc_sse', 'gauge_lat', 'gauge_lon', 'area']
+Identified time-varying reals: ['potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum', 'Aridity_instantaneous', 'Aridity_smoothed']
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0]
+| Name          | Type            | Params
+--------------------------------------------------
+0 | model         | EntityAwareLSTM | 979 K
+1 | criterion     | KGELoss         | 0
+2 | mse_criterion | MSELoss         | 0
+--------------------------------------------------
+979 K     Trainable params
+0         Non-trainable params
+979 K     Total params
+3.918     Total estimated model params size (MB)
+Sanity Checking: |          | 0/? [00:00<?, ?it/s]
+Loading data for camels_02081500...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02081500.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02081500.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 10958, Last valid at index 23310
+Data shape after trimming: (12353, 8)
+No remaining NaNs found in the trimmed data.
+WARNING: Found 540 non-positive streamflow values in camels_02081500
+Searching for attributes for gage_id: camels_02081500
+Searching for attributes for gauge_id: camels_02081500
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+Loading data for camels_02059500...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02059500.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02059500.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 10958, Last valid at index 23351
+Data shape after trimming: (12394, 8)
+No remaining NaNs found in the trimmed data.
+Searching for attributes for gage_id: camels_02059500
+Searching for attributes for gauge_id: camels_02059500
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+Loading data for camels_02046000...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02046000.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02046000.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 10958, Last valid at index 23375
+Data shape after trimming: (12418, 8)
+No remaining NaNs found in the trimmed data.
+WARNING: Found 146 non-positive streamflow values in camels_02046000
+Searching for attributes for gage_id: camels_02046000
+Searching for attributes for gauge_id: camels_02046000
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+Loading data for camels_02069700...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02069700.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02069700.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 10958, Last valid at index 23353
+Data shape after trimming: (12396, 8)
+No remaining NaNs found in the trimmed data.
+Searching for attributes for gage_id: camels_02069700
+Searching for attributes for gauge_id: camels_02069700
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+WARNING: Extreme values in total_precipitation_sum for camels_02069700
+Checking for extreme normalized values...
+WARNING: Extreme normalized values in total_precipitation_sum!
+Min: -0.43, Max: 19.03
+Successfully prepared combined DataFrame with shape: (49561, 59)
+Identified static reals: ['pet_mm_syr', 'aet_mm_syr', 'pre_mm_syr', 'tmp_dc_syr', 'tmp_dc_smn', 'tmp_dc_smx', 'snw_pc_syr', 'snw_pc_smx', 'swc_pc_syr', 'gdp_ud_sav', 'gdp_ud_ssu', 'inu_pc_slt', 'inu_pc_smn', 'inu_pc_smx', 'run_mm_syr', 'dis_m3_pmn', 'dis_m3_pmx', 'dis_m3_pyr', 'lka_pc_sse', 'lkv_mc_usu', 'rev_mc_usu', 'ria_ha_usu', 'riv_tc_usu', 'dor_pc_pva', 'gwt_cm_sav', 'ele_mt_sav', 'slp_dg_sav', 'sgr_dk_sav', 'ari_ix_sav', 'glc_cl_smj', 'for_pc_sse', 'crp_pc_sse', 'ire_pc_sse', 'gla_pc_sse', 'prm_pc_sse', 'cly_pc_sav', 'slt_pc_sav', 'snd_pc_sav', 'soc_th_sav', 'lit_cl_smj', 'kar_pc_sse', 'pop_ct_usu', 'rdd_mk_sav', 'urb_pc_sse', 'gauge_lat', 'gauge_lon', 'area']
+Identified time-varying reals: ['potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum', 'Aridity_instantaneous', 'Aridity_smoothed']
+Sanity Checking:   0%|          | 0/2 [00:00<?, ?it/s]
+Sanity Checking DataLoader 0:   0%|          | 0/2 [00:00<?, ?it/s]
+Sanity Checking DataLoader 0: 100%|██████████| 2/2 [00:00<00:00,  6.27it/s]
+Loading data for camels_02096846...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02096846.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02096846.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 13819, Last valid at index 23283
+Data shape after trimming: (9465, 8)
+No remaining NaNs found in the trimmed data.
+WARNING: Found 931 non-positive streamflow values in camels_02096846
+Searching for attributes for gage_id: camels_02096846
+Searching for attributes for gauge_id: camels_02096846
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+Loading data for camels_02082950...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02082950.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02082950.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 10958, Last valid at index 23283
+Data shape after trimming: (12326, 8)
+No remaining NaNs found in the trimmed data.
+WARNING: Found 102 non-positive streamflow values in camels_02082950
+Searching for attributes for gage_id: camels_02082950
+Searching for attributes for gauge_id: camels_02082950
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+Loading data for camels_02074500...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02074500.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02074500.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 10958, Last valid at index 23290
+Data shape after trimming: (12333, 8)
+No remaining NaNs found in the trimmed data.
+Searching for attributes for gage_id: camels_02074500
+Searching for attributes for gauge_id: camels_02074500
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+Loading data for camels_02051000...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02051000.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02051000.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 11231, Last valid at index 23347
+Data shape after trimming: (12117, 8)
+No remaining NaNs found in the trimmed data.
+WARNING: Found 99 non-positive streamflow values in camels_02051000
+Searching for attributes for gage_id: camels_02051000
+Searching for attributes for gauge_id: camels_02051000
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+Loading data for camels_02064000...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02064000.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02064000.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 10958, Last valid at index 23358
+Data shape after trimming: (12401, 8)
+No remaining NaNs found in the trimmed data.
+Searching for attributes for gage_id: camels_02064000
+Searching for attributes for gauge_id: camels_02064000
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+Loading data for camels_02102908...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02102908.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02102908.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 10592, Last valid at index 23283
+Data shape after trimming: (12692, 8)
+No remaining NaNs found in the trimmed data.
+Searching for attributes for gage_id: camels_02102908
+Searching for attributes for gauge_id: camels_02102908
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+Loading data for camels_02053200...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02053200.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02053200.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 10958, Last valid at index 23375
+Data shape after trimming: (12418, 8)
+No remaining NaNs found in the trimmed data.
+WARNING: Found 146 non-positive streamflow values in camels_02053200
+Searching for attributes for gage_id: camels_02053200
+Searching for attributes for gauge_id: camels_02053200
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+Loading data for camels_02070000...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02070000.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02070000.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 10958, Last valid at index 23353
+Data shape after trimming: (12396, 8)
+No remaining NaNs found in the trimmed data.
+Searching for attributes for gage_id: camels_02070000
+Searching for attributes for gauge_id: camels_02070000
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+Loading data for camels_02056900...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02056900.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02056900.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 10958, Last valid at index 23351
+Data shape after trimming: (12394, 8)
+No remaining NaNs found in the trimmed data.
+Searching for attributes for gage_id: camels_02056900
+Searching for attributes for gauge_id: camels_02056900
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+Loading data for camels_02065500...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02065500.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02065500.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 10958, Last valid at index 23354
+Data shape after trimming: (12397, 8)
+No remaining NaNs found in the trimmed data.
+WARNING: Found 15 non-positive streamflow values in camels_02065500
+Searching for attributes for gage_id: camels_02065500
+Searching for attributes for gauge_id: camels_02065500
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+Loading data for camels_02077200...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02077200.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02077200.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 10958, Last valid at index 23283
+Data shape after trimming: (12326, 8)
+No remaining NaNs found in the trimmed data.
+WARNING: Found 884 non-positive streamflow values in camels_02077200
+Searching for attributes for gage_id: camels_02077200
+Searching for attributes for gauge_id: camels_02077200
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+Loading data for camels_02055100...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02055100.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02055100.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 10592, Last valid at index 23283
+Data shape after trimming: (12692, 8)
+No remaining NaNs found in the trimmed data.
+Searching for attributes for gage_id: camels_02055100
+Searching for attributes for gauge_id: camels_02055100
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+WARNING: Extreme values in total_precipitation_sum for camels_02055100
+Checking for extreme normalized values...
+WARNING: Extreme normalized target values detected!
+Min: -1.20, Max: 11.00
+Mean: 0.00, Std: 1.00
+Clipped target values to [-10, 10]
+WARNING: Extreme normalized values in total_precipitation_sum!
+Min: -0.43, Max: 29.91
+Successfully prepared combined DataFrame with shape: (145957, 59)
+Identified static reals: ['pet_mm_syr', 'aet_mm_syr', 'pre_mm_syr', 'tmp_dc_syr', 'tmp_dc_smn', 'tmp_dc_smx', 'snw_pc_syr', 'snw_pc_smx', 'swc_pc_syr', 'gdp_ud_sav', 'gdp_ud_ssu', 'inu_pc_slt', 'inu_pc_smn', 'inu_pc_smx', 'run_mm_syr', 'dis_m3_pmn', 'dis_m3_pmx', 'dis_m3_pyr', 'lka_pc_sse', 'lkv_mc_usu', 'rev_mc_usu', 'ria_ha_usu', 'riv_tc_usu', 'dor_pc_pva', 'gwt_cm_sav', 'ele_mt_sav', 'slp_dg_sav', 'sgr_dk_sav', 'ari_ix_sav', 'glc_cl_smj', 'for_pc_sse', 'crp_pc_sse', 'ire_pc_sse', 'gla_pc_sse', 'prm_pc_sse', 'cly_pc_sav', 'slt_pc_sav', 'snd_pc_sav', 'soc_th_sav', 'lit_cl_smj', 'kar_pc_sse', 'pop_ct_usu', 'rdd_mk_sav', 'urb_pc_sse', 'gauge_lat', 'gauge_lon', 'area']
+Identified time-varying reals: ['potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum', 'Aridity_instantaneous', 'Aridity_smoothed']
+Training: |          | 0/? [00:00<?, ?it/s]
+Training:   0%|          | 0/69 [00:00<?, ?it/s]
+Epoch 0:   0%|          | 0/69 [00:00<?, ?it/s]
+Epoch 0:  72%|███████▏  | 50/69 [05:57<02:15,  0.14it/s]
+Epoch 0:  72%|███████▏  | 50/69 [05:57<02:15,  0.14it/s, v_num=ning, train_loss_step=0.406]
+Epoch 0: 100%|██████████| 69/69 [07:43<00:00,  0.15it/s, v_num=ning, train_loss_step=0.406]
+Epoch 0: 100%|██████████| 69/69 [07:43<00:00,  0.15it/s, v_num=ning, train_loss_step=0.386]
+Validation: |          | 0/? [00:00<?, ?it/s]#033[A
+Validation:   0%|          | 0/24 [00:00<?, ?it/s]#033[A
+Validation DataLoader 0:   0%|          | 0/24 [00:00<?, ?it/s]#033[A
+Validation DataLoader 0: 100%|██████████| 24/24 [01:56<00:00,  0.21it/s]#033[A
+#033[A
+Epoch 0: 100%|██████████| 69/69 [10:03<00:00,  0.11it/s, v_num=ning, train_loss_step=0.386, val_loss=0.335, val_kge=-.229]
+Epoch 0: 100%|██████████| 69/69 [10:03<00:00,  0.11it/s, v_num=ning, train_loss_step=0.386, val_loss=0.335, val_kge=-.229, train_loss_epoch=0.499]
+Metric val_loss improved. New best score: 0.335
+Epoch 0:   0%|          | 0/69 [00:00<?, ?it/s, v_num=ning, train_loss_step=0.386, val_loss=0.335, val_kge=-.229, train_loss_epoch=0.499]
+Epoch 1:   0%|          | 0/69 [00:00<?, ?it/s, v_num=ning, train_loss_step=0.386, val_loss=0.335, val_kge=-.229, train_loss_epoch=0.499]
+Epoch 1:  72%|███████▏  | 50/69 [05:34<02:07,  0.15it/s, v_num=ning, train_loss_step=0.386, val_loss=0.335, val_kge=-.229, train_loss_epoch=0.499]
+Epoch 1:  72%|███████▏  | 50/69 [05:34<02:07,  0.15it/s, v_num=ning, train_loss_step=0.346, val_loss=0.335, val_kge=-.229, train_loss_epoch=0.499]
+Epoch 1: 100%|██████████| 69/69 [07:25<00:00,  0.15it/s, v_num=ning, train_loss_step=0.346, val_loss=0.335, val_kge=-.229, train_loss_epoch=0.499]
+Epoch 1: 100%|██████████| 69/69 [07:25<00:00,  0.15it/s, v_num=ning, train_loss_step=0.334, val_loss=0.335, val_kge=-.229, train_loss_epoch=0.499]
+Validation: |          | 0/? [00:00<?, ?it/s]#033[A
+Validation:   0%|          | 0/24 [00:00<?, ?it/s]#033[A
+Validation DataLoader 0:   0%|          | 0/24 [00:00<?, ?it/s]#033[A
+Validation DataLoader 0: 100%|██████████| 24/24 [02:02<00:00,  0.20it/s]#033[A
+#033[A
+Epoch 1: 100%|██████████| 69/69 [09:52<00:00,  0.12it/s, v_num=ning, train_loss_step=0.334, val_loss=0.303, val_kge=-.154, train_loss_epoch=0.499]
+Epoch 1: 100%|██████████| 69/69 [09:52<00:00,  0.12it/s, v_num=ning, train_loss_step=0.334, val_loss=0.303, val_kge=-.154, train_loss_epoch=0.353]
+Metric val_loss improved by 0.032 >= min_delta = 0.0. New best score: 0.303
+Epoch 1:   0%|          | 0/69 [00:00<?, ?it/s, v_num=ning, train_loss_step=0.334, val_loss=0.303, val_kge=-.154, train_loss_epoch=0.353]
+Epoch 2:   0%|          | 0/69 [00:00<?, ?it/s, v_num=ning, train_loss_step=0.334, val_loss=0.303, val_kge=-.154, train_loss_epoch=0.353]
+Epoch 2:  72%|███████▏  | 50/69 [05:33<02:06,  0.15it/s, v_num=ning, train_loss_step=0.334, val_loss=0.303, val_kge=-.154, train_loss_epoch=0.353]
+Epoch 2:  72%|███████▏  | 50/69 [05:33<02:06,  0.15it/s, v_num=ning, train_loss_step=0.325, val_loss=0.303, val_kge=-.154, train_loss_epoch=0.353]
+Epoch 2: 100%|██████████| 69/69 [07:22<00:00,  0.16it/s, v_num=ning, train_loss_step=0.325, val_loss=0.303, val_kge=-.154, train_loss_epoch=0.353]
+Epoch 2: 100%|██████████| 69/69 [07:22<00:00,  0.16it/s, v_num=ning, train_loss_step=0.323, val_loss=0.303, val_kge=-.154, train_loss_epoch=0.353]
+Validation: |          | 0/? [00:00<?, ?it/s]#033[A
+Validation:   0%|          | 0/24 [00:00<?, ?it/s]#033[A
+Validation DataLoader 0:   0%|          | 0/24 [00:00<?, ?it/s]#033[A
+Validation DataLoader 0: 100%|██████████| 24/24 [01:59<00:00,  0.20it/s]#033[A
+#033[A
+Epoch 2: 100%|██████████| 69/69 [09:46<00:00,  0.12it/s, v_num=ning, train_loss_step=0.323, val_loss=0.293, val_kge=-.136, train_loss_epoch=0.353]
+Epoch 2: 100%|██████████| 69/69 [09:46<00:00,  0.12it/s, v_num=ning, train_loss_step=0.323, val_loss=0.293, val_kge=-.136, train_loss_epoch=0.331]
+Metric val_loss improved by 0.010 >= min_delta = 0.0. New best score: 0.293
+Epoch 2:   0%|          | 0/69 [00:00<?, ?it/s, v_num=ning, train_loss_step=0.323, val_loss=0.293, val_kge=-.136, train_loss_epoch=0.331]
+Epoch 3:   0%|          | 0/69 [00:00<?, ?it/s, v_num=ning, train_loss_step=0.323, val_loss=0.293, val_kge=-.136, train_loss_epoch=0.331]
+Epoch 3:  72%|███████▏  | 50/69 [05:32<02:06,  0.15it/s, v_num=ning, train_loss_step=0.323, val_loss=0.293, val_kge=-.136, train_loss_epoch=0.331]
+Epoch 3:  72%|███████▏  | 50/69 [05:32<02:06,  0.15it/s, v_num=ning, train_loss_step=0.334, val_loss=0.293, val_kge=-.136, train_loss_epoch=0.331]
+Epoch 3: 100%|██████████| 69/69 [07:20<00:00,  0.16it/s, v_num=ning, train_loss_step=0.334, val_loss=0.293, val_kge=-.136, train_loss_epoch=0.331]
+Epoch 3: 100%|██████████| 69/69 [07:20<00:00,  0.16it/s, v_num=ning, train_loss_step=0.326, val_loss=0.293, val_kge=-.136, train_loss_epoch=0.331]
+Validation: |          | 0/? [00:00<?, ?it/s]#033[A
+Validation:   0%|          | 0/24 [00:00<?, ?it/s]#033[A
+Validation DataLoader 0:   0%|          | 0/24 [00:00<?, ?it/s]#033[A
+Validation DataLoader 0: 100%|██████████| 24/24 [01:59<00:00,  0.20it/s]#033[A
+#033[A
+Epoch 3: 100%|██████████| 69/69 [09:44<00:00,  0.12it/s, v_num=ning, train_loss_step=0.326, val_loss=0.288, val_kge=-.131, train_loss_epoch=0.331]
+Epoch 3: 100%|██████████| 69/69 [09:44<00:00,  0.12it/s, v_num=ning, train_loss_step=0.326, val_loss=0.288, val_kge=-.131, train_loss_epoch=0.322]
+Metric val_loss improved by 0.005 >= min_delta = 0.0. New best score: 0.288
+Epoch 3:   0%|          | 0/69 [00:00<?, ?it/s, v_num=ning, train_loss_step=0.326, val_loss=0.288, val_kge=-.131, train_loss_epoch=0.322]
+Epoch 4:   0%|          | 0/69 [00:00<?, ?it/s, v_num=ning, train_loss_step=0.326, val_loss=0.288, val_kge=-.131, train_loss_epoch=0.322]
+Epoch 4:  72%|███████▏  | 50/69 [05:32<02:06,  0.15it/s, v_num=ning, train_loss_step=0.326, val_loss=0.288, val_kge=-.131, train_loss_epoch=0.322]
+Epoch 4:  72%|███████▏  | 50/69 [05:32<02:06,  0.15it/s, v_num=ning, train_loss_step=0.313, val_loss=0.288, val_kge=-.131, train_loss_epoch=0.322]
+Epoch 4: 100%|██████████| 69/69 [07:22<00:00,  0.16it/s, v_num=ning, train_loss_step=0.313, val_loss=0.288, val_kge=-.131, train_loss_epoch=0.322]
+Epoch 4: 100%|██████████| 69/69 [07:22<00:00,  0.16it/s, v_num=ning, train_loss_step=0.313, val_loss=0.288, val_kge=-.131, train_loss_epoch=0.322]
+Validation: |          | 0/? [00:00<?, ?it/s]#033[A
+Validation:   0%|          | 0/24 [00:00<?, ?it/s]#033[A
+Validation DataLoader 0:   0%|          | 0/24 [00:00<?, ?it/s]#033[A
+Validation DataLoader 0: 100%|██████████| 24/24 [01:59<00:00,  0.20it/s]#033[A
+#033[A
+Epoch 4: 100%|██████████| 69/69 [09:46<00:00,  0.12it/s, v_num=ning, train_loss_step=0.313, val_loss=0.290, val_kge=-.130, train_loss_epoch=0.322]
+Epoch 4: 100%|██████████| 69/69 [09:46<00:00,  0.12it/s, v_num=ning, train_loss_step=0.313, val_loss=0.290, val_kge=-.130, train_loss_epoch=0.319]
+`Trainer.fit` stopped: `max_epochs=5` reached.
+Epoch 4: 100%|██████████| 69/69 [09:46<00:00,  0.12it/s, v_num=ning, train_loss_step=0.313, val_loss=0.290, val_kge=-.130, train_loss_epoch=0.319]
+Running test evaluation...
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0]
+Loading data for camels_02092500...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02092500.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02092500.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 10958, Last valid at index 23283
+Data shape after trimming: (12326, 8)
+No remaining NaNs found in the trimmed data.
+WARNING: Found 88 non-positive streamflow values in camels_02092500
+Searching for attributes for gage_id: camels_02092500
+Searching for attributes for gauge_id: camels_02092500
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+Loading data for camels_02053800...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02053800.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02053800.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 10958, Last valid at index 23352
+Data shape after trimming: (12395, 8)
+No remaining NaNs found in the trimmed data.
+Searching for attributes for gage_id: camels_02053800
+Searching for attributes for gauge_id: camels_02053800
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+Loading data for camels_02038850...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02038850.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02038850.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 10592, Last valid at index 23290
+Data shape after trimming: (12699, 8)
+No remaining NaNs found in the trimmed data.
+WARNING: Found 23 non-positive streamflow values in camels_02038850
+Searching for attributes for gage_id: camels_02038850
+Searching for attributes for gauge_id: camels_02038850
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+Loading data for camels_02051500...
+Attempting to open: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02051500.nc
+Using s3fs and engine='scipy'
+Using default variables: ['streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum']
+Successfully opened via s3fs and scipy: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/timeseries/netcdf/camels/camels_02051500.nc
+Initial data loaded. Shape: (26662, 8)
+Trimming data based on streamflow: First valid at index 10958, Last valid at index 23325
+Data shape after trimming: (12368, 8)
+No remaining NaNs found in the trimmed data.
+WARNING: Found 6 non-positive streamflow values in camels_02051500
+Searching for attributes for gage_id: camels_02051500
+Searching for attributes for gauge_id: camels_02051500
+Using default HydroATLAS columns.
+Reading HydroATLAS attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_hydroatlas_camels.csv
+Found matching watershed in HydroATLAS attributes file.
+Reading Other attributes from: s3://climate-ai-data-science-shiny-app-data/Caravan-Jan25-nc/attributes/camels/attributes_other_camels.csv
+Found matching watershed in Other attributes file.
+Skipping Caravan attributes file as 'caravan_cols_to_extract' was not provided.
+Successfully combined attributes from 2 file(s).
+WARNING: Extreme values in total_precipitation_sum for camels_02051500
+Checking for extreme normalized values...
+WARNING: Extreme normalized values in total_precipitation_sum!
+Min: -0.43, Max: 17.90
+WARNING: Extreme normalized values in static feature inu_pc_slt!
+Min: -0.36, Max: 15.93
+WARNING: Extreme normalized values in static feature inu_pc_smx!
+Min: -0.45, Max: 36.37
+WARNING: Extreme normalized values in static feature riv_tc_usu!
+Min: -0.59, Max: 14.85
+Successfully prepared combined DataFrame with shape: (49788, 59)
+Identified static reals: ['pet_mm_syr', 'aet_mm_syr', 'pre_mm_syr', 'tmp_dc_syr', 'tmp_dc_smn', 'tmp_dc_smx', 'snw_pc_syr', 'snw_pc_smx', 'swc_pc_syr', 'gdp_ud_sav', 'gdp_ud_ssu', 'inu_pc_slt', 'inu_pc_smn', 'inu_pc_smx', 'run_mm_syr', 'dis_m3_pmn', 'dis_m3_pmx', 'dis_m3_pyr', 'lka_pc_sse', 'lkv_mc_usu', 'rev_mc_usu', 'ria_ha_usu', 'riv_tc_usu', 'dor_pc_pva', 'gwt_cm_sav', 'ele_mt_sav', 'slp_dg_sav', 'sgr_dk_sav', 'ari_ix_sav', 'glc_cl_smj', 'for_pc_sse', 'crp_pc_sse', 'ire_pc_sse', 'gla_pc_sse', 'prm_pc_sse', 'cly_pc_sav', 'slt_pc_sav', 'snd_pc_sav', 'soc_th_sav', 'lit_cl_smj', 'kar_pc_sse', 'pop_ct_usu', 'rdd_mk_sav', 'urb_pc_sse', 'gauge_lat', 'gauge_lon', 'area']
+Identified time-varying reals: ['potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean', 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum', 'Aridity_instantaneous', 'Aridity_smoothed']
+Testing: |          | 0/? [00:00<?, ?it/s]
+Testing:   0%|          | 0/24 [00:00<?, ?it/s]
+Testing DataLoader 0:   0%|          | 0/24 [00:00<?, ?it/s]
+Testing DataLoader 0: 100%|██████████| 24/24 [02:01<00:00,  0.20it/s]
+Testing DataLoader 0: 100%|██████████| 24/24 [02:01<00:00,  0.20it/s]
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃        Test metric        ┃       DataLoader 0        ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│         test_kge          │   -0.12820010426721828    │
+│      test_kge_alpha       │    0.01159918773919344    │
+│       test_kge_beta       │    0.7585810422897339     │
+│        test_kge_r         │    0.5125410822963344     │
+│         test_loss         │    0.2864692211151123     │
+│         test_mae          │    0.6976693868637085     │
+│         test_mse          │    0.9851672053337097     │
+│         test_rmse         │    1.7883552312850952     │
+└───────────────────────────┴───────────────────────────┘
+Copying best model from /opt/ml/checkpoints/experiment_lightning_73_epoch_epoch=4_kge_val_kge=-0.130.ckpt to /opt/ml/model
+==================================================
+Training completed successfully!
+Best model saved to: /opt/ml/model
+Results saved to: /opt/ml/output/data/results.json
+TensorBoard logs available at: /opt/ml/output/data/experiment_lightning_73
+Normalization parameters saved to: /opt/ml/output/data/normalization_params.json
+==================================================
+2025-08-04 13:47:11,983 sagemaker-training-toolkit INFO     Waiting for the process to finish and give a return code.
+2025-08-04 13:47:11,983 sagemaker-training-toolkit INFO     Done waiting for a return code. Received 0 from exiting process.
+2025-08-04 13:47:11,983 sagemaker-training-toolkit INFO     Reporting training SUCCESS
+
+============================================================
+Job Status: Completed

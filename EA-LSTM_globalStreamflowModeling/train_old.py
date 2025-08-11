@@ -4,12 +4,28 @@ import argparse
 import json
 import os
 import sys
-
-# Add all your imports here
+import psutil
 import torch
 import numpy as np
 import pandas as pd
-
+from typing import Optional, Dict, Any, List, Tuple, Union
+import pytorch_lightning as pl
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+#torch.set_num_threads(16)  # Limit PyTorch threads
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import Dataset, DataLoader
+from sklearn.model_selection import train_test_split
+from datetime import datetime
+#os.environ["OMP_NUM_THREADS"] = "4"  # Limit OpenMP threads
+#os.environ["MKL_NUM_THREADS"] = "4"   # Limit MKL threads
+#os.environ["NUMEXPR_NUM_THREADS"] = "4"  # Limit NumExpr threads
+import matplotlib.pyplot as plt
+import time
+import seaborn as sns
+from tqdm import tqdm  
+import pickle
+import signal  # signal handling for spot instances
 
 #########################################################################################################################
 # Caravan data processing
@@ -17,10 +33,8 @@ import pandas as pd
 
 import boto3
 import re
-import pandas as pd
 import xarray as xr
 import s3fs  # Required by xarray to open S3 files directly
-import numpy as np
 import warnings
 import gc
 
@@ -90,13 +104,7 @@ def identify_all_available_watersheds(bucket_name, base_directory):
 
 
 
-import pandas as pd
-import xarray as xr
-import s3fs # Required
 import scipy # Required for the engine
-import numpy as np
-import warnings
-import boto3
 import traceback # For detailed error reporting
 
 def load_and_process_watershed_data(bucket_name, base_directory, subdirectory_name, watershedID, variables_to_extract=None):
@@ -125,8 +133,12 @@ def load_and_process_watershed_data(bucket_name, base_directory, subdirectory_na
 
     # --- Define default variables and handle user input ---
     default_variables = [
-        'streamflow', 'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean',
-        'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 'total_precipitation_sum'
+        'streamflow', 
+#        'potential_evaporation_sum_ERA5_LAND', 
+        'surface_net_solar_radiation_mean',
+        'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min', 
+        'total_precipitation_sum',
+        'dewpoint_temperature_2m_mean'
     ]
     if variables_to_extract is None:
         # Use the default list if the user didn't provide one
@@ -285,9 +297,6 @@ def load_and_process_watershed_data(bucket_name, base_directory, subdirectory_na
     return processed_df
 
 
-import pandas as pd
-import s3fs # Required for pandas to read directly from S3
-import warnings
 
 def get_watershed_attributes(bucket_name, base_attributes_directory, subdirectory_name, watershedID, hydroatlas_cols_to_extract=None, caravan_cols_to_extract=None):
     """
@@ -314,10 +323,20 @@ def get_watershed_attributes(bucket_name, base_attributes_directory, subdirector
                        or if required files/columns are missing.
     """
     # --- Construct Paths and Target ID ---
-    base_path = f"s3://{bucket_name}/{base_attributes_directory.strip('/')}/{subdirectory_name}"
-    file1_path = f"{base_path}/attributes_hydroatlas_{subdirectory_name}.csv" # HydroATLAS
-    file2_path = f"{base_path}/attributes_other_{subdirectory_name}.csv"      # Other
-    file3_path = f"{base_path}/attributes_caravan_{subdirectory_name}.csv"    # Caravan (Optional)
+    # Check if base_attributes_directory is a local path or S3 path
+    if base_attributes_directory.startswith('/'):  # Local path
+        # For local paths, construct direct file paths
+        base_path = f"{base_attributes_directory}/{subdirectory_name}"
+        file1_path = f"{base_path}/attributes_hydroatlas_{subdirectory_name}.csv"
+        file2_path = f"{base_path}/attributes_other_{subdirectory_name}.csv"
+        file3_path = f"{base_path}/attributes_caravan_{subdirectory_name}.csv"
+    else:  # S3 path
+        # For S3 paths, construct S3 URLs
+        base_path = f"s3://{bucket_name}/{base_attributes_directory.strip('/')}/{subdirectory_name}"
+        file1_path = f"{base_path}/attributes_hydroatlas_{subdirectory_name}.csv"
+        file2_path = f"{base_path}/attributes_other_{subdirectory_name}.csv"
+        file3_path = f"{base_path}/attributes_caravan_{subdirectory_name}.csv"
+    
     target_gauge_id = f"{subdirectory_name}_{watershedID}"
 
     print(f"Searching for attributes for gauge_id: {target_gauge_id}")
@@ -326,10 +345,10 @@ def get_watershed_attributes(bucket_name, base_attributes_directory, subdirector
     default_hydroatlas_cols = [
         'pet_mm_syr', 'aet_mm_syr', 
         'pre_mm_syr', 
-        'tmp_dc_syr', 'tmp_dc_smn', 'tmp_dc_smx'
+        'tmp_dc_syr', 'tmp_dc_smn', 'tmp_dc_smx',
         'snw_pc_syr', 'snw_pc_smx', 
         'swc_pc_syr',
-        'gdp_ud_sav', 'gdp_ud_ssu', 'gdp_ud_usu',
+        'gdp_ud_sav', 'gdp_ud_ssu',
         'inu_pc_slt', 'inu_pc_smn', 'inu_pc_smx',
         'run_mm_syr',
         'dis_m3_pmn', 'dis_m3_pmx', 'dis_m3_pyr',
@@ -492,82 +511,235 @@ def get_watershed_attributes(bucket_name, base_attributes_directory, subdirector
 # Modeling - Helper Functions
 #########################################################################################################################
 
-import numpy as np
-import pandas as pd
-import warnings
-
 def calculate_kge(observed: np.ndarray, simulated: np.ndarray) -> float:
     """
-    Calculate Kling-Gupta Efficiency (KGE).
-
-    Args:
-        observed (np.ndarray): Array of observed values.
-        simulated (np.ndarray): Array of simulated values.
-
-    Returns:
-        float: KGE value. Returns np.nan if calculation fails.
+    Calculate Kling-Gupta Efficiency (KGE) with robust handling of extreme values.
     """
     # Ensure inputs are numpy arrays
     observed = np.asarray(observed).flatten()
     simulated = np.asarray(simulated).flatten()
-
-    # Remove NaN values pairwise
-    valid_indices = ~np.isnan(observed) & ~np.isnan(simulated)
-    if np.sum(valid_indices) < 2: # Need at least 2 pairs for std dev and correlation
-        warnings.warn("Not enough valid pairs to calculate KGE after removing NaNs.")
+    
+    # Remove NaN and inf values pairwise
+    valid_indices = ~np.isnan(observed) & ~np.isnan(simulated) & \
+                   np.isfinite(observed) & np.isfinite(simulated)
+    
+    if np.sum(valid_indices) < 2:
+        warnings.warn("Not enough valid pairs to calculate KGE after removing NaNs/Infs.")
         return np.nan
-
+    
     obs_valid = observed[valid_indices]
     sim_valid = simulated[valid_indices]
+    
+    # Additional check for extreme values
+    if np.any(np.abs(obs_valid) > 1e10) or np.any(np.abs(sim_valid) > 1e10):
+        warnings.warn("Extreme values detected in KGE calculation. Clipping to reasonable range.")
+        obs_valid = np.clip(obs_valid, -1e10, 1e10)
+        sim_valid = np.clip(sim_valid, -1e10, 1e10)
+    
+    # Calculate components with float64 for better precision
+    mean_obs = np.mean(obs_valid.astype(np.float64))
+    mean_sim = np.mean(sim_valid.astype(np.float64))
+    
+    if np.isnan(mean_obs) or np.isnan(mean_sim) or np.isinf(mean_obs) or np.isinf(mean_sim):
+        warnings.warn("Mean calculation resulted in NaN or Inf in KGE.")
+        return np.nan
+    
+    std_obs = np.std(obs_valid.astype(np.float64))
+    std_sim = np.std(sim_valid.astype(np.float64))
+    
+    # Avoid division by zero
+    if std_obs < 1e-10 or mean_obs == 0:
+        warnings.warn("Zero or near-zero standard deviation or mean observed value in KGE.")
+        return np.nan
+    
+    # Pearson correlation coefficient
+    if std_sim < 1e-10:
+        r = 0.0  # No variation in simulated values
+    else:
+        correlation_matrix = np.corrcoef(obs_valid, sim_valid)
+        r = correlation_matrix[0, 1]
+        if np.isnan(r):
+            r = 0.0
+    
+    # Alpha (ratio of standard deviations)
+    alpha = std_sim / std_obs
+    
+    # Beta (ratio of means)
+    beta = mean_sim / mean_obs
+    
+    # Calculate KGE
+    kge = 1 - np.sqrt((r - 1)**2 + (alpha - 1)**2 + (beta - 1)**2)
+    
+    return kge
 
+
+class KGELoss(nn.Module):
+    """Differentiable KGE loss function optimized for normalized space training"""
+    def __init__(self, epsilon=1e-6, beta_scale=2.0):
+        super().__init__()
+        self.epsilon = epsilon  
+        self.beta_scale = beta_scale
+        
+    def soft_sign_transform(self, x):
+        """Maps values to positive domain [0, 2] while preserving relative differences"""
+        return 1.0 + torch.tanh(x / self.beta_scale)
+        
+    def forward(self, predictions, targets):
+        # Flatten tensors
+        predictions = predictions.view(-1)
+        targets = targets.view(-1)
+        
+        # Calculate means
+        mean_pred = torch.mean(predictions)
+        mean_target = torch.mean(targets)
+        
+        # Calculate standard deviations
+        std_pred = torch.std(predictions, unbiased=False)
+        std_target = torch.std(targets, unbiased=False)
+        
+        # Correlation calculation
+        if std_pred < self.epsilon or std_target < self.epsilon:
+            r = torch.tensor(0.0, device=predictions.device)
+        else:
+            pred_standardized = (predictions - mean_pred) / (std_pred + self.epsilon)
+            target_standardized = (targets - mean_target) / (std_target + self.epsilon)
+            r = torch.mean(pred_standardized * target_standardized)
+            r = torch.clamp(r, min=-0.999, max=0.999)
+        
+        # Beta calculation with soft sign transformation
+        transformed_mean_pred = self.soft_sign_transform(mean_pred)
+        transformed_mean_target = self.soft_sign_transform(mean_target)
+        
+        # Calculate beta as ratio of transformed values
+        beta = transformed_mean_pred / (transformed_mean_target + self.epsilon)
+        
+        # Alpha calculation - ENSURE IT'S ALWAYS A TENSOR
+        if std_target < self.epsilon:
+            # Create tensor instead of using float
+            if std_pred < self.epsilon:
+                alpha = torch.tensor(1.0, device=predictions.device)
+            else:
+                alpha = torch.tensor(10.0, device=predictions.device)
+        else:
+            alpha = (std_pred + self.epsilon) / (std_target + self.epsilon)
+        
+        # Apply bounds - now alpha and beta are guaranteed to be tensors
+        alpha = torch.clamp(alpha, min=0.01, max=100.0)
+        beta = torch.clamp(beta, min=0.01, max=100.0)
+        
+        # Calculate KGE
+        kge = 1 - torch.sqrt((r - 1)**2 + (alpha - 1)**2 + (beta - 1)**2)
+        kge = torch.clamp(kge, min=-10.0)
+        
+        return -kge
+
+
+def calculate_kge_components(observed: np.ndarray, simulated: np.ndarray) -> tuple:
+    """
+    Calculate KGE and its three components.
+    
+    Args:
+        observed: Array of observed values
+        simulated: Array of simulated values
+        
+    Returns:
+        tuple: (kge, r, alpha, beta)
+    """
+    # Ensure inputs are numpy arrays
+    observed = np.asarray(observed).flatten()
+    simulated = np.asarray(simulated).flatten()
+    
+    # Remove NaN values pairwise
+    valid_indices = ~np.isnan(observed) & ~np.isnan(simulated) & np.isfinite(observed) & np.isfinite(simulated)
+    if np.sum(valid_indices) < 2:
+        return np.nan, np.nan, np.nan, np.nan
+    
+    obs_valid = observed[valid_indices]
+    sim_valid = simulated[valid_indices]
+    
     # Calculate components
     mean_obs = np.mean(obs_valid)
     mean_sim = np.mean(sim_valid)
     std_obs = np.std(obs_valid)
     std_sim = np.std(sim_valid)
-
-    # Avoid division by zero for standard deviations
-    if std_obs == 0 or std_sim == 0 or mean_obs == 0:
-         warnings.warn("Zero standard deviation or mean observed value encountered in KGE calculation.")
-         # Return NaN or a default low value depending on desired behavior
-         return np.nan # Or perhaps -np.inf or a very negative number
-
+    
+    # Avoid division by zero
+    if std_obs < 1e-10 or mean_obs == 0:
+        return np.nan, np.nan, np.nan, np.nan
+    
     # Pearson correlation coefficient
-    correlation_matrix = np.corrcoef(obs_valid, sim_valid)
-    r = correlation_matrix[0, 1]
-
+    if std_sim < 1e-10:
+        r = 0.0
+    else:
+        correlation_matrix = np.corrcoef(obs_valid, sim_valid)
+        r = correlation_matrix[0, 1]
+        if np.isnan(r):
+            r = 0.0
+    
     # Alpha (ratio of standard deviations)
     alpha = std_sim / std_obs
-
+    
     # Beta (ratio of means)
     beta = mean_sim / mean_obs
-
+    
     # Calculate KGE
     kge = 1 - np.sqrt((r - 1)**2 + (alpha - 1)**2 + (beta - 1)**2)
+    
+    return kge, r, alpha, beta
 
-    return kge
+
+def calculate_rmse(observed: np.ndarray, simulated: np.ndarray) -> float:
+    """Calculate Root Mean Squared Error"""
+    observed = np.asarray(observed).flatten()
+    simulated = np.asarray(simulated).flatten()
+    
+    valid_indices = ~np.isnan(observed) & ~np.isnan(simulated)
+    if np.sum(valid_indices) < 1:
+        return np.nan
+        
+    return np.sqrt(np.mean((observed[valid_indices] - simulated[valid_indices])**2))
+
+
+def calculate_mae(observed: np.ndarray, simulated: np.ndarray) -> float:
+    """Calculate Mean Absolute Error"""
+    observed = np.asarray(observed).flatten()
+    simulated = np.asarray(simulated).flatten()
+    
+    valid_indices = ~np.isnan(observed) & ~np.isnan(simulated)
+    if np.sum(valid_indices) < 1:
+        return np.nan
+        
+    return np.mean(np.abs(observed[valid_indices] - simulated[valid_indices]))
+
+
 
 
 import traceback
 
 def unnormalize_predictions(predictions, norm_params):
     """
-    Reverse normalization for streamflow predictions.
-    
-    Args:
-        predictions: Normalized log-transformed predictions
-        norm_params: Dictionary with target_mean and target_std
-        
-    Returns:
-        Original scale predictions
+    Reverse normalization for streamflow predictions with safety bounds.
     """
+    # Clip predictions to reasonable range before unnormalization
+    predictions = np.clip(predictions, -10, 10)
+    
     # Reverse standardization
     log_predictions = predictions * norm_params['target_std'] + norm_params['target_mean']
+    
+    # Clip log predictions to prevent extreme exponentials
+    # exp(20) ≈ 485 million, which should be more than enough for any streamflow
+    log_predictions = np.clip(log_predictions, -10, 20)
     
     # Reverse log transform
     original_predictions = np.expm1(log_predictions)  # exp(x) - 1
     
+    # Final safety clip for streamflow (mm/day)
+    # Maximum reasonable streamflow is ~10,000 mm/day
+    original_predictions = np.clip(original_predictions, 0, 10000)
+    
     return original_predictions
+
+
 
 def unnormalize_features(features_df, norm_params, feature_type='dynamic'):
     """
@@ -594,172 +766,9 @@ def unnormalize_features(features_df, norm_params, feature_type='dynamic'):
 #################################################################################################
 
 
-import psutil
-
-def get_ram_usage():
-    """
-    Returns current RAM usage statistics.
-    """
-    virtual_mem = psutil.virtual_memory()
-    total_ram_gb = virtual_mem.total / (1024**3)  # Total RAM in GB
-    used_ram_gb = virtual_mem.used / (1024**3)    # Used RAM in GB
-    percent_used = virtual_mem.percent             # Percentage of RAM used
-    
-    return {
-        "total_ram_gb": total_ram_gb,
-        "used_ram_gb": used_ram_gb,
-        "percent_used": percent_used
-    }
-
-def print_ram_usage(context_message="Current RAM Usage"):
-    """
-    Prints the current RAM usage statistics in a formatted way.
-    """
-    usage = get_ram_usage()
-    print(f"--- {context_message} ---")
-    print(f"  Total RAM: {usage['total_ram_gb']:.2f} GB")
-    print(f"  Used RAM:  {usage['used_ram_gb']:.2f} GB")
-    print(f"  Percent Used: {usage['percent_used']:.1f}%")
-    print("--------------------------------------")
 
 
-class EarlyStopping:
-    """Early stopping to stop training when validation loss doesn't improve"""
-    def __init__(self, patience=7, verbose=True, delta=0, save_path='checkpoint.pt'):
-        """
-        Args:
-            patience (int): How many epochs to wait after last improvement
-            verbose (bool): If True, prints messages
-            delta (float): Minimum change to qualify as improvement
-            save_path (str): Path to save the best model
-        """
-        self.patience = patience
-        self.verbose = verbose
-        self.counter = 0
-        self.best_score = None
-        self.early_stop = False
-        self.val_loss_min = np.Inf
-        self.delta = delta
-        self.save_path = save_path
-        
-    def __call__(self, val_loss, model, optimizer, epoch, additional_info=None):
-        score = -val_loss  # We want to minimize loss, so negate it
-        
-        if self.best_score is None:
-            self.best_score = score
-            self.save_checkpoint(val_loss, model, optimizer, epoch, additional_info)
-        elif score < self.best_score + self.delta:
-            self.counter += 1
-            if self.verbose:
-                print(f'EarlyStopping counter: {self.counter} out of {self.patience}')
-            if self.counter >= self.patience:
-                self.early_stop = True
-        else:
-            self.best_score = score
-            self.save_checkpoint(val_loss, model, optimizer, epoch, additional_info)
-            self.counter = 0
-            
-    def save_checkpoint(self, val_loss, model, optimizer, epoch, additional_info):
-        """Saves model when validation loss decreases"""
-        if self.verbose:
-            print(f'Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}). Saving model...')
-        
-        checkpoint = {
-            'epoch': epoch,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-            'val_loss': val_loss,
-        }
-        if additional_info:
-            checkpoint.update(additional_info)
-            
-        torch.save(checkpoint, self.save_path)
-        self.val_loss_min = val_loss
 
-
-def get_learning_rate_scheduler(optimizer, scheduler_type='reduce_on_plateau', **kwargs):
-    """
-    Get a learning rate scheduler based on type.
-    
-    Args:
-        optimizer: PyTorch optimizer
-        scheduler_type: Type of scheduler ('reduce_on_plateau', 'cosine', 'step', 'exponential')
-        **kwargs: Additional arguments for the scheduler
-    
-    Returns:
-        scheduler object
-    """
-    if scheduler_type == 'reduce_on_plateau':
-        return torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer,
-            mode='min',
-            factor=kwargs.get('factor', 0.5),
-            patience=kwargs.get('patience', 5),
-            verbose=True,
-            min_lr=kwargs.get('min_lr', 1e-6)
-        )
-    elif scheduler_type == 'cosine':
-        return torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer,
-            T_max=kwargs.get('T_max', 100),
-            eta_min=kwargs.get('min_lr', 1e-6)
-        )
-    elif scheduler_type == 'step':
-        return torch.optim.lr_scheduler.StepLR(
-            optimizer,
-            step_size=kwargs.get('step_size', 30),
-            gamma=kwargs.get('gamma', 0.1)
-        )
-    elif scheduler_type == 'exponential':
-        return torch.optim.lr_scheduler.ExponentialLR(
-            optimizer,
-            gamma=kwargs.get('gamma', 0.95)
-        )
-    elif scheduler_type == 'warmup_cosine':
-        # Custom warmup + cosine annealing
-        return WarmupCosineScheduler(
-            optimizer,
-            warmup_epochs=kwargs.get('warmup_epochs', 5),
-            max_epochs=kwargs.get('max_epochs', 100),
-            min_lr=kwargs.get('min_lr', 1e-6)
-        )
-    else:
-        return None
-
-class WarmupCosineScheduler:
-    """Learning rate scheduler with linear warmup and cosine annealing"""
-    def __init__(self, optimizer, warmup_epochs, max_epochs, min_lr=1e-6):
-        self.optimizer = optimizer
-        self.warmup_epochs = warmup_epochs
-        self.max_epochs = max_epochs
-        self.min_lr = min_lr
-        self.base_lr = optimizer.param_groups[0]['lr']
-        self.current_epoch = 0
-        
-    def step(self, epoch=None):
-        if epoch is not None:
-            self.current_epoch = epoch
-        else:
-            self.current_epoch += 1
-            
-        if self.current_epoch < self.warmup_epochs:
-            # Linear warmup
-            lr = self.base_lr * (self.current_epoch + 1) / self.warmup_epochs
-        else:
-            # Cosine annealing
-            progress = (self.current_epoch - self.warmup_epochs) / (self.max_epochs - self.warmup_epochs)
-            lr = self.min_lr + (self.base_lr - self.min_lr) * 0.5 * (1 + np.cos(np.pi * progress))
-            
-        for param_group in self.optimizer.param_groups:
-            param_group['lr'] = lr
-            
-    def get_last_lr(self):
-        return [param_group['lr'] for param_group in self.optimizer.param_groups]
-
-
-# Assume load_and_process_watershed_data and get_watershed_attributes
-# functions from previous steps are defined and imported here.
-# from your_module import load_and_process_watershed_data, get_watershed_attributes
 
 def prepare_ptf_dataframe(
     watershed_subset_df,
@@ -790,11 +799,16 @@ def prepare_ptf_dataframe(
     """
     # Define these at the start to avoid undefined variable errors if the loop is skipped
     weather_cols = [
-        'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean',
+#        'potential_evaporation_sum_ERA5_LAND', 
+        'surface_net_solar_radiation_mean',
         'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min',
-        'total_precipitation_sum'
+        'total_precipitation_sum',
+        'dewpoint_temperature_2m_mean'
     ]
-    time_varying_cols = weather_cols  # Define early
+    # ADD: Include new smoothed precip features in weather columns
+    precip_cols = ['Precip_smoothed_5day', 'Precip_lagged_90day']
+    time_varying_cols = weather_cols + precip_cols  # Modified to include smoothed precip
+    
     all_data_list = []
     static_attribute_names = []
 
@@ -812,11 +826,13 @@ def prepare_ptf_dataframe(
             if timeseries_df.empty:
                 print(f"  Warning: No timeseries data loaded for {group_id}. Skipping.")
                 continue
-
+                
             weather_cols = [
-                'potential_evaporation_sum_ERA5_LAND', 'surface_net_solar_radiation_mean',
+#                'potential_evaporation_sum_ERA5_LAND',
+                'surface_net_solar_radiation_mean',
                 'temperature_2m_max', 'temperature_2m_mean', 'temperature_2m_min',
-                'total_precipitation_sum'
+                'total_precipitation_sum',
+                'dewpoint_temperature_2m_mean'
             ]
             target_col = 'streamflow'
             
@@ -828,9 +844,54 @@ def prepare_ptf_dataframe(
                 timeseries_df.loc[invalid_mask, target_col] = 1e-6
             
             
+            
+
+            # Calculate precipitation features BEFORE subsetting columns
+            if 'total_precipitation_sum' in timeseries_df.columns:
+                # Calculate Precip_smoothed_5day (5-day centered smoothing)
+                # Use center=True for centered window, min_periods=1 to handle edges
+                timeseries_df['Precip_smoothed_5day'] = (
+                    timeseries_df['total_precipitation_sum']
+                    .rolling(window=5, min_periods=1, center=True)
+                    .mean()
+                )
+                
+                # Calculate Precip_lagged_90day (90-day lagged average)
+                # This is the average precipitation over the preceding 90 days
+                timeseries_df['Precip_lagged_90day'] = (
+                    timeseries_df['total_precipitation_sum']
+                    .rolling(window=90, min_periods=1, center=False)
+                    .mean()
+                )
+                
+                # Handle any potential NaN values at the beginning of the series
+                # For smoothed: should have minimal NaNs due to min_periods=1
+                timeseries_df['Precip_smoothed_5day'] = timeseries_df['Precip_smoothed_5day'].ffill().bfill()
+                # For lagged: forward fill then backward fill
+                timeseries_df['Precip_lagged_90day'] = timeseries_df['Precip_lagged_90day'].ffill().bfill()
+                
+                # Log extreme values if any
+                for col in precip_cols:
+                    col_max = timeseries_df[col].max()
+                    col_min = timeseries_df[col].min()
+                    col_mean = timeseries_df[col].mean()
+                    if col_max > 1000 or col_min < 0:  # Precipitation shouldn't be negative or extremely high
+                        print(f"  Warning: Extreme {col} values in {group_id}: min={col_min:.3f}, max={col_max:.3f}, mean={col_mean:.3f}")
+            else:
+                print(f"  Warning: Missing total_precipitation_sum column for precipitation features in {group_id}")
+                # Create dummy columns with appropriate default values (using typical precipitation values)
+                timeseries_df['Precip_smoothed_5day'] = 0  
+                timeseries_df['Precip_lagged_90day'] = 0
+
+            
+            # Now update the columns to keep
             date_col = 'date'
-            keep_cols = [date_col, target_col] + weather_cols
+            target_col = 'streamflow'
+            keep_cols = [date_col, target_col] + weather_cols + precip_cols
             timeseries_df = timeseries_df[keep_cols]
+
+            
+            
 
             timeseries_df[date_col] = pd.to_datetime(timeseries_df[date_col])
             timeseries_df = timeseries_df.sort_values(by=date_col)
@@ -934,11 +995,14 @@ def prepare_ptf_dataframe(
      # Compute or apply normalization parameters
     if compute_norm_params:
         # Only compute params, don't normalize yet
+        # Update time_varying_cols to include smoothed precip
+        all_time_varying_cols = weather_cols + precip_cols
+        
         norm_params = {
             'static_means': {col: combined_df[col].mean() for col in static_attribute_names},
             'static_stds': {col: combined_df[col].std() for col in static_attribute_names},
-            'dynamic_means': {col: combined_df[col].mean() for col in time_varying_cols},
-            'dynamic_stds': {col: combined_df[col].std() for col in time_varying_cols},
+            'dynamic_means': {col: combined_df[col].mean() for col in all_time_varying_cols},
+            'dynamic_stds': {col: combined_df[col].std() for col in all_time_varying_cols},
             'target_mean': np.mean(np.log1p(combined_df[target_col])),
             'target_std': np.std(np.log1p(combined_df[target_col]))
         }
@@ -955,8 +1019,9 @@ def prepare_ptf_dataframe(
                 else:
                     combined_df[col] = 0.0
         
-        # Dynamic features
-        for col in time_varying_cols:
+        # Dynamic features (including smoothed precip)
+        all_time_varying_cols = weather_cols + precip_cols
+        for col in all_time_varying_cols:
             if col in norm_params['dynamic_means']:
                 mean_val = norm_params['dynamic_means'][col]
                 std_val = norm_params['dynamic_stds'][col]
@@ -970,6 +1035,68 @@ def prepare_ptf_dataframe(
         mean_target = norm_params['target_mean']
         std_target = norm_params['target_std']
         combined_df[target_col] = (combined_df[target_col] - mean_target) / std_target
+        
+        # ========== ADD VALIDATION DATA CHECKS HERE ==========
+        # Check for extreme normalized values
+        print("\nChecking for extreme normalized values...")
+        extreme_found = False
+        
+        # Check target values
+        target_normalized = combined_df[target_col]
+        if target_normalized.max() > 20 or target_normalized.min() < -20:
+            extreme_found = True
+            print(f"WARNING: Extreme normalized target values detected!")
+            print(f"  Min: {target_normalized.min():.2f}, Max: {target_normalized.max():.2f}")
+            print(f"  Mean: {target_normalized.mean():.2f}, Std: {target_normalized.std():.2f}")
+            # Clip extreme values
+            combined_df[target_col] = combined_df[target_col].clip(-20, 20)
+            print(f"  Clipped target values to [-20, 20]")
+        
+        # Check dynamic features
+        for col in all_time_varying_cols:
+            if col in combined_df.columns:
+                col_values = combined_df[col]
+                if col_values.max() > 20 or col_values.min() < -20:
+                    extreme_found = True
+                    print(f"WARNING: Extreme normalized values in {col}!")
+                    print(f"  Min: {col_values.min():.2f}, Max: {col_values.max():.2f}")
+                    combined_df[col] = combined_df[col].clip(-20, 20)
+        
+        # Check static features
+        for col in static_attribute_names:
+            if col in combined_df.columns:
+                col_values = combined_df[col]
+                if col_values.max() > 20 or col_values.min() < -20:
+                    extreme_found = True
+                    print(f"WARNING: Extreme normalized values in static feature {col}!")
+                    print(f"  Min: {col_values.min():.2f}, Max: {col_values.max():.2f}")
+                    combined_df[col] = combined_df[col].clip(-20, 20)
+        
+        if not extreme_found:
+            print("  No extreme values found - normalization looks good!")
+        
+        # Additional check for NaN or Inf values - FIXED VERSION
+        # Only check numeric columns
+        numeric_cols = combined_df.select_dtypes(include=[np.number]).columns
+        
+        # Check for NaN values in numeric columns
+        if combined_df[numeric_cols].isna().any().any():
+            print(f"WARNING: NaN values detected after normalization!")
+            # Fill NaN values in numeric columns only
+            for col in numeric_cols:
+                if combined_df[col].isna().any():
+                    combined_df[col] = combined_df[col].fillna(0)
+            print("  Filled NaN values with 0")
+        
+        # Check for Inf values in numeric columns
+        inf_mask = np.isinf(combined_df[numeric_cols].values)
+        if inf_mask.any():
+            print(f"WARNING: Inf values detected after normalization!")
+            # Replace inf values with large but finite values
+            for col in numeric_cols:
+                combined_df[col] = combined_df[col].replace([np.inf, -np.inf], [10, -10])
+            print("  Replaced Inf values with ±10")
+        # ========== END OF VALIDATION DATA CHECKS ==========
             
     # Ensure correct types
     combined_df[target_col] = combined_df[target_col].astype(float)
@@ -978,36 +1105,15 @@ def prepare_ptf_dataframe(
     for col in static_attribute_names:
         combined_df[col] = combined_df[col].astype(float)
 
+
+    time_varying_cols = weather_cols + precip_cols
+    
     print(f"Successfully prepared combined DataFrame with shape: {combined_df.shape}")
     print(f"Identified static reals: {static_attribute_names}")
     print(f"Identified time-varying reals: {time_varying_cols}")
 
     return combined_df, static_attribute_names, time_varying_cols, norm_params
 
-
-
-
-import torch
-#torch.set_num_threads(16)  # Limit PyTorch threads
-import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader
-import numpy as np
-import pandas as pd
-from sklearn.model_selection import train_test_split
-import warnings
-from datetime import datetime
-import json
-import gc
-import os
-#os.environ["OMP_NUM_THREADS"] = "4"  # Limit OpenMP threads
-#os.environ["MKL_NUM_THREADS"] = "4"   # Limit MKL threads
-#os.environ["NUMEXPR_NUM_THREADS"] = "4"  # Limit NumExpr threads
-import matplotlib.pyplot as plt
-import seaborn as sns
-from tqdm import tqdm  
-import pickle
-import signal  # signal handling for spot instances
 
 
 
@@ -1077,7 +1183,7 @@ class EntityAwareLSTM(nn.Module):
         # Static feature processing for input gate modulation
         self.static_encoder = nn.Sequential(
             nn.Linear(static_input_size, hidden_size),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Dropout(dropout),
             nn.Linear(hidden_size, hidden_size),
             nn.Sigmoid()  # Output between 0 and 1 for gate modulation
@@ -1086,14 +1192,14 @@ class EntityAwareLSTM(nn.Module):
         # Optional: Additional static feature integration
         self.static_hidden_init = nn.Sequential(
             nn.Linear(static_input_size, hidden_size * num_layers),
-            nn.ReLU()
+            nn.GELU()
         )
         
         # Time Modulation Network (NEW)
         if self.use_time_modulation:
             self.time_modulator = nn.Sequential(
                 nn.Conv1d(hidden_size, hidden_size, kernel_size=1),
-                nn.ReLU(),
+                nn.GELU(),
                 nn.Dropout(dropout),
                 nn.Conv1d(hidden_size, hidden_size, kernel_size=1),
                 nn.Sigmoid()  # Output between 0 and 1 for temporal gating
@@ -1102,7 +1208,7 @@ class EntityAwareLSTM(nn.Module):
         # Output layers
         self.output_layer = nn.Sequential(
             nn.Linear(hidden_size + static_input_size, hidden_size),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Dropout(dropout),
             nn.Linear(hidden_size, 1)
         )
@@ -1160,11 +1266,11 @@ class EntityAwareLSTM(nn.Module):
                     nn.init.xavier_uniform_(param, gain=0.5)  # Small gain
                 elif 'conv' in name:
                     # Use He initialization for convolutional layers
-                    nn.init.kaiming_uniform_(param, a=0, mode='fan_in', nonlinearity='relu')
+                    nn.init.kaiming_uniform_(param, a=0, mode='fan_in', nonlinearity='leaky_relu')
                     param.data *= 0.5  # Scale down for stability
                 else:
                     # Use He initialization for other layers
-                    nn.init.kaiming_uniform_(param, a=0, mode='fan_in', nonlinearity='relu')
+                    nn.init.kaiming_uniform_(param, a=0, mode='fan_in', nonlinearity='leaky_relu')
                     param.data *= 0.1  # Scale down
             elif 'bias' in name:
                 nn.init.constant_(param, 0.0)
@@ -1172,144 +1278,858 @@ class EntityAwareLSTM(nn.Module):
 
 
 
-class EntityAwareLSTM_old(nn.Module):
-    """Entity-Aware LSTM following Kratzert et al. (2019) approach"""
-    def __init__(self, dynamic_input_size, static_input_size, hidden_size=256, 
-                 num_layers=1, dropout=0.2):
+
+
+class StreamflowLightningModule(pl.LightningModule):
+    """Lightning wrapper for EA-LSTM streamflow model with KGE loss"""
+    
+    def __init__(
+        self,
+        dynamic_input_size: int,
+        static_input_size: int,
+        hidden_size: int = 256,
+        num_layers: int = 1,
+        dropout: float = 0.2,
+        learning_rate: float = 1e-4,
+        use_time_modulation: bool = True,
+        # Training parameters
+        target_noise_std: float = 0.1,
+        target_noise_type: str = 'log-normal',
+        gradient_clip_val: float = 5.0,
+        # LR scheduler parameters
+        lr_scheduler_params: Optional[Dict[str, Any]] = None,
+        # Normalization parameters for metrics
+        norm_params: Optional[Dict[str, Any]] = None,
+        **kwargs
+    ):
         super().__init__()
         
-        self.hidden_size = hidden_size
-        self.num_layers = num_layers
+        # Save all hyperparameters for checkpointing and logging
+        self.save_hyperparameters()
         
-        # Standard LSTM with dynamic inputs
-        self.lstm = nn.LSTM(
-            input_size=dynamic_input_size,
+        # Initialize the EA-LSTM model
+        self.model = EntityAwareLSTM(
+            dynamic_input_size=dynamic_input_size,
+            static_input_size=static_input_size,
             hidden_size=hidden_size,
             num_layers=num_layers,
-            batch_first=True,
-            dropout=dropout if num_layers > 1 else 0
+            dropout=dropout,
+            use_time_modulation=use_time_modulation
         )
         
-        # Static feature processing for input gate modulation
-        self.static_encoder = nn.Sequential(
-            nn.Linear(static_input_size, hidden_size),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_size, hidden_size),
-            nn.Sigmoid()  # Output between 0 and 1 for gate modulation
+        # Loss functions
+        self.criterion = KGELoss()  # Base KGE loss
+        self.mse_criterion = nn.MSELoss()  # MSE loss for additional term
+        
+        # Target noise wrapper
+        self.target_noise = TargetNoiseWrapper(
+            noise_std=target_noise_std,
+            noise_type=target_noise_type
         )
         
-        # Optional: Additional static feature integration
-        self.static_hidden_init = nn.Sequential(
-            nn.Linear(static_input_size, hidden_size * num_layers),
-            nn.ReLU()
-        )
+        # Store parameters
+        self.learning_rate = learning_rate
+        self.gradient_clip_val = gradient_clip_val
+        self.lr_scheduler_params = lr_scheduler_params or {
+            'factor': 0.5,
+            'patience': 2,
+            'min_lr': 1e-7,
+            'threshold': 0.001,
+            'cooldown': 1,
+            'verbose': True
+        }
+        self.norm_params = norm_params
         
-        # Output layers
-        self.output_layer = nn.Sequential(
-            nn.Linear(hidden_size + static_input_size, hidden_size),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_size, 1)
-        )
-        
-        
-        
-        self._initialize_weights()
-        
+        # Track validation outputs for epoch-level metrics
+        self.validation_step_outputs = []
+        self.test_step_outputs = []
+
     def forward(self, dynamic_inputs, static_inputs):
-        batch_size = dynamic_inputs.size(0)
+        """Forward pass through the model"""
+        predictions = self.model(dynamic_inputs, static_inputs)
+        # Clip predictions to prevent extreme values during any forward pass
+        predictions = torch.clamp(predictions, min=-10, max=15)
+        return predictions
         
-        # Initialize hidden state with static features
-        h_0 = self.static_hidden_init(static_inputs)
-        h_0 = h_0.view(self.num_layers, batch_size, self.hidden_size)
-        c_0 = torch.zeros_like(h_0)
+    def training_step_og(self, batch, batch_idx):
+        """Training step with progressive KGE + MSE loss"""
+        dynamic_seq, static_feat, target = batch
         
-        # Generate input gate modulation from static features
-        input_gate_modulation = self.static_encoder(static_inputs)
+        # Forward pass
+        predictions = self(dynamic_seq, static_feat)
         
-        # Run LSTM
-        lstm_out, (h_n, c_n) = self.lstm(dynamic_inputs, (h_0, c_0))
+        # Add noise to target during training
+        noisy_target = self.target_noise.add_noise(target, training=True)
         
-        # Apply entity-aware modulation to LSTM outputs
-        # This scales the LSTM output based on watershed characteristics
-        lstm_out = lstm_out * input_gate_modulation.unsqueeze(1)
+        # Calculate base losses
+        kge_loss = self.criterion(predictions, noisy_target)
+        mse_loss = self.mse_criterion(predictions, noisy_target)
         
-        # Take last timestep output
-        last_output = lstm_out[:, -1, :]
+        # Calculate MSE weight: ramp from 0 to 0.5 over first 50 epochs
+        mse_weight = min(0.5, self.current_epoch / 50.0)
         
-        # Concatenate with static features for final prediction
-        combined = torch.cat([last_output, static_inputs], dim=1)
-        prediction = self.output_layer(combined)
+        # Combined loss: (1-weight)*KGE + weight*MSE
+        loss = (1 - mse_weight) * kge_loss + mse_weight * mse_loss
         
-        return prediction
+        # Check for NaN/Inf
+        if torch.isnan(loss) or torch.isinf(loss):
+            self.log('train_nan_count', 1.0, on_step=True, prog_bar=False)
+            return None  # Skip this batch
+        
+        # Log metrics
+        self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+        self.log('train_kge_loss', kge_loss, on_step=True, on_epoch=True, prog_bar=False, logger=True)
+        self.log('train_mse_loss', mse_loss, on_step=True, on_epoch=True, prog_bar=False, logger=True)
+        self.log('mse_weight', mse_weight, on_step=False, on_epoch=True, prog_bar=False, logger=True)
+        
+        # Log gradient norm if available
+        if self.global_step > 0 and self.global_step % 50 == 0:
+            total_norm = 0
+            for p in self.model.parameters():
+                if p.grad is not None:
+                    param_norm = p.grad.data.norm(2)
+                    total_norm += param_norm.item() ** 2
+            total_norm = total_norm ** 0.5
+            self.log('grad_norm', total_norm, on_step=True, prog_bar=False)
+        
+        return loss
+        
+    def training_step(self, batch, batch_idx):
+        """Training step with scale-balanced KGE + MSE loss"""
+        dynamic_seq, static_feat, target = batch
+        
+        # Forward pass
+        predictions = self(dynamic_seq, static_feat)
+        
+        # Add noise to target during training
+        noisy_target = self.target_noise.add_noise(target, training=True)
+        
+        # Calculate base losses
+        kge_loss = self.criterion(predictions, noisy_target)
+        mse_loss = self.mse_criterion(predictions, noisy_target)
+        
+        # Normalize MSE by target variance with safety checks
+        target_var = torch.var(noisy_target)
+        
+        # Add safety check for very small variance
+#        if target_var < 1e-6:
+#            # If variance is too small, use standard deviation instead
+#            target_std = torch.std(noisy_target) + 1e-6
+#            normalized_mse = mse_loss / (target_std ** 2)
+#        else:
+#            normalized_mse = mse_loss / target_var
+        
+        # Additional safety: clamp normalized MSE to reasonable range
+#        normalized_mse = torch.clamp(normalized_mse, min=0.0, max=10.0)
+        
+        # Calculate MSE weight: ramp from 0 to 0.5 over first 1000 epochs
+        mse_weight = min(0.5, self.current_epoch / 2000.0)
+        
+        # Combined loss
+        loss = (1 - mse_weight) * kge_loss + mse_weight * mse_loss
+        
+        # Check for NaN/Inf
+        if torch.isnan(loss) or torch.isinf(loss):
+            self.log('train_nan_count', 1.0, on_step=True, prog_bar=False)
+            # Log debug info
+            print(f"NaN/Inf in loss. KGE: {kge_loss.item()}, MSE: {mse_loss.item()}, "
+                  f"Var: {target_var.item()}, Normalized MSE: {mse_loss.item()}")
+            return None  # Skip this batch
+        
+        # Log metrics
+        self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+        self.log('train_kge_loss', kge_loss, on_step=True, on_epoch=True, prog_bar=False, logger=True)
+        self.log('train_mse_loss', mse_loss, on_step=True, on_epoch=True, prog_bar=False, logger=True)
+#        self.log('train_normalized_mse', normalized_mse, on_step=True, on_epoch=True, prog_bar=False, logger=True)
+        self.log('train_target_var', target_var, on_step=True, on_epoch=True, prog_bar=False, logger=True)
+        self.log('mse_weight', mse_weight, on_step=False, on_epoch=True, prog_bar=False, logger=True)
+        
+        # Log gradient norm if available
+        if self.global_step > 0 and self.global_step % 50 == 0:
+            total_norm = 0
+            for p in self.model.parameters():
+                if p.grad is not None:
+                    param_norm = p.grad.data.norm(2)
+                    total_norm += param_norm.item() ** 2
+            total_norm = total_norm ** 0.5
+            self.log('grad_norm', total_norm, on_step=True, prog_bar=False)
+        
+        return loss
     
-    def _initialize_weights(self):  
-        """Initialize weights with smaller values to prevent gradient explosion"""
-        for name, param in self.named_parameters():
-            if 'weight' in name:
-                if 'lstm' in name:
-                    # Use Xavier initialization for LSTM weights
-                    nn.init.xavier_uniform_(param, gain=0.5)  # Small gain is 0.1
-                else:
-                    # Use He initialization for other layers
-                    nn.init.kaiming_uniform_(param, a=0, mode='fan_in', nonlinearity='relu')
-                    param.data *= 0.1  # Scale down
-            elif 'bias' in name:
-                nn.init.constant_(param, 0.0)
+    def validation_step(self, batch, batch_idx):
+        """Validation step with normalized MSE"""
+        dynamic_seq, static_feat, target = batch
+        
+        # Forward pass
+        predictions = self(dynamic_seq, static_feat)
+        
+        # Calculate losses
+        kge_loss = self.criterion(predictions, target)
+        mse_loss = self.mse_criterion(predictions, target)
+        
+        # Normalize MSE by target variance (same as training)
+#        target_var = torch.var(target)
+#        if target_var < 1e-6:
+#            target_std = torch.std(target) + 1e-6
+#            normalized_mse = mse_loss / (target_std ** 2)
+#        else:
+#            normalized_mse = mse_loss / target_var
+        
+#        normalized_mse = torch.clamp(normalized_mse, min=0.0, max=10.0)
+        
+        # Calculate MSE weight: ramp from 0 to 0.5 over first 1000 epochs
+        mse_weight = min(0.5, self.current_epoch / 2000.0)
+        loss = (1 - mse_weight) * kge_loss + mse_weight * mse_loss
+        
+        # Store outputs for epoch-level metrics calculation
+        self.validation_step_outputs.append({
+            'loss': loss,
+            'kge_loss': kge_loss,
+            'mse_loss': mse_loss,
+#            'normalized_mse': normalized_mse,
+            'predictions': predictions.detach().cpu(),
+            'targets': target.detach().cpu()
+        })
+        
+        return loss
+
+
+    def on_validation_epoch_end(self):
+        """Calculate comprehensive epoch-level validation metrics"""
+        # Gather all outputs
+        all_losses = [x['loss'] for x in self.validation_step_outputs]
+        all_kge_losses = [x['kge_loss'] for x in self.validation_step_outputs]
+        all_mse_losses = [x['mse_loss'] for x in self.validation_step_outputs]
+        all_preds = torch.cat([x['predictions'] for x in self.validation_step_outputs])
+        all_targets = torch.cat([x['targets'] for x in self.validation_step_outputs])
+        
+        # Calculate mean losses
+        avg_loss = torch.stack(all_losses).mean()
+        avg_kge_loss = torch.stack(all_kge_losses).mean()
+        avg_mse_loss = torch.stack(all_mse_losses).mean()
+        
+        # Convert to numpy for metric calculations
+        preds_np = all_preds.numpy().flatten()
+        targets_np = all_targets.numpy().flatten()
+        
+        # Calculate metrics on original scale
+        if self.norm_params is not None:
+            # Unnormalize predictions and targets
+            preds_original = unnormalize_predictions(preds_np, self.norm_params)
+            targets_original = unnormalize_predictions(targets_np, self.norm_params)
+        else:
+            preds_original = preds_np
+            targets_original = targets_np
+        
+        # Calculate all metrics
+        kge, r, alpha, beta = calculate_kge_components(targets_original, preds_original)
+        rmse = calculate_rmse(targets_original, preds_original)
+        mae = calculate_mae(targets_original, preds_original)
+        
+        # Log all metrics
+        self.log('val_loss', avg_loss, on_epoch=True, prog_bar=True, logger=True)
+        self.log('val_kge_loss', avg_kge_loss, on_epoch=True, prog_bar=False, logger=True)
+        self.log('val_mse_loss', avg_mse_loss, on_epoch=True, prog_bar=False, logger=True)
+        self.log('val_kge', kge, on_epoch=True, prog_bar=True, logger=True)
+        self.log('val_kge_r', r, on_epoch=True, prog_bar=False, logger=True)
+        self.log('val_kge_alpha', alpha, on_epoch=True, prog_bar=False, logger=True)
+        self.log('val_kge_beta', beta, on_epoch=True, prog_bar=False, logger=True)
+        self.log('val_rmse', rmse, on_epoch=True, prog_bar=False, logger=True)
+        self.log('val_mae', mae, on_epoch=True, prog_bar=False, logger=True)
+        
+        # Clear stored outputs
+        self.validation_step_outputs.clear()
+        
+    def test_step(self, batch, batch_idx):
+        """Test step with comprehensive metrics"""
+        dynamic_seq, static_feat, target = batch
+        
+        # Forward pass
+        predictions = self(dynamic_seq, static_feat)
+        
+        # Calculate losses
+        kge_loss = self.criterion(predictions, target)
+        mse_loss = self.mse_criterion(predictions, target)
+        
+        # Use same weighting as training
+        mse_weight = min(0.5, self.current_epoch / 50.0)
+        loss = (1 - mse_weight) * kge_loss + mse_weight * mse_loss
+        
+        # Store outputs for metrics calculation
+        self.test_step_outputs.append({
+            'loss': loss,
+            'kge_loss': kge_loss,
+            'mse_loss': mse_loss,
+            'predictions': predictions.detach().cpu(),
+            'targets': target.detach().cpu()
+        })
+        
+        return loss
+    
+    def on_test_epoch_end(self):
+        """Calculate comprehensive test metrics"""
+        # Gather all outputs
+        all_losses = [x['loss'] for x in self.test_step_outputs]
+        all_kge_losses = [x['kge_loss'] for x in self.test_step_outputs]
+        all_mse_losses = [x['mse_loss'] for x in self.test_step_outputs]
+        all_preds = torch.cat([x['predictions'] for x in self.test_step_outputs])
+        all_targets = torch.cat([x['targets'] for x in self.test_step_outputs])
+        
+        # Calculate mean losses
+        avg_loss = torch.stack(all_losses).mean()
+        avg_kge_loss = torch.stack(all_kge_losses).mean()
+        avg_mse_loss = torch.stack(all_mse_losses).mean()
+        
+        # Convert to numpy
+        preds_np = all_preds.numpy().flatten()
+        targets_np = all_targets.numpy().flatten()
+        
+        # Calculate metrics on original scale
+        if self.norm_params is not None:
+            preds_original = unnormalize_predictions(preds_np, self.norm_params)
+            targets_original = unnormalize_predictions(targets_np, self.norm_params)
+        else:
+            preds_original = preds_np
+            targets_original = targets_np
+        
+        # Calculate all metrics
+        kge, r, alpha, beta = calculate_kge_components(targets_original, preds_original)
+        rmse = calculate_rmse(targets_original, preds_original)
+        mae = calculate_mae(targets_original, preds_original)
+        
+        # Log all metrics
+        self.log('test_loss', avg_loss, on_epoch=True, logger=True)
+        self.log('test_kge_loss', avg_kge_loss, on_epoch=True, logger=True)
+        self.log('test_mse_loss', avg_mse_loss, on_epoch=True, logger=True)
+        self.log('test_kge', kge, on_epoch=True, logger=True)
+        self.log('test_kge_r', r, on_epoch=True, logger=True)
+        self.log('test_kge_alpha', alpha, on_epoch=True, logger=True)
+        self.log('test_kge_beta', beta, on_epoch=True, logger=True)
+        self.log('test_rmse', rmse, on_epoch=True, logger=True)
+        self.log('test_mae', mae, on_epoch=True, logger=True)
+        
+        # Clear stored outputs
+        self.test_step_outputs.clear()
+    
+    def configure_optimizers(self):
+        """Configure optimizer and learning rate scheduler"""
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+        
+        # Configure scheduler - now monitoring combined loss
+        scheduler = ReduceLROnPlateau(
+            optimizer,
+            mode='min',
+            factor=self.lr_scheduler_params['factor'],
+            patience=self.lr_scheduler_params['patience'],
+            min_lr=self.lr_scheduler_params['min_lr'],
+            threshold=self.lr_scheduler_params['threshold'],
+            cooldown=self.lr_scheduler_params['cooldown'],
+            verbose=self.lr_scheduler_params['verbose']
+        )
+        
+        return {
+            'optimizer': optimizer,
+            'lr_scheduler': {
+                'scheduler': scheduler,
+                'monitor': 'val_loss',
+                'interval': 'epoch',
+                'frequency': 1
+            }
+        }
+    
+    def on_after_backward(self):
+        """Custom gradient clipping and monitoring"""
+        if self.global_step % 100 == 0:
+            total_norm = 0
+            max_grad = 0
+            for p in self.model.parameters():
+                if p.grad is not None:
+                    param_norm = p.grad.data.norm(2)
+                    total_norm += param_norm.item() ** 2
+                    max_grad = max(max_grad, p.grad.data.abs().max().item())
+            total_norm = total_norm ** 0.5
+            
+            # Log large gradient warnings
+            if total_norm > 100 or max_grad > 50:
+                self.log('large_gradient_warning', 1.0, on_step=True)
+                print(f"Warning: Large gradients detected - norm: {total_norm:.2f}, max: {max_grad:.2f}")
 
 
 
-def print_gpu_memory(context_message="Current GPU Usage"):
-    """
-    Prints current GPU memory usage statistics.
-    """
-    if torch.cuda.is_available():
-        # Get current GPU memory stats
-        allocated = torch.cuda.memory_allocated() / (1024**3)  # GB
-        reserved = torch.cuda.memory_reserved() / (1024**3)    # GB
-        max_allocated = torch.cuda.max_memory_allocated() / (1024**3)  # GB
-        
-        print(f"--- {context_message} ---")
-        print(f"  GPU Memory Allocated: {allocated:.2f} GB")
-        print(f"  GPU Memory Reserved:  {reserved:.2f} GB")
-        print(f"  Max GPU Memory Used:  {max_allocated:.2f} GB")
-        print("--------------------------------------")
-        
-        # Optional: Print per-GPU stats if multiple GPUs
-        if torch.cuda.device_count() > 1:
-            for i in range(torch.cuda.device_count()):
-                print(f"  GPU {i}: {torch.cuda.memory_allocated(i)/(1024**3):.2f} GB")
-    else:
-        print(f"--- {context_message} ---")
-        print("  No GPU available")
-        print("--------------------------------------")
 
-def print_memory_usage(context_message="Current Memory Usage"):
-    """
-    Prints current CPU memory usage and process information.
-    """
-    import psutil
-    import os
+
+class CaravanDataModule(pl.LightningDataModule):
+    """Lightning DataModule for Caravan watershed data with data caching for improved GPU utilization"""
     
-    # System-wide memory
-    virtual_mem = psutil.virtual_memory()
+    def __init__(
+        self,
+        watersheds_df: pd.DataFrame,
+        bucket_name: str,
+        base_data_dir: str,
+        base_attr_dir: str,
+        sequence_length: int = 365,
+        batch_size: int = 256,
+        num_workers: int = 16,  # Increased from 4
+        chunk_size: int = 50,
+        train_split: float = 0.6,
+        val_split: float = 0.2,
+        random_seed: int = 42,
+        pin_memory: bool = True,
+        persistent_workers: bool = True,
+        prefetch_factor: int = 4,  # Increased from 2
+        norm_params: Optional[Dict[str, Any]] = None,
+        cache_data: bool = True,  # NEW: Enable data caching
+        cache_dir: str = '/opt/ml/input/data/cache'  # NEW: Cache directory
+    ):
+        super().__init__()
+        
+        # Save parameters
+        self.watersheds_df = watersheds_df
+        self.bucket_name = bucket_name
+        self.base_data_dir = base_data_dir
+        self.base_attr_dir = base_attr_dir
+        self.sequence_length = sequence_length
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+        self.chunk_size = chunk_size
+        self.train_split = train_split
+        self.val_split = val_split
+        self.random_seed = random_seed
+        self.pin_memory = pin_memory
+        self.persistent_workers = persistent_workers
+        self.prefetch_factor = prefetch_factor
+        self.cache_data = cache_data
+        self.cache_dir = cache_dir
+        
+        # Data attributes (will be set during setup)
+        self.train_watersheds = None
+        self.val_watersheds = None
+        self.test_watersheds = None
+        self.norm_params = norm_params
+        self.static_cols = None
+        self.dynamic_cols_no_target = None
+        
+        # NEW: Cached data storage
+        self._cached_data = {}
+        self._cached_datasets = {}
+        
+        # Current chunk tracking for memory-efficient loading (kept for fallback)
+        self.current_train_chunk = 0
+        self.train_chunks = []
+        
+        # Create cache directory if caching is enabled
+        if self.cache_data and self.cache_dir:
+            os.makedirs(self.cache_dir, exist_ok=True)
     
-    # Current process memory
-    process = psutil.Process(os.getpid())
-    process_info = process.memory_info()
+    def setup(self, stage: Optional[str] = None):
+        """Prepare data splits and compute normalization parameters"""
+        
+        if stage == 'fit' or stage is None:
+            # Split watersheds
+            np.random.seed(self.random_seed)
+            train_watersheds, temp_watersheds = train_test_split(
+                self.watersheds_df, test_size=(1 - self.train_split), random_state=self.random_seed
+            )
+            val_watersheds, test_watersheds = train_test_split(
+                temp_watersheds, test_size=0.5, random_state=self.random_seed
+            )
+            
+            self.train_watersheds = train_watersheds
+            self.val_watersheds = val_watersheds
+            self.test_watersheds = test_watersheds
+            
+            print(f"Train watersheds: {len(self.train_watersheds)}")
+            print(f"Val watersheds: {len(self.val_watersheds)}")
+            print(f"Test watersheds: {len(self.test_watersheds)}")
+            
+            # Compute normalization parameters if not provided
+            if self.norm_params is None:
+                print("Computing normalization parameters from training data...")
+                _, _, _, self.norm_params = prepare_ptf_dataframe(
+                    self.train_watersheds,
+                    self.bucket_name,
+                    self.base_data_dir,
+                    self.base_attr_dir,
+                    compute_norm_params=True
+                )
+            
+            # Get feature columns from a sample
+            sample_df, static_cols, dynamic_cols, _ = prepare_ptf_dataframe(
+                self.train_watersheds.iloc[:5],
+                self.bucket_name,
+                self.base_data_dir,
+                self.base_attr_dir,
+                norm_params=self.norm_params
+            )
+            
+            self.static_cols = static_cols
+            self.dynamic_cols_no_target = [col for col in dynamic_cols if col != 'streamflow']
+            
+            # NEW: Pre-cache all data if enabled
+            if self.cache_data and stage == 'fit':
+                self._cache_all_data()
+            else:
+                # Original chunking approach as fallback
+                self.train_chunks = [
+                    self.train_watersheds[i:i+self.chunk_size]
+                    for i in range(0, len(self.train_watersheds), self.chunk_size)
+                ]
+            
+            del sample_df
+            gc.collect()
+            
+        if stage == 'test':
+            # For testing, we already have test_watersheds from fit stage
+            pass
     
-    print(f"--- {context_message} ---")
-    print(f"System Memory:")
-    print(f"  Total: {virtual_mem.total / (1024**3):.2f} GB")
-    print(f"  Used:  {virtual_mem.used / (1024**3):.2f} GB ({virtual_mem.percent:.1f}%)")
-    print(f"  Available: {virtual_mem.available / (1024**3):.2f} GB")
-    print(f"Process Memory:")
-    print(f"  RSS (Resident): {process_info.rss / (1024**3):.2f} GB")
-    print(f"  VMS (Virtual):  {process_info.vms / (1024**3):.2f} GB")
-    print(f"  CPU Count: {psutil.cpu_count(logical=False)} physical, {psutil.cpu_count()} logical")
-    print(f"  Process Threads: {process.num_threads()}")
-    print("--------------------------------------")
+    def _cache_all_data(self):
+        """Pre-cache all training and validation data for faster loading"""
+        print("\n" + "="*60)
+        print("PRE-CACHING ALL DATA FOR FASTER TRAINING")
+        print("="*60)
+        
+        # Try to load from disk cache first
+        cache_file_train = os.path.join(self.cache_dir, 'train_data.pkl') if self.cache_dir else None
+        cache_file_val = os.path.join(self.cache_dir, 'val_data.pkl') if self.cache_dir else None
+        
+        # Cache training data
+        if cache_file_train and os.path.exists(cache_file_train):
+            print("Loading cached training data from disk...")
+            try:
+                with open(cache_file_train, 'rb') as f:
+                    self._cached_data['train'] = pickle.load(f)
+                print(f"✓ Loaded training data from cache: {cache_file_train}")
+            except Exception as e:
+                print(f"✗ Failed to load cache: {e}")
+                self._cached_data['train'] = None
+        else:
+            print(f"Loading {len(self.train_watersheds)} training watersheds from S3...")
+            start_time = time.time()
+            
+            self._cached_data['train'], _, _, _ = prepare_ptf_dataframe(
+                self.train_watersheds,
+                self.bucket_name,
+                self.base_data_dir,
+                self.base_attr_dir,
+                norm_params=self.norm_params
+            )
+            
+            load_time = time.time() - start_time
+            print(f"✓ Training data loaded in {load_time:.1f} seconds")
+            
+            # Save to disk cache if path provided
+            if cache_file_train:
+                try:
+                    print(f"Saving training data to cache: {cache_file_train}")
+                    with open(cache_file_train, 'wb') as f:
+                        pickle.dump(self._cached_data['train'], f, protocol=pickle.HIGHEST_PROTOCOL)
+                    print("✓ Training data cached to disk")
+                except Exception as e:
+                    print(f"✗ Failed to save cache: {e}")
+        
+        # Cache validation data
+        if cache_file_val and os.path.exists(cache_file_val):
+            print("\nLoading cached validation data from disk...")
+            try:
+                with open(cache_file_val, 'rb') as f:
+                    self._cached_data['val'] = pickle.load(f)
+                print(f"✓ Loaded validation data from cache: {cache_file_val}")
+            except Exception as e:
+                print(f"✗ Failed to load cache: {e}")
+                self._cached_data['val'] = None
+        else:
+            print(f"\nLoading {len(self.val_watersheds)} validation watersheds from S3...")
+            start_time = time.time()
+            
+            self._cached_data['val'], _, _, _ = prepare_ptf_dataframe(
+                self.val_watersheds,
+                self.bucket_name,
+                self.base_data_dir,
+                self.base_attr_dir,
+                norm_params=self.norm_params
+            )
+            
+            load_time = time.time() - start_time
+            print(f"✓ Validation data loaded in {load_time:.1f} seconds")
+            
+            # Save to disk cache if path provided
+            if cache_file_val:
+                try:
+                    print(f"Saving validation data to cache: {cache_file_val}")
+                    with open(cache_file_val, 'wb') as f:
+                        pickle.dump(self._cached_data['val'], f, protocol=pickle.HIGHEST_PROTOCOL)
+                    print("✓ Validation data cached to disk")
+                except Exception as e:
+                    print(f"✗ Failed to save cache: {e}")
+        
+        # Pre-create datasets for even faster access
+        print("\nPre-creating PyTorch datasets...")
+        
+        if 'train' in self._cached_data and self._cached_data['train'] is not None:
+            self._cached_datasets['train'] = OptimizedWatershedDataset(
+                self._cached_data['train'],
+                self.static_cols,
+                self.dynamic_cols_no_target,
+                'streamflow',
+                self.sequence_length
+            )
+            print(f"✓ Training dataset created with {len(self._cached_datasets['train'])} samples")
+        
+        if 'val' in self._cached_data and self._cached_data['val'] is not None:
+            self._cached_datasets['val'] = OptimizedWatershedDataset(
+                self._cached_data['val'],
+                self.static_cols,
+                self.dynamic_cols_no_target,
+                'streamflow',
+                self.sequence_length
+            )
+            print(f"✓ Validation dataset created with {len(self._cached_datasets['val'])} samples")
+        
+        # Memory report
+        if 'train' in self._cached_data and self._cached_data['train'] is not None:
+            train_memory = self._cached_data['train'].memory_usage(deep=True).sum() / 1e9
+            print(f"\nMemory usage - Training data: {train_memory:.2f} GB")
+        if 'val' in self._cached_data and self._cached_data['val'] is not None:
+            val_memory = self._cached_data['val'].memory_usage(deep=True).sum() / 1e9
+            print(f"Memory usage - Validation data: {val_memory:.2f} GB")
+        
+        print("="*60 + "\n")
+    
+    def train_dataloader(self):
+        """Create training dataloader using cached data when available"""
+        if self.cache_data and 'train' in self._cached_datasets:
+            # Use pre-created cached dataset
+            print("Using cached training dataset")
+            dataset = self._cached_datasets['train']
+        elif self.cache_data and 'train' in self._cached_data and self._cached_data['train'] is not None:
+            # Create dataset from cached data
+            dataset = OptimizedWatershedDataset(
+                self._cached_data['train'],
+                self.static_cols,
+                self.dynamic_cols_no_target,
+                'streamflow',
+                self.sequence_length
+            )
+        else:
+            # Fallback to original chunking approach
+            print("Warning: Using chunked loading (slower). Consider enabling caching.")
+            chunk_watersheds = self.train_chunks[self.current_train_chunk]
+            self.current_train_chunk = (self.current_train_chunk + 1) % len(self.train_chunks)
+            
+            chunk_df, _, _, _ = prepare_ptf_dataframe(
+                chunk_watersheds,
+                self.bucket_name,
+                self.base_data_dir,
+                self.base_attr_dir,
+                norm_params=self.norm_params
+            )
+            
+            dataset = WatershedDataset(
+                chunk_df,
+                self.static_cols,
+                self.dynamic_cols_no_target,
+                'streamflow',
+                self.sequence_length
+            )
+        
+        # Create dataloader with optimized settings
+        return DataLoader(
+            dataset,
+            batch_size=self.batch_size,
+            shuffle=True,
+            num_workers=self.num_workers,
+            pin_memory=self.pin_memory and torch.cuda.is_available(),
+            persistent_workers=self.persistent_workers and self.num_workers > 0,
+            prefetch_factor=self.prefetch_factor if self.num_workers > 0 else 2,
+            drop_last=True
+        )
+    
+    def val_dataloader(self):
+        """Create validation dataloader using cached data when available"""
+        if self.cache_data and 'val' in self._cached_datasets:
+            # Use pre-created cached dataset
+            print("Using cached validation dataset")
+            dataset = self._cached_datasets['val']
+            
+            return DataLoader(
+                dataset,
+                batch_size=self.batch_size,
+                shuffle=False,
+                num_workers=min(self.num_workers, 4),  # Fewer workers for validation
+                pin_memory=self.pin_memory and torch.cuda.is_available(),
+                persistent_workers=self.persistent_workers and self.num_workers > 0,
+                prefetch_factor=self.prefetch_factor if self.num_workers > 0 else 2
+            )
+        else:
+            # Fallback to original approach
+            return self._create_eval_dataloader(self.val_watersheds)
+    
+    def test_dataloader(self):
+        """Create test dataloader"""
+        # Test data is not cached by default to save memory
+        return self._create_eval_dataloader(self.test_watersheds)
+    
+    def _create_eval_dataloader(self, watersheds_df):
+        """Helper to create evaluation dataloaders with chunking (fallback method)"""
+        chunks = [
+            watersheds_df[i:i+self.chunk_size]
+            for i in range(0, len(watersheds_df), self.chunk_size)
+        ]
+        
+        dataloaders = []
+        for chunk in chunks:
+            chunk_df, _, _, _ = prepare_ptf_dataframe(
+                chunk,
+                self.bucket_name,
+                self.base_data_dir,
+                self.base_attr_dir,
+                norm_params=self.norm_params
+            )
+            
+            if not chunk_df.empty:
+                dataset = WatershedDataset(
+                    chunk_df,
+                    self.static_cols,
+                    self.dynamic_cols_no_target,
+                    'streamflow',
+                    self.sequence_length
+                )
+                
+                if len(dataset) > 0:
+                    dataloader = DataLoader(
+                        dataset,
+                        batch_size=self.batch_size,
+                        shuffle=False,
+                        num_workers=min(self.num_workers, 4),
+                        pin_memory=self.pin_memory and torch.cuda.is_available(),
+                        persistent_workers=self.persistent_workers and self.num_workers > 0,
+                        prefetch_factor=self.prefetch_factor if self.num_workers > 0 else 2
+                    )
+                    dataloaders.append(dataloader)
+        
+        # Return combined dataloader
+        return CombinedDataLoader(dataloaders)
+    
+    def on_after_batch_transfer(self, batch, dataloader_idx):
+        """Clean up memory after batch transfer"""
+        if hasattr(self, '_cleanup_counter'):
+            self._cleanup_counter += 1
+        else:
+            self._cleanup_counter = 0
+            
+        if self._cleanup_counter % 100 == 0:
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        
+        return batch
+
+
+class OptimizedWatershedDataset(Dataset):
+    """Optimized PyTorch Dataset with pre-computed arrays for faster data loading"""
+    
+    def __init__(self, data_df, static_cols, dynamic_cols, target_col, sequence_length):
+        self.data_df = data_df.copy()
+        self.static_cols = static_cols
+        self.dynamic_cols = dynamic_cols
+        self.target_col = target_col
+        self.sequence_length = sequence_length
+        
+        # Group data by watershed
+        self.groups = self.data_df.groupby('group_id')
+        self.group_keys = list(self.groups.groups.keys())
+        
+        # Pre-compute all valid samples for faster access
+        print("Pre-computing dataset arrays for faster access...")
+        self._precompute_all_samples()
+        print(f"Dataset ready with {len(self)} samples")
+    
+    def _precompute_all_samples(self):
+        """Pre-compute and cache all samples as numpy arrays"""
+        self.all_samples = []
+        self.valid_indices = []
+        
+        # Pre-convert all groups to numpy arrays
+        self.group_arrays = {}
+        
+        for group_id in tqdm(self.group_keys, desc="Pre-processing watersheds"):
+            group_data = self.groups.get_group(group_id)
+            
+            # Convert to numpy arrays once (much faster than repeated pandas indexing)
+            dynamic_array = group_data[self.dynamic_cols].values.astype(np.float32)
+            static_array = group_data[self.static_cols].iloc[0].values.astype(np.float32)
+            target_array = group_data[self.target_col].values.astype(np.float32)
+            
+            self.group_arrays[group_id] = {
+                'dynamic': dynamic_array,
+                'static': static_array,
+                'target': target_array
+            }
+            
+            # Calculate valid indices for this group
+            n_samples = len(group_data) - self.sequence_length
+            if n_samples > 0:
+                for i in range(n_samples):
+                    self.valid_indices.append((group_id, i))
+                    
+                    # Pre-extract sequences
+                    end_idx = i + self.sequence_length
+                    dynamic_seq = dynamic_array[i:end_idx]
+                    target = target_array[end_idx]
+                    
+                    # Store pre-extracted samples
+                    self.all_samples.append((
+                        dynamic_seq,
+                        static_array,
+                        np.array([target], dtype=np.float32)
+                    ))
+    
+    def __len__(self):
+        return len(self.all_samples)
+    
+    def __getitem__(self, idx):
+        # Direct access to pre-computed samples (very fast)
+        dynamic_seq, static_features, target = self.all_samples[idx]
+        
+        # Convert to tensors
+        return (
+            torch.from_numpy(dynamic_seq),
+            torch.from_numpy(static_features),
+            torch.from_numpy(target)
+        )
+
+
+class CombinedDataLoader:
+    """Helper class to combine multiple dataloaders for chunked evaluation"""
+    
+    def __init__(self, dataloaders):
+        self.dataloaders = dataloaders
+        
+    def __iter__(self):
+        for dataloader in self.dataloaders:
+            for batch in dataloader:
+                yield batch
+                
+    def __len__(self):
+        return sum(len(dl) for dl in self.dataloaders)
+
+
+
+
+
+
+class ValidationFrequencyCallback(pl.Callback):
+    def __init__(self, initial_frequency=1, later_frequency=10, switch_epoch=10):
+        self.initial_frequency = initial_frequency
+        self.later_frequency = later_frequency
+        self.switch_epoch = switch_epoch
+        
+    def on_train_epoch_start(self, trainer, pl_module):
+        if trainer.current_epoch == self.switch_epoch:
+            trainer.check_val_every_n_epoch = self.later_frequency
+            print(f"Switching validation frequency to every {self.later_frequency} epochs")
+
+
 
 
 class TargetNoiseWrapper:
@@ -1353,904 +2173,9 @@ class TargetNoiseWrapper:
 
 
 
-def train_ea_lstm_model_with_scheduling(
-    watersheds_df,
-    bucket_name,
-    base_data_dir,
-    base_attr_dir,
-    hyperparameters,
-    save_dir,
-    chunk_size=50,
-    epochs_per_chunk=10,
-    device='cpu',
-    random_seed=42,
-    gradient_accumulation_steps=8,
-    memory_cleanup_frequency=5,
-    # New parameters for early stopping and LR scheduling
-    early_stopping_patience=15,
-    lr_scheduler_type='reduce_on_plateau',
-    lr_scheduler_params=None,
-    target_noise_std=0.1,  # New parameter
-    target_noise_type='multiplicative'  # New parameter
-):
-    """
-    Train EntityAwareLSTM model with early stopping and learning rate scheduling.
-    
-    Additional Args:
-        early_stopping_patience: Number of epochs without improvement before stopping
-        lr_scheduler_type: Type of learning rate scheduler to use
-        lr_scheduler_params: Dict of parameters for the learning rate scheduler
-    """
-
-    # anomaly detection for debugging
-    torch.autograd.set_detect_anomaly(True)
-    
-    # CPU-specific setup
-    n_threads = min(4, psutil.cpu_count(logical=False) // 2)  # Half the physical cores
-    torch.set_num_threads(n_threads)
-    os.environ["OMP_NUM_THREADS"] = str(n_threads)
-    os.environ["MKL_NUM_THREADS"] = str(n_threads)
-    os.environ["NUMEXPR_NUM_THREADS"] = str(n_threads)
-    torch.set_flush_denormal(True)
-
-    scaler = GradScaler(
-        init_scale=1024,  # Lower initial scale
-        growth_factor=2,
-        backoff_factor=0.5,
-        growth_interval=2000,
-        enabled=device == 'cuda'
-    ) if device == 'cuda' else None
-    
-    # Set random seeds
-    np.random.seed(random_seed)
-    torch.manual_seed(random_seed)
-    
-    # Create save directory
-    os.makedirs(save_dir, exist_ok=True)
-    
-    # Log setup
-    log_file = os.path.join(save_dir, 'training_log.txt')
-    log_buffer = []
-    
-    def log_message(msg, force_flush=False):
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        full_msg = f"[{timestamp}] {msg}"
-        print(full_msg)
-        log_buffer.append(full_msg)
-        
-        if force_flush or len(log_buffer) >= 10:
-            with open(log_file, 'a') as f:
-                f.write('\n'.join(log_buffer) + '\n')
-            log_buffer.clear()
-    
-    log_message("Starting EntityAwareLSTM training with early stopping and LR scheduling")
-    log_message(f"Early stopping patience: {early_stopping_patience}")
-    log_message(f"LR scheduler: {lr_scheduler_type}")
-    log_message(f"Total watersheds available: {len(watersheds_df)}")
-
-    # Initialize target noise wrapper
-    target_noise = TargetNoiseWrapper(
-        noise_std=target_noise_std,
-        noise_type=target_noise_type
-    )
-    
-    log_message(f"Using target noise: std={target_noise_std}, type={target_noise_type}")
-    
-    # Initial memory state
-    print_memory_usage("Initial state")
-
-    # Resume from checkpoint if exists
-    start_epoch = 0
-    resume_checkpoint = None
-    checkpoint_dir = '/opt/ml/checkpoints'
-    
-    if os.path.exists(checkpoint_dir):
-        # Look for checkpoint files
-        checkpoint_files = sorted([f for f in os.listdir(checkpoint_dir) if f.endswith('.pt')])
-        
-        if checkpoint_files:
-            # Use the most recent checkpoint
-            latest_checkpoint = os.path.join(checkpoint_dir, checkpoint_files[-1])
-            log_message(f"Found checkpoint: {latest_checkpoint}")
-            
-            try:
-                resume_checkpoint = torch.load(latest_checkpoint, map_location=device)
-                if 'norm_params' in resume_checkpoint:
-                    train_norm_params = resume_checkpoint['norm_params']
-                    log_message("Loaded normalization parameters from checkpoint")
-                else:
-                    # If not in checkpoint, need to recompute or error
-                    log_message("WARNING: No normalization parameters in checkpoint!")
-
-                # Check for a poisoned checkpoint from a previous NaN state
-                if 'early_stopping_state' in resume_checkpoint and np.isnan(resume_checkpoint['early_stopping_state'].get('best_score', 0.0)):
-                    log_message("!!! WARNING: POISONED CHECKPOINT DETECTED (NaN state) !!!")
-                    log_message("Starting with fresh optimizer, scheduler, and history, but keeping model weights.")
-                    # Invalidate the parts of the checkpoint that cause cascading failure
-                    resume_checkpoint['optimizer_state_dict'] = None
-                    resume_checkpoint['scheduler_state_dict'] = None
-                    resume_checkpoint['early_stopping_state'] = None
-                    training_history = {} # Force re-initialization
-                
-                # Extract state from checkpoint
-                start_epoch = resume_checkpoint['epoch']
-                training_history = resume_checkpoint['training_history']
-                chunks_processed = resume_checkpoint.get('chunks_processed', 0)
-                
-                # Feature info
-                if 'feature_info' in resume_checkpoint:
-                    static_cols = resume_checkpoint['feature_info']['static_cols']
-                    dynamic_cols_no_target = resume_checkpoint['feature_info']['dynamic_cols_no_target']
-                    dynamic_input_size = resume_checkpoint['feature_info']['dynamic_input_size']
-                    static_input_size = resume_checkpoint['feature_info']['static_input_size']
-                    
-                log_message(f"Resuming from epoch {start_epoch}")
-                log_message(f"Training history has {len(training_history['epoch'])} entries")
-                
-            except Exception as e:
-                log_message(f"Error loading checkpoint: {e}. Starting fresh.")
-                resume_checkpoint = None
-                start_epoch = 0
-                training_history = {
-                    'train_loss': [],
-                    'val_loss': [],
-                    'train_kge': [],
-                    'val_kge': [],
-                    'epoch': [],
-                    'learning_rate': []
-                }
-        else:
-            log_message("No checkpoint files found in checkpoint directory")
-            training_history = {
-                'train_loss': [],
-                'val_loss': [],
-                'train_kge': [],
-                'val_kge': [],
-                'epoch': [],
-                'learning_rate': []
-            }
-    else:
-        log_message("Checkpoint directory does not exist, starting fresh")
-        training_history = {
-            'train_loss': [],
-            'val_loss': [],
-            'train_kge': [],
-            'val_kge': [],
-            'epoch': [],
-            'learning_rate': []
-        }
 
 
 
-    
-    # Split watersheds
-    train_watersheds, temp_watersheds = train_test_split(
-        watersheds_df, test_size=0.4, random_state=random_seed
-    )
-    val_watersheds, test_watersheds = train_test_split(
-        temp_watersheds, test_size=0.5, random_state=random_seed
-    )
-    
-    log_message(f"Train watersheds: {len(train_watersheds)}")
-    log_message(f"Val watersheds: {len(val_watersheds)}")
-    log_message(f"Test watersheds: {len(test_watersheds)}")
-    
-    # Save splits
-    train_watersheds.to_csv(os.path.join(save_dir, 'train_watersheds.csv'), index=False)
-    val_watersheds.to_csv(os.path.join(save_dir, 'val_watersheds.csv'), index=False)
-    test_watersheds.to_csv(os.path.join(save_dir, 'test_watersheds.csv'), index=False)
-    
-    # Compute normalization parameters from full training data
-    log_message("Computing normalization parameters from full training data...")
-    _, _, _, train_norm_params = prepare_ptf_dataframe(
-        train_watersheds, bucket_name, base_data_dir, base_attr_dir,
-        compute_norm_params=True  # Only compute params, don't normalize
-    )
-
-    # Save normalization parameters
-    norm_params_path = os.path.join(save_dir, 'normalization_params.json')
-    with open(norm_params_path, 'w') as f:
-        json_params = {
-            'static_means': {k: float(v) for k, v in train_norm_params['static_means'].items()},
-            'static_stds': {k: float(v) for k, v in train_norm_params['static_stds'].items()},
-            'dynamic_means': {k: float(v) for k, v in train_norm_params['dynamic_means'].items()},
-            'dynamic_stds': {k: float(v) for k, v in train_norm_params['dynamic_stds'].items()},
-            'target_mean': float(train_norm_params['target_mean']),
-            'target_std': float(train_norm_params['target_std'])
-        }
-        json.dump(json_params, f, indent=2)
-    log_message(f"Saved normalization parameters to {norm_params_path}")
-    
-    # Extract hyperparameters
-    hp = hyperparameters
-    sequence_length = hp.get('sequence_length', 365)
-    hidden_size = hp.get('hidden_size', 256)
-    learning_rate = hp.get('learning_rate', 0.0001)
-    batch_size = hp.get('batch_size', 256)
-    dropout = hp.get('dropout', 0.2)
-    num_layers = hp.get('num_layers', 1)
-    total_epochs = hp.get('total_epochs', 100)
-    
-    # Setup default LR scheduler parameters if not provided
-    if lr_scheduler_params is None:
-        lr_scheduler_params = {
-            'factor': 0.5,
-            'patience': 5,
-            'min_lr': 1e-6,
-            'T_max': total_epochs,
-            'warmup_epochs': 5,
-            'max_epochs': total_epochs
-        }
-    
-    # Save all hyperparameters
-    hp_to_save = hyperparameters.copy()
-    hp_to_save.update({
-        'gradient_accumulation_steps': gradient_accumulation_steps,
-        'effective_batch_size': batch_size * gradient_accumulation_steps,
-        'early_stopping_patience': early_stopping_patience,
-        'lr_scheduler_type': lr_scheduler_type,
-        'lr_scheduler_params': lr_scheduler_params
-    })
-    
-    with open(os.path.join(save_dir, 'hyperparameters.json'), 'w') as f:
-        json.dump(hp_to_save, f, indent=2)
-    
-    # Prepare data
-    log_message("Loading and processing training data...")
-    train_chunks = [train_watersheds[i:i+chunk_size] 
-                   for i in range(0, len(train_watersheds), chunk_size)]
-    
-    # Determine feature dimensions
-    sample_chunk = train_chunks[0][:5]
-    sample_df, static_cols, dynamic_cols, norm_params_sample = prepare_ptf_dataframe(
-        sample_chunk, bucket_name, base_data_dir, base_attr_dir, norm_params=train_norm_params
-    )
-    
-    if sample_df.empty:
-        raise ValueError("Failed to load sample data")
-    
-    del sample_df
-    gc.collect()
-    
-    dynamic_cols_no_target = [col for col in dynamic_cols if col != 'streamflow']
-    dynamic_input_size = len(dynamic_cols_no_target)
-    static_input_size = len(static_cols)
-    
-    log_message(f"Dynamic input size: {dynamic_input_size}")
-    log_message(f"Static input size: {static_input_size}")
-    
-    gc.collect()
-
-    # Save normalization parameters to a JSON file
-    norm_params_path = os.path.join(save_dir, 'normalization_params.json')
-    with open(norm_params_path, 'w') as f:
-        # Convert numpy types to standard Python types for JSON serialization
-        json_params = {
-            'static_means': {k: float(v) for k, v in train_norm_params['static_means'].items()},
-            'static_stds': {k: float(v) for k, v in train_norm_params['static_stds'].items()},
-            'dynamic_means': {k: float(v) for k, v in train_norm_params['dynamic_means'].items()},
-            'dynamic_stds': {k: float(v) for k, v in train_norm_params['dynamic_stds'].items()},
-            'target_mean': float(train_norm_params['target_mean']),
-            'target_std': float(train_norm_params['target_std'])
-        }
-        json.dump(json_params, f, indent=2)
-    log_message(f"Saved normalization parameters to {norm_params_path}")
-
-    
-    
-    
-    # Initialize model
-    model = EntityAwareLSTM(
-        dynamic_input_size=dynamic_input_size,
-        static_input_size=static_input_size,
-        hidden_size=hidden_size,
-        num_layers=num_layers,
-        dropout=dropout,
-        use_time_modulation=True 
-    ).to(device)
-    
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-    criterion = nn.MSELoss()
-    
-    # Initialize learning rate scheduler
-    scheduler = get_learning_rate_scheduler(optimizer, lr_scheduler_type, **lr_scheduler_params)
-    
-    # Initialize early stopping
-    early_stopping = EarlyStopping(
-        patience=early_stopping_patience,
-        verbose=True,
-        save_path=os.path.join(save_dir, 'best_model.pt')
-    )
-
-
-    # Restore states from checkpoint if resuming
-    if resume_checkpoint is not None:
-        log_message("Restoring model and optimizer states from checkpoint...")
-        
-        # Restore model state
-        model.load_state_dict(resume_checkpoint['model_state_dict'])
-        
-        # Restore optimizer state
-        optimizer.load_state_dict(resume_checkpoint['optimizer_state_dict'])
-        
-        # Restore scheduler state if it exists
-        if scheduler and 'scheduler_state_dict' in resume_checkpoint and resume_checkpoint['scheduler_state_dict'] is not None:
-            try:
-                scheduler.load_state_dict(resume_checkpoint['scheduler_state_dict'])
-                log_message("Restored learning rate scheduler state")
-            except Exception as e:
-                log_message(f"Warning: Could not restore scheduler state: {e}")
-        
-        # Restore early stopping state
-        if 'early_stopping_state' in resume_checkpoint:
-            es_state = resume_checkpoint['early_stopping_state']
-            early_stopping.counter = es_state['counter']
-            early_stopping.best_score = es_state['best_score']
-            early_stopping.val_loss_min = es_state['val_loss_min']
-            early_stopping.early_stop = es_state.get('early_stop', False)
-            log_message(f"Restored early stopping state: counter={es_state['counter']}, best_score={es_state['best_score']}")
-        
-        log_message("Successfully restored all states from checkpoint")
-
-    
-    
-    # Training history
-    if resume_checkpoint is None:
-        training_history = {
-            'train_loss': [],
-            'val_loss': [],
-            'train_kge': [],
-            'val_kge': [],
-            'epoch': [],
-            'learning_rate': []
-        }
-    else:
-        # training_history was already loaded from checkpoint
-        log_message(f"Continuing with existing training history ({len(training_history['epoch'])} epochs)")
-                    
-    # Training loop
-        # Initialize tracking variables
-    gradient_explosion_count = 0
-    nan_batch_count = 0
-    global_step = 0
-    if resume_checkpoint is None:
-        chunks_processed = 0
-    
-    for epoch in range(0, total_epochs, epochs_per_chunk):
-        # Check early stopping
-        if early_stopping.early_stop:
-            log_message("Early stopping triggered! Stopping training.", force_flush=True)
-            break
-
- 
-        # Manually reduce LR based on epoch
-        current_epoch = epoch + epochs_per_chunk - 1
-#        if current_epoch > 100 and optimizer.param_groups[0]['lr'] > 1e-4:
-#            for param_group in optimizer.param_groups:
-#                param_group['lr'] = 1e-4
-#            log_message(f"Manually reduced learning rate to 1e-4 at epoch {current_epoch}")
-#        elif current_epoch > 200 and optimizer.param_groups[0]['lr'] > 1e-5:
-#            for param_group in optimizer.param_groups:
-#                param_group['lr'] = 1e-5
-#            log_message(f"Manually reduced learning rate to 1e-5 at epoch {current_epoch}")
-        
-        log_message(f"\n=== Global epochs {epoch} to {min(epoch + epochs_per_chunk - 1, total_epochs - 1)} ===")
-        
-        # Log current learning rate
-        current_lr = optimizer.param_groups[0]['lr']
-        log_message(f"Current learning rate: {current_lr:.6f}")
-        
-        gc.collect()
-        np.random.shuffle(train_chunks)
-        
-        epoch_train_losses = []
-        
-        for chunk_idx, chunk_watersheds in enumerate(train_chunks):
-            chunks_processed += 1
-            log_message(f"\nProcessing chunk {chunk_idx + 1}/{len(train_chunks)}")
-            
-            try:
-                # Check for termination request
-                termination_file = '/opt/ml/checkpoints/TERMINATION_REQUESTED'
-                if os.path.exists(termination_file):
-                    log_message("!!! Spot instance termination detected! Saving emergency checkpoint...", force_flush=True)
-                    
-                    # Save complete state
-                    emergency_checkpoint = os.path.join(checkpoint_dir, 'emergency_checkpoint.pt')
-                    torch.save({
-                        'epoch': current_epoch,
-                        'model_state_dict': model.state_dict(),
-                        'optimizer_state_dict': optimizer.state_dict(),
-                        'scheduler_state_dict': scheduler.state_dict() if scheduler else None,
-                        'training_history': training_history,
-                        'norm_params': train_norm_params,
-                        'chunks_processed': chunks_processed,
-                        'chunk_idx': chunk_idx,
-                        'early_stopping_state': {
-                            'counter': early_stopping.counter,
-                            'best_score': early_stopping.best_score,
-                            'val_loss_min': early_stopping.val_loss_min,
-                            'early_stop': early_stopping.early_stop
-                        },
-                        'feature_info': {
-                            'static_cols': static_cols,
-                            'dynamic_cols_no_target': dynamic_cols_no_target,
-                            'dynamic_input_size': dynamic_input_size,
-                            'static_input_size': static_input_size
-                        }
-                    }, emergency_checkpoint)
-                    
-                    log_message(f"Emergency checkpoint saved to {emergency_checkpoint}", force_flush=True)
-                    log_message("Exiting due to spot instance termination...", force_flush=True)
-                    
-                    # Clean exit
-                    sys.exit(0)
-
-                
-                # Load chunk data
-                chunk_df, _, _, _ = prepare_ptf_dataframe(
-                    chunk_watersheds, bucket_name, base_data_dir, base_attr_dir, norm_params=train_norm_params  
-                )
-                
-                if chunk_df.empty:
-                    log_message(f"Warning: Empty data for chunk {chunk_idx + 1}, skipping")
-                    continue
-                
-                # Create dataset
-                train_dataset = WatershedDataset(
-                    chunk_df, static_cols, dynamic_cols_no_target, 
-                    'streamflow', sequence_length
-                )
-                
-                del chunk_df
-                gc.collect()
-                
-                if len(train_dataset) == 0:
-                    log_message(f"Warning: No valid sequences in chunk {chunk_idx + 1}, skipping")
-                    del train_dataset
-                    continue
-                
-                train_loader = DataLoader(
-                    train_dataset, 
-                    batch_size=batch_size, 
-                    shuffle=True, 
-                    num_workers=4,  # Reduce from 8 to 4 for GPU
-                    pin_memory=True,  # Important for GPU!
-                    persistent_workers=True,
-                    prefetch_factor=2,  # Added for speed
-                    drop_last=True  # Add this to avoid variable batch sizes
-                )
-                
-                # Train for epochs_per_chunk
-                for chunk_epoch in range(epochs_per_chunk):
-                    current_epoch = epoch + chunk_epoch
-                    if current_epoch >= total_epochs:
-                        break
-                    
-                    if early_stopping.early_stop:
-                        break
-                        
-                    model.train()
-                    chunk_losses = []
-                    
-                    show_progress = (current_epoch == 0) or (current_epoch % 10 == 0)
-                    
-                    if show_progress:
-                        progress_bar = tqdm(train_loader, 
-                                          desc=f'Epoch {current_epoch}, Chunk {chunk_idx+1}')
-                    else:
-                        progress_bar = train_loader
-                    
-                    optimizer.zero_grad()
-                    
-                    for batch_idx, (dynamic_seq, static_feat, target) in enumerate(progress_bar):
-                            # Move to GPU
-                        dynamic_seq = dynamic_seq.to(device)
-                        static_feat = static_feat.to(device)
-                        target = target.to(device)
-                        
-                        if device == 'cuda':
-                            with autocast():
-                                predictions = model(dynamic_seq, static_feat)
-                                noisy_target = target_noise.add_noise(target, training=model.training)
-                                loss = criterion(predictions, noisy_target)
-
-                                # Add this NaN propagation check here:
-                                if torch.isnan(loss) or torch.isinf(loss):
-                                    nan_batch_count += 1
-                                    log_message(f"Warning: Invalid loss detected: {loss.item()} at epoch {current_epoch}, batch {batch_idx}")
-                                    optimizer.zero_grad()  # Clear any partial gradients
-                                    continue  # Skip this batch
-                            
-                            scaler.scale(loss / gradient_accumulation_steps).backward()
-                            
-                            if (batch_idx + 1) % gradient_accumulation_steps == 0:
-                                scaler.unscale_(optimizer)
-
-                                total_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)#1.0)
-                                if total_norm > 10:  # Warning threshold
-                                    log_message(f"Warning: Large gradient norm: {total_norm:.2f}")
-                                if torch.isnan(total_norm):
-                                    log_message("Warning: NaN gradients detected! Skipping batch.")
-                                    optimizer.zero_grad()
-                                    scaler.update()
-                                    continue
-
-                                # Emergency LR reduction on extreme gradients
-                                if total_norm > 50:
-                                    gradient_explosion_count += 1 
-                                    current_lr = optimizer.param_groups[0]['lr']
-                                    new_lr = max(current_lr * 0.5, 1e-7)
-                                    for param_group in optimizer.param_groups:
-                                        param_group['lr'] = new_lr
-                                    log_message(f"Emergency LR reduction due to gradient explosion: {current_lr} -> {new_lr}")
-
-#                                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-                                scaler.step(optimizer)
-                                scaler.update()
-                                optimizer.zero_grad()
-                        else:
-                            # CPU path (no mixed precision)
-                            predictions = model(dynamic_seq, static_feat)
-                            noisy_target = target_noise.add_noise(target, training=model.training)
-                            loss = criterion(predictions, noisy_target)
-                            loss = loss / gradient_accumulation_steps
-                            loss.backward()
-                            
-                            if (batch_idx + 1) % gradient_accumulation_steps == 0:
-                                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
-                                optimizer.step()
-                                optimizer.zero_grad()          
-                                
-                        loss_value = loss.item() * gradient_accumulation_steps
-                        chunk_losses.append(loss_value)
-
-                        
-                        if batch_idx % 50 == 0:
-                            del predictions, loss
-                        
-                        if show_progress and hasattr(progress_bar, 'set_postfix'):
-                            progress_bar.set_postfix({'loss': np.mean(chunk_losses[-100:]) if len(chunk_losses) > 100 else np.mean(chunk_losses)})
-                    
-                        if batch_idx % 10 == 0 and device == 'cuda':
-                            torch.cuda.empty_cache()
-
-                    
-                    # Handle remaining gradients
-                    if (batch_idx + 1) % gradient_accumulation_steps != 0:
-                        total_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
-                        if total_norm > 100:  # Emergency brake
-                            optimizer.zero_grad()  # Skip this update entirely
-                    
-                    mean_chunk_loss = np.mean(chunk_losses)
-                    epoch_train_losses.append(mean_chunk_loss)
-                    
-                    log_message(f"Chunk {chunk_idx+1} - Epoch {current_epoch}: Loss={mean_chunk_loss:.4f}")
-                
-                # Cleanup
-                del train_dataset, train_loader
-                if 'dynamic_seq' in locals():
-                    del dynamic_seq, static_feat, target
-                gc.collect()
-                
-                # Periodic deep cleanup
-                if chunks_processed % memory_cleanup_frequency == 0 or chunks_processed == len(train_chunks):
-                    log_message("Performing deep memory cleanup...")
-                    gc.collect()
-                    import ctypes
-                    if hasattr(ctypes, 'CDLL'):
-                        log_message("confirming hasattr(ctypes, 'CDLL')...")
-                        try:
-                            libc = ctypes.CDLL("libc.so.6")
-                            libc.malloc_trim(0)
-                            log_message("confirming libc.malloc_trim(0) was performed...")
-                        except:
-                            log_message("confirming libc.malloc_trim(0) has failed...")
-                            pass
-                
-            except Exception as e:
-                log_message(f"Error processing chunk {chunk_idx + 1}: {str(e)}", force_flush=True)
-                import traceback
-                traceback.print_exc()
-                gc.collect()
-                continue
-        
-        # Validation and scheduler step
-        if (epoch + epochs_per_chunk) % 5 == 0 or early_stopping.early_stop:
-            log_message("\nRunning validation...", force_flush=True)
-            gc.collect()
-            
-            val_loss, val_kge = evaluate_model_gpu_optimized(
-                model, val_watersheds, bucket_name, base_data_dir, base_attr_dir,
-                static_cols, dynamic_cols_no_target, sequence_length, 
-                batch_size, device, chunk_size, norm_params=train_norm_params
-            )
-            
-            log_message(f"Validation - Loss: {val_loss:.4f}, KGE: {val_kge:.4f}")
-            
-            # Update history
-            current_epoch_num = min(epoch + epochs_per_chunk, total_epochs)
-            training_history['epoch'].append(current_epoch_num)
-            training_history['val_loss'].append(val_loss)
-            training_history['val_kge'].append(val_kge)
-            training_history['train_loss'].append(np.mean(epoch_train_losses) if epoch_train_losses else np.nan)
-            training_history['learning_rate'].append(optimizer.param_groups[0]['lr'])
-            
-            # Early stopping check
-            early_stopping(val_loss, model, optimizer, current_epoch_num, 
-                         additional_info={'val_kge': val_kge})
-            
-            # Learning rate scheduler step
-            if scheduler:
-                if lr_scheduler_type == 'reduce_on_plateau':
-                    scheduler.step(val_loss)
-                    print(f"Scheduler step called with val_loss: {val_loss}")  # ADD THIS LINE HERE
-                elif hasattr(scheduler, 'step'):
-                    scheduler.step()
-                    
-                # Log new learning rate if changed
-                new_lr = optimizer.param_groups[0]['lr']
-                if new_lr != current_lr:
-                    log_message(f"Learning rate changed: {current_lr:.6f} -> {new_lr:.6f}")
-            
-            # Save intermediate results
-            with open(os.path.join(save_dir, 'training_history.pkl'), 'wb') as f:
-                pickle.dump(training_history, f)
-
-            checkpoint_dir = '/opt/ml/checkpoints'
-            if os.path.exists(checkpoint_dir):
-                checkpoint_path = os.path.join(checkpoint_dir, f'checkpoint_epoch_{current_epoch_num}.pt')
-                torch.save({
-                    'epoch': current_epoch_num,
-                    'model_state_dict': model.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'scheduler_state_dict': scheduler.state_dict() if scheduler else None,
-                    'training_history': training_history,
-                    'norm_params': train_norm_params,
-                    'early_stopping_state': {
-                        'counter': early_stopping.counter,
-                        'best_score': early_stopping.best_score,
-                        'val_loss_min': early_stopping.val_loss_min,
-                        'early_stop': early_stopping.early_stop
-                    },
-                    'feature_info': {
-                        'static_cols': static_cols,
-                        'dynamic_cols_no_target': dynamic_cols_no_target,
-                        'dynamic_input_size': dynamic_input_size,
-                        'static_input_size': static_input_size
-                    }
-                }, checkpoint_path)
-                print(f"Checkpoint saved to {checkpoint_path}")
-    
-    # Final evaluation
-    log_message("\n=== Final evaluation on test set ===", force_flush=True)
-    gc.collect()
-    
-    # Load best model
-    checkpoint = torch.load(os.path.join(save_dir, 'best_model.pt'), map_location=device)
-    model.load_state_dict(checkpoint['model_state_dict'])
-    
-    test_loss, test_kge = evaluate_model_gpu_optimized(
-        model, test_watersheds, bucket_name, base_data_dir, base_attr_dir,
-        static_cols, dynamic_cols_no_target, sequence_length, 
-        batch_size, device, chunk_size, norm_params=train_norm_params
-    )
-    
-    log_message(f"Test set - Loss: {test_loss:.4f}, KGE: {test_kge:.4f}", force_flush=True)
-    
-    # Save final results
-    results = {
-        'test_loss': test_loss,
-        'test_kge': test_kge,
-        'best_val_loss': checkpoint['val_loss'],
-        'best_val_kge': checkpoint.get('val_kge', np.nan),
-        'best_epoch': checkpoint['epoch'],
-        'total_epochs_trained': training_history['epoch'][-1] if training_history['epoch'] else 0,
-        'early_stopped': early_stopping.early_stop,
-        'training_history': training_history,
-        'feature_info': {
-            'static_features': static_cols,
-            'dynamic_features': dynamic_cols_no_target,
-            'target': 'streamflow'
-        }
-    }
-    
-    with open(os.path.join(save_dir, 'results.json'), 'w') as f:
-        json.dump(results, f, indent=2)
-    
-    # Enhanced plotting with learning rate
-    plot_training_history_with_lr(training_history, save_dir)
-    
-    print_memory_usage("Final state")
-    
-    log_message("\n=== Training Summary ===")
-    log_message(f"Total gradient explosions: {gradient_explosion_count}")
-    log_message(f"Total NaN batches skipped: {nan_batch_count}")
-    log_message(f"Final learning rate: {optimizer.param_groups[0]['lr']}")
-    log_message(f"Best validation KGE: {early_stopping.best_score}")
-    
-    log_message("\nTraining completed successfully!", force_flush=True)
-    
-    return results
-
-
-
-
-def sigterm_handler(signum, frame):
-    """
-    Handle SIGTERM signal from spot instance termination.
-    This gives us ~2 minutes to save our progress before shutdown.
-    """
-    print("\n!!! SIGTERM received - Spot instance terminating !!!")
-    print("Attempting to save emergency checkpoint...")
-    
-    # Try to access global training state if available
-    # In your case, these would need to be made accessible
-    checkpoint_path = '/opt/ml/checkpoints/emergency_checkpoint.pt'
-    
-    # Since we can't easily access the training loop variables here,
-    # we'll create a marker file that the training loop can check
-    with open('/opt/ml/checkpoints/TERMINATION_REQUESTED', 'w') as f:
-        f.write('SIGTERM received')
-    
-    print(f"Termination marker created. Training loop will save state on next iteration.")
-    # Don't exit immediately - let the training loop handle it
-
-
-
-
-
-
-
-
-
-
-
-def evaluate_model_gpu_optimized(model, watersheds_df, bucket_name, base_data_dir, base_attr_dir,
-                   static_cols, dynamic_cols, sequence_length, batch_size, 
-                   device, chunk_size=50, norm_params=None):
-    """Evaluate model with GPU support"""
-    model.eval()
-    all_losses = []
-    all_predictions = []
-    all_targets = []
-    
-    chunks = [watersheds_df[i:i+chunk_size] 
-              for i in range(0, len(watersheds_df), chunk_size)]
-    
-    with torch.no_grad():
-        for chunk_idx, chunk_watersheds in enumerate(chunks):
-            try:
-                chunk_df, _, _, _ = prepare_ptf_dataframe(
-                    chunk_watersheds, bucket_name, base_data_dir, base_attr_dir, norm_params=norm_params
-                )
-                
-                if chunk_df.empty:
-                    continue
-                
-                dataset = WatershedDataset(
-                    chunk_df, static_cols, dynamic_cols, 
-                    'streamflow', sequence_length
-                )
-                
-                del chunk_df
-                gc.collect()
-                
-                if len(dataset) == 0:
-                    del dataset
-                    continue
-                
-                loader = DataLoader(
-                    dataset, batch_size=batch_size, 
-                    shuffle=False, 
-                    num_workers=4,  # Reduced for GPU
-                    pin_memory=True  # Important for GPU
-                )
-                
-                chunk_losses = []
-                for batch_idx, (dynamic_seq, static_feat, target) in enumerate(loader):
-                    # Move to GPU
-                    dynamic_seq = dynamic_seq.to(device)
-                    static_feat = static_feat.to(device)
-                    target = target.to(device)
-                    
-                    predictions = model(dynamic_seq, static_feat)
-                    loss = nn.MSELoss()(predictions, target)
-                    
-                    chunk_losses.append(loss.item())
-                    # Move back to CPU for storage
-                    all_predictions.extend(predictions.cpu().numpy())
-                    all_targets.extend(target.cpu().numpy())
-                    
-                    del predictions, loss
-                    
-                    if batch_idx % 20 == 0:
-                        if device == 'cuda':
-                            torch.cuda.empty_cache()
-                
-                all_losses.extend(chunk_losses)
-                
-                del dataset, loader
-                gc.collect()
-                if device == 'cuda':
-                    torch.cuda.empty_cache()
-                
-            except Exception as e:
-                print(f"Error evaluating chunk {chunk_idx}: {str(e)}")
-                gc.collect()
-                continue
-    
-    mean_loss = np.mean(all_losses) if all_losses else float('inf')
-    # Before calculating metrics (line ~1863)
-    if norm_params is not None:
-        # Unnormalize predictions and targets for KGE calculation
-        predictions_original = unnormalize_predictions(
-            np.array(all_predictions).flatten(), 
-            norm_params
-        )
-        targets_original = unnormalize_predictions(
-            np.array(all_targets).flatten(), 
-            norm_params
-        )
-        
-        # Calculate KGE on original scale
-        kge = calculate_kge(targets_original, predictions_original) if all_targets else float('-inf')
-    else:
-        # Fallback to normalized KGE
-        kge = calculate_kge(
-            np.array(all_targets).flatten(), 
-            np.array(all_predictions).flatten()
-        ) if all_targets else float('-inf')
-
-    mean_loss = np.mean(all_losses) if all_losses else float('inf')
-    
-    return mean_loss, kge
-
-
-
-
-
-
-
-
-
-def save_training_state(save_path, model, optimizer, scheduler, training_history, 
-                       chunk_idx, epoch, chunks_processed, early_stopping, 
-                       static_cols, dynamic_cols_no_target, additional_info=None):
-    """Save complete training state to disk"""
-    state = {
-        'model_state_dict': model.state_dict(),
-        'optimizer_state_dict': optimizer.state_dict(),
-        'scheduler_state_dict': scheduler.state_dict() if scheduler else None,
-        'training_history': training_history,
-        'chunk_idx': chunk_idx,
-        'current_epoch': epoch,
-        'chunks_processed': chunks_processed,
-        'early_stopping_state': {
-            'counter': early_stopping.counter,
-            'best_score': early_stopping.best_score,
-            'val_loss_min': early_stopping.val_loss_min,
-            'early_stop': early_stopping.early_stop
-        },
-        'feature_info': {
-            'static_cols': static_cols,
-            'dynamic_cols_no_target': dynamic_cols_no_target,
-            'dynamic_input_size': len(dynamic_cols_no_target),
-            'static_input_size': len(static_cols)
-        },
-        'timestamp': datetime.now().isoformat()
-    }
-    
-    if additional_info:
-        state.update(additional_info)
-    
-    # Save with atomic write (write to temp, then rename)
-    temp_path = save_path + '.tmp'
-    torch.save(state, temp_path)
-    os.rename(temp_path, save_path)
-    
-    print(f"Saved training state to {save_path}")
-    return save_path
 
 
 
@@ -2323,7 +2248,62 @@ def plot_training_history_with_lr(history, save_dir):
 
 ################################################################
 
+
+    
+def tensor_to_python(obj):
+    """Recursively convert PyTorch tensors to Python native types"""
+    if torch.is_tensor(obj):
+        if obj.dim() == 0:  # scalar tensor
+            return obj.item()
+        else:
+            return obj.tolist()
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {k: tensor_to_python(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [tensor_to_python(v) for v in obj]
+    elif isinstance(obj, tuple):
+        return tuple(tensor_to_python(v) for v in obj)
+    elif isinstance(obj, (np.integer, np.floating)):
+        return float(obj)
+    else:
+        return obj
+
+
+
+
+
+
+
 def main():
+    """Main entry point for SageMaker training with PyTorch Lightning"""
+    
+    # CUDA Memory Management
+    if torch.cuda.is_available():
+        # Clear any existing allocations
+        torch.cuda.empty_cache()
+        
+        # Set memory fraction to prevent OOM
+        torch.cuda.set_per_process_memory_fraction(0.95)  # Use 95% of GPU memory
+        
+        # Reset peak memory stats
+        torch.cuda.reset_peak_memory_stats()
+        
+        # Set CUDA allocator settings
+        os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:512'
+    
+    # Enable garbage collection
+    import gc
+    gc.collect()    
+    # Enable CUDNN optimizations
+    torch.backends.cudnn.benchmark = True
+    torch.backends.cudnn.enabled = True
+    
+    # Enable TF32 on Ampere GPUs
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
+    
     # Parse arguments
     parser = argparse.ArgumentParser()
     
@@ -2331,96 +2311,276 @@ def main():
     parser.add_argument('--model-dir', type=str, default=os.environ.get('SM_MODEL_DIR'))
     parser.add_argument('--output-data-dir', type=str, default=os.environ.get('SM_OUTPUT_DATA_DIR'))
     
-    # Your training arguments
+    # Training arguments
     parser.add_argument('--bucket-name', type=str, required=True)
     parser.add_argument('--base-data-dir', type=str, required=True)
     parser.add_argument('--base-attr-dir', type=str, required=True)
     parser.add_argument('--experiment-name', type=str, default='experiment_1')
-    parser.add_argument('--chunk-size', type=int, default=25)
-    parser.add_argument('--epochs-per-chunk', type=int, default=100)#10)
-    parser.add_argument('--batch-size', type=int, default=256)#32)
-    parser.add_argument('--hidden-size', type=int, default=128)
+    parser.add_argument('--chunk-size', type=int, default=200)
+    parser.add_argument('--total-epochs', type=int, default=200)
+    parser.add_argument('--batch-size', type=int, default=256)
+    parser.add_argument('--hidden-size', type=int, default=256)
     parser.add_argument('--num-layers', type=int, default=2)
-    parser.add_argument('--total-epochs', type=int, default=500)
     parser.add_argument('--learning-rate', type=float, default=0.0001)
     parser.add_argument('--dropout', type=float, default=0.3)
     
     args = parser.parse_args()
     
-    # Register SIGTERM handler for spot instance termination
-    signal.signal(signal.SIGTERM, sigterm_handler)
-    print("SIGTERM handler registered for spot instance termination")
+    # Define checkpoint directory EARLY, before any usage
+    checkpoint_dir = os.environ.get('SM_CHECKPOINT_DIR', '/opt/ml/checkpoints')
     
-    # Create hyperparameters dict
-    hyperparameters = {
-        'sequence_length': 365,
-        'hidden_size': args.hidden_size,
-        'learning_rate': args.learning_rate,
-        'batch_size': args.batch_size,
-        'dropout': args.dropout,
-        'num_layers': args.num_layers,
-        'total_epochs': args.total_epochs
-    }
+    # Log configuration
+    print(f"Starting PyTorch Lightning training with experiment: {args.experiment_name}")
+    print(f"Model directory: {args.model_dir}")
+    print(f"Output directory: {args.output_data_dir}")
+    print(f"Checkpoint directory: {checkpoint_dir}")
     
-    lr_scheduler_params = {
-        'factor': 0.1,  # More aggressive reduction (was 0.5)
-        'patience': 3,  # Less patience (was 5)
-        'min_lr': 1e-7,  # Lower minimum (was 1e-6)
-        'threshold': 0.01,  # Add threshold for significant improvement
-        'cooldown': 5  # Add cooldown period after reduction
-    }
-
-    
-    # Load watersheds data
-    # You'll need to modify this to load from S3 or pass as argument
-    watershed_df = identify_all_available_watersheds(args.bucket_name, args.base_data_dir)
-    watershed_df = watershed_df[watershed_df['subdirectory_name'] == 'camels']
-    watershed_df = watershed_df.iloc[0:20]
-    
-    # Use the output directory for saving (this persists after training)
-    save_dir = args.output_data_dir
-
-
-        # Detect if GPU is available
+    # Detect device
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print(f"Using device: {device}")
     if device == 'cuda':
         print(f"GPU: {torch.cuda.get_device_name(0)}")
         print(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
-
-
     
-    # Run your training function
-    results = train_ea_lstm_model_with_scheduling(
+    # Create output directory if it doesn't exist
+    os.makedirs(args.output_data_dir, exist_ok=True)
+    if args.model_dir:
+        os.makedirs(args.model_dir, exist_ok=True)
+    
+    # Load watershed data
+    print("Loading watershed data...")
+    watershed_df = identify_all_available_watersheds(args.bucket_name, args.base_data_dir)
+    watershed_df = watershed_df[watershed_df['subdirectory_name'] == 'camels']
+    watershed_df = watershed_df#.iloc[0:100]  # Adjust as needed
+    print(f"Found {len(watershed_df)} watersheds")
+    
+    # Create data module
+    print("Creating Lightning DataModule...")
+    data_module = CaravanDataModule(
         watersheds_df=watershed_df,
         bucket_name=args.bucket_name,
         base_data_dir=args.base_data_dir,
         base_attr_dir=args.base_attr_dir,
-        hyperparameters=hyperparameters,
-        save_dir=save_dir,
+        sequence_length=365,
+        batch_size=args.batch_size,
+        num_workers=8,
         chunk_size=args.chunk_size,
-        epochs_per_chunk=args.epochs_per_chunk,
-        gradient_accumulation_steps=8,#2
-        early_stopping_patience=10,
-        lr_scheduler_type='reduce_on_plateau',
-        lr_scheduler_params=lr_scheduler_params,
-        target_noise_std=0.1,
-        target_noise_type='multiplicative', #'log-normal',
-        device=device, 
+        train_split=0.6,
+        val_split=0.2,
+        random_seed=42
     )
     
-    # Save final model to model directory
-    if os.path.exists(os.path.join(save_dir, 'best_model.pt')):
-        import shutil
-        shutil.copy(
-            os.path.join(save_dir, 'best_model.pt'),
-            os.path.join(args.model_dir, 'model.pt')
-        )
+    # Setup data (computes normalization params)
+    print("Setting up data splits and computing normalization parameters...")
+    data_module.setup('fit')
     
+    # Save normalization parameters
+    norm_params_path = os.path.join(args.output_data_dir, 'normalization_params.json')
+    with open(norm_params_path, 'w') as f:
+        json_params = {
+            'static_means': {k: float(v) for k, v in data_module.norm_params['static_means'].items()},
+            'static_stds': {k: float(v) for k, v in data_module.norm_params['static_stds'].items()},
+            'dynamic_means': {k: float(v) for k, v in data_module.norm_params['dynamic_means'].items()},
+            'dynamic_stds': {k: float(v) for k, v in data_module.norm_params['dynamic_stds'].items()},
+            'target_mean': float(data_module.norm_params['target_mean']),
+            'target_std': float(data_module.norm_params['target_std'])
+        }
+        json.dump(json_params, f, indent=2)
+    print(f"Saved normalization parameters to {norm_params_path}")
+    
+    # Create model
+    print("Creating Lightning model...")
+    model = StreamflowLightningModule(
+        dynamic_input_size=len(data_module.dynamic_cols_no_target),
+        static_input_size=len(data_module.static_cols),
+        hidden_size=args.hidden_size,
+        num_layers=args.num_layers,
+        dropout=args.dropout,
+        learning_rate=args.learning_rate,
+        norm_params=data_module.norm_params,
+        target_noise_std=0.1,
+        target_noise_type='multiplicative',
+        gradient_clip_val=5.0,
+        lr_scheduler_params={
+            'factor': 0.5,
+            'patience': 2,
+            'min_lr': 1e-7,
+            'threshold': 0.001,
+            'cooldown': 1,
+            'verbose': True
+        }
+    )
+    
+    # Create trainer with SageMaker-compatible settings
+    trainer = pl.Trainer(
+        max_epochs=args.total_epochs,
+        accelerator='gpu' if device == 'cuda' else 'cpu',
+        devices=1,
+        precision=16 if device == 'cuda' else 32,  # Mixed precision on GPU only
+        gradient_clip_val=5.0,
+        accumulate_grad_batches=4, # Accumulate 4 batches before update which increases the effective batch size
+        num_sanity_val_steps=2,  # Run validation at start to initialize metrics
+#        val_check_interval=1 if args.total_epochs <= 10 else None,  # Validate every epoch for short runs
+        
+        # Callbacks
+        callbacks=[
+            ValidationFrequencyCallback(initial_frequency=1, later_frequency=10, switch_epoch=10),
+            # Checkpoint callback with SageMaker paths
+            pl.callbacks.ModelCheckpoint(
+                dirpath=checkpoint_dir,
+                filename=f'{args.experiment_name}_epoch_{{epoch}}_kge_{{val_kge:.3f}}',
+                monitor='val_kge',  # Still monitor KGE for saving best model
+                mode='max',  # Maximize KGE
+                save_top_k=3,
+                save_last=True,
+                save_on_train_epoch_end=True,
+                every_n_epochs=1
+            ),
+            # Update Early stopping to use KGE loss
+            pl.callbacks.EarlyStopping(
+                monitor='val_kge',  # This is now negative KGE; wait now positive kge
+                patience=10,
+                mode='max',  # Minimize negative KGE; wait now maximize kge
+                verbose=True
+            ),
+            # Learning rate monitor
+            pl.callbacks.LearningRateMonitor(logging_interval='epoch'),
+            # Progress bar refresh rate
+            pl.callbacks.TQDMProgressBar(refresh_rate=50),
+        ],
+        
+        # Logging - TensorBoard with SageMaker output path
+        logger=pl.loggers.TensorBoardLogger(
+            save_dir=args.output_data_dir,
+            name=args.experiment_name,
+            version='lightning'
+        ),
+        
+        # Validation frequency
+        check_val_every_n_epoch=1, #if args.total_epochs > 10 else None,  # Modified: validate every epoch initially
+        limit_val_batches=1.0,  # Use all validation data
+        
+        # Enable better error messages
+        enable_model_summary=True,
+        
+        # For distributed training readiness
+        strategy='auto',
+        
+        # Other settings
+        log_every_n_steps=50,
+        enable_progress_bar=True,
+        enable_checkpointing=True,
+        deterministic=False,  # Faster training
+        benchmark=True,  # CUDNN auto-tuner
+    )
+    
+    # Check for existing checkpoints
+    ckpt_path = None  # Initialize checkpoint path
+    
+    if os.path.exists(checkpoint_dir):
+        checkpoint_files = sorted([f for f in os.listdir(checkpoint_dir) 
+                                 if f.endswith('.ckpt') and 'last' in f])
+        if checkpoint_files:
+            ckpt_path = os.path.join(checkpoint_dir, checkpoint_files[-1])
+            print(f"Found checkpoint: {ckpt_path}")
+            print("Will resume training from this checkpoint")
+        else:
+            print("No checkpoint files found, starting fresh training")
+    else:
+        print(f"Checkpoint directory {checkpoint_dir} does not exist, starting fresh training")
+    
+    # Train the model
+    print("Starting training...")
+    trainer.fit(model, data_module, ckpt_path=ckpt_path)
+    
+    # Test the model
+    print("Running test evaluation...")
+    test_results = trainer.test(model, data_module)
+    
+    # Save the best model to SageMaker model directory
+    if hasattr(trainer, 'checkpoint_callback') and trainer.checkpoint_callback:
+        best_model_path = trainer.checkpoint_callback.best_model_path
+        if best_model_path and os.path.exists(best_model_path):
+            print(f"Copying best model from {best_model_path} to {args.model_dir}")
+            import shutil
+            shutil.copy(best_model_path, os.path.join(args.model_dir, 'model.ckpt'))
+            
+            # Also save as state dict for compatibility
+            checkpoint = torch.load(best_model_path, map_location=device)
+            torch.save(checkpoint['state_dict'], os.path.join(args.model_dir, 'model.pt'))
+            
+            # Save model info - APPLY tensor_to_python HERE
+            best_score = trainer.checkpoint_callback.best_model_score
+            if best_score is not None:
+                best_score = tensor_to_python(best_score)
+
+            # Convert best_k_models as well - it might contain tensors
+            best_k_models = trainer.checkpoint_callback.best_k_models
+            if best_k_models is not None:
+                best_k_models = tensor_to_python(best_k_models)
+
+            model_info = {
+                'best_epoch': best_k_models,  # Now converted
+                'best_score': best_score,
+                'monitor_metric': trainer.checkpoint_callback.monitor,
+                'feature_info': {
+                    'static_features': data_module.static_cols,
+                    'dynamic_features': data_module.dynamic_cols_no_target,
+                    'target': 'streamflow'
+                }
+            }
+            # Extra safety: convert the entire dict
+            model_info = tensor_to_python(model_info)
+            
+            with open(os.path.join(args.model_dir, 'model_info.json'), 'w') as f:
+                json.dump(model_info, f, indent=2)
+        else:
+            print("Warning: No best model checkpoint found")
+    
+    # Save training results
+    results = {
+        'test_results': tensor_to_python(test_results),  # Apply here
+        'total_epochs_trained': trainer.current_epoch,
+        'experiment_name': args.experiment_name,
+        'hyperparameters': {
+            'batch_size': args.batch_size,
+            'hidden_size': args.hidden_size,
+            'num_layers': args.num_layers,
+            'learning_rate': args.learning_rate,
+            'dropout': args.dropout,
+            'chunk_size': args.chunk_size
+        },
+        'feature_info': {
+            'static_features': data_module.static_cols,
+            'dynamic_features': data_module.dynamic_cols_no_target,
+            'target': 'streamflow',
+            'num_static_features': len(data_module.static_cols),
+            'num_dynamic_features': len(data_module.dynamic_cols_no_target)
+        },
+        'data_info': {
+            'total_watersheds': len(watershed_df),
+            'train_watersheds': len(data_module.train_watersheds),
+            'val_watersheds': len(data_module.val_watersheds),
+            'test_watersheds': len(data_module.test_watersheds)
+        }
+    }
+
+    # Add timing information if available
+    if hasattr(trainer, 'logged_metrics'):
+        results['final_metrics'] = tensor_to_python(trainer.logged_metrics)  # Use tensor_to_python here too
+
+    results_path = os.path.join(args.output_data_dir, 'results.json')
+    with open(results_path, 'w') as f:
+        json.dump(results, f, indent=2)
+        
+    print("\n" + "="*50)
     print("Training completed successfully!")
+    print(f"Best model saved to: {args.model_dir}")
+    print(f"Results saved to: {results_path}")
+    print(f"TensorBoard logs available at: {args.output_data_dir}/{args.experiment_name}")
+    print(f"Normalization parameters saved to: {norm_params_path}")
+    print("="*50)
+
 
 if __name__ == '__main__':
-    # Copy all your function definitions here
-    # (all the functions from your lstmCode.txt)
-    
     main()
