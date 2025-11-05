@@ -1,5 +1,5 @@
 # Set the main directory where data and results will be stored
-main_dir = "C:\\Users\\18033\\Documents\\GitHub\\SurfaceWaterProjections\\streamflowSignatures"#"C:/Users/arikt/Documents/GitHub/SurfaceWaterProjections/streamflowSignatures"
+main_dir = "C:/Users/arikt/Documents/GitHub/SurfaceWaterProjections/streamflowSignatures"#"C:/Users/arikt/Documents/GitHub/SurfaceWaterProjections/streamflowSignatures"
 metadata_dir = "D:/"
 # Load helper functions
 source(file.path(main_dir, "helperFunctions.R"), local=FALSE)
@@ -11,7 +11,7 @@ source(file.path(main_dir, "helperFunctions.R"), local=FALSE)
 
 # Analysis period
 start_date = as.Date("1979-10-01")  # Modern data period
-end_date = as.Date("2025-06-01")    # End of analysis period
+end_date = as.Date("2025-10-01")    # End of analysis period
 
 # Data quality thresholds
 min_num_years = 30    # Minimum number of years required for analysis
@@ -19,7 +19,7 @@ min_nona_days = floor(365*.9)   # Minimum number of non-NA days per year
 min_Q_value_and_days = c(0.0001, 30)  # Min flow value (mm) and days above this value
 
 # Output file for results
-output_file = file.path(metadata_dir, "processedOuts/summary_data.csv")
+output_file = file.path(metadata_dir, "processedOuts/summary_data_15aug2025.csv")
 
 ################################################################################################
 # LOAD REQUIRED DATASETS
@@ -82,41 +82,42 @@ tryCatch({
 metadata <- process_gages_rawToRaw(
   gages_df = canadian_gages,#conus_gages,#AK_gages,
   gage_type = "Canada",
-  min_num_years = 30,
-  start_date = as.Date("1979-10-01"),
-  end_date = as.Date("2025-06-01"),
-  min_Q_value_and_days = c(0.001, 328),
-  output_dir = "processed_streamflow_data_canada",
+  min_num_years = min_num_years,
+  start_date = start_date,
+  end_date = end_date,
+  min_Q_value_and_days = min_Q_value_and_days,
+  output_dir = file.path(getwd(), "processed_streamflow_data_canada"),
   storage_format = "parquet",
-  chunk_size = 1000,
-  resume=TRUE
-)
-
-metadata <- process_gages_rawToRaw(
-  gages_df = conus_gages,#AK_gages,
-  gage_type = "USGS",
-  min_num_years = 30,
-  start_date = as.Date("1979-10-01"),
-  end_date = as.Date("2025-06-01"),
-  min_Q_value_and_days = c(0.001, 328),
-  output_dir = "processed_streamflow_data_conus",
-  storage_format = "parquet",
-  chunk_size = 1000,
-  resume=TRUE
+  chunk_size = 1000#,
+#  resume=TRUE
 )
 
 # Process gages
 metadata <- process_gages_rawToRaw(
   gages_df = AK_gages,
   gage_type = "USGS",
-  min_num_years = 30,
-  start_date = as.Date("1979-10-01"),
-  end_date = as.Date("2025-06-01"),
-  min_Q_value_and_days = c(0.001, 328),
-  output_dir = "processed_streamflow_data_AK",
-  storage_format = "parquet",
-  chunk_size = 1000
+  min_num_years = min_num_years,
+  start_date = start_date,
+  end_date = end_date,
+  min_Q_value_and_days = min_Q_value_and_days,
+  output_dir = file.path(getwd(), "processed_streamflow_data_AK"),
+  chunk_size = 1000#,
+  #  resume=TRUE
 )
+
+metadata <- process_gages_rawToRaw(
+  gages_df = conus_gages,#AK_gages,
+  gage_type = "USGS",
+  min_num_years = min_num_years,
+  start_date = start_date,
+  end_date = end_date,
+  min_Q_value_and_days = min_Q_value_and_days,
+  output_dir = file.path(getwd(), "processed_streamflow_data_conus"),
+  storage_format = "parquet",
+  chunk_size = 1000#,
+  #  resume=TRUE
+)
+
 
 
 

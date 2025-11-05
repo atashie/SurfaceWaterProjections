@@ -38,11 +38,10 @@ require(ncdf4)
 #########################################################################################
 # process gage data
 
-# Add this helper function at the beginning of helperFunctions.R
 calculate_water_year_info <- function(dates) {
   # For Northern Hemisphere: water year starts October 1
   # TODO: calculate water year for alternative regions
-
+  
   years <- year(dates)
   months <- month(dates)
   
@@ -58,7 +57,7 @@ calculate_water_year_info <- function(dates) {
 }
 
 
-
+# original function - processes api data directly, outputs metrics and trends
 process_gages_rawData <- function(gages_df, gage_type, min_num_years, start_date, end_date, 
                                   min_Q_value_and_days, basinAt_NorAm_polys, HB_dt, 
                                   upstream_hydrobasins, output_file) {
@@ -324,7 +323,7 @@ process_gages_rawData <- function(gages_df, gage_type, min_num_years, start_date
 }
 
 
-
+  # processes api data and outputs timeseries of streamflow and an associated metadata file
 process_gages_rawToRaw <- function(gages_df, gage_type, min_num_years, start_date, end_date, 
                                    min_Q_value_and_days, output_dir, 
                                    storage_format = c("parquet", "csv", "rds", "feather"),
@@ -412,15 +411,13 @@ process_gages_rawToRaw <- function(gages_df, gage_type, min_num_years, start_dat
         next
       }
       
-      # Apply min_Q_value_and_days filter
+      # Gate based on qualifying years, but do not drop non-qualifying years once accepted
       years_to_use <- NULL
       for (this_year in unique(streamflow_data$year)) {
         test_year <- subset(streamflow_data, year == this_year)
-        if(!is.numeric(test_year$Q)) test_year$Q <- as.numeric(test_year$Q)
-        
+        if (!is.numeric(test_year$Q)) test_year$Q <- as.numeric(test_year$Q)
         valid_q_values <- test_year$Q[!is.na(test_year$Q)]
         nonzero_rows <- which(valid_q_values > min_Q_value_and_days[1])
-        
         if (length(nonzero_rows) >= min_Q_value_and_days[2]) {
           years_to_use <- c(years_to_use, this_year)
         }
@@ -434,40 +431,38 @@ process_gages_rawToRaw <- function(gages_df, gage_type, min_num_years, start_dat
         next
       }
       
-      # Filter to valid years
-      streamflow_data_filtered <- streamflow_data[streamflow_data$year %in% years_to_use, ]
+      # IMPORTANT: Keep ALL data within the requested window once the site qualifies
+      streamflow_data_kept <- streamflow_data[
+        streamflow_data$Date >= start_date & streamflow_data$Date <= end_date, ]
       
-      # Update metadata
-      meta_row$num_years <- length(years_to_use)
+      # Metadata semantics unchanged:
+      # - num_years/start_year/end_year = qualifying years
+      # - num_days = number of days in those qualifying years (as before)
+      meta_row$num_years  <- length(years_to_use)
       meta_row$start_year <- min(years_to_use)
-      meta_row$end_year <- max(years_to_use)
-      meta_row$num_days <- nrow(streamflow_data_filtered)
+      meta_row$end_year   <- max(years_to_use)
+      meta_row$num_days   <- nrow(streamflow_data[streamflow_data$year %in% years_to_use, ])
       meta_row$processing_status <- "success"
       
-      # Add gage_id to streamflow data for long format
-      streamflow_data_filtered$gage_id <- gage_id
+      # Add gage_id and keep the flag in the saved output
+      streamflow_data_kept$gage_id <- gage_id
       
-      # Select only essential columns for storage
-      cols_to_keep <- c("gage_id", "Date", "Q", "year", "month", "doy", "water_year", "dowy")
-      # Add PPT and SWE if they exist
-      if ("PPT" %in% names(streamflow_data_filtered)) cols_to_keep <- c(cols_to_keep, "PPT")
-      if ("SWE" %in% names(streamflow_data_filtered)) cols_to_keep <- c(cols_to_keep, "SWE")
+      cols_to_keep <- c("gage_id", "Date", "Q", "year", "month", "doy", "water_year", "dowy", "flag")
+      if ("PPT" %in% names(streamflow_data_kept)) cols_to_keep <- c(cols_to_keep, "PPT")
+      if ("SWE" %in% names(streamflow_data_kept)) cols_to_keep <- c(cols_to_keep, "SWE")
       
-      # Convert to data.table and select columns
-      streamflow_data_filtered <- as.data.table(streamflow_data_filtered)
-      streamflow_data_filtered <- streamflow_data_filtered[, ..cols_to_keep]
+      streamflow_data_kept <- as.data.table(streamflow_data_kept)[, ..cols_to_keep]
       
       # Add to chunk
-      daily_data_chunk <- rbind(daily_data_chunk, streamflow_data_filtered, fill = TRUE)
+      daily_data_chunk <- rbind(daily_data_chunk, streamflow_data_kept, fill = TRUE)
       processed_gages <- processed_gages + 1
       
       # Save chunk when it reaches chunk_size
       if (processed_gages %% chunk_size == 0) {
         save_chunk(daily_data_chunk, output_dir, chunk_num, storage_format)
-        daily_data_chunk <- data.table()  # Reset chunk
+        daily_data_chunk <- data.table()
         chunk_num <- chunk_num + 1
         
-        # Also save metadata incrementally
         fwrite(metadata, metadata_file)
         cat("\nSaved chunk", chunk_num - 1, "with", chunk_size, "watersheds\n")
       }
@@ -611,194 +606,72 @@ query_watersheds <- function(output_dir, gage_ids, storage_format = "parquet") {
 
 
 
-# old; no longer used
-process_gages <- function(gages_df, gage_type, min_num_years, start_date, end_date, 
-                          min_Q_value_and_days, basinAt_NorAm_polys, HB_dt, 
-                          upstream_hydrobasins, output_file) {
-  
-  # Check if output file exists; if so, read it with gage_id forced to character.
-  if (file.exists(output_file)) {
-    summary_output <- fread(output_file, colClasses = list(character = "gage_id"))
-    # Also force conversion in case some rows were stored as integer64.
-    summary_output[, gage_id := as.character(gage_id)]
-    cat("Loaded existing summary data with", nrow(summary_output), "rows\n")
-  } else {
-    summary_output <- data.table(
-      gage_id = character(),
-      latitude = numeric(),
-      longitude = numeric(),
-      basin_area = numeric(),
-      gage_type = character()
-    )
-    cat("Created new summary data table\n")
-    fwrite(summary_output, output_file)
-  }
-  
-  # Process each gage
-  for (i in 1:nrow(gages_df)) {
-    current_gage <- gages_df[i, ]
-    
-    # Extract gage ID and coordinate info based on gage type
-    if (gage_type == "USGS") {
-      gage_id <- as.character(current_gage$STAID)
-      latitude <- as.numeric(current_gage$LAT_GAGE)
-      longitude <- as.numeric(current_gage$LNG_GAGE)
-      basin_area <- as.numeric(current_gage$DRAIN_SQKM)
-    } else if (gage_type %in% c("Canada", "CANADIAN")) {
-      # Rename Canadian coordinate columns to match USGS convention
-      names(current_gage)[names(current_gage) == 'LATITUDE'] <- 'LAT_GAGE'
-      names(current_gage)[names(current_gage) == 'LONGITUDE'] <- 'LNG_GAGE'
-      gage_id <- as.character(current_gage$STATION_NUMBER)
-      latitude <- as.numeric(current_gage$LAT_GAGE)
-      longitude <- as.numeric(current_gage$LNG_GAGE)
-      basin_area <- NA
-    } else {
-      stop("Unsupported gage type")
-    }
-    
-    if (gage_id %in% summary_output$gage_id) {
-      cat("Skipping gage", gage_id, "as it's already in the output\n")
-      next
-    }
-    
-    cat("Processing gage", gage_id, "(", i, "of", nrow(gages_df), ")\n")
-    
-    tryCatch({
-      streamflow_data <- generate_streamflow_dt(current_gage, gage_type, 
-                                                min_num_years, start_date, end_date)
-      if (is.null(streamflow_data) || identical(streamflow_data, NA) ||
-          (is.data.frame(streamflow_data) && nrow(streamflow_data) == 0)) {
-        cat("No valid streamflow data for gage", gage_id, "\n")
-        next
-      }
-      if (!is.data.frame(streamflow_data)) {
-        cat("Invalid streamflow data format for gage", gage_id, "\n")
-        next
-      }
-      
-      # Try to add required columns if missing
-      required_cols <- c("year", "Q", "doy")
-      if (!all(required_cols %in% colnames(streamflow_data))) {
-        if (!"year" %in% colnames(streamflow_data) && "Date" %in% colnames(streamflow_data)) {
-          streamflow_data$year <- year(streamflow_data$Date)
-        }
-        if (!"doy" %in% colnames(streamflow_data) && "Date" %in% colnames(streamflow_data)) {
-          streamflow_data$doy <- yday(streamflow_data$Date)
-        }
-        if (!all(required_cols %in% colnames(streamflow_data))) {
-          cat("Missing required columns in streamflow data for gage", gage_id, "\n")
-          next
-        }
-      }
-      
-      years_to_use <- NULL
-      for (this_year in unique(streamflow_data$year)) {
-        test_year <- subset(streamflow_data, year == this_year)
-        nonzero_rows <- which(test_year$Q > min_Q_value_and_days[1])
-        if (length(nonzero_rows) > min_Q_value_and_days[2]) {
-          years_to_use <- c(years_to_use, this_year)
-        }
-      }
-      
-      if (length(years_to_use) <= min_num_years) {
-        cat("Insufficient years with valid data for gage", gage_id, "\n")
-        next
-      }
-      
-      streamflow_data <- streamflow_data[streamflow_data$year %in% years_to_use, ]
-      
-      upstream_basins <- NULL
-      tryCatch({
-        upstream_basins <- find_upstream_hydrobasins(
-          current_gage = current_gage,
-          basinAt_NorAm_polys = basinAt_NorAm_polys,
-          HB_dt = HB_dt,
-          upstream_hydrobasins = upstream_hydrobasins,
-          save_path = file.path(dirname(output_file), "upstream_hydrobasins.RData")
-        )
-      }, error = function(e) {
-        cat("Error finding upstream basins for gage", gage_id, ":", e$message, "\n")
-      })
-      
-      # [Calculate metrics...]
-      # (Your existing calls to calculate_flow_vols_by_year, etc., remain unchanged.)
-      
-      # Create a row for this gage
-      gage_row <- data.table(
-        gage_id = gage_id,
-        latitude = latitude,
-        longitude = longitude,
-        basin_area = basin_area,
-        gage_type = gage_type,
-        num_years = length(years_to_use),
-        start_year = min(years_to_use),
-        end_year = max(years_to_use)
-      )
-      
-      # Append metrics (if available) to gage_row...
-      if (!is.null(upstream_basins)) {
-        gage_row$num_upstream_basins <- length(upstream_basins)
-      } else {
-        gage_row$num_upstream_basins <- NA
-      }
-      
-      summary_output <- rbind(summary_output, gage_row, fill = TRUE)
-      fwrite(summary_output, output_file)
-      cat("Successfully processed gage", gage_id, "\n")
-      
-    }, error = function(e) {
-      cat("Error processing gage", gage_id, ":", e$message, "\n")
-    })
-  }
-  
-  return(summary_output)
-}
 
 
-
+  # helper funciton that generates a data table for holding streamflow data; bespoke per data source
 generate_streamflow_dt <- function(dt, data_origin, 
                                    min_num_years = 20, 
                                    start_date = as.Date("1900-01-01"), 
                                    end_date = as.Date("2024-12-31")) {
-  # Check that data_origin is valid; if not, warn and return NA.
   if (!data_origin %in% c("USGS", "Canada")) {
     warning("Invalid data_origin provided. It must be either 'USGS' or 'Canada'. Returning NA.")
     return(NULL)
   }
-  
-  # Ensure dt is a data.table for consistency.
   if (!inherits(dt, "data.table")) {
     dt <- as.data.table(dt)
   }
-  
-  output <- NA  # Default output
+  output <- NA
   
   if (data_origin == "USGS") {
     gage_data <- readNWISdv(siteNumber = dt$STAID,
                             parameterCd = "00060",
-                            startDate = "1900-01-01", endDate = as.character(end_date))
-    gage_data <- subset(gage_data, Date > start_date)
-    gage_id <- gage_data$site_no[1]
+                            startDate = "1900-01-01",
+                            endDate = as.character(end_date))
+    # Enforce the requested window
+    gage_data <- subset(gage_data, Date >= start_date & Date <= end_date)
+    if (nrow(gage_data) == 0) return(NA)
     
-    if (nrow(gage_data) > 365 * min_num_years & last(gage_data$Date) > start_date) {
-      names(gage_data)[4] <- "Q_rawUnits"
-      # Remove flagged data (assumes column 5 holds flags)
-      gage_data$Q_rawUnits[-which(gage_data[, 5] %in% c("A", "A e", "P", "P e"))] <- NA
+    # Try to standardize column names and find value/code
+    gd2 <- tryCatch(dataRetrieval::renameNWISColumns(gage_data), error = function(e) gage_data)
+    if ("Flow" %in% names(gd2) && "Flow_cd" %in% names(gd2)) {
+      val_col <- "Flow"
+      code_col <- "Flow_cd"
+      gage_data <- gd2
+    } else {
+      # Fallback to raw names
+      candidates_val <- grep("^X_00060_00003$", names(gage_data), value = TRUE)
+      candidates_cd  <- grep("^X_00060_00003_cd$", names(gage_data), value = TRUE)
+      if (length(candidates_val) == 1 && length(candidates_cd) == 1) {
+        val_col <- candidates_val
+        code_col <- candidates_cd
+      } else {
+        # Last resort: original assumption (4th is value, 5th is code)
+        val_col <- names(gage_data)[4]
+        code_col <- names(gage_data)[5]
+      }
+    }
+    
+    if (nrow(gage_data) > 365 * min_num_years && max(gage_data$Date) > start_date) {
+      streamy <- gage_data[, c("Date", val_col, code_col)]
+      names(streamy) <- c("Date", "Q_rawUnits", "flag")
       
-      streamy <- gage_data[, c("Date", "Q_rawUnits")]
+      # Mask Q as before by acceptable codes, but keep the flag column
+      keep_codes <- c("A", "A e", "P", "P e")
+      streamy$Q_rawUnits[!(streamy$flag %in% keep_codes)] <- NA_real_
       
-      # Convert to mm/day using drainage area from dt
+      # Convert to mm/day using drainage area (sqkm) from metadata row
+      gage_id <- gage_data$site_no[1]
       sqkm <- dt$DRAIN_SQKM[dt$STAID == gage_id]
       conversion <- 60 * 60 * 24 / (sqkm * 3280.84^3) * 1e6
       streamy$Q <- as.numeric(streamy$Q_rawUnits) * conversion
-      streamy$year = year(streamy$Date)
-      streamy$month = month(streamy$Date)
-      streamy$doy = yday(streamy$Date)
       
-      # Add water year information
+      streamy$year  <- lubridate::year(streamy$Date)
+      streamy$month <- lubridate::month(streamy$Date)
+      streamy$doy   <- lubridate::yday(streamy$Date)
+      
       wy_info <- calculate_water_year_info(streamy$Date)
       streamy$water_year <- wy_info$water_year
-      streamy$dowy <- wy_info$dowy
+      streamy$dowy       <- wy_info$dowy
       
       output <- streamy
     } else {
@@ -810,27 +683,31 @@ generate_streamflow_dt <- function(dt, data_origin,
   if (data_origin == "Canada") {
     can_stream <- hy_daily(station_number = paste(dt$STATION_NUMBER))
     can_stream_only <- subset(can_stream, Parameter == "Flow")
+    # Enforce the requested window
+    can_stream_only <- can_stream_only[
+      can_stream_only$Date >= start_date & can_stream_only$Date <= end_date, ]
     
-    if ("Flow" %in% can_stream$Parameter & last(can_stream_only$Date) > start_date & 
+    if ("Flow" %in% can_stream$Parameter &&
         nrow(can_stream_only) > 365 * min_num_years) {
-      stream_all <- cbind.data.frame(as.Date(can_stream_only$Date), can_stream_only$Value)
-      colnames(stream_all) <- c("Date", "Q_rawUnits")
-      streamy <- subset(stream_all, Date > start_date)
+      streamy <- data.frame(
+        Date = as.Date(can_stream_only$Date),
+        Q_rawUnits = can_stream_only$Value,
+        flag = can_stream_only$Symbol,   # HYDAT qualifier
+        stringsAsFactors = FALSE
+      )
       
-      # Converting to mm/day for m^3/s
+      # Convert from m^3/s to mm/day
       sqkm <- hy_stations(paste(dt$STATION_NUMBER))$DRAINAGE_AREA_GROSS
       conversion <- ifelse(is.na(sqkm), 99999, 60 * 60 * 24 * 1e9 / (sqkm * 1e12))
       streamy$Q <- as.numeric(streamy$Q_rawUnits) * conversion
       
-      # Add temporal information
-      streamy$year = year(streamy$Date)
-      streamy$month = month(streamy$Date)
-      streamy$doy = yday(streamy$Date)
+      streamy$year  <- lubridate::year(streamy$Date)
+      streamy$month <- lubridate::month(streamy$Date)
+      streamy$doy   <- lubridate::yday(streamy$Date)
       
-      # Add water year information
       wy_info <- calculate_water_year_info(streamy$Date)
       streamy$water_year <- wy_info$water_year
-      streamy$dowy <- wy_info$dowy
+      streamy$dowy       <- wy_info$dowy
       
       output <- streamy
     } else {
@@ -845,6 +722,7 @@ generate_streamflow_dt <- function(dt, data_origin,
 
 
 
+  # recursive search for all hydrobasins upstream of a a selected basin; only needed for delineating basins as defined by hydrobasins
 find_upstream_hydrobasins <- function(current_gage, basinAt_NorAm_polys, HB_dt, upstream_hydrobasins = list(), save_path = NULL) {
   if (missing(current_gage) || missing(basinAt_NorAm_polys) || missing(HB_dt)) {
     stop("Required inputs missing: current_gage, basinAt_NorAm_polys, or HB_dt")
@@ -925,8 +803,9 @@ find_upstream_hydrobasins <- function(current_gage, basinAt_NorAm_polys, HB_dt, 
 
 
 ################################################################
-# statisticla processing functions
+# statistical processing functions
 
+  # helper function that receives a time series and outputs summary metrics (trends, averages, etc.)
 generate_stats <- function(data, value_cols = NULL, year_col = "year", min_rows = 3) {
   # Check if zyp package is available
   if (!requireNamespace("zyp", quietly = TRUE)) {
@@ -1286,7 +1165,7 @@ analyze_flashiness_trends <- function(streamflow_data) {
   
   # Calculate Richards-Baker flashiness index by year
   years <- unique(streamflow_data$water_year)
-
+  
   # Initialize flashiness_byYear data frame
   flashiness_byYear <- data.frame(
     water_year = years,
@@ -1335,7 +1214,7 @@ analyze_flashiness_trends <- function(streamflow_data) {
   
   # Use generate_stats to calculate all statistics
   result <- generate_stats(flashiness_byYear, value_cols = "RB_index", year_col = "water_year")
-
+  
   # Rename columns to match expected output
   names(result) <- gsub("RB_index", "flashinessRB", names(result))
   
@@ -1359,7 +1238,7 @@ analyze_flow_timing_trends <- function(streamflow_data) {
   # Create a data frame to store Julian days when cumulative flow reaches each percentile
   years <- unique(streamflow_data$water_year)
   julday_max <- data.frame(water_year = years)
-
+  
   # Define percentiles
   percentiles <- c(5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95)
   
@@ -1432,7 +1311,7 @@ analyze_flow_timing_trends <- function(streamflow_data) {
   
   # Use generate_stats to calculate all statistics at once
   result <- generate_stats(julday_max, value_cols = metric_columns, year_col = "water_year")
-
+  
   # Add julday_max as an attribute to the result
   attr(result, "julday_max") <- julday_max
   
@@ -1544,10 +1423,10 @@ calculate_pulse_metrics <- function(streamflow_data) {
   # Process each year
   for (yr in years) {
     year_data <- streamflow_data[streamflow_data$water_year == yr, ]
-
+    
     # Sort by day of year to ensure chronological order
     year_data <- year_data[order(year_data$dowy), ]
-
+    
     # Calculate year-specific thresholds
     q90_year <- quantile(year_data$Q, probs = 0.90, na.rm = TRUE)
     q10_year <- quantile(year_data$Q, probs = 0.10, na.rm = TRUE)
@@ -1809,7 +1688,7 @@ analyze_baseflow_indices <- function(streamflow_data) {
     
     # Sort by day of year to ensure chronological order
     year_data <- year_data[order(year_data$dowy), ]
-
+    
     # Get streamflow values
     Q <- year_data$Q
     
@@ -1832,7 +1711,7 @@ analyze_baseflow_indices <- function(streamflow_data) {
       total_baseflow_eckhardt <- sum(baseflow_eckhardt, na.rm = TRUE)
       bfi_eckhardt <- total_baseflow_eckhardt / total_flow
       bfi_by_year$BFI_Eckhardt[bfi_by_year$water_year == yr] <- bfi_eckhardt
-
+      
       # Lyne-Hollick BFI
       total_baseflow_lyne <- sum(baseflow_lyne, na.rm = TRUE)
       bfi_lyne <- total_baseflow_lyne / total_flow
@@ -2085,7 +1964,7 @@ analyze_recession_parameters <- function(streamflow_data) {
       # Get the middle day of the recession event for timing
       mid_idx <- event$indices[ceiling(length(event$indices)/2)]
       event_dowy <- year_data$dowy[mid_idx]
-
+      
       # Fit parameters for this event
       event_params <- fit_recession_event(Q_event, remove_first_day = TRUE)
       
@@ -2100,7 +1979,7 @@ analyze_recession_parameters <- function(streamflow_data) {
           log_a = event_params$log_a,
           b = event_params$b
         )
-
+        
         # Calculate concavity (difference in b between first and second half)
         if (length(Q_event) >= 6) {  # Need at least 6 points
           mid_point <- floor(length(Q_event) / 2)
@@ -2226,7 +2105,7 @@ analyze_recession_parameters <- function(streamflow_data) {
     event_dowys <- sapply(all_recession_events, function(x) x$dowy)
     event_log_a_values <- sapply(all_recession_events, function(x) x$log_a)
     event_water_years <- sapply(all_recession_events, function(x) x$water_year)
-
+    
     # Fit sinusoidal model to all data
     seasonality_all <- fit_sinusoidal_model(event_dowys, event_log_a_values)
     result$log_a_seasonality_amplitude_all <- seasonality_all$amplitude
@@ -2236,7 +2115,7 @@ analyze_recession_parameters <- function(streamflow_data) {
     median_water_year <- median(unique(event_water_years))
     first_half_idx <- which(event_water_years <= median_water_year)
     last_half_idx <- which(event_water_years > median_water_year)
-
+    
     # Fit sinusoidal model to first half
     if (length(first_half_idx) >= 10) {
       seasonality_first <- fit_sinusoidal_model(event_dowys[first_half_idx], 
@@ -2413,7 +2292,7 @@ process_caravan_gages <- function(data_project_arg, caravan_base_dir,
     current_identifier <- paste(watershed_id, data_project_arg, sep = "_")
     if (current_identifier %in% processed_identifiers) {
       cat("Skipping watershed", watershed_id, "(data_project:", data_project_arg, ") as it's already in the output\n")
-        # note: there are redundancies between the camels and hysets datasets, so redundancy is expected
+      # note: there are redundancies between the camels and hysets datasets, so redundancy is expected
       next
     }
     
@@ -2508,7 +2387,7 @@ process_caravan_gages <- function(data_project_arg, caravan_base_dir,
       # Combine base watershed info with calculated metrics
       # Ensure metric results are data.tables or can be coerced
       watershed_row <- cbind(watershed_row, 
-                            as.data.table(metrics_flow_vols),
+                             as.data.table(metrics_flow_vols),
                              as.data.table(metrics_fdc_trends),
                              as.data.table(metrics_flashiness),
                              as.data.table(metrics_flow_timing),
@@ -2758,7 +2637,7 @@ process_caravan_to_annual <- function(caravan_directory,
                                       end_date_filter = as.Date("2024-12-31"),
                                       output_dir = "annualized_caravan_data",
                                       min_num_days = 328
-                                      ) {
+) {
   
   # Create output directory if it doesn't exist
   if (!dir.exists(output_dir)) {
@@ -3188,4 +3067,564 @@ add_downstream_basin_ids <- function(metadata_file_path,
   cat("Unique basins with upstream data:", length(upstream_hydrobasins), "\n")
   
   return(metadata)
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+########################################################################################################################
+## older versions of functions that are no longer used
+
+
+
+# old; no longer used
+process_gages <- function(gages_df, gage_type, min_num_years, start_date, end_date, 
+                          min_Q_value_and_days, basinAt_NorAm_polys, HB_dt, 
+                          upstream_hydrobasins, output_file) {
+  
+  # Check if output file exists; if so, read it with gage_id forced to character.
+  if (file.exists(output_file)) {
+    summary_output <- fread(output_file, colClasses = list(character = "gage_id"))
+    # Also force conversion in case some rows were stored as integer64.
+    summary_output[, gage_id := as.character(gage_id)]
+    cat("Loaded existing summary data with", nrow(summary_output), "rows\n")
+  } else {
+    summary_output <- data.table(
+      gage_id = character(),
+      latitude = numeric(),
+      longitude = numeric(),
+      basin_area = numeric(),
+      gage_type = character()
+    )
+    cat("Created new summary data table\n")
+    fwrite(summary_output, output_file)
+  }
+  
+  # Process each gage
+  for (i in 1:nrow(gages_df)) {
+    current_gage <- gages_df[i, ]
+    
+    # Extract gage ID and coordinate info based on gage type
+    if (gage_type == "USGS") {
+      gage_id <- as.character(current_gage$STAID)
+      latitude <- as.numeric(current_gage$LAT_GAGE)
+      longitude <- as.numeric(current_gage$LNG_GAGE)
+      basin_area <- as.numeric(current_gage$DRAIN_SQKM)
+    } else if (gage_type %in% c("Canada", "CANADIAN")) {
+      # Rename Canadian coordinate columns to match USGS convention
+      names(current_gage)[names(current_gage) == 'LATITUDE'] <- 'LAT_GAGE'
+      names(current_gage)[names(current_gage) == 'LONGITUDE'] <- 'LNG_GAGE'
+      gage_id <- as.character(current_gage$STATION_NUMBER)
+      latitude <- as.numeric(current_gage$LAT_GAGE)
+      longitude <- as.numeric(current_gage$LNG_GAGE)
+      basin_area <- NA
+    } else {
+      stop("Unsupported gage type")
+    }
+    
+    if (gage_id %in% summary_output$gage_id) {
+      cat("Skipping gage", gage_id, "as it's already in the output\n")
+      next
+    }
+    
+    cat("Processing gage", gage_id, "(", i, "of", nrow(gages_df), ")\n")
+    
+    tryCatch({
+      streamflow_data <- generate_streamflow_dt(current_gage, gage_type, 
+                                                min_num_years, start_date, end_date)
+      if (is.null(streamflow_data) || identical(streamflow_data, NA) ||
+          (is.data.frame(streamflow_data) && nrow(streamflow_data) == 0)) {
+        cat("No valid streamflow data for gage", gage_id, "\n")
+        next
+      }
+      if (!is.data.frame(streamflow_data)) {
+        cat("Invalid streamflow data format for gage", gage_id, "\n")
+        next
+      }
+      
+      # Try to add required columns if missing
+      required_cols <- c("year", "Q", "doy")
+      if (!all(required_cols %in% colnames(streamflow_data))) {
+        if (!"year" %in% colnames(streamflow_data) && "Date" %in% colnames(streamflow_data)) {
+          streamflow_data$year <- year(streamflow_data$Date)
+        }
+        if (!"doy" %in% colnames(streamflow_data) && "Date" %in% colnames(streamflow_data)) {
+          streamflow_data$doy <- yday(streamflow_data$Date)
+        }
+        if (!all(required_cols %in% colnames(streamflow_data))) {
+          cat("Missing required columns in streamflow data for gage", gage_id, "\n")
+          next
+        }
+      }
+      
+      years_to_use <- NULL
+      for (this_year in unique(streamflow_data$year)) {
+        test_year <- subset(streamflow_data, year == this_year)
+        nonzero_rows <- which(test_year$Q > min_Q_value_and_days[1])
+        if (length(nonzero_rows) > min_Q_value_and_days[2]) {
+          years_to_use <- c(years_to_use, this_year)
+        }
+      }
+      
+      if (length(years_to_use) <= min_num_years) {
+        cat("Insufficient years with valid data for gage", gage_id, "\n")
+        next
+      }
+      
+      streamflow_data <- streamflow_data[streamflow_data$year %in% years_to_use, ]
+      
+      upstream_basins <- NULL
+      tryCatch({
+        upstream_basins <- find_upstream_hydrobasins(
+          current_gage = current_gage,
+          basinAt_NorAm_polys = basinAt_NorAm_polys,
+          HB_dt = HB_dt,
+          upstream_hydrobasins = upstream_hydrobasins,
+          save_path = file.path(dirname(output_file), "upstream_hydrobasins.RData")
+        )
+      }, error = function(e) {
+        cat("Error finding upstream basins for gage", gage_id, ":", e$message, "\n")
+      })
+      
+      # [Calculate metrics...]
+      # (Your existing calls to calculate_flow_vols_by_year, etc., remain unchanged.)
+      
+      # Create a row for this gage
+      gage_row <- data.table(
+        gage_id = gage_id,
+        latitude = latitude,
+        longitude = longitude,
+        basin_area = basin_area,
+        gage_type = gage_type,
+        num_years = length(years_to_use),
+        start_year = min(years_to_use),
+        end_year = max(years_to_use)
+      )
+      
+      # Append metrics (if available) to gage_row...
+      if (!is.null(upstream_basins)) {
+        gage_row$num_upstream_basins <- length(upstream_basins)
+      } else {
+        gage_row$num_upstream_basins <- NA
+      }
+      
+      summary_output <- rbind(summary_output, gage_row, fill = TRUE)
+      fwrite(summary_output, output_file)
+      cat("Successfully processed gage", gage_id, "\n")
+      
+    }, error = function(e) {
+      cat("Error processing gage", gage_id, ":", e$message, "\n")
+    })
+  }
+  
+  return(summary_output)
+}
+
+ # original version of generate_streamflow_dt() 
+generate_streamflow_dt_og <- function(dt, data_origin, 
+                                      min_num_years = 20, 
+                                      start_date = as.Date("1900-01-01"), 
+                                      end_date = as.Date("2024-12-31")) {
+  # Check that data_origin is valid; if not, warn and return NA.
+  if (!data_origin %in% c("USGS", "Canada")) {
+    warning("Invalid data_origin provided. It must be either 'USGS' or 'Canada'. Returning NA.")
+    return(NULL)
+  }
+  
+  # Ensure dt is a data.table for consistency.
+  if (!inherits(dt, "data.table")) {
+    dt <- as.data.table(dt)
+  }
+  
+  output <- NA  # Default output
+  
+  if (data_origin == "USGS") {
+    gage_data <- readNWISdv(siteNumber = dt$STAID,
+                            parameterCd = "00060",
+                            startDate = "1900-01-01", endDate = as.character(end_date))
+    gage_data <- subset(gage_data, Date > start_date)
+    gage_id <- gage_data$site_no[1]
+    
+    if (nrow(gage_data) > 365 * min_num_years & last(gage_data$Date) > start_date) {
+      names(gage_data)[4] <- "Q_rawUnits"
+      # Remove flagged data (assumes column 5 holds flags)
+      gage_data$Q_rawUnits[-which(gage_data[, 5] %in% c("A", "A e", "P", "P e"))] <- NA
+      
+      streamy <- gage_data[, c("Date", "Q_rawUnits")]
+      
+      # Convert to mm/day using drainage area from dt
+      sqkm <- dt$DRAIN_SQKM[dt$STAID == gage_id]
+      conversion <- 60 * 60 * 24 / (sqkm * 3280.84^3) * 1e6
+      streamy$Q <- as.numeric(streamy$Q_rawUnits) * conversion
+      streamy$year = year(streamy$Date)
+      streamy$month = month(streamy$Date)
+      streamy$doy = yday(streamy$Date)
+      
+      # Add water year information
+      wy_info <- calculate_water_year_info(streamy$Date)
+      streamy$water_year <- wy_info$water_year
+      streamy$dowy <- wy_info$dowy
+      
+      output <- streamy
+    } else {
+      message("Insufficient Data to Process")
+      output <- NA
+    }
+  }
+  
+  if (data_origin == "Canada") {
+    can_stream <- hy_daily(station_number = paste(dt$STATION_NUMBER))
+    can_stream_only <- subset(can_stream, Parameter == "Flow")
+    
+    if ("Flow" %in% can_stream$Parameter & last(can_stream_only$Date) > start_date & 
+        nrow(can_stream_only) > 365 * min_num_years) {
+      stream_all <- cbind.data.frame(as.Date(can_stream_only$Date), can_stream_only$Value)
+      colnames(stream_all) <- c("Date", "Q_rawUnits")
+      streamy <- subset(stream_all, Date > start_date)
+      
+      # Converting to mm/day for m^3/s
+      sqkm <- hy_stations(paste(dt$STATION_NUMBER))$DRAINAGE_AREA_GROSS
+      conversion <- ifelse(is.na(sqkm), 99999, 60 * 60 * 24 * 1e9 / (sqkm * 1e12))
+      streamy$Q <- as.numeric(streamy$Q_rawUnits) * conversion
+      
+      # Add temporal information
+      streamy$year = year(streamy$Date)
+      streamy$month = month(streamy$Date)
+      streamy$doy = yday(streamy$Date)
+      
+      # Add water year information
+      wy_info <- calculate_water_year_info(streamy$Date)
+      streamy$water_year <- wy_info$water_year
+      streamy$dowy <- wy_info$dowy
+      
+      output <- streamy
+    } else {
+      message("Insufficient Data to Process")
+      output <- NA
+    }
+  }
+  
+  return(output)
+}
+
+
+
+
+####################################################################################################################
+# Final user-facing function
+
+# Function to process streamflow signatures from parquet files (long format)
+process_signatures_from_parquet <- function(
+    parquet_file_path = "combined_streamflow_output/combined_daily_data.parquet",
+    metadata_file_path = "combined_streamflow_output/combined_watershed_metadata.csv",
+    output_file = "processed_signatures_from_parquet.csv",
+    min_Q_value_and_days = c(0.0001, 30),
+    min_num_years = 20,
+    min_frac_good_data = 0.9  # NEW PARAMETER for filter 2b
+) {
+  
+  # Load required libraries
+  require(arrow)
+  require(data.table)
+  require(lubridate)
+  
+  cat("Reading parquet file and metadata...\n")
+  
+  # Read the combined parquet file
+  streamflow_data <- arrow::read_parquet(parquet_file_path)
+  streamflow_data <- as.data.table(streamflow_data)
+  
+  # Check the structure of the data
+  cat("Data structure:\n")
+  cat("Columns:", paste(names(streamflow_data), collapse = ", "), "\n")
+  cat("Number of rows:", nrow(streamflow_data), "\n")
+  
+  # Read metadata - ensure gage_id is character
+  metadata <- fread(metadata_file_path, colClasses = list(character = "gage_id"))
+  metadata[, gage_id := as.character(gage_id)]
+  cat("Number of gages in metadata:", nrow(metadata), "\n")
+  
+  # Initialize output data table
+  summary_output <- data.table()
+  
+  # Get list of unique gage IDs from the parquet data
+  unique_gages <- unique(as.character(streamflow_data$gage_id))
+  cat("Found", length(unique_gages), "unique gages in parquet file\n")
+  
+  # Create a lookup table for metadata with multiple possible formats
+  # important for USGS data where IDs often have leading 0s that may be dropped
+  metadata_lookup <- data.table()
+  for (i in 1:nrow(metadata)) {
+    meta_row <- metadata[i]
+    base_id <- as.character(meta_row$gage_id)
+    
+    # Store the original metadata row
+    metadata_lookup <- rbind(metadata_lookup, meta_row, fill = TRUE)
+    
+    # Also store versions with leading zeros removed (if they exist)
+    stripped_id <- gsub("^0+", "", base_id)
+    if (stripped_id != base_id && stripped_id != "") {
+      alt_row <- copy(meta_row)
+      alt_row$gage_id <- stripped_id
+      metadata_lookup <- rbind(metadata_lookup, alt_row, fill = TRUE)
+    }
+  }
+  
+  # Function to find metadata for a gage ID, trying different formats
+  find_metadata <- function(gage_id, metadata_lookup) {
+    gage_id <- as.character(gage_id)
+    
+    # First try exact match
+    meta <- metadata_lookup[gage_id == gage_id]
+    if (nrow(meta) > 0) return(meta[1])
+    
+    # Try adding leading zeros (up to 4)
+    for (num_zeros in 1:4) {
+      padded_id <- sprintf(paste0("%0", nchar(gage_id) + num_zeros, "d"), 
+                           as.numeric(gage_id))
+      meta <- metadata_lookup[gage_id == padded_id]
+      if (nrow(meta) > 0) {
+        cat("  Found match for", gage_id, "as", padded_id, "\n")
+        return(meta[1])
+      }
+    }
+    
+    # Try removing leading zeros
+    stripped_id <- gsub("^0+", "", gage_id)
+    if (stripped_id != gage_id && stripped_id != "") {
+      meta <- metadata_lookup[gage_id == stripped_id]
+      if (nrow(meta) > 0) {
+        cat("  Found match for", gage_id, "as", stripped_id, "\n")
+        return(meta[1])
+      }
+    }
+    
+    return(NULL)
+  }
+  
+  # Track matching statistics
+  matched_gages <- 0
+  unmatched_gages <- character()
+  
+  # Process each unique gage
+  for (i in seq_along(unique_gages)) {
+    gage_id <- unique_gages[i]
+    
+    if (i %% 100 == 0) {
+      cat("Processing gage", i, "of", length(unique_gages), "\n")
+    }
+    
+    tryCatch({
+      # Find metadata for this gage
+      gage_meta <- find_metadata(gage_id, metadata_lookup)
+      
+      if (is.null(gage_meta)) {
+        unmatched_gages <- c(unmatched_gages, gage_id)
+        next
+      }
+      
+      matched_gages <- matched_gages + 1
+      
+      # Extract streamflow data for this gage
+      gage_flow <- streamflow_data[gage_id == unique_gages[i], ]
+      
+      if (nrow(gage_flow) == 0) {
+        cat("  No data for gage", gage_id, "\n")
+        next
+      }
+      
+      # Ensure required columns exist
+      if (!"Date" %in% names(gage_flow)) {
+        cat("  Missing Date column for gage", gage_id, "\n")
+        next
+      }
+      
+      if (!"Q" %in% names(gage_flow)) {
+        cat("  Missing Q column for gage", gage_id, "\n")
+        next
+      }
+      
+      # Remove NA values in Q
+      gage_flow <- gage_flow[!is.na(Q)]
+      
+      if (nrow(gage_flow) == 0) {
+        cat("  No valid Q data for gage", gage_id, "\n")
+        next
+      }
+      
+      # Check if temporal columns exist, if not create them
+      if (!"year" %in% names(gage_flow)) {
+        gage_flow[, year := year(Date)]
+      }
+      if (!"month" %in% names(gage_flow)) {
+        gage_flow[, month := month(Date)]
+      }
+      if (!"doy" %in% names(gage_flow)) {
+        gage_flow[, doy := yday(Date)]
+      }
+      
+      # Add water year information if missing
+      if (!all(c("water_year", "dowy") %in% names(gage_flow))) {
+        wy_info <- calculate_water_year_info(gage_flow$Date)
+        gage_flow[, `:=`(
+          water_year = wy_info$water_year,
+          dowy = wy_info$dowy
+        )]
+      }
+      
+      # ============= APPLY WATER YEAR BASED FILTERS =============
+      # Filter 2: Check each water year for minimum days above threshold
+      # Filter 2b: Check each water year for minimum fraction of non-NA data
+      
+      water_years_to_use <- NULL
+      
+      for (this_wy in unique(gage_flow$water_year)) {
+        test_wy <- gage_flow[water_year == this_wy]
+        
+        # Filter 2: Check days with Q > threshold
+        nonzero_rows <- sum(test_wy$Q > min_Q_value_and_days[1], na.rm = TRUE)
+        if (nonzero_rows < min_Q_value_and_days[2]) {
+          cat("  WY", this_wy, "rejected: only", nonzero_rows, 
+              "days > threshold (need", min_Q_value_and_days[2], ")\n")
+          next
+        }
+        
+        # Filter 2b: Check fraction of good (non-NA) data
+        # Determine expected days in water year (account for leap years)
+        # Water year runs Oct 1 to Sep 30
+        # If this_wy is 2020, it runs from Oct 1, 2019 to Sep 30, 2020
+        # Leap year affects the calendar year that ends the water year
+        is_leap <- ((this_wy %% 4 == 0) & (this_wy %% 100 != 0)) | (this_wy %% 400 == 0)
+        expected_days <- ifelse(is_leap, 366, 365)
+        min_required_days <- floor(expected_days * min_frac_good_data)
+        
+        n_good_days <- nrow(test_wy)  # Already filtered for non-NA Q above
+        
+        if (n_good_days < min_required_days) {
+          cat("  WY", this_wy, "rejected: only", n_good_days, 
+              "valid days (need", min_required_days, "for", 
+              sprintf("%.1f%%", min_frac_good_data * 100), "coverage)\n")
+          next
+        }
+        
+        # This water year passes both filters
+        water_years_to_use <- c(water_years_to_use, this_wy)
+      }
+      
+      # Filter 3: Check minimum number of qualifying water years
+      if (length(water_years_to_use) < min_num_years) {
+        cat("  Insufficient qualifying water years for gage", gage_id, 
+            "(", length(water_years_to_use), "water years)\n")
+        next
+      }
+      
+      # Filter to qualifying water years
+      streamflow_data_filtered <- gage_flow[water_year %in% water_years_to_use]
+      
+      # Initialize metric results
+      metrics_list <- list()
+      
+      # Calculate each metric group with error handling
+      tryCatch({
+        metrics_list$flow_vols <- calculate_flow_vols_by_year(streamflow_data_filtered)
+      }, error = function(e) NULL)
+      
+      tryCatch({
+        metrics_list$fdc_trends <- analyze_fdc_trends_from_streamflow(streamflow_data_filtered)
+      }, error = function(e) NULL)
+      
+      tryCatch({
+        metrics_list$flashiness <- analyze_flashiness_trends(streamflow_data_filtered)
+      }, error = function(e) NULL)
+      
+      tryCatch({
+        metrics_list$flow_timing <- analyze_flow_timing_trends(streamflow_data_filtered)
+      }, error = function(e) NULL)
+      
+      tryCatch({
+        metrics_list$pulses <- calculate_pulse_metrics(streamflow_data_filtered)
+      }, error = function(e) NULL)
+      
+      tryCatch({
+        metrics_list$baseflow <- analyze_baseflow_indices(streamflow_data_filtered)
+      }, error = function(e) NULL)
+      
+      tryCatch({
+        metrics_list$recession <- analyze_recession_parameters(streamflow_data_filtered)
+      }, error = function(e) NULL)
+      
+      # Create output row
+      gage_row <- data.table(
+        gage_id = gage_id,
+        gage_id_metadata = gage_meta$gage_id,  # Store the metadata version too
+        latitude = gage_meta$latitude,
+        longitude = gage_meta$longitude, 
+        basin_area = gage_meta$basin_area,
+        gage_type = gage_meta$gage_type,
+        num_water_years = length(water_years_to_use),  # Changed from num_years
+        start_water_year = min(water_years_to_use),     # Changed from start_year
+        end_water_year = max(water_years_to_use),       # Changed from end_year
+        num_upstream_basins = gage_meta$num_upstream_basins
+      )
+      
+      # Add calculated metrics
+      for (metric_name in names(metrics_list)) {
+        if (!is.null(metrics_list[[metric_name]])) {
+          gage_row <- cbind(gage_row, as.data.table(metrics_list[[metric_name]]))
+        }
+      }
+      
+      # Add to summary output
+      summary_output <- rbind(summary_output, gage_row, fill = TRUE)
+      
+    }, error = function(e) {
+      cat("  Error processing gage", gage_id, ":", e$message, "\n")
+    })
+    
+    # Periodic save
+    if (i %% 500 == 0 && nrow(summary_output) > 0) {
+      fwrite(summary_output, output_file)
+      cat("Saved intermediate results (", nrow(summary_output), "gages processed)\n")
+    }
+  }
+  
+  # Final save
+  if (nrow(summary_output) > 0) {
+    fwrite(summary_output, output_file)
+    cat("\n========== PROCESSING COMPLETE ==========\n")
+    cat("Total unique gages in parquet:", length(unique_gages), "\n")
+    cat("Successfully matched to metadata:", matched_gages, "\n")
+    cat("Could not match to metadata:", length(unmatched_gages), "\n")
+    cat("Successfully processed:", nrow(summary_output), "\n")
+    cat("Results saved to:", output_file, "\n")
+    
+    # Save list of unmatched gages for debugging
+    if (length(unmatched_gages) > 0) {
+      unmatched_file <- gsub("\\.csv$", "_unmatched_gages.txt", output_file)
+      writeLines(unmatched_gages, unmatched_file)
+      cat("List of unmatched gages saved to:", unmatched_file, "\n")
+      cat("Sample of unmatched gages:", head(unmatched_gages, 10), "\n")
+    }
+  } else {
+    cat("\n========== NO DATA PROCESSED ==========\n")
+    cat("No gages were successfully processed.\n")
+  }
+  
+  return(summary_output)
 }

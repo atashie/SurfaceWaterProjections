@@ -41,7 +41,7 @@ require(ncdf4)
 calculate_water_year_info <- function(dates) {
   # For Northern Hemisphere: water year starts October 1
   # TODO: calculate water year for alternative regions
-
+  
   years <- year(dates)
   months <- month(dates)
   
@@ -411,15 +411,13 @@ process_gages_rawToRaw <- function(gages_df, gage_type, min_num_years, start_dat
         next
       }
       
-      # Apply min_Q_value_and_days filter
+      # Gate based on qualifying years, but do not drop non-qualifying years once accepted
       years_to_use <- NULL
       for (this_year in unique(streamflow_data$year)) {
         test_year <- subset(streamflow_data, year == this_year)
-        if(!is.numeric(test_year$Q)) test_year$Q <- as.numeric(test_year$Q)
-        
+        if (!is.numeric(test_year$Q)) test_year$Q <- as.numeric(test_year$Q)
         valid_q_values <- test_year$Q[!is.na(test_year$Q)]
         nonzero_rows <- which(valid_q_values > min_Q_value_and_days[1])
-        
         if (length(nonzero_rows) >= min_Q_value_and_days[2]) {
           years_to_use <- c(years_to_use, this_year)
         }
@@ -433,40 +431,38 @@ process_gages_rawToRaw <- function(gages_df, gage_type, min_num_years, start_dat
         next
       }
       
-      # Filter to valid years
-      streamflow_data_filtered <- streamflow_data[streamflow_data$year %in% years_to_use, ]
+      # IMPORTANT: Keep ALL data within the requested window once the site qualifies
+      streamflow_data_kept <- streamflow_data[
+        streamflow_data$Date >= start_date & streamflow_data$Date <= end_date, ]
       
-      # Update metadata
-      meta_row$num_years <- length(years_to_use)
+      # Metadata semantics unchanged:
+      # - num_years/start_year/end_year = qualifying years
+      # - num_days = number of days in those qualifying years (as before)
+      meta_row$num_years  <- length(years_to_use)
       meta_row$start_year <- min(years_to_use)
-      meta_row$end_year <- max(years_to_use)
-      meta_row$num_days <- nrow(streamflow_data_filtered)
+      meta_row$end_year   <- max(years_to_use)
+      meta_row$num_days   <- nrow(streamflow_data[streamflow_data$year %in% years_to_use, ])
       meta_row$processing_status <- "success"
       
-      # Add gage_id to streamflow data for long format
-      streamflow_data_filtered$gage_id <- gage_id
+      # Add gage_id and keep the flag in the saved output
+      streamflow_data_kept$gage_id <- gage_id
       
-      # Select only essential columns for storage
-      cols_to_keep <- c("gage_id", "Date", "Q", "year", "month", "doy", "water_year", "dowy")
-      # Add PPT and SWE if they exist
-      if ("PPT" %in% names(streamflow_data_filtered)) cols_to_keep <- c(cols_to_keep, "PPT")
-      if ("SWE" %in% names(streamflow_data_filtered)) cols_to_keep <- c(cols_to_keep, "SWE")
+      cols_to_keep <- c("gage_id", "Date", "Q", "year", "month", "doy", "water_year", "dowy", "flag")
+      if ("PPT" %in% names(streamflow_data_kept)) cols_to_keep <- c(cols_to_keep, "PPT")
+      if ("SWE" %in% names(streamflow_data_kept)) cols_to_keep <- c(cols_to_keep, "SWE")
       
-      # Convert to data.table and select columns
-      streamflow_data_filtered <- as.data.table(streamflow_data_filtered)
-      streamflow_data_filtered <- streamflow_data_filtered[, ..cols_to_keep]
+      streamflow_data_kept <- as.data.table(streamflow_data_kept)[, ..cols_to_keep]
       
       # Add to chunk
-      daily_data_chunk <- rbind(daily_data_chunk, streamflow_data_filtered, fill = TRUE)
+      daily_data_chunk <- rbind(daily_data_chunk, streamflow_data_kept, fill = TRUE)
       processed_gages <- processed_gages + 1
       
       # Save chunk when it reaches chunk_size
       if (processed_gages %% chunk_size == 0) {
         save_chunk(daily_data_chunk, output_dir, chunk_num, storage_format)
-        daily_data_chunk <- data.table()  # Reset chunk
+        daily_data_chunk <- data.table()
         chunk_num <- chunk_num + 1
         
-        # Also save metadata incrementally
         fwrite(metadata, metadata_file)
         cat("\nSaved chunk", chunk_num - 1, "with", chunk_size, "watersheds\n")
       }
@@ -754,11 +750,122 @@ process_gages <- function(gages_df, gage_type, min_num_years, start_date, end_da
 }
 
 
-
 generate_streamflow_dt <- function(dt, data_origin, 
                                    min_num_years = 20, 
                                    start_date = as.Date("1900-01-01"), 
                                    end_date = as.Date("2024-12-31")) {
+  if (!data_origin %in% c("USGS", "Canada")) {
+    warning("Invalid data_origin provided. It must be either 'USGS' or 'Canada'. Returning NA.")
+    return(NULL)
+  }
+  if (!inherits(dt, "data.table")) {
+    dt <- as.data.table(dt)
+  }
+  output <- NA
+  
+  if (data_origin == "USGS") {
+    gage_data <- readNWISdv(siteNumber = dt$STAID,
+                            parameterCd = "00060",
+                            startDate = "1900-01-01",
+                            endDate = as.character(end_date))
+    # Enforce the requested window
+    gage_data <- subset(gage_data, Date >= start_date & Date <= end_date)
+    if (nrow(gage_data) == 0) return(NA)
+    
+    # Try to standardize column names and find value/code
+    gd2 <- tryCatch(dataRetrieval::renameNWISColumns(gage_data), error = function(e) gage_data)
+    if ("Flow" %in% names(gd2) && "Flow_cd" %in% names(gd2)) {
+      val_col <- "Flow"
+      code_col <- "Flow_cd"
+      gage_data <- gd2
+    } else {
+      # Fallback to raw names
+      candidates_val <- grep("^X_00060_00003$", names(gage_data), value = TRUE)
+      candidates_cd  <- grep("^X_00060_00003_cd$", names(gage_data), value = TRUE)
+      if (length(candidates_val) == 1 && length(candidates_cd) == 1) {
+        val_col <- candidates_val
+        code_col <- candidates_cd
+      } else {
+        # Last resort: original assumption (4th is value, 5th is code)
+        val_col <- names(gage_data)[4]
+        code_col <- names(gage_data)[5]
+      }
+    }
+    
+    if (nrow(gage_data) > 365 * min_num_years && max(gage_data$Date) > start_date) {
+      streamy <- gage_data[, c("Date", val_col, code_col)]
+      names(streamy) <- c("Date", "Q_rawUnits", "flag")
+      
+      # Mask Q as before by acceptable codes, but keep the flag column
+      keep_codes <- c("A", "A e", "P", "P e")
+      streamy$Q_rawUnits[!(streamy$flag %in% keep_codes)] <- NA_real_
+      
+      # Convert to mm/day using drainage area (sqkm) from metadata row
+      gage_id <- gage_data$site_no[1]
+      sqkm <- dt$DRAIN_SQKM[dt$STAID == gage_id]
+      conversion <- 60 * 60 * 24 / (sqkm * 3280.84^3) * 1e6
+      streamy$Q <- as.numeric(streamy$Q_rawUnits) * conversion
+      
+      streamy$year  <- lubridate::year(streamy$Date)
+      streamy$month <- lubridate::month(streamy$Date)
+      streamy$doy   <- lubridate::yday(streamy$Date)
+      
+      wy_info <- calculate_water_year_info(streamy$Date)
+      streamy$water_year <- wy_info$water_year
+      streamy$dowy       <- wy_info$dowy
+      
+      output <- streamy
+    } else {
+      message("Insufficient Data to Process")
+      output <- NA
+    }
+  }
+  
+  if (data_origin == "Canada") {
+    can_stream <- hy_daily(station_number = paste(dt$STATION_NUMBER))
+    can_stream_only <- subset(can_stream, Parameter == "Flow")
+    # Enforce the requested window
+    can_stream_only <- can_stream_only[
+      can_stream_only$Date >= start_date & can_stream_only$Date <= end_date, ]
+    
+    if ("Flow" %in% can_stream$Parameter &&
+        nrow(can_stream_only) > 365 * min_num_years) {
+      streamy <- data.frame(
+        Date = as.Date(can_stream_only$Date),
+        Q_rawUnits = can_stream_only$Value,
+        flag = can_stream_only$Symbol,   # HYDAT qualifier
+        stringsAsFactors = FALSE
+      )
+      
+      # Convert from m^3/s to mm/day
+      sqkm <- hy_stations(paste(dt$STATION_NUMBER))$DRAINAGE_AREA_GROSS
+      conversion <- ifelse(is.na(sqkm), 99999, 60 * 60 * 24 * 1e9 / (sqkm * 1e12))
+      streamy$Q <- as.numeric(streamy$Q_rawUnits) * conversion
+      
+      streamy$year  <- lubridate::year(streamy$Date)
+      streamy$month <- lubridate::month(streamy$Date)
+      streamy$doy   <- lubridate::yday(streamy$Date)
+      
+      wy_info <- calculate_water_year_info(streamy$Date)
+      streamy$water_year <- wy_info$water_year
+      streamy$dowy       <- wy_info$dowy
+      
+      output <- streamy
+    } else {
+      message("Insufficient Data to Process")
+      output <- NA
+    }
+  }
+  
+  return(output)
+}
+
+
+
+generate_streamflow_dt_og <- function(dt, data_origin, 
+                                      min_num_years = 20, 
+                                      start_date = as.Date("1900-01-01"), 
+                                      end_date = as.Date("2024-12-31")) {
   # Check that data_origin is valid; if not, warn and return NA.
   if (!data_origin %in% c("USGS", "Canada")) {
     warning("Invalid data_origin provided. It must be either 'USGS' or 'Canada'. Returning NA.")
@@ -1285,7 +1392,7 @@ analyze_flashiness_trends <- function(streamflow_data) {
   
   # Calculate Richards-Baker flashiness index by year
   years <- unique(streamflow_data$water_year)
-
+  
   # Initialize flashiness_byYear data frame
   flashiness_byYear <- data.frame(
     water_year = years,
@@ -1334,7 +1441,7 @@ analyze_flashiness_trends <- function(streamflow_data) {
   
   # Use generate_stats to calculate all statistics
   result <- generate_stats(flashiness_byYear, value_cols = "RB_index", year_col = "water_year")
-
+  
   # Rename columns to match expected output
   names(result) <- gsub("RB_index", "flashinessRB", names(result))
   
@@ -1358,7 +1465,7 @@ analyze_flow_timing_trends <- function(streamflow_data) {
   # Create a data frame to store Julian days when cumulative flow reaches each percentile
   years <- unique(streamflow_data$water_year)
   julday_max <- data.frame(water_year = years)
-
+  
   # Define percentiles
   percentiles <- c(5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95)
   
@@ -1431,7 +1538,7 @@ analyze_flow_timing_trends <- function(streamflow_data) {
   
   # Use generate_stats to calculate all statistics at once
   result <- generate_stats(julday_max, value_cols = metric_columns, year_col = "water_year")
-
+  
   # Add julday_max as an attribute to the result
   attr(result, "julday_max") <- julday_max
   
@@ -1543,10 +1650,10 @@ calculate_pulse_metrics <- function(streamflow_data) {
   # Process each year
   for (yr in years) {
     year_data <- streamflow_data[streamflow_data$water_year == yr, ]
-
+    
     # Sort by day of year to ensure chronological order
     year_data <- year_data[order(year_data$dowy), ]
-
+    
     # Calculate year-specific thresholds
     q90_year <- quantile(year_data$Q, probs = 0.90, na.rm = TRUE)
     q10_year <- quantile(year_data$Q, probs = 0.10, na.rm = TRUE)
@@ -1808,7 +1915,7 @@ analyze_baseflow_indices <- function(streamflow_data) {
     
     # Sort by day of year to ensure chronological order
     year_data <- year_data[order(year_data$dowy), ]
-
+    
     # Get streamflow values
     Q <- year_data$Q
     
@@ -1831,7 +1938,7 @@ analyze_baseflow_indices <- function(streamflow_data) {
       total_baseflow_eckhardt <- sum(baseflow_eckhardt, na.rm = TRUE)
       bfi_eckhardt <- total_baseflow_eckhardt / total_flow
       bfi_by_year$BFI_Eckhardt[bfi_by_year$water_year == yr] <- bfi_eckhardt
-
+      
       # Lyne-Hollick BFI
       total_baseflow_lyne <- sum(baseflow_lyne, na.rm = TRUE)
       bfi_lyne <- total_baseflow_lyne / total_flow
@@ -2084,7 +2191,7 @@ analyze_recession_parameters <- function(streamflow_data) {
       # Get the middle day of the recession event for timing
       mid_idx <- event$indices[ceiling(length(event$indices)/2)]
       event_dowy <- year_data$dowy[mid_idx]
-
+      
       # Fit parameters for this event
       event_params <- fit_recession_event(Q_event, remove_first_day = TRUE)
       
@@ -2099,7 +2206,7 @@ analyze_recession_parameters <- function(streamflow_data) {
           log_a = event_params$log_a,
           b = event_params$b
         )
-
+        
         # Calculate concavity (difference in b between first and second half)
         if (length(Q_event) >= 6) {  # Need at least 6 points
           mid_point <- floor(length(Q_event) / 2)
@@ -2225,7 +2332,7 @@ analyze_recession_parameters <- function(streamflow_data) {
     event_dowys <- sapply(all_recession_events, function(x) x$dowy)
     event_log_a_values <- sapply(all_recession_events, function(x) x$log_a)
     event_water_years <- sapply(all_recession_events, function(x) x$water_year)
-
+    
     # Fit sinusoidal model to all data
     seasonality_all <- fit_sinusoidal_model(event_dowys, event_log_a_values)
     result$log_a_seasonality_amplitude_all <- seasonality_all$amplitude
@@ -2235,7 +2342,7 @@ analyze_recession_parameters <- function(streamflow_data) {
     median_water_year <- median(unique(event_water_years))
     first_half_idx <- which(event_water_years <= median_water_year)
     last_half_idx <- which(event_water_years > median_water_year)
-
+    
     # Fit sinusoidal model to first half
     if (length(first_half_idx) >= 10) {
       seasonality_first <- fit_sinusoidal_model(event_dowys[first_half_idx], 
@@ -2412,7 +2519,7 @@ process_caravan_gages <- function(data_project_arg, caravan_base_dir,
     current_identifier <- paste(watershed_id, data_project_arg, sep = "_")
     if (current_identifier %in% processed_identifiers) {
       cat("Skipping watershed", watershed_id, "(data_project:", data_project_arg, ") as it's already in the output\n")
-        # note: there are redundancies between the camels and hysets datasets, so redundancy is expected
+      # note: there are redundancies between the camels and hysets datasets, so redundancy is expected
       next
     }
     
@@ -2507,7 +2614,7 @@ process_caravan_gages <- function(data_project_arg, caravan_base_dir,
       # Combine base watershed info with calculated metrics
       # Ensure metric results are data.tables or can be coerced
       watershed_row <- cbind(watershed_row, 
-                            as.data.table(metrics_flow_vols),
+                             as.data.table(metrics_flow_vols),
                              as.data.table(metrics_fdc_trends),
                              as.data.table(metrics_flashiness),
                              as.data.table(metrics_flow_timing),
@@ -2757,7 +2864,7 @@ process_caravan_to_annual <- function(caravan_directory,
                                       end_date_filter = as.Date("2024-12-31"),
                                       output_dir = "annualized_caravan_data",
                                       min_num_days = 328
-                                      ) {
+) {
   
   # Create output directory if it doesn't exist
   if (!dir.exists(output_dir)) {
