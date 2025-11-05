@@ -46,6 +46,19 @@ message(paste("Loaded", nrow(watersheds), "watershed boundaries"))
 n_matched <- sum(goodGages$Downstream_HB_ID %in% watersheds$first_basin_id)
 message(paste("Matched", n_matched, "out of", nrow(goodGages), "gages to watershed boundaries"))
 
+# Load streamflow signature summary data
+message("Loading streamflow signature summary data from S3...")
+signature_data <- read_csv_from_s3_direct(
+  bucket = s3_bucket_name,
+  object_key = "streamflow/streamflowSignature_summaryData_OCT2025.csv"
+)
+message(paste("Loaded signature data for", nrow(signature_data), "gages"))
+
+# Extract metric names from columns ending in "_mean"
+mean_columns <- grep("_mean$", names(signature_data), value = TRUE)
+metric_names <- gsub("_mean$", "", mean_columns)
+message(paste("Found", length(metric_names), "metrics:", paste(head(metric_names, 3), collapse = ", "), "..."))
+
 # Define UI
 ui <- fluidPage(
   theme = shinytheme("superhero"),
@@ -90,6 +103,70 @@ ui <- fluidPage(
              color = "#3498db"
            )
     )
+  ),
+  
+  # New section for metric visualization
+  fluidRow(
+    column(6,
+           h3("Streamflow Signature Metrics"),
+           selectInput(
+             inputId = "metric_selector",
+             label = "Select Metric to Plot:",
+             choices = metric_names,
+             selected = metric_names[1]
+           )
+    ),
+    column(6,
+           h3("Point Size Control"),
+           sliderInput(
+             inputId = "point_size",
+             label = "Marker Radius:",
+             min = 1,
+             max = 5,
+             value = 2,
+             step = 0.5
+           )
+    )
+  ),
+  
+  # First row of metric maps (Mean and Median) - clockwise from top left
+  fluidRow(
+    column(6,
+           h4("Mean"),
+           withSpinner(
+             leafletOutput("metric_map_mean", height = "400px"),
+             type = 4,
+             color = "#3498db"
+           )
+    ),
+    column(6,
+           h4("Median"),
+           withSpinner(
+             leafletOutput("metric_map_median", height = "400px"),
+             type = 4,
+             color = "#3498db"
+           )
+    )
+  ),
+  
+  # Second row of metric maps (Slope and P-value)
+  fluidRow(
+    column(6,
+           h4("Slope (Trend)"),
+           withSpinner(
+             leafletOutput("metric_map_slp", height = "400px"),
+             type = 4,
+             color = "#3498db"
+           )
+    ),
+    column(6,
+           h4("P-value"),
+           withSpinner(
+             leafletOutput("metric_map_pval", height = "400px"),
+             type = 4,
+             color = "#3498db"
+           )
+    )
   )
 )
 
@@ -113,7 +190,7 @@ server <- function(input, output, session) {
     # Create base map with ONLY the default basemap
     leaflet() %>%
       addTiles(group = "OpenStreetMap") %>%
-      setView(lng = -98.5, lat = 39.8, zoom = 4) %>%  # Center on US
+      setView(lng = -98.5, lat = 45, zoom = 4) %>%  # Center on US
       # Add gage points
       addCircleMarkers(
         data = goodGages,
@@ -390,6 +467,199 @@ server <- function(input, output, session) {
     }
     
     return(p)
+  })
+  
+  # === NEW METRIC MAPS ===
+  
+  # Helper function to create metric map
+  create_metric_map <- function(metric_name, stat_type) {
+    req(input$metric_selector, input$point_size)
+    
+    # Construct column name
+    col_name <- paste0(input$metric_selector, "_", stat_type)
+    
+    # Check if column exists
+    if (!col_name %in% names(signature_data)) {
+      return(leaflet() %>% 
+               addTiles() %>% 
+               setView(lng = -98.5, lat = 45, zoom = 3))
+    }
+    
+    # Get p-value column name for this metric
+    pval_col_name <- paste0(input$metric_selector, "_pval")
+    
+    # Merge signature data with coordinates and p-values
+    if (pval_col_name %in% names(signature_data)) {
+      map_data <- signature_data %>%
+        select(gage_id, latitude, longitude, all_of(col_name), all_of(pval_col_name)) %>%
+        filter(!is.na(latitude), !is.na(longitude))
+    } else {
+      map_data <- signature_data %>%
+        select(gage_id, latitude, longitude, all_of(col_name)) %>%
+        filter(!is.na(latitude), !is.na(longitude))
+    }
+    
+    # Separate data with valid values from NA values
+    map_data_valid <- map_data %>%
+      filter(!is.na(!!sym(col_name)))
+    
+    map_data_na <- map_data %>%
+      filter(is.na(!!sym(col_name)))
+    
+    # Create base map
+    m <- leaflet() %>%
+      addTiles() %>%
+      setView(lng = -98.5, lat = 45, zoom = 3)
+    
+    # If we have valid data, add colored markers with palette
+    if (nrow(map_data_valid) > 0) {
+      # Extract the column values
+      col_values <- map_data_valid[[col_name]]
+      
+      # Determine color limits and clamp values based on stat type
+      if (stat_type == "slp") {
+        # For slope: use max of absolute value of 5th and 95th percentiles
+        p05 <- quantile(col_values, 0.05, na.rm = TRUE)
+        p95 <- quantile(col_values, 0.95, na.rm = TRUE)
+        max_abs <- max(abs(p05), abs(p95))
+        
+        # Set domain limits
+        color_min <- -max_abs
+        color_max <- max_abs
+        
+        # Clamp values to these limits
+        col_values_clamped <- pmax(pmin(col_values, color_max), color_min)
+        
+        # Diverging palette for slope
+        pal <- colorNumeric(
+          palette = "RdBu",
+          domain = c(color_min, color_max),
+          reverse = TRUE
+        )
+        
+      } else if (stat_type == "pval") {
+        # For p-value: always 0 to 1
+        color_min <- 0
+        color_max <- 1
+        
+        # Clamp values (though p-values should already be 0-1)
+        col_values_clamped <- pmax(pmin(col_values, color_max), color_min)
+        
+        # Sequential palette for p-value
+        pal <- colorNumeric(
+          palette = "YlOrRd",
+          domain = c(color_min, color_max),
+          reverse = FALSE
+        )
+        
+      } else {
+        # For mean and median: use 5th and 95th percentiles
+        color_min <- quantile(col_values, 0.05, na.rm = TRUE)
+        color_max <- quantile(col_values, 0.95, na.rm = TRUE)
+        
+        # Clamp values to these limits
+        col_values_clamped <- pmax(pmin(col_values, color_max), color_min)
+        
+        # Sequential palette for mean and median
+        pal <- colorNumeric(
+          palette = "viridis",
+          domain = c(color_min, color_max)
+        )
+      }
+      
+      # Create hover text showing ORIGINAL (unclamped) values
+      hover_text_valid <- paste0(
+        "<b>Gage ID:</b> ", map_data_valid$gage_id, "<br>",
+        "<b>", gsub("_", " ", col_name), ":</b> ", 
+        round(col_values, 4)
+      )
+      
+      # Determine marker styling based on p-value (applies to ALL plots)
+      if (pval_col_name %in% names(map_data_valid)) {
+        # Get p-values for these gages
+        pval_values <- map_data_valid[[pval_col_name]]
+        
+        # Black outline (weight=2) if p-value < 0.05, otherwise colored outline (weight=1)
+        marker_colors <- ifelse(!is.na(pval_values) & pval_values < 0.05, 
+                                "black", 
+                                pal(col_values_clamped))
+        marker_weights <- ifelse(!is.na(pval_values) & pval_values < 0.05, 2, 1)
+      } else {
+        # If p-value column doesn't exist, use default styling
+        marker_colors <- pal(col_values_clamped)
+        marker_weights <- rep(1, length(col_values))
+      }
+      
+      # Add markers for valid data using CLAMPED values for colors
+      m <- m %>%
+        addCircleMarkers(
+          data = map_data_valid,
+          lng = ~longitude,
+          lat = ~latitude,
+          radius = input$point_size,
+          color = marker_colors,
+          fillColor = pal(col_values_clamped),
+          fillOpacity = 0.8,
+          stroke = TRUE,
+          weight = marker_weights,
+          popup = hover_text_valid,
+          label = lapply(1:nrow(map_data_valid), function(i) {
+            HTML(paste0("Gage: ", map_data_valid$gage_id[i], 
+                        " | Value: ", round(col_values[i], 4)))
+          }),
+          group = "Valid Data"
+        ) %>%
+        addLegend(
+          position = "bottomright",
+          pal = pal,
+          values = c(color_min, color_max),
+          title = gsub("_", " ", col_name),
+          opacity = 1
+        )
+    }
+    
+    # Add light grey markers for NA values
+    if (nrow(map_data_na) > 0) {
+      hover_text_na <- paste0(
+        "<b>Gage ID:</b> ", map_data_na$gage_id, "<br>",
+        "<b>", gsub("_", " ", col_name), ":</b> NA"
+      )
+      
+      m <- m %>%
+        addCircleMarkers(
+          data = map_data_na,
+          lng = ~longitude,
+          lat = ~latitude,
+          radius = input$point_size,
+          color = "lightgrey",
+          fillColor = "lightgrey",
+          fillOpacity = 0.6,
+          stroke = TRUE,
+          weight = 1,
+          popup = hover_text_na,
+          label = ~paste0("Gage: ", gage_id, " | Value: NA"),
+          group = "NA Values"
+        )
+    }
+    
+    return(m)
+  }
+  
+  # Render the four metric maps
+  output$metric_map_mean <- renderLeaflet({
+    create_metric_map(input$metric_selector, "mean")
+  })
+  
+  output$metric_map_median <- renderLeaflet({
+    create_metric_map(input$metric_selector, "median")
+  })
+  
+  output$metric_map_pval <- renderLeaflet({
+    create_metric_map(input$metric_selector, "pval")
+  })
+  
+  output$metric_map_slp <- renderLeaflet({
+    create_metric_map(input$metric_selector, "slp")
   })
 }
 
