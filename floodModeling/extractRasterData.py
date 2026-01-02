@@ -34,22 +34,22 @@ warnings.filterwarnings('ignore')
 SOIL_FEATURES = [
     'CLAY_0_TO_5CM',
 #    'CLAY_5_TO_15CM',
-    'CLAY_15_TO_30CM', 
-#    'CLAY_30_TO_60CM',
-    'CLAY_60_TO_100CM',
-    'CLAY_100_TO_200CM',
-    'SAND_0_TO_5CM', 
-#    'SAND_5_TO_15CM', 
-    'SAND_15_TO_30CM',
+#    'CLAY_15_TO_30CM', 
+    'CLAY_30_TO_60CM',
+#    'CLAY_60_TO_100CM',
+#    'CLAY_100_TO_200CM',
+#    'SAND_0_TO_5CM', 
+    'SAND_5_TO_15CM', 
+#    'SAND_15_TO_30CM',
 #    'SAND_30_TO_60CM', 
     'SAND_60_TO_100CM', 
-    'SAND_100_TO_200CM',
+#    'SAND_100_TO_200CM',
 #    'SILT_0_TO_5CM', 
-    'SILT_5_TO_15CM', 
-#    'SILT_15_TO_30CM',
-    'SILT_30_TO_60CM', 
+#    'SILT_5_TO_15CM', 
+    'SILT_15_TO_30CM',
+#    'SILT_30_TO_60CM', 
 #    'SILT_60_TO_100CM', 
-#    'SILT_100_TO_200CM'
+    'SILT_100_TO_200CM'
 ]
 
 
@@ -612,6 +612,84 @@ def derive_dem_features(dem_ds: gdal.Dataset) -> Dict:
     print(f"      ✅ Generated {len(derived_features)-1} DEM-derived features")
     return derived_features
 
+def compute_built_area_ratio(arr: np.ndarray, window_size: int, nodata_val) -> np.ndarray:
+    """
+    Compute ratio of Built Area (class 7) pixels in sliding window.
+    Returns values from 0.0 to 1.0 representing the fraction of built area.
+    """
+    from scipy import ndimage
+    
+    result = np.full(arr.shape, nodata_val if nodata_val is not None else -9999, dtype=np.float32)
+    
+    print(f"         Computing built area ratios for {arr.shape[0]}x{arr.shape[1]} pixels...")
+    
+    # For small windows, use optimized generic_filter
+    if window_size <= 9:
+        def built_ratio_func(values):
+            # Filter nodata
+            if nodata_val is not None:
+                valid = values[values != nodata_val]
+            else:
+                valid = values[values >= 0]
+            
+            if len(valid) == 0:
+                return nodata_val if nodata_val is not None else -9999
+            
+            # Count Built Area pixels (class 7)
+            built_count = np.sum(valid == 7)
+            return float(built_count) / len(valid)
+        
+        result = ndimage.generic_filter(
+            arr,
+            built_ratio_func,
+            size=window_size,
+            mode='constant',
+            cval=nodata_val if nodata_val is not None else -9999
+        )
+    else:
+        # For large windows, use batch processing
+        print(f"            Using batch processing for large window...")
+        
+        half_window = window_size // 2
+        pad_value = nodata_val if nodata_val is not None else -9999
+        padded = np.pad(arr, half_window, mode='constant', constant_values=pad_value)
+        
+        chunk_size = 100
+        n_rows = arr.shape[0]
+        n_chunks = (n_rows + chunk_size - 1) // chunk_size
+        
+        for chunk_idx in range(n_chunks):
+            start_row = chunk_idx * chunk_size
+            end_row = min(start_row + chunk_size, n_rows)
+            
+            if chunk_idx % max(1, n_chunks // 10) == 0:
+                progress = 100 * chunk_idx // n_chunks
+                print(f"            Progress: {progress}%")
+            
+            # Process chunk rows
+            for i in range(start_row, end_row):
+                for j in range(arr.shape[1]):
+                    # Extract window
+                    window = padded[i:i+window_size, j:j+window_size]
+                    
+                    # Filter nodata
+                    if nodata_val is not None:
+                        valid_values = window[window != nodata_val]
+                    else:
+                        valid_values = window[window >= 0]
+                    
+                    if len(valid_values) == 0:
+                        continue
+                    
+                    # Calculate ratio of Built Area (class 7)
+                    built_count = np.sum(valid_values == 7)
+                    result[i, j] = float(built_count) / len(valid_values)
+        
+        print(f"            Progress: 100%")
+    
+    return result.astype(np.float32)
+
+
 def derive_lulc_features(lulc_ds: gdal.Dataset) -> Dict:
     """
     Calculate neighborhood features from LULC data.
@@ -755,8 +833,33 @@ def derive_lulc_features(lulc_ds: gdal.Dataset) -> Dict:
         if len(valid_data) > 0:
             unique_classes = np.unique(valid_data)
             print(f"            Found {len(unique_classes)} unique LULC classes in output")
+
+    # Built Area ratio in various window sizes
+    built_area_windows = [3, 9, 27]
+    print(f"      Computing ratio_built_area for windows: {built_area_windows}")
     
-    print(f"      ✅ Generated {len(derived_features)} LULC neighborhood features")
+    for window in built_area_windows:
+        print(f"         Processing {window}x{window} built area ratio...")
+        
+        built_ratio = compute_built_area_ratio(lulc_array, window, nodata)
+        
+        feature_name = f"ratio_built_area_{window}x{window}"
+        derived_features[feature_name] = {
+            'array': built_ratio,
+            'window_size': window,
+            'description': f'Ratio of Built Area (class 7) in {window}x{window} window',
+            'type': 'lulc_built_ratio'
+        }
+        
+        # Statistics
+        valid_data = built_ratio[(built_ratio != nodata) & np.isfinite(built_ratio)] if nodata is not None else built_ratio[np.isfinite(built_ratio)]
+        
+        if len(valid_data) > 0:
+            mean_ratio = np.mean(valid_data)
+            max_ratio = np.max(valid_data)
+            print(f"            Mean ratio: {mean_ratio:.3f} ({mean_ratio*100:.1f}%), Max: {max_ratio:.3f}")
+    
+    print(f"      ✅ Generated {len(derived_features)} LULC features (modal + built area ratio)")
     return derived_features
     
 def create_multiband_raster(
@@ -891,7 +994,21 @@ def create_multiband_raster(
             band_arrays.append(array.astype(np.float32))
             nodata = all_features['IO_LULC']['raster'].GetRasterBand(1).GetNoDataValue()
             band_nodata_values.append(nodata if nodata is not None else default_nodata)
- 
+
+    # LULC Built Area ratios
+    for window in [3, 9, 27]:
+        key = f'ratio_built_area_{window}x{window}'
+        if key in all_features:
+            band_order.append(key)
+            array = all_features[key]['array']
+            if array.shape != ref_shape:
+                print(f"      Aligning {key}: {array.shape} -> {ref_shape}")
+                array = align_array_to_reference(array, ref_shape)
+            band_arrays.append(array.astype(np.float32))
+            nodata = all_features['IO_LULC']['raster'].GetRasterBand(1).GetNoDataValue()
+            band_nodata_values.append(nodata if nodata is not None else default_nodata)
+
+    
     # Soil features
     for soil_feature in SOIL_FEATURES:
         if soil_feature in all_features:
@@ -1081,6 +1198,8 @@ def plot_all_bands(multiband_raster: gdal.Dataset, band_names: List[str],
             cmap = 'viridis'
         elif 'most_common_lulc' in band_name.lower():  # NEW
             cmap = 'tab20'
+        elif 'ratio_built_area' in band_name.lower():
+            cmap = 'Reds'  # Red intensity for urbanization
         elif 'lulc' in band_name.lower():
             cmap = 'tab20'
         elif 'clay' in band_name.lower():
@@ -1165,6 +1284,14 @@ def plot_all_bands(multiband_raster: gdal.Dataset, band_names: List[str],
                 if len(valid_data) > 0:
                     n_classes = len(np.unique(valid_data))
                     title += f"\n({n_classes} classes)"
+        elif 'ratio_built_area' in band_name:
+            window = band_name.split('_')[-1]
+            title = f"Built Area Ratio {window}"
+            if hasattr(array, 'compressed'):
+                valid_data = array.compressed()
+                if len(valid_data) > 0:
+                    mean_val = valid_data.mean()
+                    title += f"\n({mean_val:.2%} mean)"
                     
         else:
             title = band_name.replace('_', ' ').title()
@@ -1188,6 +1315,8 @@ def plot_all_bands(multiband_raster: gdal.Dataset, band_names: List[str],
             cbar.set_label('Ratio (0-1)', rotation=270, labelpad=12, fontsize=8)
         elif 'most_common_lulc' in band_name:
             cbar.set_label('LULC class', rotation=270, labelpad=12, fontsize=8)            
+        elif 'ratio_built_area' in band_name:
+            cbar.set_label('Built Ratio (0-1)', rotation=270, labelpad=12, fontsize=8)
     
     # Hide extras
     for idx in range(n_bands, len(axes)):
@@ -1264,14 +1393,15 @@ def extract_raster_data_for_polygon(
         )
     
     return result
-    
+
 def query_and_clip_lulc_native(
     geojson_path: str, 
-    polygon_gdf: gpd.GeoDataFrame
+    polygon_gdf: gpd.GeoDataFrame,
+    max_retries: int = 2
 ) -> Optional[Dict]:
     """
-    Query and clip LULC at native 10m resolution WITHOUT resampling.
-    This preserves the original resolution for window operations.
+    Query and clip LULC at native 10m resolution.
+    Validates ALL source tiles (both same-proj and cross-proj) before processing.
     """
     print(f"\n3b. Querying and clipping IO_LULC at native resolution...")
     
@@ -1290,21 +1420,327 @@ def query_and_clip_lulc_native(
     
     print(f"   ✅ Found {len(lulc_results)} IO_LULC tiles")
     
-    # Handle multiple tiles with mosaicing
     lulc_uris = lulc_results['URI'].tolist()
     
     if len(lulc_uris) > 1:
         print(f"   Mosaicking {len(lulc_uris)} LULC tiles...")
         vsi_paths = [uri.replace('s3://', '/vsis3/') for uri in lulc_uris]
-        temp_mosaic = f"/tmp/IO_LULC_mosaic_native.tif"
         
-        lulc_ds = mosaic_and_fn(
-            input_filelist=vsi_paths,
-            output_pth=temp_mosaic,
-            fn="max", 
-            dtype="float"
-        )
+        # Read projection of first VALID tile (not just first in list)
+        reference_proj = None
+        first_valid_idx = -1
+        
+        for idx, vsi_path in enumerate(vsi_paths):
+            try:
+                test_ds = gdal.Open(vsi_path, gdal.GA_ReadOnly)
+                if test_ds is not None:
+                    reference_proj = test_ds.GetProjection()
+                    first_valid_idx = idx
+                    test_ds = None
+                    break
+            except:
+                continue
+        
+        if reference_proj is None:
+            print(f"   ❌ Cannot open any LULC tiles")
+            return None
+        
+        print(f"   Using tile {first_valid_idx+1} as reference projection")
+        
+        # Process ALL tiles (validate originals, reproject if needed)
+        unified_paths = []
+        temp_files = []
+        
+        for idx, vsi_path in enumerate(vsi_paths):
+            # CRITICAL: Validate the original tile FIRST
+            try:
+                print(f"      Validating tile {idx+1}...")
+                tile_ds = gdal.Open(vsi_path, gdal.GA_ReadOnly)
+                if tile_ds is None:
+                    print(f"         ⚠️ Cannot open tile {idx+1}, skipping")
+                    continue
+                
+                # Test read a small sample
+                try:
+                    test_band = tile_ds.GetRasterBand(1)
+                    test_sample = test_band.ReadAsArray(0, 0, 
+                        min(100, tile_ds.RasterXSize),
+                        min(100, tile_ds.RasterYSize))
+                    
+                    if test_sample is None:
+                        print(f"         ⚠️ Cannot read tile {idx+1}, skipping")
+                        tile_ds = None
+                        continue
+                except Exception as e:
+                    print(f"         ⚠️ Read error on tile {idx+1}: {str(e)[:50]}, skipping")
+                    tile_ds = None
+                    continue
+                
+                # Get projection
+                tile_proj = tile_ds.GetProjection()
+                tile_ds = None
+                
+                # If projection matches, use original path
+                if tile_proj == reference_proj:
+                    print(f"         ✓ Tile {idx+1} validated (same projection)")
+                    unified_paths.append(vsi_path)
+                else:
+                    # Reproject to match reference projection
+                    print(f"         Reprojecting tile {idx+1} to match reference...")
+                    temp_reproj = f"/tmp/lulc_reproj_{idx}_{os.getpid()}.tif"
+                    
+                    warp_options = gdal.WarpOptions(
+                        dstSRS=reference_proj,
+                        resampleAlg='near',
+                        format='GTiff',
+                        creationOptions=['COMPRESS=DEFLATE', 'TILED=YES']
+                    )
+                    
+                    result_ds = gdal.Warp(temp_reproj, vsi_path, options=warp_options)
+                    
+                    if result_ds is not None:
+                        result_ds.FlushCache()
+                        result_ds = None
+                        
+                        # Validate reprojected file
+                        try:
+                            validate_ds = gdal.Open(temp_reproj, gdal.GA_ReadOnly)
+                            if validate_ds is None:
+                                print(f"            ⚠️ Tile {idx+1}: cannot reopen reprojected file, skipping")
+                                try:
+                                    os.remove(temp_reproj)
+                                except:
+                                    pass
+                                continue
+                            
+                            test_band = validate_ds.GetRasterBand(1)
+                            test_read = test_band.ReadAsArray(0, 0,
+                                min(100, validate_ds.RasterXSize),
+                                min(100, validate_ds.RasterYSize))
+                            
+                            validate_ds = None
+                            
+                            if test_read is None:
+                                print(f"            ⚠️ Tile {idx+1}: cannot read reprojected file, skipping")
+                                try:
+                                    os.remove(temp_reproj)
+                                except:
+                                    pass
+                                continue
+                            
+                            # Success
+                            unified_paths.append(temp_reproj)
+                            temp_files.append(temp_reproj)
+                            print(f"            ✓ Tile {idx+1} reprojected successfully")
+                            
+                        except Exception as e:
+                            print(f"            ⚠️ Tile {idx+1}: validation failed ({str(e)[:50]}), skipping")
+                            try:
+                                os.remove(temp_reproj)
+                            except:
+                                pass
+                            continue
+                    else:
+                        print(f"         ⚠️ Failed to reproject tile {idx+1}, skipping")
+            
+            except Exception as e:
+                print(f"      ⚠️ Error processing tile {idx+1}: {str(e)[:50]}")
+                continue
+        
+        if len(unified_paths) == 0:
+            print(f"   ❌ No tiles could be processed")
+            return None
+        
+        print(f"   Using {len(unified_paths)} tiles ({len(temp_files)} reprojected to common projection)")
+        
+        # Now mosaic with unified projection
+        temp_mosaic = f"/tmp/IO_LULC_mosaic_native_{os.getpid()}.tif"
+        
+        lulc_ds = None
+        for attempt in range(max_retries):
+            try:
+                lulc_ds = mosaic_and_fn(
+                    input_filelist=unified_paths,
+                    output_pth=temp_mosaic,
+                    fn="max", 
+                    dtype="float"
+                )
+                
+                if lulc_ds is not None:
+                    band = lulc_ds.GetRasterBand(1)
+                    if band is not None:
+                        print(f"   ✅ Mosaic successful (attempt {attempt + 1}/{max_retries})")
+                        break
+                    else:
+                        print(f"   ⚠️ Mosaic dataset invalid (attempt {attempt + 1}/{max_retries})")
+                        lulc_ds = None
+                else:
+                    print(f"   ⚠️ Mosaic returned None (attempt {attempt + 1}/{max_retries})")
+                
+            except Exception as e:
+                print(f"   ⚠️ Mosaic attempt {attempt + 1}/{max_retries} failed: {e}")
+                lulc_ds = None
+            
+            if lulc_ds is None and attempt < max_retries - 1:
+                print(f"   Retrying in 2 seconds...")
+                import time
+                time.sleep(2)
+                try:
+                    if os.path.exists(temp_mosaic):
+                        os.remove(temp_mosaic)
+                except:
+                    pass
+        
+        # Clean up reprojected temp files
+        for temp_file in temp_files:
+            try:
+                if os.path.exists(temp_file):
+                    os.remove(temp_file)
+            except:
+                pass
+        
+        if lulc_ds is None:
+            print(f"   ❌ Failed to mosaic LULC after {max_retries} attempts")
+            return None
+            
     else:
+        # Single tile
+        lulc_uri = lulc_uris[0]
+        vsi_path = lulc_uri.replace('s3://', '/vsis3/')
+        
+        gdal.SetConfigOption('GDAL_DISABLE_READDIR_ON_OPEN', 'YES')
+        lulc_ds = gdal.Open(vsi_path)
+    
+    if lulc_ds is None:
+        print(f"   ❌ Failed to open IO_LULC")
+        return None
+    
+    print(f"   Opened LULC: {lulc_ds.RasterXSize} x {lulc_ds.RasterYSize} pixels")
+    
+    # Clip to polygon
+    clipped_lulc_path = f"/tmp/IO_LULC_native_clipped_{os.getpid()}.tif"
+    
+    try:
+        clipped_lulc = clip_raster_to_vector(
+            gd_raster=lulc_ds,
+            gpd_shp=polygon_gdf,
+            out_pth=clipped_lulc_path,
+            crop=True,
+            alltouched=False,
+            crs=4326
+        )
+    except Exception as e:
+        print(f"   ❌ Failed to clip LULC: {e}")
+        lulc_ds = None
+        return None
+    
+    lulc_ds = None
+    
+    if clipped_lulc is None:
+        print(f"   ❌ Failed to clip LULC")
+        return None
+    
+    # Validate clipped output
+    band = clipped_lulc.GetRasterBand(1)
+    array = band.ReadAsArray()
+    nodata = band.GetNoDataValue()
+    
+    if nodata is not None:
+        valid_data = array[array != nodata]
+    else:
+        valid_data = array[array >= 0]
+    
+    if len(valid_data) > 0:
+        unique_classes = np.unique(valid_data)
+        print(f"   ✅ LULC clipped: found {len(unique_classes)} unique classes: {unique_classes[:10]}")
+    else:
+        print(f"   ⚠️ Warning: No valid LULC data after clipping")
+    
+    return {
+        'raster': clipped_lulc,
+        'path': clipped_lulc_path,
+        'name': 'IO_LULC',
+        'description': 'Land Use Land Cover (native 10m)',
+        'resolution': '10m'
+    }
+
+
+def query_and_clip_lulc_native_og(
+    geojson_path: str, 
+    polygon_gdf: gpd.GeoDataFrame,
+    max_retries: int = 2
+) -> Optional[Dict]:
+    """
+    Query and clip LULC at native 10m resolution WITHOUT resampling.
+    Includes retry logic for VRT mosaicking failures.
+    """
+    print(f"\n3b. Querying and clipping IO_LULC at native resolution...")
+    
+    geo_db = Geospatial_DB(enable_s3=True)
+    
+    lulc_results = geo_db.query_asset_catalog(
+        geojson_pth=geojson_path,
+        product='IO_LULC',
+        start_date='2015-01-01',
+        end_date='2025-01-01'
+    )
+    
+    if lulc_results is None or len(lulc_results) == 0:
+        print(f"   ⚠️ No IO_LULC data found for this region")
+        return None
+    
+    print(f"   ✅ Found {len(lulc_results)} IO_LULC tiles")
+    
+    lulc_uris = lulc_results['URI'].tolist()
+    
+    if len(lulc_uris) > 1:
+        print(f"   Mosaicking {len(lulc_uris)} LULC tiles...")
+        vsi_paths = [uri.replace('s3://', '/vsis3/') for uri in lulc_uris]
+        temp_mosaic = f"/tmp/IO_LULC_mosaic_native_{os.getpid()}.tif"
+        
+        lulc_ds = None
+        for attempt in range(max_retries):
+            try:
+                lulc_ds = mosaic_and_fn(
+                    input_filelist=vsi_paths,
+                    output_pth=temp_mosaic,
+                    fn="max", 
+                    dtype="float"
+                )
+                
+                # Validate the dataset was created successfully
+                if lulc_ds is not None:
+                    band = lulc_ds.GetRasterBand(1)
+                    if band is not None:
+                        print(f"   ✅ Mosaic successful (attempt {attempt + 1}/{max_retries})")
+                        break
+                    else:
+                        print(f"   ⚠️ Mosaic dataset invalid (attempt {attempt + 1}/{max_retries})")
+                        lulc_ds = None
+                else:
+                    print(f"   ⚠️ Mosaic returned None (attempt {attempt + 1}/{max_retries})")
+                
+            except Exception as e:
+                print(f"   ⚠️ Mosaic attempt {attempt + 1}/{max_retries} failed: {e}")
+                lulc_ds = None
+            
+            if lulc_ds is None and attempt < max_retries - 1:
+                print(f"   Retrying in 2 seconds...")
+                import time
+                time.sleep(2)
+                # Clean up temp file before retry
+                try:
+                    if os.path.exists(temp_mosaic):
+                        os.remove(temp_mosaic)
+                except:
+                    pass
+        
+        if lulc_ds is None:
+            print(f"   ❌ Failed to mosaic LULC after {max_retries} attempts")
+            return None
+            
+    else:
+        # Single tile - direct open
         lulc_uri = lulc_uris[0]
         vsi_path = lulc_uri.replace('s3://', '/vsis3/')
         
@@ -1317,22 +1753,30 @@ def query_and_clip_lulc_native(
     
     print(f"   Opened LULC: {lulc_ds.RasterXSize} x {lulc_ds.RasterYSize} pixels at native 10m resolution")
     
-    # Clip to polygon (but DON'T resample yet)
-    clipped_lulc_path = f"/tmp/IO_LULC_native_clipped.tif"
-    clipped_lulc = clip_raster_to_vector(
-        gd_raster=lulc_ds,
-        gpd_shp=polygon_gdf,
-        out_pth=clipped_lulc_path,
-        crop=True,
-        alltouched=False,
-        crs=4326
-    )
+    # Clip to polygon
+    clipped_lulc_path = f"/tmp/IO_LULC_native_clipped_{os.getpid()}.tif"
+    
+    try:
+        clipped_lulc = clip_raster_to_vector(
+            gd_raster=lulc_ds,
+            gpd_shp=polygon_gdf,
+            out_pth=clipped_lulc_path,
+            crop=True,
+            alltouched=False,
+            crs=4326
+        )
+    except Exception as e:
+        print(f"   ❌ Failed to clip LULC: {e}")
+        lulc_ds = None
+        return None
+    
+    lulc_ds = None  # Close source
     
     if clipped_lulc is None:
         print(f"   ❌ Failed to clip LULC")
         return None
     
-    print(f"   ✅ LULC clipped at native 10m resolution (not yet resampled)")
+    print(f"   ✅ LULC clipped at native 10m resolution")
     
     return {
         'raster': clipped_lulc,
@@ -1341,6 +1785,7 @@ def query_and_clip_lulc_native(
         'description': 'Land Use Land Cover (native 10m)',
         'resolution': '10m'
     }
+
 
 def resample_lulc_feature_to_reference(
     feature_array: np.ndarray,

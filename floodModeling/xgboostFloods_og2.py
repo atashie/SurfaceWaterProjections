@@ -35,7 +35,6 @@ import xgboost as xgb
 from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold
 from scipy.stats import randint, uniform, loguniform
 
-
 from sklearn.metrics import (
     f1_score, accuracy_score, precision_score, recall_score,
     roc_auc_score, average_precision_score, cohen_kappa_score,
@@ -697,7 +696,6 @@ def train_xgboost_flood_model(parquet_uri: str, training_folder: str,
             xgb_params['objective'] = config.objective
             xgb_params['tree_method'] = config.tree_method
             xgb_params['eval_metric'] = config.eval_metric
-            xgb_params['early_stopping_rounds'] = config.early_stopping_rounds  # ADD THIS
             xgb_params['random_state'] = config.seed + fold_idx
             xgb_params['n_jobs'] = config.n_jobs
         else:
@@ -714,7 +712,6 @@ def train_xgboost_flood_model(parquet_uri: str, training_folder: str,
                 'objective': config.objective,
                 'tree_method': config.tree_method,
                 'eval_metric': config.eval_metric,
-                'early_stopping_rounds': config.early_stopping_rounds,  # ADD THIS
                 'random_state': config.seed + fold_idx,
                 'n_jobs': config.n_jobs
             }
@@ -727,13 +724,9 @@ def train_xgboost_flood_model(parquet_uri: str, training_folder: str,
         xgb_model = xgb.XGBClassifier(**xgb_params)
         xgb_model.fit(
             X_train, y_train,
-            eval_set=[(X_train, y_train), (X_val, y_val)],
+            eval_set=[(X_val, y_val)],
             verbose=False
         )
-        
-        # Get evaluation results for plotting
-        evals_results = xgb_model.evals_result()
-
         
         y_train_proba = xgb_model.predict_proba(X_train)[:, 1]
         y_val_proba = xgb_model.predict_proba(X_val)[:, 1]
@@ -752,10 +745,6 @@ def train_xgboost_flood_model(parquet_uri: str, training_folder: str,
         val_metrics['fold'] = fold_idx + 1
         val_metrics['set'] = 'val'
         fold_rows.extend([train_metrics, val_metrics])
-
-        # Plot training curves and ROC curves
-        plot_training_curves(evals_results, fold_idx + 1, model_folder)
-        plot_roc_curves(y_train, y_train_proba, y_val, y_val_proba, fold_idx + 1, model_folder)
         
         del xgb_model, X_train, y_train, X_val, y_val
         gc.collect()
@@ -791,11 +780,11 @@ def train_xgboost_flood_model(parquet_uri: str, training_folder: str,
     if len(np.unique(y_train_final)) < 2:
         print("WARNING: Single-class final training data")
     
+    if best_params:
         final_xgb_params = best_params.copy()
         final_xgb_params['objective'] = config.objective
         final_xgb_params['tree_method'] = config.tree_method
         final_xgb_params['eval_metric'] = config.eval_metric
-#        final_xgb_params['early_stopping_rounds'] = config.early_stopping_rounds  # ADD THIS
         final_xgb_params['random_state'] = config.seed
         final_xgb_params['n_jobs'] = config.n_jobs
     else:
@@ -812,7 +801,6 @@ def train_xgboost_flood_model(parquet_uri: str, training_folder: str,
             'objective': config.objective,
             'tree_method': config.tree_method,
             'eval_metric': config.eval_metric,
-#            'early_stopping_rounds': config.early_stopping_rounds,  # ADD THIS
             'random_state': config.seed,
             'n_jobs': config.n_jobs
         }
@@ -872,8 +860,7 @@ def train_xgboost_flood_model(parquet_uri: str, training_folder: str,
     
     # Create diagnostic plots in same folder
     create_diagnostic_plots(results, model_folder)
-    # Calculate and plot VIF analysis
-    plot_vif_analysis(dataset, feature_cols, train_ws, means, stds, model_folder)    
+    
     return results
 
 
@@ -976,278 +963,6 @@ def create_diagnostic_plots(model_results: Dict, output_folder: str):
         save_and_upload_plot(fig, cv_path)
     
     print("✅ Diagnostic plots complete!")
-
-def plot_training_curves(evals_results: dict, fold_idx: int, output_folder: str):
-    """Plot training and validation loss curves."""
-    fig, ax = plt.subplots(figsize=(10, 6))
-    
-    # Extract loss curves
-    train_loss = evals_results['validation_0']['logloss']
-    val_loss = evals_results['validation_1']['logloss']
-    epochs = range(len(train_loss))
-    
-    ax.plot(epochs, train_loss, label='Training Loss', linewidth=2, color='steelblue')
-    ax.plot(epochs, val_loss, label='Validation Loss', linewidth=2, color='coral')
-    
-    ax.set_xlabel('Iteration', fontsize=12)
-    ax.set_ylabel('Log Loss', fontsize=12)
-    ax.set_title(f'Training History - Fold {fold_idx}', fontsize=14, fontweight='bold')
-    ax.legend(fontsize=11)
-    ax.grid(alpha=0.3)
-    
-    plt.tight_layout()
-    
-    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
-        temp_path = tmp.name
-    plt.savefig(temp_path, dpi=150, bbox_inches='tight')
-    plt.close(fig)
-    
-    s3_path = f"{output_folder}/training_curve_fold_{fold_idx}.png"
-    if s3_path.startswith('s3://'):
-        s3_client = boto3.client('s3')
-        bucket, key = s3_path.replace('s3://', '').split('/', 1)
-        s3_client.upload_file(temp_path, bucket, key)
-    else:
-        import shutil
-        os.makedirs(os.path.dirname(s3_path), exist_ok=True)
-        shutil.move(temp_path, s3_path)
-    
-    os.remove(temp_path) if os.path.exists(temp_path) else None
-    print(f"  Created training curve: {s3_path}")
-
-
-def plot_roc_curves(y_train, y_train_proba, y_val, y_val_proba, fold_idx: int, output_folder: str):
-    """Plot ROC curves for training and validation sets."""
-    from sklearn.metrics import roc_curve, auc
-    
-    fig, ax = plt.subplots(figsize=(10, 8))
-    
-    # Training ROC
-    if len(np.unique(y_train)) > 1:
-        fpr_train, tpr_train, _ = roc_curve(y_train, y_train_proba)
-        roc_auc_train = auc(fpr_train, tpr_train)
-        ax.plot(fpr_train, tpr_train, label=f'Train (AUC = {roc_auc_train:.3f})', 
-                linewidth=2, color='steelblue')
-    
-    # Validation ROC
-    if len(np.unique(y_val)) > 1:
-        fpr_val, tpr_val, _ = roc_curve(y_val, y_val_proba)
-        roc_auc_val = auc(fpr_val, tpr_val)
-        ax.plot(fpr_val, tpr_val, label=f'Validation (AUC = {roc_auc_val:.3f})', 
-                linewidth=2, color='coral')
-    
-    # Diagonal reference line
-    ax.plot([0, 1], [0, 1], 'k--', linewidth=1, label='Random (AUC = 0.500)')
-    
-    ax.set_xlabel('False Positive Rate', fontsize=12)
-    ax.set_ylabel('True Positive Rate', fontsize=12)
-    ax.set_title(f'ROC Curves - Fold {fold_idx}', fontsize=14, fontweight='bold')
-    ax.legend(fontsize=11, loc='lower right')
-    ax.grid(alpha=0.3)
-    ax.set_xlim([0.0, 1.0])
-    ax.set_ylim([0.0, 1.05])
-    
-    plt.tight_layout()
-    
-    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
-        temp_path = tmp.name
-    plt.savefig(temp_path, dpi=150, bbox_inches='tight')
-    plt.close(fig)
-    
-    s3_path = f"{output_folder}/roc_curve_fold_{fold_idx}.png"
-    if s3_path.startswith('s3://'):
-        s3_client = boto3.client('s3')
-        bucket, key = s3_path.replace('s3://', '').split('/', 1)
-        s3_client.upload_file(temp_path, bucket, key)
-    else:
-        import shutil
-        os.makedirs(os.path.dirname(s3_path), exist_ok=True)
-        shutil.move(temp_path, s3_path)
-    
-    os.remove(temp_path) if os.path.exists(temp_path) else None
-    print(f"  Created ROC curve: {s3_path}")
-
-def plot_vif_analysis(dataset, feature_cols: List[str], train_watersheds: List[str], 
-                     means: np.ndarray, stds: np.ndarray, output_folder: str, 
-                     sample_size: int = 10000):
-    """Calculate and plot Variance Inflation Factor (VIF) for all features.
-    
-    Args:
-        dataset: PyArrow dataset
-        feature_cols: List of feature names
-        train_watersheds: List of training watershed IDs
-        means: Feature means for normalization
-        stds: Feature standard deviations for normalization
-        output_folder: Path to save outputs
-        sample_size: Number of samples to use for VIF calculation
-    """
-    print("  Calculating Variance Inflation Factor (VIF) for features...")
-    from statsmodels.stats.outliers_influence import variance_inflation_factor
-    import statsmodels.api as sm
-    
-    # Load a sample of training data
-    filt = ds.field("Watershed_Loc").isin(pa.array(train_watersheds))
-    scanner = make_scanner(dataset, columns=feature_cols, filter=filt, batch_size=sample_size)
-    
-    X_samples = []
-    total_loaded = 0
-    
-    for batch in scanner_batches(scanner):
-        if batch.num_rows == 0:
-            continue
-        
-        X_batch = arrow_batch_to_numpy(batch, feature_cols)
-        X_samples.append(X_batch)
-        total_loaded += len(X_batch)
-        
-        if total_loaded >= sample_size:
-            break
-    
-    if not X_samples:
-        print("  ⚠️  No data available for VIF calculation")
-        return
-    
-    X_sample = np.vstack(X_samples)[:sample_size]
-    
-    # Normalize and clean data
-    X_sample = np.where(np.isnan(X_sample), means, X_sample)
-    X_sample = (X_sample - means) / stds
-    
-    # Remove any remaining problematic rows
-    row_mask = ~np.any(np.isnan(X_sample) | np.isinf(X_sample), axis=1)
-    X_clean = X_sample[row_mask]
-    
-    if len(X_clean) < 100:
-        print(f"  ⚠️  Insufficient clean data for VIF calculation ({len(X_clean)} rows)")
-        return
-    
-    print(f"  Using {len(X_clean):,} samples for VIF calculation")
-    
-    # Calculate VIF for each feature
-    vif_data = []
-    n_features = X_clean.shape[1]
-    
-    for i in range(n_features):
-        if (i + 1) % 50 == 0:
-            print(f"    Calculating VIF {i+1}/{n_features}...")
-        
-        try:
-            vif_value = variance_inflation_factor(X_clean, i)
-            vif_data.append({
-                'feature': feature_cols[i],
-                'VIF': vif_value
-            })
-        except Exception as e:
-            # Handle singular matrix or other numerical issues
-            vif_data.append({
-                'feature': feature_cols[i],
-                'VIF': np.nan
-            })
-    
-    vif_df = pd.DataFrame(vif_data)
-    vif_df = vif_df.sort_values('VIF', ascending=False)
-    
-    # Filter out infinite/NaN values for plotting
-    vif_df_plot = vif_df[np.isfinite(vif_df['VIF'])].copy()
-    
-    if len(vif_df_plot) == 0:
-        print("  ⚠️  No valid VIF values calculated")
-        return
-    
-    # Create visualization
-    fig, axes = plt.subplots(1, 2, figsize=(16, 8))
-    
-    # Left plot: Top 30 features by VIF
-    top_n = min(30, len(vif_df_plot))
-    top_vif = vif_df_plot.head(top_n)
-    
-    colors = ['red' if v > 10 else 'orange' if v > 5 else 'steelblue' 
-              for v in top_vif['VIF']]
-    
-    axes[0].barh(range(len(top_vif)), top_vif['VIF'], color=colors)
-    axes[0].set_yticks(range(len(top_vif)))
-    axes[0].set_yticklabels(top_vif['feature'], fontsize=9)
-    axes[0].set_xlabel('VIF Value', fontsize=12)
-    axes[0].set_title(f'Variance Inflation Factor (Top {top_n})', 
-                      fontsize=13, fontweight='bold')
-    axes[0].axvline(x=5, color='orange', linestyle='--', linewidth=1.5, 
-                    label='Moderate (VIF=5)')
-    axes[0].axvline(x=10, color='red', linestyle='--', linewidth=1.5, 
-                    label='High (VIF=10)')
-    axes[0].legend(fontsize=10)
-    axes[0].grid(axis='x', alpha=0.3)
-    axes[0].invert_yaxis()
-    
-    # Right plot: Distribution of VIF values (log scale for better visualization)
-    axes[1].hist(np.log10(vif_df_plot['VIF'] + 1), bins=50, 
-                color='steelblue', alpha=0.7, edgecolor='black')
-    axes[1].axvline(x=np.log10(6), color='orange', linestyle='--', linewidth=2, 
-                    label='Moderate (VIF=5)')
-    axes[1].axvline(x=np.log10(11), color='red', linestyle='--', linewidth=2, 
-                    label='High (VIF=10)')
-    axes[1].set_xlabel('log10(VIF + 1)', fontsize=12)
-    axes[1].set_ylabel('Count', fontsize=12)
-    axes[1].set_title('Distribution of VIF Values (Log Scale)', fontsize=13, fontweight='bold')
-    axes[1].legend(fontsize=11)
-    axes[1].grid(alpha=0.3)
-    
-    # Add summary statistics
-    n_high = (vif_df_plot['VIF'] > 10).sum()
-    n_moderate = ((vif_df_plot['VIF'] > 5) & (vif_df_plot['VIF'] <= 10)).sum()
-    n_low = (vif_df_plot['VIF'] <= 5).sum()
-    median_vif = vif_df_plot['VIF'].median()
-    max_vif = vif_df_plot['VIF'].max()
-    
-    summary_text = (
-        f"High multicollinearity (VIF > 10): {n_high}\n"
-        f"Moderate (5 < VIF ≤ 10): {n_moderate}\n"
-        f"Low (VIF ≤ 5): {n_low}\n"
-        f"Median VIF: {median_vif:.2f}\n"
-        f"Max VIF: {max_vif:.2f}"
-    )
-    
-    axes[1].text(0.98, 0.97, summary_text, transform=axes[1].transAxes,
-                fontsize=10, va='top', ha='right',
-                bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.8))
-    
-    plt.tight_layout()
-    
-    # Save plot
-    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
-        temp_path = tmp.name
-    plt.savefig(temp_path, dpi=150, bbox_inches='tight')
-    plt.close(fig)
-    
-    s3_path = f"{output_folder}/xgboost_vif_analysis.png"
-    if s3_path.startswith('s3://'):
-        s3_client = boto3.client('s3')
-        bucket, key = s3_path.replace('s3://', '').split('/', 1)
-        s3_client.upload_file(temp_path, bucket, key)
-    else:
-        import shutil
-        os.makedirs(os.path.dirname(s3_path), exist_ok=True)
-        shutil.move(temp_path, s3_path)
-    
-    os.remove(temp_path) if os.path.exists(temp_path) else None
-    
-    # Save VIF values to CSV
-    csv_path = f"{output_folder}/xgboost_vif_values.csv"
-    with tempfile.NamedTemporaryFile(suffix='.csv', delete=False) as tmp:
-        temp_csv = tmp.name
-    vif_df.to_csv(temp_csv, index=False)
-    
-    if csv_path.startswith('s3://'):
-        bucket, key = csv_path.replace('s3://', '').split('/', 1)
-        s3_client.upload_file(temp_csv, bucket, key)
-    else:
-        os.makedirs(os.path.dirname(csv_path), exist_ok=True)
-        shutil.move(temp_csv, csv_path)
-    
-    os.remove(temp_csv) if os.path.exists(temp_csv) else None
-    
-    print(f"  Created VIF plot: {s3_path}")
-    print(f"  Created VIF CSV: {csv_path}")
-    print(f"  Summary: {n_high} high, {n_moderate} moderate, {n_low} low multicollinearity features")
 
 
 # ======================== Visualization Class ========================
@@ -1437,8 +1152,8 @@ class XGBoostFloodVisualizer:
             select_dates: List of date strings (YYYYMMDD format) to generate predictions for.
                          If provided, generates prediction maps (not confusion matrices).
             generate_forecasts_for_all_subwatersheds: If True, generates predictions for all
-                                                      watersheds separately (each in own coordinate system).
-                                                      If False, only generates for test watershed.
+                                                      watersheds in parquet file. If False,
+                                                      only generates for test watershed.
         """
         
         # Import parquet generation function
@@ -1452,7 +1167,7 @@ class XGBoostFloodVisualizer:
         print("="*60)
         
         if generate_forecasts_for_all_subwatersheds:
-            print(f"Mode: All watersheds (processed separately)")
+            print(f"Mode: All watersheds")
         else:
             print(f"Test watershed: {self.test_watershed}")
         
@@ -1462,6 +1177,7 @@ class XGBoostFloodVisualizer:
         print(f"Output folder: {output_folder}")
         
         # Parse training_folder to extract parameters for parquet generation
+        # Format: s3://bucket/prefix/trainingFolderFor_Lat_{lat}_Lon_{lon}
         training_folder_match = re.match(
             r's3://([^/]+)/(.+)/trainingFolderFor_Lat_([-\d\.]+)_Lon_([-\d\.]+)',
             self.training_folder
@@ -1511,197 +1227,84 @@ class XGBoostFloodVisualizer:
         if select_dates is None and not generate_forecasts_for_all_subwatersheds:
             create_diagnostic_plots(self.model_results, output_folder)
         
-        # ====================================================================
-        # MAIN BRANCHING LOGIC: Single watershed vs. Multiple watersheds
-        # ====================================================================
-        
+        # Determine which watersheds to process
         if generate_forecasts_for_all_subwatersheds:
-            # ================================================================
-            # MULTI-WATERSHED MODE: Process each watershed separately
-            # ================================================================
             dataset = open_parquet_dataset(self.parquet_uri)
-            all_watersheds = get_unique_watersheds(dataset)
-            
-            print(f"\nProcessing {len(all_watersheds)} watersheds individually...")
-            print("Each watershed will have its own coordinate system and outputs.")
-            
-            all_outputs = {}
-            
-            # Save original test watershed to restore later
-            original_test_ws = self.test_watershed
-            original_test_lat = self.test_lat
-            original_test_lon = self.test_lon
-            
-            for ws_idx, ws in enumerate(all_watersheds, 1):
-                print(f"\n{'='*60}")
-                print(f"Processing watershed {ws_idx}/{len(all_watersheds)}: {ws}")
-                print(f"{'='*60}")
-                
-                # Parse lat/lon from watershed location
-                match = re.match(r"Lat_([-\d\.]+)_Lon_([-\d\.]+)", ws)
-                if not match:
-                    print(f"  ⚠️  Cannot parse watershed ID: {ws}, skipping")
-                    continue
-                
-                ws_lat, ws_lon = match.groups()
-                
-                # Temporarily override test watershed
-                self.test_watershed = ws
-                self.test_lat = ws_lat
-                self.test_lon = ws_lon
-                
-                # Generate predictions for THIS watershed only
-                predictions, confusions, metrics = self._generate_predictions(
-                    select_dates, is_prediction_mode
-                )
-                
-                if not predictions:
-                    print(f"  ⚠️  No predictions generated for {ws}")
-                    continue
-                
-                # Get reference raster for THIS watershed
-                flood_tiff_path = (
-                    f"{self.training_folder}/floodMaps/"
-                    f"dswx_s1_timeseries_subwatershed_Lon{ws_lon}_Lat{ws_lat}.tif"
-                )
-                ref_ds = gdal.Open(flood_tiff_path.replace('s3://', '/vsis3/'), gdal.GA_ReadOnly)
-                
-                if ref_ds is None:
-                    print(f"  ⚠️  Cannot open reference raster for {ws}")
-                    continue
-                
-                dates = sorted(predictions.keys())
-                
-                # Create watershed-specific output folder
-                ws_output_folder = f"{output_folder}/{ws}"
-                
-                # Save outputs for this watershed
-                if is_prediction_mode:
-                    # Prediction mode - only save predictions
-                    pred_tiff = f"{ws_output_folder}/xgboost_predictions_{ws}.tif"
-                    self._write_multiband_tiff(ref_ds, predictions, dates, pred_tiff, "XGBoost_Prediction")
-                    
-                    # Create diagnostic PNG for this watershed
-                    self._create_target_watershed_diagnostic_png(predictions, ws_output_folder)
-                    
-                    # Create prediction PNGs with boundaries
-                    png_paths = self._create_prediction_pngs_single_watershed(
-                        predictions, dates, metrics, ws_output_folder, ws_lat, ws_lon
-                    )
-                    
-                    csv_paths = self._write_csvs(ws_output_folder, metrics)
-                    
-                    all_outputs[ws] = {
-                        'prediction_tiff': pred_tiff,
-                        'png_visualizations': png_paths,
-                        'csv_outputs': csv_paths
-                    }
-                else:
-                    # Confusion matrix mode
-                    pred_tiff = f"{ws_output_folder}/xgboost_predictions_{ws}.tif"
-                    cm_tiff = f"{ws_output_folder}/xgboost_confusion_matrix_{ws}.tif"
-                    
-                    self._write_multiband_tiff(ref_ds, predictions, dates, pred_tiff, "XGBoost_Prediction")
-                    self._write_multiband_tiff(ref_ds, confusions, dates, cm_tiff, "XGBoost_CM")
-                    
-                    png_paths = self._create_pngs_single_watershed(
-                        confusions, dates, metrics, ws_output_folder, ws_lat, ws_lon
-                    )
-                    
-                    csv_paths = self._write_csvs(ws_output_folder, metrics)
-                    
-                    all_outputs[ws] = {
-                        'prediction_tiff': pred_tiff,
-                        'confusion_matrix_tiff': cm_tiff,
-                        'png_visualizations': png_paths,
-                        'csv_outputs': csv_paths
-                    }
-                
-                ref_ds = None
-                print(f"  ✅ Completed {ws}")
-            
-            # Restore original test watershed
-            self.test_watershed = original_test_ws
-            self.test_lat = original_test_lat
-            self.test_lon = original_test_lon
-            
-            print(f"\n{'='*60}")
-            print(f"✅ Processed {len(all_outputs)} watersheds successfully")
-            print(f"{'='*60}")
-            
-            return all_outputs
-        
+            watersheds_to_process = get_unique_watersheds(dataset)
+            watershed_suffix = "all_watersheds"
         else:
-            # ================================================================
-            # SINGLE WATERSHED MODE: Original behavior
-            # ================================================================
+            watersheds_to_process = [self.test_watershed]
+            watershed_suffix = self.test_watershed
+        
+        # Generate predictions or confusion matrices based on mode
+        if generate_forecasts_for_all_subwatersheds:
+            predictions, confusions, per_date_metrics = self._generate_predictions_multi_watershed(
+                watersheds_to_process, select_dates, is_prediction_mode
+            )
+        else:
             predictions, confusions, per_date_metrics = self._generate_predictions(
                 select_dates, is_prediction_mode
             )
+        
+        # Check if predictions were generated
+        if not predictions:
+            print("\n⚠️  No predictions generated - no data found for specified parameters")
+            return {
+                'prediction_tiff': None,
+                'confusion_matrix_tiff': None if not is_prediction_mode else None,
+                'png_visualizations': [],
+                'csv_outputs': {}
+            }
+        
+        # Get reference dataset for geotransform
+        flood_tiff_path = (
+            f"{self.training_folder}/floodMaps/"
+            f"dswx_s1_timeseries_subwatershed_Lon{self.test_lon}_Lat{self.test_lat}.tif"
+        )
+        ref_ds = gdal.Open(flood_tiff_path.replace('s3://', '/vsis3/'), gdal.GA_ReadOnly)
+        
+        dates = sorted(predictions.keys())
+        
+        # Create appropriate output files
+        if is_prediction_mode:
+            # Prediction mode - only save predictions
+            pred_tiff = f"{output_folder}/xgboost_predictions_{watershed_suffix}.tif"
+            self._write_multiband_tiff(ref_ds, predictions, dates, pred_tiff, "XGBoost_Prediction")
             
-            if not predictions:
-                print("\n⚠️  No predictions generated - no data found for specified parameters")
-                return {
-                    'prediction_tiff': None,
-                    'confusion_matrix_tiff': None if not is_prediction_mode else None,
-                    'png_visualizations': [],
-                    'csv_outputs': {}
-                }
+            png_paths = self._create_prediction_pngs(predictions, dates, per_date_metrics, output_folder)
+            csv_paths = self._write_csvs(output_folder, per_date_metrics)
+
+            self._create_target_watershed_diagnostic_png(predictions, output_folder)
             
-            # Get reference dataset for geotransform
-            flood_tiff_path = (
-                f"{self.training_folder}/floodMaps/"
-                f"dswx_s1_timeseries_subwatershed_Lon{self.test_lon}_Lat{self.test_lat}.tif"
-            )
-            ref_ds = gdal.Open(flood_tiff_path.replace('s3://', '/vsis3/'), gdal.GA_ReadOnly)
+            # Existing PNG generation
+            png_paths = self._create_prediction_pngs(predictions, dates, per_date_metrics, output_folder)
+            csv_paths = self._write_csvs(output_folder, per_date_metrics)
+            print("\n✅ XGBoost prediction visualization complete!")
             
-            dates = sorted(predictions.keys())
+            return {
+                'prediction_tiff': pred_tiff,
+                'png_visualizations': png_paths,
+                'csv_outputs': csv_paths
+            }
+        else:
+            # Confusion matrix mode (default behavior)
+            pred_tiff = f"{output_folder}/xgboost_predictions_{watershed_suffix}.tif"
+            cm_tiff = f"{output_folder}/xgboost_confusion_matrix_{watershed_suffix}.tif"
             
-            # Create appropriate output files
-            if is_prediction_mode:
-                # Prediction mode - only save predictions
-                pred_tiff = f"{output_folder}/xgboost_predictions_{self.test_watershed}.tif"
-                self._write_multiband_tiff(ref_ds, predictions, dates, pred_tiff, "XGBoost_Prediction")
-                
-                # Create diagnostic PNG for target watershed
-                self._create_target_watershed_diagnostic_png(predictions, output_folder)
-                
-                # Create prediction PNGs with boundaries
-                png_paths = self._create_prediction_pngs_single_watershed(
-                    predictions, dates, per_date_metrics, output_folder, self.test_lat, self.test_lon
-                )
-                
-                csv_paths = self._write_csvs(output_folder, per_date_metrics)
-                
-                print("\n✅ XGBoost prediction visualization complete!")
-                
-                return {
-                    'prediction_tiff': pred_tiff,
-                    'png_visualizations': png_paths,
-                    'csv_outputs': csv_paths
-                }
-            else:
-                # Confusion matrix mode (default behavior)
-                pred_tiff = f"{output_folder}/xgboost_predictions_{self.test_watershed}.tif"
-                cm_tiff = f"{output_folder}/xgboost_confusion_matrix_{self.test_watershed}.tif"
-                
-                self._write_multiband_tiff(ref_ds, predictions, dates, pred_tiff, "XGBoost_Prediction")
-                self._write_multiband_tiff(ref_ds, confusions, dates, cm_tiff, "XGBoost_CM")
-                
-                png_paths = self._create_pngs_single_watershed(
-                    confusions, dates, per_date_metrics, output_folder, self.test_lat, self.test_lon
-                )
-                
-                csv_paths = self._write_csvs(output_folder, per_date_metrics)
-                
-                print("\n✅ XGBoost visualization complete!")
-                
-                return {
-                    'prediction_tiff': pred_tiff,
-                    'confusion_matrix_tiff': cm_tiff,
-                    'png_visualizations': png_paths,
-                    'csv_outputs': csv_paths
-                }
+            self._write_multiband_tiff(ref_ds, predictions, dates, pred_tiff, "XGBoost_Prediction")
+            self._write_multiband_tiff(ref_ds, confusions, dates, cm_tiff, "XGBoost_CM")
+            
+            png_paths = self._create_pngs(confusions, dates, per_date_metrics, output_folder)
+            csv_paths = self._write_csvs(output_folder, per_date_metrics)
+            
+            print("\n✅ XGBoost visualization complete!")
+            
+            return {
+                'prediction_tiff': pred_tiff,
+                'confusion_matrix_tiff': cm_tiff,
+                'png_visualizations': png_paths,
+                'csv_outputs': csv_paths
+            }
     
     def _generate_predictions(self, select_dates: Optional[List[str]] = None, 
                              is_prediction_mode: bool = False):
@@ -1793,23 +1396,10 @@ class XGBoostFloodVisualizer:
             rows = date_data['PixelRow'].to_numpy(dtype=np.int32, copy=False)
             cols = date_data['PixelCol'].to_numpy(dtype=np.int32, copy=False)
             
-            # ✅ NEW: Stricter validity check with feature completeness threshold
-            # Count non-NaN features per pixel
-            non_nan_counts = np.sum(~np.isnan(X), axis=1)
-            total_features = X.shape[1]
-            
-            # Require at least 70% of features to be valid (adjust threshold as needed)
-            # This prevents predictions based solely on coarse-resolution features
-            feature_completeness_threshold = int(0.70 * total_features)
-            
-            # Also check if pixel is within bounds
+            # Identify valid pixels: at least one non-NaN feature AND within bounds
+            valid_mask = ~np.all(np.isnan(X), axis=1)
             in_bounds = (rows >= 0) & (rows < H) & (cols >= 0) & (cols < W)
-            
-            # Combined validity: sufficient features AND in bounds
-            valid_mask = (non_nan_counts >= feature_completeness_threshold) & in_bounds
-            
-            print(f"  Valid pixels for {date_str}: {valid_mask.sum():,}/{len(valid_mask):,} "
-                  f"(require ≥{feature_completeness_threshold}/{total_features} features)")
+            valid_mask = valid_mask & in_bounds
             
             # Initialize prediction array with NoData (full reference dimensions)
             pred_img = np.full((H, W), 255, dtype=np.uint8)
@@ -1820,7 +1410,7 @@ class XGBoostFloodVisualizer:
                 rows_valid = rows[valid_mask]
                 cols_valid = cols[valid_mask]
                 
-                # Fill remaining NaNs with training means and normalize
+                # Fill remaining NaNs with training means and normalize (SAME AS TRAINING)
                 X_valid = np.where(np.isnan(X_valid), self.means, X_valid)
                 X_valid = (X_valid - self.means) / self.stds
                 
@@ -1830,10 +1420,9 @@ class XGBoostFloodVisualizer:
                 
                 # Place predictions in output array
                 pred_img[rows_valid, cols_valid] = y_pred_valid
-            else:
-                print(f"  Warning: No valid pixels for {date_str}")
             
-            predictions[date_str] = pred_img            
+            predictions[date_str] = pred_img
+            
             # Create confusion matrices if not in prediction mode
             if not is_prediction_mode and y_true is not None:
                 cm_img = np.full((H, W), 255, dtype=np.uint8)
@@ -2043,285 +1632,6 @@ class XGBoostFloodVisualizer:
         
         return predictions, confusions if confusions is not None else {}, per_date_metrics
 
-    def _create_prediction_pngs_single_watershed(self, predictions, dates, metrics, 
-                                                output_folder, ws_lat, ws_lon):
-        """Create prediction PNGs with boundary overlay for a single watershed."""
-        png_paths = []
-        
-        # Get reference raster and boundary for THIS specific watershed
-        flood_tiff_path = (
-            f"{self.training_folder}/floodMaps/"
-            f"dswx_s1_timeseries_subwatershed_Lon{ws_lon}_Lat{ws_lat}.tif"
-        )
-        ref_ds = gdal.Open(flood_tiff_path.replace('s3://', '/vsis3/'), gdal.GA_ReadOnly)
-        
-        if ref_ds is None:
-            print("  ⚠️  Cannot open reference raster for boundaries")
-            geotransform = None
-            H, W = None, None
-        else:
-            geotransform = ref_ds.GetGeoTransform()
-            H, W = ref_ds.RasterYSize, ref_ds.RasterXSize
-            ref_ds = None
-        
-        # Load watershed boundary for THIS watershed
-        gpkg_path = (
-            f"{self.training_folder}/watershedBoundaries/"
-            f"processedWatershedAndBasins_Lon{ws_lon}_Lat{ws_lat}.gpkg"
-        )
-        
-        pixel_polygons = []
-        if geotransform is not None:
-            try:
-                import geopandas as gpd
-                from matplotlib.patches import Polygon
-                
-                vsi_gpkg = gpkg_path.replace('s3://', '/vsis3/')
-                gdf = gpd.read_file(vsi_gpkg)
-                
-                def geo_to_pixel(x_geo, y_geo, gt):
-                    px = (x_geo - gt[0]) / gt[1]
-                    py = (y_geo - gt[3]) / gt[5]
-                    return px, py
-                
-                for geom in gdf.geometry:
-                    if geom is None or geom.is_empty:
-                        continue
-                    
-                    polys = [geom] if geom.geom_type == 'Polygon' else list(geom.geoms)
-                    
-                    for poly in polys:
-                        coords = list(poly.exterior.coords)
-                        pixel_coords = [geo_to_pixel(x, y, geotransform) for x, y in coords]
-                        pixel_polygons.append(pixel_coords)
-                
-                if pixel_polygons:
-                    print(f"  Loaded {len(pixel_polygons)} watershed boundary polygons")
-            except Exception as e:
-                print(f"  Could not load watershed boundaries: {e}")
-        
-        # Create PNGs
-        for date_str in dates:
-            pred = predictions.get(date_str)
-            if pred is None or np.count_nonzero(pred != 255) < 100:
-                continue
-            
-            m = metrics.get(date_str, {})
-            
-            fig, ax = plt.subplots(figsize=(12, 10))
-            
-            pred_disp = pred.astype(float)
-            pred_disp[pred == 255] = np.nan
-            
-            cmap = matplotlib.colors.ListedColormap(['tan', 'blue'])
-            
-            if H is not None and W is not None:
-                ax.imshow(pred_disp, cmap=cmap, vmin=0, vmax=1,
-                         extent=[0, W, H, 0], origin='upper')
-                ax.set_xlim(0, W)
-                ax.set_ylim(H, 0)
-            else:
-                ax.imshow(pred_disp, cmap=cmap, vmin=0, vmax=1)
-            
-            # Overlay watershed boundary
-            if pixel_polygons:
-                from matplotlib.patches import Polygon
-                for poly_coords in pixel_polygons:
-                    polygon = Polygon(poly_coords, fill=False, edgecolor='red',
-                                    linewidth=2.5, linestyle='-', zorder=10)
-                    ax.add_patch(polygon)
-            
-            legend_elements = [
-                mpatches.Patch(color='tan', label='Predicted Land'),
-                mpatches.Patch(color='blue', label='Predicted Water')
-            ]
-            
-            if pixel_polygons:
-                from matplotlib.lines import Line2D
-                legend_elements.append(
-                    Line2D([0], [0], color='red', linewidth=2.5, 
-                          label='Watershed Boundary')
-                )
-            
-            ax.legend(handles=legend_elements, loc='upper right', fontsize=10)
-            ax.set_title(f'XGBoost Flood Prediction - {date_str}\nLat_{ws_lat}_Lon_{ws_lon}', 
-                        fontsize=14, fontweight='bold')
-            
-            text = (
-                f"Date: {date_str}\n"
-                f"Model: XGBoost\n"
-                f"Watershed: Lat_{ws_lat}_Lon_{ws_lon}\n"
-                f"Predicted Flood Fraction: {m.get('pred_pos_frac', 0):.3f}"
-            )
-            props = dict(boxstyle='round', facecolor='lightyellow', alpha=0.8)
-            ax.text(0.02, 0.98, text, transform=ax.transAxes, fontsize=11, va='top', bbox=props)
-            
-            ax.axis('off')
-            plt.tight_layout()
-            
-            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
-                temp_png = tmp.name
-            plt.savefig(temp_png, dpi=150, bbox_inches='tight')
-            plt.close()
-            
-            s3_path = f"{output_folder}/xgboost_prediction_{date_str}.png"
-            bucket, key = s3_path.replace('s3://', '').split('/', 1)
-            self.s3_client.upload_file(temp_png, bucket, key)
-            os.remove(temp_png)
-            png_paths.append(s3_path)
-        
-        print(f"  Created {len(png_paths)} prediction PNG visualizations")
-        return png_paths
-    
-    
-    def _create_pngs_single_watershed(self, confusions, dates, metrics, 
-                                     output_folder, ws_lat, ws_lon):
-        """Create confusion matrix PNGs with boundary overlay for a single watershed."""
-        png_paths = []
-        
-        # Get reference raster for THIS watershed
-        flood_tiff_path = (
-            f"{self.training_folder}/floodMaps/"
-            f"dswx_s1_timeseries_subwatershed_Lon{ws_lon}_Lat{ws_lat}.tif"
-        )
-        ref_ds = gdal.Open(flood_tiff_path.replace('s3://', '/vsis3/'), gdal.GA_ReadOnly)
-        
-        if ref_ds is None:
-            print("  ⚠️  Cannot open reference raster for boundaries")
-            geotransform = None
-            H, W = None, None
-        else:
-            geotransform = ref_ds.GetGeoTransform()
-            H, W = ref_ds.RasterYSize, ref_ds.RasterXSize
-            ref_ds = None
-        
-        # Load boundary
-        gpkg_path = (
-            f"{self.training_folder}/watershedBoundaries/"
-            f"processedWatershedAndBasins_Lon{ws_lon}_Lat{ws_lat}.gpkg"
-        )
-        
-        pixel_polygons = []
-        if geotransform is not None:
-            try:
-                import geopandas as gpd
-                from matplotlib.patches import Polygon
-                
-                vsi_gpkg = gpkg_path.replace('s3://', '/vsis3/')
-                gdf = gpd.read_file(vsi_gpkg)
-                
-                def geo_to_pixel(x_geo, y_geo, gt):
-                    px = (x_geo - gt[0]) / gt[1]
-                    py = (y_geo - gt[3]) / gt[5]
-                    return px, py
-                
-                for geom in gdf.geometry:
-                    if geom is None or geom.is_empty:
-                        continue
-                    
-                    polys = [geom] if geom.geom_type == 'Polygon' else list(geom.geoms)
-                    
-                    for poly in polys:
-                        coords = list(poly.exterior.coords)
-                        pixel_coords = [geo_to_pixel(x, y, geotransform) for x, y in coords]
-                        pixel_polygons.append(pixel_coords)
-                
-                if pixel_polygons:
-                    print(f"  Loaded {len(pixel_polygons)} watershed boundary polygons")
-            except Exception as e:
-                print(f"  Could not load watershed boundaries: {e}")
-        
-        dates_to_process = sorted(dates)
-        if hasattr(self.config, 'max_png_dates') and self.config.max_png_dates is not None:
-            dates_to_process = dates_to_process[:self.config.max_png_dates]
-        
-        for date_str in dates_to_process:
-            cm = confusions.get(date_str)
-            if cm is None or np.count_nonzero(cm != 255) < 100:
-                continue
-            
-            m = metrics.get(date_str, {})
-            
-            fig, ax = plt.subplots(figsize=(12, 10))
-            
-            cm_disp = cm.astype(float)
-            cm_disp[cm == 255] = np.nan
-            
-            cmap = matplotlib.colors.ListedColormap(['green', 'blue', 'orange', 'red'])
-            
-            if H is not None and W is not None:
-                ax.imshow(cm_disp, cmap=cmap, vmin=0, vmax=3,
-                         extent=[0, W, H, 0], origin='upper')
-                ax.set_xlim(0, W)
-                ax.set_ylim(H, 0)
-            else:
-                ax.imshow(cm_disp, cmap=cmap, vmin=0, vmax=3)
-            
-            # Overlay boundary
-            if pixel_polygons:
-                from matplotlib.patches import Polygon
-                for poly_coords in pixel_polygons:
-                    polygon = Polygon(poly_coords, fill=False, edgecolor='black',
-                                    linewidth=2.5, linestyle='-', zorder=10)
-                    ax.add_patch(polygon)
-            
-            legend_elements = [
-                mpatches.Patch(color='green', label='True Negative (Land correct)'),
-                mpatches.Patch(color='blue', label='True Positive (Water correct)'),
-                mpatches.Patch(color='orange', label='False Negative (Missed water)'),
-                mpatches.Patch(color='red', label='False Positive (False water)')
-            ]
-            
-            if pixel_polygons:
-                from matplotlib.lines import Line2D
-                legend_elements.append(
-                    Line2D([0], [0], color='black', linewidth=2.5, 
-                          label='Watershed Boundary')
-                )
-            
-            ax.legend(handles=legend_elements, loc='upper right', fontsize=10)
-            ax.set_title(f'XGBoost Confusion Matrix - {date_str}\nLat_{ws_lat}_Lon_{ws_lon}', 
-                        fontsize=14, fontweight='bold')
-            
-            auc_val = m.get('ROC_AUC', np.nan)
-            pr_auc_val = m.get('PR_AUC', np.nan)
-            auc_str = f"{auc_val:.3f}" if np.isfinite(auc_val) else "N/A"
-            pr_auc_str = f"{pr_auc_val:.3f}" if np.isfinite(pr_auc_val) else "N/A"
-            
-            text = (
-                f"Date: {date_str}\n"
-                f"Model: XGBoost\n"
-                f"Watershed: Lat_{ws_lat}_Lon_{ws_lon}\n"
-                f"MCC: {m.get('MCC', 0):.3f}\n"
-                f"F1 Score: {m.get('F1', 0):.3f}\n"
-                f"Accuracy: {m.get('Accuracy', 0):.3f}\n"
-                f"Precision: {m.get('Precision', 0):.3f}\n"
-                f"Recall: {m.get('Recall', 0):.3f}\n"
-                f"ROC AUC: {auc_str}\n"
-                f"PR AUC: {pr_auc_str}\n"
-                f"Kappa: {m.get('Kappa', 0):.3f}"
-            )
-            props = dict(boxstyle='round', facecolor='lightyellow', alpha=0.8)
-            ax.text(0.02, 0.98, text, transform=ax.transAxes, fontsize=11, va='top', bbox=props)
-            
-            ax.axis('off')
-            plt.tight_layout()
-            
-            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
-                temp_png = tmp.name
-            plt.savefig(temp_png, dpi=150, bbox_inches='tight')
-            plt.close()
-            
-            s3_path = f"{output_folder}/xgboost_confusion_matrix_{date_str}.png"
-            bucket, key = s3_path.replace('s3://', '').split('/', 1)
-            self.s3_client.upload_file(temp_png, bucket, key)
-            os.remove(temp_png)
-            png_paths.append(s3_path)
-        
-        print(f"  Created {len(png_paths)} confusion matrix PNG visualizations")
-        return png_paths
-
-    
     def _create_prediction_pngs(self, predictions, dates, metrics, output_folder):
         """Create PNG visualizations with ALL watershed boundaries overlaid."""
         png_paths = []

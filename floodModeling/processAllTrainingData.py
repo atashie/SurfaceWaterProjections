@@ -6,6 +6,7 @@ Training folders now include floodMaps/ with water extent time series for each w
 """
 
 import os
+import time
 import logging
 import pandas as pd
 import numpy as np
@@ -231,6 +232,10 @@ class OptimizedBasinTrainingPipeline:
             if dswx_summary.get('total_dates_processed', 0) > 0:
                 print(f"    Total dates processed: {dswx_summary['total_dates_processed']}")
         print(f"  - Output folder: {training_folder_path}")
+
+
+        summary['latitude_folder'] = watershed_lat_str
+        summary['longitude_folder'] = watershed_lon_str
         
         return summary
     
@@ -276,7 +281,7 @@ class OptimizedBasinTrainingPipeline:
             'errors': []
         }
 
-        max_retries = 3
+        max_retries = 10
         for attempt in range(max_retries):
             try:
                 print(f"\n   Processing watershed {hybas_id} at ({lat_str}, {lon_str})...")
@@ -321,25 +326,34 @@ class OptimizedBasinTrainingPipeline:
                 import time
                 time.sleep(0.5)  # Small delay to prevent connection overload
                 
-                try:
-                    from extractRasterData import prepare_watershed_polygon, extract_raster_data_for_polygon
-                    
-                    watershed_data = prepare_watershed_polygon(
-                        longitude=lon,
-                        latitude=lat,
-                        polygon_type='subwatershed',
-                        training_folder_path=training_folder_path
-                    )
-                    
-                    raster_results = extract_raster_data_for_polygon(
-                        watershed_data,
-                        output_dir=f"{training_folder_path}/rasters",
-                        reference_raster_type=reference_raster_type
-                    )
-                    result['raster_data'] = raster_results
-                except Exception as raster_error:
-                    print(f"      ⚠️ Raster extraction failed: {raster_error}")
-                    result['raster_data'] = {'status': 'failed', 'error': str(raster_error)}
+                lulc_max_retries = 10
+                for lulc_attempt in range(lulc_max_retries):
+                    try:
+                        from extractRasterData import prepare_watershed_polygon, extract_raster_data_for_polygon
+                
+                        watershed_data = prepare_watershed_polygon(
+                            longitude=lon,
+                            latitude=lat,
+                            polygon_type='subwatershed',
+                            training_folder_path=training_folder_path
+                        )
+                
+                        raster_results = extract_raster_data_for_polygon(
+                            watershed_data,
+                            output_dir=f"{training_folder_path}/rasters",
+                            reference_raster_type=reference_raster_type
+                        )
+                        result['raster_data'] = raster_results
+                        break  # Success!
+                    except Exception as raster_error:
+                        # Customize this check if you want to only retry on LULC-specific errors
+                        if lulc_attempt < lulc_max_retries - 1:
+                            print(f"      LULC/raster extraction failed (attempt {lulc_attempt+1}/{lulc_max_retries}): {raster_error}")
+                            time.sleep(5)
+                            continue
+                        else:
+                            print(f"      ‚ö†Ô∏è Raster extraction failed after {lulc_max_retries} attempts: {raster_error}")
+                            result['raster_data'] = {'status': 'failed', 'error': str(raster_error)}
                 
                 # Step 5: Process OPERA DSWx water extent time series
                 if include_dswx:
