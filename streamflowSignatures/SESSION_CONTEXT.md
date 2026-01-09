@@ -44,6 +44,17 @@
   - `validate_gage_output()` - Validates individual gage results
 - [x] Integrated into `process_signatures_from_parquet()` main entry point
 
+### Phase 3.5: Critical Bug Fixes (COMPLETE)
+- [x] Fixed data.table scoping bug in metadata lookup (helperFunctions.R:3425)
+  - `find_metadata()` parameter renamed from `gage_id` to `target_gage_id`
+  - Bug caused all gages to receive first row's metadata (column compared to itself)
+- [x] Fixed missing Canadian basin_area
+  - Was hardcoded as `NA` for Canadian stations
+  - Now fetches `DRAINAGE_AREA_GROSS` from `tidyhydat::hy_stations()`
+  - Added runtime fallback in `process_signatures_from_parquet()` for existing metadata files
+- [x] Created `smoke_test.R` for regression testing
+- [x] Verified all 10 test gages have correct, unique metadata including basin areas
+
 ### Phase 4: Climate Integration (FUTURE)
 - [ ] Design climate data integration (ERA5/PRISM)
 - [ ] Implement synchrony metrics

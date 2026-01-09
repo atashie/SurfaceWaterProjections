@@ -130,6 +130,22 @@ Key parameters in processing functions:
 
 Water year convention: October 1 - September 30 (Northern Hemisphere)
 
+## Logging and Validation
+
+The project includes structured logging and input validation via `config.R`:
+
+```r
+source("config.R")
+
+# Set log level (DEBUG, INFO, WARN, ERROR, NONE)
+set_log_level("DEBUG")
+
+# Enable file logging
+set_log_file("logs/processing.log")
+```
+
+See `CLAUDE.md` for detailed documentation on logging functions and validation utilities.
+
 ## Development
 
 See `CLAUDE.md` for detailed architecture documentation, code conventions, and development guidelines.

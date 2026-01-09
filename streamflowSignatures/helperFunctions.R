@@ -97,11 +97,15 @@ process_gages_rawData <- function(gages_df, gage_type, min_num_years, start_date
       gage_id <- as.character(current_gage$STATION_NUMBER)
       latitude <- as.numeric(current_gage$LAT_GAGE)
       longitude <- as.numeric(current_gage$LNG_GAGE)
-      basin_area <- NA
+      # Fetch drainage area from tidyhydat database
+      basin_area <- tryCatch({
+        stn_info <- hy_stations(gage_id)
+        as.numeric(stn_info$DRAINAGE_AREA_GROSS)
+      }, error = function(e) NA_real_)
     } else {
       stop("Unsupported gage type")
     }
-    
+
     if (gage_id %in% summary_output$gage_id) {
       cat("Skipping gage", gage_id, "as it's already in the output\n")
       next
@@ -375,7 +379,11 @@ process_gages_rawToRaw <- function(gages_df, gage_type, min_num_years, start_dat
       gage_id <- as.character(current_gage$STATION_NUMBER)
       latitude <- as.numeric(current_gage$LAT_GAGE)
       longitude <- as.numeric(current_gage$LNG_GAGE)
-      basin_area <- NA
+      # Fetch drainage area from tidyhydat database
+      basin_area <- tryCatch({
+        stn_info <- hy_stations(gage_id)
+        as.numeric(stn_info$DRAINAGE_AREA_GROSS)
+      }, error = function(e) NA_real_)
     } else {
       stop("Unsupported gage type")
     }
@@ -1139,9 +1147,6 @@ analyze_fdc_trends_from_streamflow <- function(streamflow_data) {
   names(stats_result) <- gsub("slp_all", "FDCall", names(stats_result))
   names(stats_result) <- gsub("slp_90th", "FDC90th", names(stats_result))
   names(stats_result) <- gsub("slp_mid", "FDCmid", names(stats_result))
-  
-  # Fix the one inconsistent column name
-  names(stats_result) <- gsub("FDC90th_slp", "FDC90_slp", names(stats_result))
   
   # Convert to data frame
   result <- as.data.frame(stats_result)
@@ -3133,11 +3138,15 @@ process_gages <- function(gages_df, gage_type, min_num_years, start_date, end_da
       gage_id <- as.character(current_gage$STATION_NUMBER)
       latitude <- as.numeric(current_gage$LAT_GAGE)
       longitude <- as.numeric(current_gage$LNG_GAGE)
-      basin_area <- NA
+      # Fetch drainage area from tidyhydat database
+      basin_area <- tryCatch({
+        stn_info <- hy_stations(gage_id)
+        as.numeric(stn_info$DRAINAGE_AREA_GROSS)
+      }, error = function(e) NA_real_)
     } else {
       stop("Unsupported gage type")
     }
-    
+
     if (gage_id %in% summary_output$gage_id) {
       cat("Skipping gage", gage_id, "as it's already in the output\n")
       next
@@ -3423,34 +3432,36 @@ process_signatures_from_parquet <- function(
   }
   
   # Function to find metadata for a gage ID, trying different formats
-  find_metadata <- function(gage_id, metadata_lookup) {
-    gage_id <- as.character(gage_id)
-    
+  # NOTE: Parameter named target_gage_id to avoid data.table scoping collision
+  # with the 'gage_id' column in metadata_lookup
+  find_metadata <- function(target_gage_id, metadata_lookup) {
+    target_gage_id <- as.character(target_gage_id)
+
     # First try exact match
-    meta <- metadata_lookup[gage_id == gage_id]
+    meta <- metadata_lookup[gage_id == target_gage_id]
     if (nrow(meta) > 0) return(meta[1])
-    
+
     # Try adding leading zeros (up to 4)
     for (num_zeros in 1:4) {
-      padded_id <- sprintf(paste0("%0", nchar(gage_id) + num_zeros, "d"), 
-                           as.numeric(gage_id))
+      padded_id <- sprintf(paste0("%0", nchar(target_gage_id) + num_zeros, "d"),
+                           as.numeric(target_gage_id))
       meta <- metadata_lookup[gage_id == padded_id]
       if (nrow(meta) > 0) {
-        log_debug("Found match for", gage_id, "as", padded_id, context = ctx)
+        log_debug("Found match for", target_gage_id, "as", padded_id, context = ctx)
         return(meta[1])
       }
     }
 
     # Try removing leading zeros
-    stripped_id <- gsub("^0+", "", gage_id)
-    if (stripped_id != gage_id && stripped_id != "") {
+    stripped_id <- gsub("^0+", "", target_gage_id)
+    if (stripped_id != target_gage_id && stripped_id != "") {
       meta <- metadata_lookup[gage_id == stripped_id]
       if (nrow(meta) > 0) {
-        log_debug("Found match for", gage_id, "as", stripped_id, context = ctx)
+        log_debug("Found match for", target_gage_id, "as", stripped_id, context = ctx)
         return(meta[1])
       }
     }
-    
+
     return(NULL)
   }
   
@@ -3469,12 +3480,21 @@ process_signatures_from_parquet <- function(
     tryCatch({
       # Find metadata for this gage
       gage_meta <- find_metadata(gage_id, metadata_lookup)
-      
+
       if (is.null(gage_meta)) {
         unmatched_gages <- c(unmatched_gages, gage_id)
         next
       }
-      
+
+      # If basin_area is NA and this looks like a Canadian gage (format: ##XX###),
+      # try to fetch from tidyhydat
+      if (is.na(gage_meta$basin_area) && grepl("^[0-9]{2}[A-Z]{2}", gage_id)) {
+        gage_meta$basin_area <- tryCatch({
+          stn_info <- hy_stations(gage_id)
+          as.numeric(stn_info$DRAINAGE_AREA_GROSS)
+        }, error = function(e) NA_real_)
+      }
+
       matched_gages <- matched_gages + 1
       
       # Extract streamflow data for this gage

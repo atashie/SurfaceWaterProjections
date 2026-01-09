@@ -357,24 +357,40 @@ validate_gage_type <- function(gage_type, context = NULL) {
 # ==============================================================================
 
 # Define expected signature columns (base names without suffixes)
+# Updated to match actual output from helperFunctions.R
 EXPECTED_SIGNATURE_BASES <- c(
-  # Flow volumes
+  # Flow volumes (seasonal and annual)
   "Qann", "Qwin", "Qspr", "Qsum", "Qfal",
-  "Q05", "Q10", "Q20", "Q25", "Q30", "Q40", "Q50", "Q60", "Q70", "Q75", "Q80", "Q90", "Q95",
-  # Baseflow
+  # Flow percentiles (Q1 through Q99)
+  "Q1", "Q5", "Q10", "Q20", "Q25", "Q30", "Q40", "Q50",
+  "Q60", "Q70", "Q75", "Q80", "Q90", "Q95", "Q99",
+  "Q95.Q10",  # Ratio of high to low flows
+  # Flow Duration Curve metrics
+  "FDC90th", "FDCall", "FDCmid",
+  # Baseflow indices
   "BFI_Eckhardt", "BFI_LyneHollick",
-  # Recession
+  # Recession parameters
   "log_a_pointcloud", "log_a_events", "b_pointcloud", "b_events", "concavity",
-  "log_a_seasonality_amplitude", "log_a_seasonality_minimum",
-  # Pulse metrics
-  "n_high_pulses_year", "n_low_pulses_year",
-  "dur_high_pulses_year", "dur_low_pulses_year",
-  "TQmean", "Flow_Reversals",
+  # Pulse metrics (yearly and overall)
+  "n_high_pulses_year", "n_low_pulses_year", "n_high_pulses_all", "n_low_pulses_all",
+  "dur_high_pulses_year", "dur_low_pulses_year", "dur_high_pulses_all", "dur_low_pulses_all",
+  "TQmean",
+  # Flow reversals (annual and seasonal)
+  "Flow_Reversals_annual", "Flow_Reversals_winter", "Flow_Reversals_spring",
+  "Flow_Reversals_summer", "Flow_Reversals_fall",
   # Flashiness
-  "RB_index",
-  # Flow timing
-  "D05_day", "D10_day", "D25_day", "D50_day", "D75_day", "D90_day", "D95_day",
+  "flashinessRB",
+  # Flow timing (day of water year for cumulative flow percentiles)
+  "D5_day", "D10_day", "D20_day", "D30_day", "D40_day", "D50_day",
+  "D60_day", "D70_day", "D80_day", "D90_day", "D95_day",
   "D25_to_D75", "Dmax"
+)
+
+# Recession seasonality columns (not standard suffix pattern)
+EXPECTED_RECESSION_SEASONALITY <- c(
+  "log_a_seasonality_amplitude_all", "log_a_seasonality_amplitude_first_half",
+  "log_a_seasonality_amplitude_last_half", "log_a_seasonality_minimum_all",
+  "log_a_seasonality_minimum_first_half", "log_a_seasonality_minimum_last_half"
 )
 
 # Validate output CSV schema
@@ -396,6 +412,9 @@ validate_output_schema <- function(output_df, strict = FALSE, context = NULL) {
   expected_sig_cols <- unlist(lapply(EXPECTED_SIGNATURE_BASES, function(base) {
     paste0(base, STAT_SUFFIXES)
   }))
+
+  # Add recession seasonality columns (don't follow standard suffix pattern)
+  expected_sig_cols <- c(expected_sig_cols, EXPECTED_RECESSION_SEASONALITY)
 
   present_sig_cols <- intersect(expected_sig_cols, names(output_df))
   missing_sig_cols <- setdiff(expected_sig_cols, names(output_df))

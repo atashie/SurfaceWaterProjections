@@ -253,6 +253,22 @@ validate_gage_output(gage_row, gage_id)
 # Checks for NA/Inf values, warns if >50% NA
 ```
 
+## Known Issues Fixed (Jan 2026)
+
+### Metadata Lookup Bug
+- **Issue**: Data.table scoping caused all gages to receive the first row's metadata
+- **Root Cause**: `metadata_lookup[gage_id == gage_id]` compared column to itself (always TRUE)
+- **Fix**: Renamed `find_metadata()` parameter to `target_gage_id`
+- **Location**: `helperFunctions.R` line ~3425
+
+### Canadian Basin Area Missing
+- **Issue**: Basin area was hardcoded as `NA` for Canadian stations
+- **Impact**: Canadian gages had no drainage area in output
+- **Fix**: Now fetches `DRAINAGE_AREA_GROSS` from `tidyhydat::hy_stations()`
+- **Locations**:
+  - Metadata creation functions (for new processing)
+  - `process_signatures_from_parquet()` runtime fallback (for existing metadata)
+
 ## Future Development
 
 ### Climate Integration
@@ -264,6 +280,8 @@ validate_gage_output(gage_row, gage_id)
 - ~~Consolidate active helper file variants into canonical `helperFunctions.R`~~ DONE
 - ~~Add centralized `config.R` for parameters~~ DONE
 - ~~Implement structured logging~~ DONE
+- ~~Fix metadata lookup bug~~ DONE
+- ~~Fix Canadian basin_area bug~~ DONE
 - Add unit tests
 
 ## Contact

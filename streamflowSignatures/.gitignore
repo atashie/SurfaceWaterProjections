@@ -1,0 +1,33 @@
+# Test outputs
+test_output/
+*-temp.csv
+*-temp-*.csv
+
+# R session files
+.RData
+.Rhistory
+.Rproj.user/
+
+# IDE
+.vscode/
+*.Rproj
+
+# Large data files (store elsewhere)
+*.parquet
+*.nc
+*.gpkg
+
+# Claude Code artifacts
+.claude/
+
+# Logs
+logs/
+*.log
+
+# Environment files (may contain secrets)
+.Renviron
+
+# OS files
+.DS_Store
+Thumbs.db
+nul
