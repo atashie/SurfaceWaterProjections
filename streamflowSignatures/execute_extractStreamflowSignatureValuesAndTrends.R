@@ -13,7 +13,8 @@ output_path <- file.path(metadata_dir, "combined_streamflow_output/streamflowSig
 # !!!!!! USER INPUT !!!!!!
 # Source helper functions - i.e., where is your code?
 main_dir <- "C:/Users/arikt/Documents/GitHub/SurfaceWaterProjections/streamflowSignatures"
-source(file.path(main_dir, "helperFunctions_extractStreamflowSignatureValuesAndTrends.R"))
+source(file.path(main_dir, "config.R"))           # Centralized configuration
+source(file.path(main_dir, "helperFunctions.R"))  # All core functions
 
 # Process signatures from the concatenated parquet file
 summary_output <- process_signatures_from_parquet(

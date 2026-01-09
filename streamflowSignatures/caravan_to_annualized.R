@@ -1,6 +1,8 @@
 # Set the main directory
-main_dir = "C:/Users/18033/Documents/GitHub/SurfaceWaterProjections/treamflowSignatures"#"C:/Users/arikt/Documents/GitHub/SurfaceWaterProjections/streamflowSignatures"
+main_dir = "C:/Users/18033/Documents/GitHub/SurfaceWaterProjections/streamflowSignatures"
 
+# Load configuration and helper functions
+source(file.path(main_dir, "config.R"))           # Centralized configuration
 source(file.path(main_dir, "helperFunctions.R"), local=FALSE)
 
 

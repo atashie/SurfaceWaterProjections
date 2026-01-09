@@ -1,7 +1,9 @@
 # Set the main directory where data and results will be stored
-main_dir = "C:/Users/arikt/Documents/GitHub/SurfaceWaterProjections/streamflowSignatures"#"C:/Users/arikt/Documents/GitHub/SurfaceWaterProjections/streamflowSignatures"
+main_dir = "C:/Users/arikt/Documents/GitHub/SurfaceWaterProjections/streamflowSignatures"
 metadata_dir = "D:/"
-# Load helper functions
+
+# Load configuration and helper functions
+source(file.path(main_dir, "config.R"))           # Centralized configuration (optional - can override below)
 source(file.path(main_dir, "helperFunctions.R"), local=FALSE)
 
 ################################################################################################

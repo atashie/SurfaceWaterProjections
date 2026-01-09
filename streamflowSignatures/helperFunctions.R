@@ -3338,34 +3338,70 @@ process_signatures_from_parquet <- function(
     min_num_years = 20,
     min_frac_good_data = 0.9  # NEW PARAMETER for filter 2b
 ) {
-  
+
+  ctx <- "process_signatures_from_parquet"
+
   # Load required libraries
   require(arrow)
   require(data.table)
   require(lubridate)
-  
-  cat("Reading parquet file and metadata...\n")
-  
+
+  log_info("Starting signature extraction from parquet", context = ctx)
+
+  # ==== INPUT VALIDATION ====
+  log_info("Validating inputs...", context = ctx)
+  validate_file_exists(parquet_file_path, "parquet_file_path",
+                       required_ext = "parquet", context = ctx)
+  validate_file_exists(metadata_file_path, "metadata_file_path",
+                       required_ext = "csv", context = ctx)
+  validate_numeric(min_Q_value_and_days, "min_Q_value_and_days",
+                   min_val = 0, context = ctx)
+  validate_numeric(min_num_years, "min_num_years",
+                   min_val = 1, context = ctx)
+  validate_numeric(min_frac_good_data, "min_frac_good_data",
+                   min_val = 0, max_val = 1, context = ctx)
+
+  # Validate output directory exists (create if needed)
+  output_dir <- dirname(output_file)
+  if (output_dir != "." && output_dir != "") {
+    validate_directory(output_dir, "output_directory", create = TRUE, context = ctx)
+  }
+
+  log_info("Reading parquet file and metadata...", context = ctx)
+
   # Read the combined parquet file
-  streamflow_data <- arrow::read_parquet(parquet_file_path)
+  streamflow_data <- tryCatch({
+    arrow::read_parquet(parquet_file_path)
+  }, error = function(e) {
+    log_error("Failed to read parquet file:", e$message, context = ctx)
+    stop(paste0("Failed to read parquet file: ", e$message))
+  })
   streamflow_data <- as.data.table(streamflow_data)
   
   # Check the structure of the data
-  cat("Data structure:\n")
-  cat("Columns:", paste(names(streamflow_data), collapse = ", "), "\n")
-  cat("Number of rows:", nrow(streamflow_data), "\n")
-  
+  log_info("Data columns:", paste(names(streamflow_data), collapse = ", "), context = ctx)
+  log_info("Number of rows:", nrow(streamflow_data), context = ctx)
+
+  # Validate streamflow data structure
+  validate_columns(streamflow_data, c("gage_id", "Date", "Q"),
+                   df_name = "streamflow_data", context = ctx)
+
   # Read metadata - ensure gage_id is character
-  metadata <- fread(metadata_file_path, colClasses = list(character = "gage_id"))
+  metadata <- tryCatch({
+    fread(metadata_file_path, colClasses = list(character = "gage_id"))
+  }, error = function(e) {
+    log_error("Failed to read metadata file:", e$message, context = ctx)
+    stop(paste0("Failed to read metadata file: ", e$message))
+  })
   metadata[, gage_id := as.character(gage_id)]
-  cat("Number of gages in metadata:", nrow(metadata), "\n")
+  log_info("Number of gages in metadata:", nrow(metadata), context = ctx)
   
   # Initialize output data table
   summary_output <- data.table()
   
   # Get list of unique gage IDs from the parquet data
   unique_gages <- unique(as.character(streamflow_data$gage_id))
-  cat("Found", length(unique_gages), "unique gages in parquet file\n")
+  log_info("Found", length(unique_gages), "unique gages in parquet file", context = ctx)
   
   # Create a lookup table for metadata with multiple possible formats
   # important for USGS data where IDs often have leading 0s that may be dropped
@@ -3400,17 +3436,17 @@ process_signatures_from_parquet <- function(
                            as.numeric(gage_id))
       meta <- metadata_lookup[gage_id == padded_id]
       if (nrow(meta) > 0) {
-        cat("  Found match for", gage_id, "as", padded_id, "\n")
+        log_debug("Found match for", gage_id, "as", padded_id, context = ctx)
         return(meta[1])
       }
     }
-    
+
     # Try removing leading zeros
     stripped_id <- gsub("^0+", "", gage_id)
     if (stripped_id != gage_id && stripped_id != "") {
       meta <- metadata_lookup[gage_id == stripped_id]
       if (nrow(meta) > 0) {
-        cat("  Found match for", gage_id, "as", stripped_id, "\n")
+        log_debug("Found match for", gage_id, "as", stripped_id, context = ctx)
         return(meta[1])
       }
     }
@@ -3427,7 +3463,7 @@ process_signatures_from_parquet <- function(
     gage_id <- unique_gages[i]
     
     if (i %% 100 == 0) {
-      cat("Processing gage", i, "of", length(unique_gages), "\n")
+      log_info("Processing gage", i, "of", length(unique_gages), context = ctx)
     }
     
     tryCatch({
@@ -3445,26 +3481,26 @@ process_signatures_from_parquet <- function(
       gage_flow <- streamflow_data[gage_id == unique_gages[i], ]
       
       if (nrow(gage_flow) == 0) {
-        cat("  No data for gage", gage_id, "\n")
+        log_debug("No data for gage", gage_id, context = ctx)
         next
       }
-      
+
       # Ensure required columns exist
       if (!"Date" %in% names(gage_flow)) {
-        cat("  Missing Date column for gage", gage_id, "\n")
+        log_warn("Missing Date column for gage", gage_id, context = ctx)
         next
       }
-      
+
       if (!"Q" %in% names(gage_flow)) {
-        cat("  Missing Q column for gage", gage_id, "\n")
+        log_warn("Missing Q column for gage", gage_id, context = ctx)
         next
       }
-      
+
       # Remove NA values in Q
       gage_flow <- gage_flow[!is.na(Q)]
-      
+
       if (nrow(gage_flow) == 0) {
-        cat("  No valid Q data for gage", gage_id, "\n")
+        log_debug("No valid Q data for gage", gage_id, context = ctx)
         next
       }
       
@@ -3500,11 +3536,12 @@ process_signatures_from_parquet <- function(
         # Filter 2: Check days with Q > threshold
         nonzero_rows <- sum(test_wy$Q > min_Q_value_and_days[1], na.rm = TRUE)
         if (nonzero_rows < min_Q_value_and_days[2]) {
-          cat("  WY", this_wy, "rejected: only", nonzero_rows, 
-              "days > threshold (need", min_Q_value_and_days[2], ")\n")
+          log_debug("WY", this_wy, "rejected: only", nonzero_rows,
+                    "days > threshold (need", min_Q_value_and_days[2], ")",
+                    context = paste0(ctx, ":", gage_id))
           next
         }
-        
+
         # Filter 2b: Check fraction of good (non-NA) data
         # Determine expected days in water year (account for leap years)
         # Water year runs Oct 1 to Sep 30
@@ -3513,24 +3550,25 @@ process_signatures_from_parquet <- function(
         is_leap <- ((this_wy %% 4 == 0) & (this_wy %% 100 != 0)) | (this_wy %% 400 == 0)
         expected_days <- ifelse(is_leap, 366, 365)
         min_required_days <- floor(expected_days * min_frac_good_data)
-        
+
         n_good_days <- nrow(test_wy)  # Already filtered for non-NA Q above
-        
+
         if (n_good_days < min_required_days) {
-          cat("  WY", this_wy, "rejected: only", n_good_days, 
-              "valid days (need", min_required_days, "for", 
-              sprintf("%.1f%%", min_frac_good_data * 100), "coverage)\n")
+          log_debug("WY", this_wy, "rejected: only", n_good_days,
+                    "valid days (need", min_required_days, "for",
+                    sprintf("%.1f%%", min_frac_good_data * 100), "coverage)",
+                    context = paste0(ctx, ":", gage_id))
           next
         }
-        
+
         # This water year passes both filters
         water_years_to_use <- c(water_years_to_use, this_wy)
       }
-      
+
       # Filter 3: Check minimum number of qualifying water years
       if (length(water_years_to_use) < min_num_years) {
-        cat("  Insufficient qualifying water years for gage", gage_id, 
-            "(", length(water_years_to_use), "water years)\n")
+        log_debug("Insufficient qualifying water years for gage", gage_id,
+                  "(", length(water_years_to_use), "water years)", context = ctx)
         next
       }
       
@@ -3592,39 +3630,47 @@ process_signatures_from_parquet <- function(
       
       # Add to summary output
       summary_output <- rbind(summary_output, gage_row, fill = TRUE)
-      
+
     }, error = function(e) {
-      cat("  Error processing gage", gage_id, ":", e$message, "\n")
+      log_error("Error processing gage", gage_id, ":", e$message, context = ctx)
     })
-    
+
     # Periodic save
     if (i %% 500 == 0 && nrow(summary_output) > 0) {
       fwrite(summary_output, output_file)
-      cat("Saved intermediate results (", nrow(summary_output), "gages processed)\n")
+      log_info("Saved intermediate results (", nrow(summary_output), "gages processed)",
+               context = ctx)
     }
   }
-  
-  # Final save
+
+  # Final save and validation
   if (nrow(summary_output) > 0) {
     fwrite(summary_output, output_file)
-    cat("\n========== PROCESSING COMPLETE ==========\n")
-    cat("Total unique gages in parquet:", length(unique_gages), "\n")
-    cat("Successfully matched to metadata:", matched_gages, "\n")
-    cat("Could not match to metadata:", length(unmatched_gages), "\n")
-    cat("Successfully processed:", nrow(summary_output), "\n")
-    cat("Results saved to:", output_file, "\n")
-    
+
+    log_info("========== PROCESSING COMPLETE ==========", context = ctx)
+    log_info("Total unique gages in parquet:", length(unique_gages), context = ctx)
+    log_info("Successfully matched to metadata:", matched_gages, context = ctx)
+    log_info("Could not match to metadata:", length(unmatched_gages), context = ctx)
+    log_info("Successfully processed:", nrow(summary_output), context = ctx)
+    log_info("Results saved to:", output_file, context = ctx)
+
+    # Validate output schema
+    validation_result <- validate_output_schema(summary_output, strict = FALSE,
+                                                 context = ctx)
+
     # Save list of unmatched gages for debugging
     if (length(unmatched_gages) > 0) {
       unmatched_file <- gsub("\\.csv$", "_unmatched_gages.txt", output_file)
       writeLines(unmatched_gages, unmatched_file)
-      cat("List of unmatched gages saved to:", unmatched_file, "\n")
-      cat("Sample of unmatched gages:", head(unmatched_gages, 10), "\n")
+      log_info("List of unmatched gages saved to:", unmatched_file, context = ctx)
+      log_debug("Sample of unmatched gages:",
+                paste(head(unmatched_gages, 10), collapse = ", "), context = ctx)
     }
   } else {
-    cat("\n========== NO DATA PROCESSED ==========\n")
-    cat("No gages were successfully processed.\n")
+    log_warn("========== NO DATA PROCESSED ==========", context = ctx)
+    log_warn("No gages were successfully processed.", context = ctx)
   }
-  
+
+  log_info("Signature extraction complete", context = ctx)
   return(summary_output)
 }
