@@ -2,8 +2,12 @@
 # Smoke Test - Uses existing parquet data with a subset of gages
 ################################################################################################
 
-# Paths
-main_dir <- "C:/Users/18033/Documents/GitHub/SurfaceWaterProjections/streamflowSignatures"
+# Paths - auto-detect based on script location
+main_dir <- getwd()
+if (!file.exists(file.path(main_dir, "config.R"))) {
+  # Try parent if running from subdirectory
+  main_dir <- dirname(main_dir)
+}
 metadata_dir <- "D:"
 
 # Load config and functions
@@ -70,4 +74,56 @@ if (nrow(summary_output) > 0) {
   cat("\nSTATUS: SMOKE TEST PASSED\n")
 } else {
   cat("STATUS: SMOKE TEST FAILED - No gages processed\n")
+}
+
+# ==============================================================================
+# CLIMATE SIGNATURES TEST (Optional - requires Daymet parquet)
+# ==============================================================================
+
+daymet_parquet <- file.path(main_dir, DAYMET_PARQUET_PATH)
+
+if (file.exists(daymet_parquet)) {
+  cat("\n========== CLIMATE SIGNATURES SMOKE TEST ==========\n")
+
+  output_path_climate <- file.path(main_dir, "test_output/smoke_test_climate_signatures.csv")
+
+  log_info("Running process_signatures_from_parquet with Daymet integration...")
+
+  summary_with_climate <- process_signatures_from_parquet(
+    parquet_file_path = temp_parquet,
+    metadata_file_path = metadata_path,
+    output_file = output_path_climate,
+    daymet_parquet_path = daymet_parquet,
+    min_Q_value_and_days = c(0.0001, 30),
+    min_num_years = 20,
+    min_frac_good_data = 0.95
+  )
+
+  cat("\n========== CLIMATE SIGNATURES RESULTS ==========\n")
+
+  # Check for climate signature columns
+  climate_cols <- c("elasticity_static", "elasticity_mean",
+                    "qp_slope_sd_mean", "qp_bimodality_mean",
+                    "avg_storage_mean", "annual_runoff_ratio_mean")
+
+  found_cols <- intersect(climate_cols, names(summary_with_climate))
+  cat("Climate signature columns found:", length(found_cols), "/", length(climate_cols), "\n")
+
+  for (col in found_cols) {
+    non_na <- sum(!is.na(summary_with_climate[[col]]))
+    cat(sprintf("  %s: %d/%d non-NA values\n",
+                col, non_na, nrow(summary_with_climate)))
+  }
+
+  if (length(found_cols) > 0 && any(!is.na(summary_with_climate[[found_cols[1]]]))) {
+    cat("\nSample climate signature values:\n")
+    cols_to_show <- intersect(c("gage_id", found_cols), names(summary_with_climate))
+    print(summary_with_climate[1, ..cols_to_show])
+    cat("\nCLIMATE SIGNATURES STATUS: PASSED\n")
+  } else {
+    cat("\nCLIMATE SIGNATURES STATUS: No data populated (check Daymet-gage ID matching)\n")
+  }
+} else {
+  cat("\n[SKIP] Climate signatures test - Daymet parquet not found\n")
+  cat("       To enable: run convert_daymet_zip_to_parquet() first\n")
 }

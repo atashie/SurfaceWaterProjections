@@ -73,16 +73,67 @@ Caravan NetCDF ───────┴─────────┴───�
 
 ### 7. Q-PPT Relationships (`analyze_Q_PPT_relationships`) - *Requires Climate Data*
 - Runoff ratios by season (streamflow / precipitation)
-- Currently needs PPT column in input data (available in Caravan, not in raw USGS/HYDAT)
+- Requires PPT column in input data (available via Daymet integration or Caravan)
 
-## Statistics Per Signature
+### 8. Streamflow Elasticity (`calculate_streamflow_elasticity`) - *Requires Climate Data*
+- **elasticity_static**: Overall catchment elasticity - median of annual elasticity values
+- **elasticity**: Rolling window (11-year) elasticity trend statistics
+- Elasticity measures sensitivity of streamflow to precipitation changes: E = (dQ/dP) / (Q_mean/P_mean)
+- Values ~1.0 indicate proportional response; >1 indicates amplified response
+- Citation: Sawicz et al. (2011)
 
-Each signature has 5 associated statistics:
-- **_slp**: Theil-Sen slope (robust non-parametric trend)
-- **_rho**: Spearman's rank correlation coefficient
-- **_pval**: P-value for trend significance
-- **_mean**: Arithmetic mean across all water years
-- **_median**: Median value across all water years
+### 9. Q-P Seasonality (`calculate_qp_seasonality`) - *Requires Climate Data*
+- **qp_slope_sd**: Standard deviation of monthly cumulative Q-P slopes (measures seasonality strength)
+- **qp_bimodality**: Bimodality coefficient of Q-P relationship (values >0.555 suggest seasonal/bimodal patterns)
+- Calculated from 30-day rolling slopes of cumulative Q vs cumulative P
+- Citation: Wrede et al. (2015)
+
+### 10. Average Storage (`calculate_average_storage`) - *Requires Climate Data*
+- **avg_storage**: Mean annual catchment storage derived from water balance (P - Q)
+- Cumulative storage calculated as S = cumsum(P - Q)
+- Annual storage interpolated at mean discharge for each water year
+- Units: mm
+- Citation: Peters & Aulenbach (2011)
+
+## Signature Statistics Standard (REQUIRED)
+
+### The Rule
+
+**Every signature MUST produce exactly 5 statistics using `generate_stats()`.**
+
+This is not optional. The downstream analysis pipeline, visualization app, and CSV schema all depend on this consistency.
+
+### The 5 Required Statistics
+
+| Suffix | Statistic | Purpose |
+|--------|-----------|---------|
+| `_slp` | Theil-Sen slope | Detect monotonic trends over time |
+| `_rho` | Spearman's rho | Measure correlation strength with time |
+| `_pval` | P-value | Statistical significance of trend |
+| `_mean` | Arithmetic mean | Central tendency across all years |
+| `_median` | Median | Robust central tendency |
+
+### Why This Pattern?
+
+1. **Scientific consistency**: Trends in hydrological signatures are a primary research question
+2. **Schema stability**: Downstream tools expect predictable column names
+3. **Automation**: `generate_stats()` handles edge cases (insufficient data, failed tests)
+
+### Exceptions
+
+Some signatures have additional columns beyond the standard 5:
+- `elasticity_static`: Overall catchment elasticity (single value, not a time series)
+- Recession seasonality: `log_a_seasonality_amplitude`, `log_a_seasonality_minimum`
+
+These exceptions are explicitly documented in `config.R` as `EXPECTED_ELASTICITY_STATIC` and `EXPECTED_RECESSION_SEASONALITY`.
+
+### Adding a New Signature
+
+1. Calculate the metric for each water year → `data.table` with `water_year` column
+2. Call `generate_stats(annual_data, value_cols = "metric_name", year_col = "water_year")`
+3. Return the result (5 columns: `metric_slp`, `metric_rho`, `metric_pval`, `metric_mean`, `metric_median`)
+4. Add base name to `EXPECTED_SIGNATURE_BASES` in `config.R`
+5. Run smoke test to verify schema validation passes
 
 ## Dependencies
 
@@ -283,7 +334,3 @@ validate_gage_output(gage_row, gage_id)
 - ~~Fix metadata lookup bug~~ DONE
 - ~~Fix Canadian basin_area bug~~ DONE
 - Add unit tests
-
-## Contact
-
-Part of the SurfaceWaterProjections repository.

@@ -2634,6 +2634,642 @@ plot_annual_patterns <- function(streamflow_data,
 
 
 ################################################################################
+# DAYMET CLIMATE DATA INTEGRATION
+################################################################################
+
+#' Convert Daymet ZIP of CSVs to a single Parquet file with proper Date column
+#'
+#' One-time conversion that:
+#' - Reads all yearly CSVs from the ZIP
+#' - Reconstructs the Date column (CSVs only have month/year, not day)
+#' - Combines into a single parquet with snappy compression
+#'
+#' @param daymet_zip_path Path to daymet_1980_2023.zip
+#' @param output_parquet_path Path for output parquet file
+#' @param years Vector of years to process (default: all 1980-2023)
+#' @param max_sites Maximum number of sites to process (NULL for all, useful for testing)
+#' @return Invisible path to output parquet
+convert_daymet_zip_to_parquet <- function(daymet_zip_path,
+                                           output_parquet_path,
+                                           years = 1980:2023,
+                                           max_sites = NULL) {
+
+  # Validate inputs
+  validate_file_exists(daymet_zip_path, "daymet_zip_path", required_ext = "zip",
+                       context = "convert_daymet_zip_to_parquet")
+
+  log_info("Starting Daymet ZIP to parquet conversion", context = "convert_daymet")
+  log_info("Input:", daymet_zip_path, context = "convert_daymet")
+  log_info("Output:", output_parquet_path, context = "convert_daymet")
+  log_info("Years:", min(years), "to", max(years), context = "convert_daymet")
+
+  # List files in the ZIP
+  zip_contents <- unzip(daymet_zip_path, list = TRUE)
+  csv_files <- zip_contents$Name[grepl("\\.csv$", zip_contents$Name)]
+
+  # Filter to requested years
+  year_pattern <- paste0("daymet_(", paste(years, collapse = "|"), ")\\.csv$")
+  csv_files <- csv_files[grepl(year_pattern, csv_files)]
+
+  if (length(csv_files) == 0) {
+    stop("No matching CSV files found in ZIP for requested years")
+  }
+
+  log_info("Found", length(csv_files), "CSV files to process", context = "convert_daymet")
+
+  # Process each year and combine
+  all_data <- list()
+
+  for (i in seq_along(csv_files)) {
+    csv_name <- csv_files[i]
+    year <- as.integer(gsub(".*daymet_(\\d{4})\\.csv$", "\\1", csv_name))
+
+    log_info("Processing", csv_name, "(", i, "/", length(csv_files), ")",
+             context = "convert_daymet")
+
+    # Extract CSV from ZIP to temp directory, then read with fread
+    # (fread doesn't work directly with unz() connections)
+    temp_dir <- tempdir()
+    dt <- tryCatch({
+      # Extract single file from ZIP
+      unzip(daymet_zip_path, files = csv_name, exdir = temp_dir, junkpaths = TRUE)
+      extracted_path <- file.path(temp_dir, basename(csv_name))
+
+      # Read with fread (fast)
+      result <- fread(extracted_path, showProgress = FALSE)
+
+      # Clean up temp file
+      unlink(extracted_path)
+
+      result
+    }, error = function(e) {
+      stop(paste0("Error reading ", csv_name, ": ", e$message))
+    })
+
+    # Limit sites if requested (for testing)
+    if (!is.null(max_sites)) {
+      unique_sites <- unique(dt$site_id)
+      if (length(unique_sites) > max_sites) {
+        sites_to_keep <- unique_sites[1:max_sites]
+        dt <- dt[site_id %in% sites_to_keep]
+      }
+    }
+
+    # Reconstruct the day column
+    # Data is organized as: all days for site 1, then all days for site 2, etc.
+    # Within each site/year/month, rows are sequential days
+    dt[, day := seq_len(.N), by = .(site_id, year, month)]
+
+    # Create proper Date column
+    dt[, Date := as.Date(paste(year, month, day, sep = "-"))]
+
+    # Validate: check we have expected number of days per site
+    days_per_site <- dt[, .N, by = site_id]
+    expected_days <- ifelse(year %% 4 == 0 & (year %% 100 != 0 | year %% 400 == 0), 366, 365)
+
+    bad_sites <- days_per_site[N != expected_days]
+    if (nrow(bad_sites) > 0) {
+      log_warn("Year", year, ":", nrow(bad_sites), "sites have unexpected day count",
+               context = "convert_daymet")
+    }
+
+    # Select and order columns for output
+    dt <- dt[, .(site_id, Date, prcp, tmin, tmax, swe, vp, srad)]
+
+    all_data[[i]] <- dt
+
+    # Clear memory periodically
+    if (i %% 10 == 0) {
+      gc(verbose = FALSE)
+    }
+  }
+
+  # Combine all years
+  log_info("Combining all years...", context = "convert_daymet")
+  combined <- rbindlist(all_data, use.names = TRUE)
+
+  # Sort by site_id and Date
+  setorder(combined, site_id, Date)
+
+  # Check for duplicates
+  n_rows <- nrow(combined)
+  n_unique <- nrow(unique(combined[, .(site_id, Date)]))
+  if (n_rows != n_unique) {
+    log_warn("Found", n_rows - n_unique, "duplicate site_id + Date combinations",
+             context = "convert_daymet")
+  }
+
+  # Summary statistics
+  n_sites <- length(unique(combined$site_id))
+  date_range <- range(combined$Date)
+  log_info("Combined data:", n_rows, "rows,", n_sites, "sites",
+           context = "convert_daymet")
+  log_info("Date range:", as.character(date_range[1]), "to", as.character(date_range[2]),
+           context = "convert_daymet")
+
+  # Ensure output directory exists
+  output_dir <- dirname(output_parquet_path)
+  if (!dir.exists(output_dir) && output_dir != ".") {
+    dir.create(output_dir, recursive = TRUE)
+  }
+
+  # Write to parquet with compression
+  log_info("Writing parquet file...", context = "convert_daymet")
+  arrow::write_parquet(combined, output_parquet_path, compression = "snappy")
+
+  # Report file size
+  file_size_mb <- file.info(output_parquet_path)$size / 1024 / 1024
+  log_info("Parquet file created:", round(file_size_mb, 1), "MB",
+           context = "convert_daymet")
+
+  invisible(output_parquet_path)
+}
+
+
+#' Load Daymet climate data for a specific gage
+#'
+#' Reads from the pre-processed parquet file and filters to a single gage.
+#'
+#' @param gage_id USGS gage ID (e.g., "01011000")
+#' @param daymet_parquet_path Path to daymet_1980_2023.parquet
+#' @param start_year First year to include (default: 1980)
+#' @param end_year Last year to include (default: 2023)
+#' @return data.table with Date, prcp, tmin, tmax, swe, vp, srad
+load_daymet_for_gage <- function(gage_id,
+                                  daymet_parquet_path,
+                                  start_year = 1980,
+                                  end_year = 2023) {
+
+  validate_file_exists(daymet_parquet_path, "daymet_parquet_path",
+                       required_ext = "parquet", context = "load_daymet_for_gage")
+
+  log_debug("Loading Daymet data for gage:", gage_id, context = "load_daymet_for_gage")
+
+  # Read parquet with filtering
+  # Use arrow's filter pushdown for efficiency
+  df <- arrow::read_parquet(
+    daymet_parquet_path,
+    as_data_frame = FALSE
+  )
+
+  # Filter by site_id and year range
+  start_date <- as.Date(paste0(start_year, "-01-01"))
+  end_date <- as.Date(paste0(end_year, "-12-31"))
+
+  result <- df |>
+    dplyr::filter(site_id == gage_id) |>
+    dplyr::filter(Date >= start_date & Date <= end_date) |>
+    dplyr::select(-site_id) |>
+    dplyr::collect()
+
+  result <- as.data.table(result)
+
+  if (nrow(result) == 0) {
+    log_warn("No Daymet data found for gage:", gage_id, context = "load_daymet_for_gage")
+  } else {
+    log_debug("Loaded", nrow(result), "days of climate data for gage:", gage_id,
+              context = "load_daymet_for_gage")
+  }
+
+  return(result)
+}
+
+
+#' Integrate Daymet climate data with streamflow data
+#'
+#' Joins Daymet climate variables to a streamflow data.table based on Date.
+#'
+#' @param streamflow_data data.table with at least a Date column
+#' @param gage_id USGS gage ID for fetching Daymet data
+#' @param daymet_parquet_path Path to daymet parquet file
+#' @return streamflow_data with added prcp, tmin, tmax columns
+integrate_daymet_with_streamflow <- function(streamflow_data,
+                                              gage_id,
+                                              daymet_parquet_path) {
+
+  ctx <- "integrate_daymet_with_streamflow"
+
+  # Validate streamflow data has Date column
+  if (!"Date" %in% names(streamflow_data)) {
+    stop("streamflow_data must have a 'Date' column")
+  }
+
+  # Get year range from streamflow data
+  start_year <- year(min(streamflow_data$Date))
+  end_year <- year(max(streamflow_data$Date))
+
+  # Load Daymet data
+  daymet_data <- load_daymet_for_gage(
+    gage_id = gage_id,
+    daymet_parquet_path = daymet_parquet_path,
+    start_year = start_year,
+    end_year = end_year
+  )
+
+  if (nrow(daymet_data) == 0) {
+    log_warn("No Daymet data available for gage", gage_id, "- returning original data",
+             context = ctx)
+    return(streamflow_data)
+  }
+
+  # Join on Date
+  result <- merge(streamflow_data, daymet_data, by = "Date", all.x = TRUE)
+
+  # Report coverage
+  n_matched <- sum(!is.na(result$prcp))
+  n_total <- nrow(result)
+  coverage <- n_matched / n_total * 100
+
+  if (coverage < 95) {
+    log_warn("Daymet coverage for gage", gage_id, "is only", round(coverage, 1), "%",
+             context = ctx)
+  } else {
+    log_debug("Daymet coverage:", round(coverage, 1), "% for gage", gage_id,
+              context = ctx)
+  }
+
+  # Rename prcp to PPT for compatibility with analyze_Q_PPT_relationships()
+  if ("prcp" %in% names(result)) {
+    setnames(result, "prcp", "PPT")
+  }
+
+  return(result)
+}
+
+
+################################################################################
+# CLIMATE-DEPENDENT STREAMFLOW SIGNATURES
+################################################################################
+
+#' Calculate streamflow elasticity (Sawicz et al. 2011)
+#'
+#' Elasticity measures how sensitive streamflow is to precipitation changes.
+#' E = median((dQ/dP) / (Q_mean/P_mean))
+#'
+#' @param streamflow_data data.table with water_year, Q, prcp columns
+#' @param rolling_window Number of years for rolling window (NULL for static only)
+#' @return List with elasticity statistics
+calculate_streamflow_elasticity <- function(streamflow_data,
+                                             rolling_window = ELASTICITY_WINDOW_YEARS) {
+
+  ctx <- "calculate_streamflow_elasticity"
+
+  # Validate required columns
+  required_cols <- c("water_year", "Q", "PPT")
+  validate_columns(streamflow_data, required_cols, "streamflow_data", context = ctx)
+
+  # Aggregate to annual totals
+  annual <- streamflow_data[, .(
+    Q_annual = sum(Q, na.rm = TRUE),
+    P_annual = sum(PPT, na.rm = TRUE)
+  ), by = water_year]
+
+  # Remove years with zero or very low precipitation
+  annual <- annual[P_annual > 10]  # At least 10mm/year
+
+  if (nrow(annual) < MIN_YEARS_ELASTICITY) {
+    log_warn("Insufficient years (", nrow(annual), ") for elasticity calculation",
+             context = ctx)
+    return(list(
+      elasticity_static = NA_real_,
+      elasticity_slp = NA_real_,
+      elasticity_rho = NA_real_,
+      elasticity_pval = NA_real_,
+      elasticity_mean = NA_real_,
+      elasticity_median = NA_real_
+    ))
+  }
+
+  # Calculate long-term means
+  Q_mean <- mean(annual$Q_annual, na.rm = TRUE)
+  P_mean <- mean(annual$P_annual, na.rm = TRUE)
+
+  # Calculate annual elasticity values
+  # E_i = (dQ_i/dP_i) / (Q_mean/P_mean)
+  # where dQ_i = Q_i - Q_mean, dP_i = P_i - P_mean
+  annual[, dQ := Q_annual - Q_mean]
+  annual[, dP := P_annual - P_mean]
+
+  # Avoid division by zero
+  annual[, elasticity := ifelse(abs(dP) > 0.1,
+                                 (dQ / dP) / (Q_mean / P_mean),
+                                 NA_real_)]
+
+  # Static elasticity is the median
+  elasticity_static <- median(annual$elasticity, na.rm = TRUE)
+
+  # Calculate rolling window elasticity if requested
+  if (!is.null(rolling_window) && nrow(annual) >= rolling_window) {
+    # Calculate elasticity for each rolling window
+    setorder(annual, water_year)
+    n <- nrow(annual)
+
+    rolling_elasticity <- data.table(
+      water_year = annual$water_year[(rolling_window):n],
+      elasticity_rolling = sapply((rolling_window):n, function(end_idx) {
+        start_idx <- end_idx - rolling_window + 1
+        window_data <- annual[start_idx:end_idx]
+
+        Q_mean_w <- mean(window_data$Q_annual, na.rm = TRUE)
+        P_mean_w <- mean(window_data$P_annual, na.rm = TRUE)
+
+        window_data[, dQ_w := Q_annual - Q_mean_w]
+        window_data[, dP_w := P_annual - P_mean_w]
+        window_data[, e_w := ifelse(abs(dP_w) > 0.1,
+                                     (dQ_w / dP_w) / (Q_mean_w / P_mean_w),
+                                     NA_real_)]
+        median(window_data$e_w, na.rm = TRUE)
+      })
+    )
+
+    # Calculate trend statistics on rolling elasticity
+    trend_stats <- generate_stats(rolling_elasticity,
+                                   value_cols = "elasticity_rolling",
+                                   year_col = "water_year")
+
+    result <- list(
+      elasticity_static = elasticity_static,
+      elasticity_slp = trend_stats$elasticity_rolling_slp,
+      elasticity_rho = trend_stats$elasticity_rolling_rho,
+      elasticity_pval = trend_stats$elasticity_rolling_pval,
+      elasticity_mean = trend_stats$elasticity_rolling_mean,
+      elasticity_median = trend_stats$elasticity_rolling_median
+    )
+  } else {
+    # No rolling window - use annual values for stats
+    trend_stats <- generate_stats(annual[!is.na(elasticity)],
+                                   value_cols = "elasticity",
+                                   year_col = "water_year")
+
+    result <- list(
+      elasticity_static = elasticity_static,
+      elasticity_slp = trend_stats$elasticity_slp,
+      elasticity_rho = trend_stats$elasticity_rho,
+      elasticity_pval = trend_stats$elasticity_pval,
+      elasticity_mean = trend_stats$elasticity_mean,
+      elasticity_median = trend_stats$elasticity_median
+    )
+  }
+
+  return(result)
+}
+
+
+#' Calculate Q-P seasonality metrics (Wrede et al. 2015)
+#'
+#' Quantifies seasonality in the cumulative Q vs cumulative P relationship.
+#' Uses two metrics:
+#' - qp_slope_sd: Standard deviation of monthly Q-P slopes
+#' - qp_bimodality: Bimodality coefficient of slope distribution
+#'
+#' @param streamflow_data data.table with water_year, Q, prcp, month, dowy columns
+#' @param slope_window_days Window size for rolling slope calculation
+#' @return List with seasonality statistics
+calculate_qp_seasonality <- function(streamflow_data,
+                                      slope_window_days = QP_SLOPE_WINDOW_DAYS) {
+
+
+  ctx <- "calculate_qp_seasonality"
+
+  # Validate required columns
+  required_cols <- c("water_year", "Q", "PPT", "month", "dowy")
+  validate_columns(streamflow_data, required_cols, "streamflow_data", context = ctx)
+
+  years <- unique(streamflow_data$water_year)
+
+  if (length(years) < 10) {
+    log_warn("Insufficient years for Q-P seasonality", context = ctx)
+    return(list(
+      qp_slope_sd_slp = NA_real_, qp_slope_sd_rho = NA_real_,
+      qp_slope_sd_pval = NA_real_, qp_slope_sd_mean = NA_real_,
+      qp_slope_sd_median = NA_real_,
+      qp_bimodality_slp = NA_real_, qp_bimodality_rho = NA_real_,
+      qp_bimodality_pval = NA_real_, qp_bimodality_mean = NA_real_,
+      qp_bimodality_median = NA_real_
+    ))
+  }
+
+  # Calculate annual metrics
+  annual_metrics <- rbindlist(lapply(years, function(yr) {
+    year_data <- streamflow_data[water_year == yr]
+
+    if (nrow(year_data) < 300) return(NULL)
+
+    # Check for too many NA values in Q or PPT
+    na_frac_Q <- sum(is.na(year_data$Q)) / nrow(year_data)
+    na_frac_PPT <- sum(is.na(year_data$PPT)) / nrow(year_data)
+    if (na_frac_Q > 0.1 || na_frac_PPT > 0.1) return(NULL)
+
+    # Replace remaining NA with 0 for cumsum (small gaps only)
+    year_data[is.na(Q), Q := 0]
+    year_data[is.na(PPT), PPT := 0]
+
+    # Sort by day of water year
+    setorder(year_data, dowy)
+
+    # Calculate cumulative Q and P
+    year_data[, cum_Q := cumsum(Q)]
+    year_data[, cum_P := cumsum(PPT)]
+
+    # Calculate rolling slope of cum_Q vs cum_P
+    n <- nrow(year_data)
+    if (n < slope_window_days) return(NULL)
+
+    # Calculate slope for each window
+    slopes <- sapply((slope_window_days):n, function(end_idx) {
+      start_idx <- end_idx - slope_window_days + 1
+      window <- year_data[start_idx:end_idx]
+
+      # Simple linear regression slope
+      delta_P <- window$cum_P[nrow(window)] - window$cum_P[1]
+      delta_Q <- window$cum_Q[nrow(window)] - window$cum_Q[1]
+
+      if (abs(delta_P) < 0.01) return(NA_real_)
+      delta_Q / delta_P
+    })
+
+    # Associate slopes with months (use middle of window)
+    slope_months <- year_data$month[(slope_window_days):n]
+
+    # Calculate monthly mean slopes
+    slope_dt <- data.table(month = slope_months, slope = slopes)
+    monthly_slopes <- slope_dt[!is.na(slope), .(mean_slope = mean(slope)), by = month]
+
+    if (nrow(monthly_slopes) < 6) return(NULL)
+
+    # Metric 1: SD of monthly slopes
+    qp_slope_sd <- sd(monthly_slopes$mean_slope, na.rm = TRUE)
+
+    # Metric 2: Bimodality coefficient
+    # B = (skewness^2 + 1) / kurtosis
+    # Values > 5/9 (0.555) suggest bimodality
+    slopes_clean <- slopes[!is.na(slopes)]
+    if (length(slopes_clean) < 30) {
+      qp_bimodality <- NA_real_
+    } else {
+      n_s <- length(slopes_clean)
+      m <- mean(slopes_clean)
+      s <- sd(slopes_clean)
+
+      if (s < 1e-10) {
+        qp_bimodality <- NA_real_
+      } else {
+        skewness <- sum((slopes_clean - m)^3) / (n_s * s^3)
+        kurtosis <- sum((slopes_clean - m)^4) / (n_s * s^4)
+
+        if (kurtosis < 1e-10) {
+          qp_bimodality <- NA_real_
+        } else {
+          qp_bimodality <- (skewness^2 + 1) / kurtosis
+        }
+      }
+    }
+
+    data.table(
+      water_year = yr,
+      qp_slope_sd = qp_slope_sd,
+      qp_bimodality = qp_bimodality
+    )
+  }))
+
+  if (is.null(annual_metrics) || nrow(annual_metrics) < 5) {
+    log_warn("Could not calculate Q-P seasonality for enough years", context = ctx)
+    return(list(
+      qp_slope_sd_slp = NA_real_, qp_slope_sd_rho = NA_real_,
+      qp_slope_sd_pval = NA_real_, qp_slope_sd_mean = NA_real_,
+      qp_slope_sd_median = NA_real_,
+      qp_bimodality_slp = NA_real_, qp_bimodality_rho = NA_real_,
+      qp_bimodality_pval = NA_real_, qp_bimodality_mean = NA_real_,
+      qp_bimodality_median = NA_real_
+    ))
+  }
+
+  # Calculate trend statistics
+  sd_stats <- generate_stats(annual_metrics, value_cols = "qp_slope_sd",
+                              year_col = "water_year")
+  bi_stats <- generate_stats(annual_metrics[!is.na(qp_bimodality)],
+                              value_cols = "qp_bimodality", year_col = "water_year")
+
+  result <- list(
+    qp_slope_sd_slp = sd_stats$qp_slope_sd_slp,
+    qp_slope_sd_rho = sd_stats$qp_slope_sd_rho,
+    qp_slope_sd_pval = sd_stats$qp_slope_sd_pval,
+    qp_slope_sd_mean = sd_stats$qp_slope_sd_mean,
+    qp_slope_sd_median = sd_stats$qp_slope_sd_median,
+    qp_bimodality_slp = if(nrow(bi_stats) > 0) bi_stats$qp_bimodality_slp else NA_real_,
+    qp_bimodality_rho = if(nrow(bi_stats) > 0) bi_stats$qp_bimodality_rho else NA_real_,
+    qp_bimodality_pval = if(nrow(bi_stats) > 0) bi_stats$qp_bimodality_pval else NA_real_,
+    qp_bimodality_mean = if(nrow(bi_stats) > 0) bi_stats$qp_bimodality_mean else NA_real_,
+    qp_bimodality_median = if(nrow(bi_stats) > 0) bi_stats$qp_bimodality_median else NA_real_
+  )
+
+  return(result)
+}
+
+
+#' Calculate average storage metric (Peters & Aulenbach 2011)
+#'
+#' Uses simplified water balance: dS = P - Q (no ET estimation)
+#' Calculates storage amount corresponding to average discharge.
+#'
+#' @param streamflow_data data.table with water_year, Q, prcp, dowy columns
+#' @return List with storage statistics
+calculate_average_storage <- function(streamflow_data) {
+
+  ctx <- "calculate_average_storage"
+
+  # Validate required columns
+  required_cols <- c("water_year", "Q", "PPT", "dowy")
+  validate_columns(streamflow_data, required_cols, "streamflow_data", context = ctx)
+
+  years <- unique(streamflow_data$water_year)
+
+  if (length(years) < 10) {
+    log_warn("Insufficient years for storage calculation", context = ctx)
+    return(list(
+      avg_storage_slp = NA_real_,
+      avg_storage_rho = NA_real_,
+      avg_storage_pval = NA_real_,
+      avg_storage_mean = NA_real_,
+      avg_storage_median = NA_real_
+    ))
+  }
+
+  # Calculate storage for each year
+  annual_storage <- rbindlist(lapply(years, function(yr) {
+    year_data <- streamflow_data[water_year == yr]
+
+    if (nrow(year_data) < 300) return(NULL)
+
+    # Check for too many NA values in Q or PPT
+    na_frac_Q <- sum(is.na(year_data$Q)) / nrow(year_data)
+    na_frac_PPT <- sum(is.na(year_data$PPT)) / nrow(year_data)
+    if (na_frac_Q > 0.1 || na_frac_PPT > 0.1) return(NULL)
+
+    # Replace remaining NA with 0 for cumsum (small gaps only)
+    year_data[is.na(Q), Q := 0]
+    year_data[is.na(PPT), PPT := 0]
+
+    # Sort by day of water year
+    setorder(year_data, dowy)
+
+    # Water balance: dS = P - Q
+    year_data[, dS := PPT - Q]
+
+    # Cumulative storage (relative to start of year)
+    year_data[, S := cumsum(dS)]
+
+    # Calculate mean Q for this year
+    mean_Q <- mean(year_data$Q, na.rm = TRUE)
+
+    # Find storage-discharge relationship
+    # Interpolate to find S at mean Q
+    # Sort by Q for interpolation
+    sq_data <- year_data[!is.na(Q) & !is.na(S)]
+    if (nrow(sq_data) < 10) return(NULL)
+
+    setorder(sq_data, Q)
+
+    # Linear interpolation to find S at mean_Q
+    avg_storage <- tryCatch({
+      approx(sq_data$Q, sq_data$S, xout = mean_Q, rule = 2)$y
+    }, error = function(e) NA_real_)
+
+    data.table(
+      water_year = yr,
+      avg_storage = avg_storage
+    )
+  }))
+
+  if (is.null(annual_storage) || nrow(annual_storage) < 5) {
+    log_warn("Could not calculate storage for enough years", context = ctx)
+    return(list(
+      avg_storage_slp = NA_real_,
+      avg_storage_rho = NA_real_,
+      avg_storage_pval = NA_real_,
+      avg_storage_mean = NA_real_,
+      avg_storage_median = NA_real_
+    ))
+  }
+
+  # Calculate trend statistics
+  storage_stats <- generate_stats(annual_storage[!is.na(avg_storage)],
+                                   value_cols = "avg_storage",
+                                   year_col = "water_year")
+
+  result <- list(
+    avg_storage_slp = storage_stats$avg_storage_slp,
+    avg_storage_rho = storage_stats$avg_storage_rho,
+    avg_storage_pval = storage_stats$avg_storage_pval,
+    avg_storage_mean = storage_stats$avg_storage_mean,
+    avg_storage_median = storage_stats$avg_storage_median
+  )
+
+  return(result)
+}
+
+
+################################################################################
 # temp: convert caravan to unique csvs
 process_caravan_to_annual <- function(caravan_directory, 
                                       data_project = "camels",
@@ -3345,7 +3981,8 @@ process_signatures_from_parquet <- function(
     output_file = "processed_signatures_from_parquet.csv",
     min_Q_value_and_days = c(0.0001, 30),
     min_num_years = 20,
-    min_frac_good_data = 0.9  # NEW PARAMETER for filter 2b
+    min_frac_good_data = 0.9,
+    daymet_parquet_path = NULL  # Path to Daymet parquet for climate signatures
 ) {
 
   ctx <- "process_signatures_from_parquet"
@@ -3369,6 +4006,24 @@ process_signatures_from_parquet <- function(
                    min_val = 1, context = ctx)
   validate_numeric(min_frac_good_data, "min_frac_good_data",
                    min_val = 0, max_val = 1, context = ctx)
+
+  # Validate Daymet parquet if provided
+  has_daymet <- FALSE
+  if (!is.null(daymet_parquet_path)) {
+    if (file.exists(daymet_parquet_path)) {
+      validate_file_exists(daymet_parquet_path, "daymet_parquet_path",
+                           required_ext = "parquet", context = ctx)
+      has_daymet <- TRUE
+      log_info("Daymet data available - climate signatures will be calculated",
+               context = ctx)
+    } else {
+      log_warn("Daymet parquet not found:", daymet_parquet_path,
+               "- climate signatures will be skipped", context = ctx)
+    }
+  } else {
+    log_info("No Daymet path provided - climate signatures will be skipped",
+             context = ctx)
+  }
 
   # Validate output directory exists (create if needed)
   output_dir <- dirname(output_file)
@@ -3543,7 +4198,25 @@ process_signatures_from_parquet <- function(
           dowy = wy_info$dowy
         )]
       }
-      
+
+      # ============= INTEGRATE CLIMATE DATA =============
+      gage_has_climate <- FALSE
+      if (has_daymet) {
+        tryCatch({
+          gage_flow <- integrate_daymet_with_streamflow(
+            gage_flow, gage_id, daymet_parquet_path
+          )
+          gage_has_climate <- "PPT" %in% names(gage_flow) &&
+                              sum(!is.na(gage_flow$PPT)) > 0
+          if (gage_has_climate) {
+            log_debug("Climate data integrated for gage", gage_id, context = ctx)
+          }
+        }, error = function(e) {
+          log_warn("Could not integrate Daymet for gage", gage_id, ":",
+                   e$message, context = ctx)
+        })
+      }
+
       # ============= APPLY WATER YEAR BASED FILTERS =============
       # Filter 2: Check each water year for minimum days above threshold
       # Filter 2b: Check each water year for minimum fraction of non-NA data
@@ -3626,7 +4299,38 @@ process_signatures_from_parquet <- function(
       tryCatch({
         metrics_list$recession <- analyze_recession_parameters(streamflow_data_filtered)
       }, error = function(e) NULL)
-      
+
+      # ============= CLIMATE-DEPENDENT SIGNATURES =============
+      if (gage_has_climate) {
+        # Q-PPT runoff ratios
+        tryCatch({
+          metrics_list$qtoppt <- analyze_Q_PPT_relationships(streamflow_data_filtered)
+        }, error = function(e) {
+          log_debug("Q-PPT analysis failed for gage", gage_id, ":", e$message, context = ctx)
+        })
+
+        # Streamflow elasticity (Sawicz et al. 2011)
+        tryCatch({
+          metrics_list$elasticity <- calculate_streamflow_elasticity(streamflow_data_filtered)
+        }, error = function(e) {
+          log_debug("Elasticity calc failed for gage", gage_id, ":", e$message, context = ctx)
+        })
+
+        # Q-P seasonality (Wrede et al. 2015)
+        tryCatch({
+          metrics_list$qp_seasonality <- calculate_qp_seasonality(streamflow_data_filtered)
+        }, error = function(e) {
+          log_debug("Q-P seasonality calc failed for gage", gage_id, ":", e$message, context = ctx)
+        })
+
+        # Average storage (Peters & Aulenbach 2011)
+        tryCatch({
+          metrics_list$avg_storage <- calculate_average_storage(streamflow_data_filtered)
+        }, error = function(e) {
+          log_debug("Storage calc failed for gage", gage_id, ":", e$message, context = ctx)
+        })
+      }
+
       # Create output row
       gage_row <- data.table(
         gage_id = gage_id,

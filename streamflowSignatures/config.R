@@ -91,6 +91,34 @@ PARQUET_CHUNK_SIZE <- 1000
 PROGRESS_INTERVAL <- 500
 
 # ==============================================================================
+# DAYMET CLIMATE DATA CONFIGURATION
+# ==============================================================================
+
+# Path to Daymet ZIP file (source data)
+DAYMET_ZIP_PATH <- "data_out/daymet_1980_2023.zip"
+
+# Path to converted parquet file (processed data with Date column)
+DAYMET_PARQUET_PATH <- "data_out/daymet_1980_2023.parquet"
+
+# Daymet date range
+DAYMET_START_YEAR <- 1980
+DAYMET_END_YEAR <- 2023
+
+# ==============================================================================
+# CLIMATE SIGNATURE PARAMETERS
+# ==============================================================================
+
+# Streamflow elasticity parameters (Sawicz et al. 2011)
+ELASTICITY_WINDOW_YEARS <- 11      # Rolling window size for elasticity trends
+MIN_YEARS_ELASTICITY <- 15         # Minimum years required for elasticity calculation
+
+# Q-P seasonality parameters (Wrede et al. 2015)
+QP_SLOPE_WINDOW_DAYS <- 30         # Rolling window for cumulative Q-P slope calculation
+
+# Average storage parameters (Peters & Aulenbach 2011)
+# Note: Simplified water balance uses P - Q only (no ET estimation)
+
+# ==============================================================================
 # OUTPUT CONFIGURATION
 # ==============================================================================
 
@@ -355,6 +383,23 @@ validate_gage_type <- function(gage_type, context = NULL) {
 # ==============================================================================
 # OUTPUT SCHEMA VALIDATION
 # ==============================================================================
+#
+# REQUIREMENT: Every signature produces exactly 5 statistics via generate_stats():
+#   _slp    = Theil-Sen slope (trend)
+#   _rho    = Spearman's rank correlation
+#   _pval   = P-value for trend significance
+#   _mean   = Arithmetic mean across water years
+#   _median = Median across water years
+#
+# EXCEPTIONS (explicitly listed below):
+#   - elasticity_static: Single value, not a time series
+#   - Recession seasonality columns: Derived from model fitting
+#
+# To add a new signature:
+#   1. Add base name to EXPECTED_SIGNATURE_BASES
+#   2. Implement function that returns generate_stats() output
+#   3. Run smoke test to verify schema validation
+# ==============================================================================
 
 # Define expected signature columns (base names without suffixes)
 # Updated to match actual output from helperFunctions.R
@@ -383,8 +428,20 @@ EXPECTED_SIGNATURE_BASES <- c(
   # Flow timing (day of water year for cumulative flow percentiles)
   "D5_day", "D10_day", "D20_day", "D30_day", "D40_day", "D50_day",
   "D60_day", "D70_day", "D80_day", "D90_day", "D95_day",
-  "D25_to_D75", "Dmax"
+  "D25_to_D75", "Dmax",
+  # Q-PPT runoff ratios (climate-dependent)
+  "annual_runoff_ratio", "winter_runoff_ratio", "spring_runoff_ratio",
+  "summer_runoff_ratio", "fall_runoff_ratio",
+  # Streamflow elasticity (Sawicz et al. 2011)
+  "elasticity",
+  # Q-P seasonality (Wrede et al. 2015)
+  "qp_slope_sd", "qp_bimodality",
+  # Average storage (Peters & Aulenbach 2011)
+  "avg_storage"
 )
+
+# Static elasticity column (doesn't follow standard suffix pattern)
+EXPECTED_ELASTICITY_STATIC <- "elasticity_static"
 
 # Recession seasonality columns (not standard suffix pattern)
 EXPECTED_RECESSION_SEASONALITY <- c(
