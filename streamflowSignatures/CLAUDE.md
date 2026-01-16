@@ -11,18 +11,25 @@ R-based system for extracting hydrological signatures from USGS, Canadian (HYDAT
 
 ### Data Flow
 ```
-Raw Data Sources                Processing                    Output
-─────────────────              ────────────                  ──────
-USGS (dataRetrieval)  ─┐
-                       ├──> Parquet Storage ──> Signature ──> CSV Summary
-Canadian HYDAT        ─┤         │              Extraction     (100+ metrics)
-                       │         │                   │
-Caravan NetCDF ───────┴─────────┴───────────────────┘
-  (includes climate)
+Data Sources                    Processing                     Output
+────────────                    ──────────                     ──────
+USGS (dataRetrieval)  ──┐
+  (streamflow only)     ├──> Parquet Storage ──┐
+                        │                       │
+Canadian HYDAT  ────────┘                       ├──> Signature ──> CSV Summary
+  (streamflow only)                             │    Extraction     (550+ columns)
+                                                │
+Daymet (climate data)  ──> Parquet Storage ─────┘
+  (PPT, temp, SWE)         (joined at runtime)
+
+Alternative Pipeline:
+Caravan NetCDF ──────────────> Direct Processing ──> Caravan Output
+  (bundled Q + climate)        (annualized CSVs)
 ```
 
 ### Canonical Code
-- **`helperFunctions.R`** - Primary source file containing all core functions
+- **`config.R`** - Configuration parameters, logging, validation functions (source FIRST)
+- **`helperFunctions.R`** - All core signature extraction functions (45+ functions)
 - Other `helperFunctions*.R` files are deprecated variants (see Code Status section)
 
 ### Key Entry Points
@@ -41,6 +48,8 @@ Caravan NetCDF ───────┴─────────┴───�
    - 30+ days above minimum flow threshold per water year
 
 ## Signature Categories
+
+> **Detailed Documentation**: See "Summary Documentation for Streamflow Signatures.docx" for comprehensive descriptions of each signature, including mathematical formulations, parameter choices, and scientific rationale.
 
 ### 1. Flow Volumes (`calculate_flow_vols_by_year`)
 - **Qann**: Annual mean streamflow
@@ -89,39 +98,45 @@ Caravan NetCDF ───────┴─────────┴───�
 - Citation: Wrede et al. (2015)
 
 ### 10. Average Storage (`calculate_average_storage`) - *Requires Climate Data*
-- **avg_storage**: Mean annual catchment storage derived from water balance (P - Q)
+- **avg_storage**: Mean annual catchment storage derived from simplified water balance
 - Cumulative storage calculated as S = cumsum(P - Q)
 - Annual storage interpolated at mean discharge for each water year
 - Units: mm
 - Citation: Peters & Aulenbach (2011)
 
+> **Known Limitation**: This calculation ignores evapotranspiration (ET), using only P - Q for the water balance. This simplification may overestimate storage in watersheds with significant ET losses. Future versions should incorporate ET estimation (e.g., Hargreaves-Samani from temperature data, or external ET products like MODIS ET).
+
 ## Signature Statistics Standard (REQUIRED)
 
 ### The Rule
 
-**Every signature MUST produce exactly 5 statistics using `generate_stats()`.**
+**Every signature MUST produce exactly 8 statistics using `generate_stats()`.**
 
 This is not optional. The downstream analysis pipeline, visualization app, and CSV schema all depend on this consistency.
 
-### The 5 Required Statistics
+### The 8 Required Statistics
 
-| Suffix | Statistic | Purpose |
-|--------|-----------|---------|
-| `_slp` | Theil-Sen slope | Detect monotonic trends over time |
-| `_rho` | Spearman's rho | Measure correlation strength with time |
-| `_pval` | P-value | Statistical significance of trend |
-| `_mean` | Arithmetic mean | Central tendency across all years |
-| `_median` | Median | Robust central tendency |
+| Suffix | Statistic | Method | Purpose |
+|--------|-----------|--------|---------|
+| `_senn_slp` | Theil-Sen slope | `zyp::zyp.sen` | Robust non-parametric trend detection |
+| `_linear_slp` | Linear regression slope | `lm()` | Parametric trend for comparison |
+| `_spearman_rho` | Spearman's rho | `cor.test` | Rank correlation with time |
+| `_spearman_pval` | Spearman p-value | `cor.test` | Significance of Spearman correlation |
+| `_mk_rho` | Mann-Kendall tau | `Kendall::MannKendall` | Non-parametric trend strength |
+| `_mk_pval` | Mann-Kendall p-value | `Kendall::MannKendall` | Significance of Mann-Kendall test |
+| `_mean` | Arithmetic mean | `mean()` | Central tendency across all years |
+| `_median` | Median | `median()` | Robust central tendency |
 
 ### Why This Pattern?
 
 1. **Scientific consistency**: Trends in hydrological signatures are a primary research question
-2. **Schema stability**: Downstream tools expect predictable column names
-3. **Automation**: `generate_stats()` handles edge cases (insufficient data, failed tests)
+2. **Multiple methods**: Compare parametric vs non-parametric approaches for robustness
+3. **Schema stability**: Downstream tools expect predictable column names
+4. **Automation**: `generate_stats()` handles edge cases (insufficient data, failed tests)
 
 ### Exceptions
 
-Some signatures have additional columns beyond the standard 5:
+Some signatures have additional columns beyond the standard 8:
 - `elasticity_static`: Overall catchment elasticity (single value, not a time series)
 - Recession seasonality: `log_a_seasonality_amplitude`, `log_a_seasonality_minimum`
 
@@ -131,7 +146,7 @@ These exceptions are explicitly documented in `config.R` as `EXPECTED_ELASTICITY
 
 1. Calculate the metric for each water year → `data.table` with `water_year` column
 2. Call `generate_stats(annual_data, value_cols = "metric_name", year_col = "water_year")`
-3. Return the result (5 columns: `metric_slp`, `metric_rho`, `metric_pval`, `metric_mean`, `metric_median`)
+3. Return the result (8 columns: `metric_senn_slp`, `metric_linear_slp`, `metric_spearman_rho`, `metric_spearman_pval`, `metric_mk_rho`, `metric_mk_pval`, `metric_mean`, `metric_median`)
 4. Add base name to `EXPECTED_SIGNATURE_BASES` in `config.R`
 5. Run smoke test to verify schema validation passes
 
@@ -149,6 +164,7 @@ library(tidyhydat)     # Canadian HYDAT database
 
 # Statistics
 library(zyp)          # Theil-Sen slope estimation
+library(Kendall)      # Mann-Kendall trend test
 library(mblm)         # Alternative Theil-Sen
 
 # Spatial (for basin delineation)
@@ -231,7 +247,7 @@ process_caravan_to_annual(
 ### Add New Signature
 1. Create calculation function in `helperFunctions.R`
 2. Add call to `process_signatures_from_parquet()` signature extraction section
-3. Ensure output columns follow naming convention: `{metric}_{stat}` (e.g., `Qann_slp`)
+3. Ensure output columns follow naming convention: `{metric}_{stat}` (e.g., `Qann_senn_slp`)
 4. Test with small dataset before full run
 
 ## Data Sources

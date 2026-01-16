@@ -31,3 +31,6 @@ logs/
 .DS_Store
 Thumbs.db
 nul
+
+# Data outputs
+data_out/

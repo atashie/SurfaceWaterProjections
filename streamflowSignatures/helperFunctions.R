@@ -290,21 +290,11 @@ process_gages_rawData <- function(gages_df, gage_type, min_num_years, start_date
       }
       
       # Add NA columns for Q-PPT metrics that we can't calculate
-      q_ppt_cols <- c("annual_runoff_ratio_slp", "annual_runoff_ratio_rho", 
-                      "annual_runoff_ratio_pval", "annual_runoff_ratio_mean", 
-                      "annual_runoff_ratio_median",
-                      "winter_runoff_ratio_slp", "winter_runoff_ratio_rho", 
-                      "winter_runoff_ratio_pval", "winter_runoff_ratio_mean", 
-                      "winter_runoff_ratio_median",
-                      "spring_runoff_ratio_slp", "spring_runoff_ratio_rho", 
-                      "spring_runoff_ratio_pval", "spring_runoff_ratio_mean", 
-                      "spring_runoff_ratio_median",
-                      "summer_runoff_ratio_slp", "summer_runoff_ratio_rho", 
-                      "summer_runoff_ratio_pval", "summer_runoff_ratio_mean", 
-                      "summer_runoff_ratio_median",
-                      "fall_runoff_ratio_slp", "fall_runoff_ratio_rho", 
-                      "fall_runoff_ratio_pval", "fall_runoff_ratio_mean", 
-                      "fall_runoff_ratio_median")
+      q_ppt_bases <- c("annual_runoff_ratio", "winter_runoff_ratio", "spring_runoff_ratio",
+                       "summer_runoff_ratio", "fall_runoff_ratio")
+      q_ppt_suffixes <- c("_senn_slp", "_linear_slp", "_spearman_rho", "_spearman_pval",
+                          "_mk_rho", "_mk_pval", "_mean", "_median")
+      q_ppt_cols <- as.vector(outer(q_ppt_bases, q_ppt_suffixes, paste0))
       
       for (col in q_ppt_cols) {
         gage_row[[col]] <- NA_real_
@@ -814,86 +804,122 @@ find_upstream_hydrobasins <- function(current_gage, basinAt_NorAm_polys, HB_dt, 
 # statistical processing functions
 
   # helper function that receives a time series and outputs summary metrics (trends, averages, etc.)
+  # Returns 8 statistics per metric:
+  #   _senn_slp     = Theil-Sen slope (robust non-parametric trend)
+  #   _linear_slp   = Linear regression slope (parametric trend)
+  #   _spearman_rho = Spearman's rank correlation coefficient
+  #   _spearman_pval= Spearman's p-value for trend significance
+  #   _mk_rho       = Mann-Kendall tau (non-parametric trend correlation)
+  #   _mk_pval      = Mann-Kendall p-value for trend significance
+  #   _mean         = Arithmetic mean across water years
+  #   _median       = Median across water years
 generate_stats <- function(data, value_cols = NULL, year_col = "year", min_rows = 3) {
-  # Check if zyp package is available
+  # Check if required packages are available
   if (!requireNamespace("zyp", quietly = TRUE)) {
     stop("Package 'zyp' is needed for this function. Please install it with install.packages('zyp')")
   }
-  
+  if (!requireNamespace("Kendall", quietly = TRUE)) {
+    stop("Package 'Kendall' is needed for this function. Please install it with install.packages('Kendall')")
+  }
+
   # Validate inputs
   if (!is.data.frame(data)) {
     stop("Input 'data' must be a data frame or data.table")
   }
-  
+
   if (!year_col %in% colnames(data)) {
     stop(paste("Year column '", year_col, "' not found in data"))
   }
-  
+
   # If value_cols not specified, use all numeric columns except year
   if (is.null(value_cols)) {
     numeric_cols <- names(data)[sapply(data, is.numeric)]
     value_cols <- setdiff(numeric_cols, year_col)
   }
-  
+
   # Initialize results list
   results <- list()
-  
+
   # Process each value column
   for (col in value_cols) {
     if (!col %in% colnames(data)) {
       warning(paste("Column", col, "not found in data. Skipping."))
       next
     }
-    
+
     # Create working data with only non-NA values
     working_data <- data.frame(
       year = data[[year_col]],
       value = data[[col]]
     )
     working_data <- working_data[!is.na(working_data$value), ]
-    
+
     # Check if we have enough data
     if (nrow(working_data) < min_rows) {
-      # Return NAs for all stats
-      results[[paste0(col, "_slp")]] <- NA
-      results[[paste0(col, "_rho")]] <- NA
-      results[[paste0(col, "_pval")]] <- NA
+      # Return NAs for all 8 stats
+      results[[paste0(col, "_senn_slp")]] <- NA
+      results[[paste0(col, "_linear_slp")]] <- NA
+      results[[paste0(col, "_spearman_rho")]] <- NA
+      results[[paste0(col, "_spearman_pval")]] <- NA
+      results[[paste0(col, "_mk_rho")]] <- NA
+      results[[paste0(col, "_mk_pval")]] <- NA
       results[[paste0(col, "_mean")]] <- NA
       results[[paste0(col, "_median")]] <- NA
       next
     }
-    
-    # Calculate Theil-Sen slope
+
+    # Calculate Theil-Sen slope (robust non-parametric)
     sen_result <- try(zyp::zyp.sen(value ~ year, data = working_data), silent = TRUE)
     if (inherits(sen_result, "try-error")) {
       sen_slope <- NA
     } else {
       sen_slope <- sen_result$coefficients[2]
     }
-    
+
+    # Calculate Linear regression slope (parametric)
+    lm_result <- try(lm(value ~ year, data = working_data), silent = TRUE)
+    if (inherits(lm_result, "try-error")) {
+      linear_slope <- NA
+    } else {
+      linear_slope <- coef(lm_result)[2]
+    }
+
     # Calculate Spearman correlation
-    spearman_result <- try(cor.test(working_data$year, working_data$value, 
+    spearman_result <- try(cor.test(working_data$year, working_data$value,
                                     method = "spearman"), silent = TRUE)
     if (inherits(spearman_result, "try-error")) {
-      rho <- NA
-      pval <- NA
+      spearman_rho <- NA
+      spearman_pval <- NA
     } else {
-      rho <- spearman_result$estimate
-      pval <- spearman_result$p.value
+      spearman_rho <- spearman_result$estimate
+      spearman_pval <- spearman_result$p.value
     }
-    
+
+    # Calculate Mann-Kendall trend test
+    mk_result <- try(Kendall::MannKendall(working_data$value), silent = TRUE)
+    if (inherits(mk_result, "try-error")) {
+      mk_tau <- NA
+      mk_pval <- NA
+    } else {
+      mk_tau <- as.numeric(mk_result$tau)
+      mk_pval <- as.numeric(mk_result$sl)  # sl = significance level (p-value)
+    }
+
     # Calculate mean and median
     mean_val <- mean(working_data$value, na.rm = TRUE)
     median_val <- median(working_data$value, na.rm = TRUE)
-    
-    # Store results
-    results[[paste0(col, "_slp")]] <- sen_slope
-    results[[paste0(col, "_rho")]] <- rho
-    results[[paste0(col, "_pval")]] <- pval
+
+    # Store results with new naming convention
+    results[[paste0(col, "_senn_slp")]] <- sen_slope
+    results[[paste0(col, "_linear_slp")]] <- linear_slope
+    results[[paste0(col, "_spearman_rho")]] <- spearman_rho
+    results[[paste0(col, "_spearman_pval")]] <- spearman_pval
+    results[[paste0(col, "_mk_rho")]] <- mk_tau
+    results[[paste0(col, "_mk_pval")]] <- mk_pval
     results[[paste0(col, "_mean")]] <- mean_val
     results[[paste0(col, "_median")]] <- median_val
   }
-  
+
   # Convert to data frame
   return(as.data.frame(results))
 }
@@ -1064,11 +1090,14 @@ analyze_fdc_trends_from_streamflow <- function(streamflow_data) {
   
   # Check if we have any valid years
   if (length(years) == 0 || all(is.na(years))) {
-    # Return empty result with correct structure
+    # Return empty result with correct structure (8 stats per metric)
     return(data.frame(
-      FDCall_slp = NA, FDCall_rho = NA, FDCall_pval = NA, FDCall_mean = NA, FDCall_median = NA,
-      FDC90_slp = NA, FDC90th_rho = NA, FDC90th_pval = NA, FDC90th_mean = NA, FDC90th_median = NA,
-      FDCmid_slp = NA, FDCmid_rho = NA, FDCmid_pval = NA, FDCmid_mean = NA, FDCmid_median = NA
+      FDCall_senn_slp = NA, FDCall_linear_slp = NA, FDCall_spearman_rho = NA, FDCall_spearman_pval = NA,
+      FDCall_mk_rho = NA, FDCall_mk_pval = NA, FDCall_mean = NA, FDCall_median = NA,
+      FDC90th_senn_slp = NA, FDC90th_linear_slp = NA, FDC90th_spearman_rho = NA, FDC90th_spearman_pval = NA,
+      FDC90th_mk_rho = NA, FDC90th_mk_pval = NA, FDC90th_mean = NA, FDC90th_median = NA,
+      FDCmid_senn_slp = NA, FDCmid_linear_slp = NA, FDCmid_spearman_rho = NA, FDCmid_spearman_pval = NA,
+      FDCmid_mk_rho = NA, FDCmid_mk_pval = NA, FDCmid_mean = NA, FDCmid_median = NA
     ))
   }
   
@@ -2932,9 +2961,12 @@ calculate_streamflow_elasticity <- function(streamflow_data,
              context = ctx)
     return(list(
       elasticity_static = NA_real_,
-      elasticity_slp = NA_real_,
-      elasticity_rho = NA_real_,
-      elasticity_pval = NA_real_,
+      elasticity_senn_slp = NA_real_,
+      elasticity_linear_slp = NA_real_,
+      elasticity_spearman_rho = NA_real_,
+      elasticity_spearman_pval = NA_real_,
+      elasticity_mk_rho = NA_real_,
+      elasticity_mk_pval = NA_real_,
       elasticity_mean = NA_real_,
       elasticity_median = NA_real_
     ))
@@ -2989,9 +3021,12 @@ calculate_streamflow_elasticity <- function(streamflow_data,
 
     result <- list(
       elasticity_static = elasticity_static,
-      elasticity_slp = trend_stats$elasticity_rolling_slp,
-      elasticity_rho = trend_stats$elasticity_rolling_rho,
-      elasticity_pval = trend_stats$elasticity_rolling_pval,
+      elasticity_senn_slp = trend_stats$elasticity_rolling_senn_slp,
+      elasticity_linear_slp = trend_stats$elasticity_rolling_linear_slp,
+      elasticity_spearman_rho = trend_stats$elasticity_rolling_spearman_rho,
+      elasticity_spearman_pval = trend_stats$elasticity_rolling_spearman_pval,
+      elasticity_mk_rho = trend_stats$elasticity_rolling_mk_rho,
+      elasticity_mk_pval = trend_stats$elasticity_rolling_mk_pval,
       elasticity_mean = trend_stats$elasticity_rolling_mean,
       elasticity_median = trend_stats$elasticity_rolling_median
     )
@@ -3003,9 +3038,12 @@ calculate_streamflow_elasticity <- function(streamflow_data,
 
     result <- list(
       elasticity_static = elasticity_static,
-      elasticity_slp = trend_stats$elasticity_slp,
-      elasticity_rho = trend_stats$elasticity_rho,
-      elasticity_pval = trend_stats$elasticity_pval,
+      elasticity_senn_slp = trend_stats$elasticity_senn_slp,
+      elasticity_linear_slp = trend_stats$elasticity_linear_slp,
+      elasticity_spearman_rho = trend_stats$elasticity_spearman_rho,
+      elasticity_spearman_pval = trend_stats$elasticity_spearman_pval,
+      elasticity_mk_rho = trend_stats$elasticity_mk_rho,
+      elasticity_mk_pval = trend_stats$elasticity_mk_pval,
       elasticity_mean = trend_stats$elasticity_mean,
       elasticity_median = trend_stats$elasticity_median
     )
@@ -3040,12 +3078,14 @@ calculate_qp_seasonality <- function(streamflow_data,
   if (length(years) < 10) {
     log_warn("Insufficient years for Q-P seasonality", context = ctx)
     return(list(
-      qp_slope_sd_slp = NA_real_, qp_slope_sd_rho = NA_real_,
-      qp_slope_sd_pval = NA_real_, qp_slope_sd_mean = NA_real_,
-      qp_slope_sd_median = NA_real_,
-      qp_bimodality_slp = NA_real_, qp_bimodality_rho = NA_real_,
-      qp_bimodality_pval = NA_real_, qp_bimodality_mean = NA_real_,
-      qp_bimodality_median = NA_real_
+      qp_slope_sd_senn_slp = NA_real_, qp_slope_sd_linear_slp = NA_real_,
+      qp_slope_sd_spearman_rho = NA_real_, qp_slope_sd_spearman_pval = NA_real_,
+      qp_slope_sd_mk_rho = NA_real_, qp_slope_sd_mk_pval = NA_real_,
+      qp_slope_sd_mean = NA_real_, qp_slope_sd_median = NA_real_,
+      qp_bimodality_senn_slp = NA_real_, qp_bimodality_linear_slp = NA_real_,
+      qp_bimodality_spearman_rho = NA_real_, qp_bimodality_spearman_pval = NA_real_,
+      qp_bimodality_mk_rho = NA_real_, qp_bimodality_mk_pval = NA_real_,
+      qp_bimodality_mean = NA_real_, qp_bimodality_median = NA_real_
     ))
   }
 
@@ -3135,12 +3175,14 @@ calculate_qp_seasonality <- function(streamflow_data,
   if (is.null(annual_metrics) || nrow(annual_metrics) < 5) {
     log_warn("Could not calculate Q-P seasonality for enough years", context = ctx)
     return(list(
-      qp_slope_sd_slp = NA_real_, qp_slope_sd_rho = NA_real_,
-      qp_slope_sd_pval = NA_real_, qp_slope_sd_mean = NA_real_,
-      qp_slope_sd_median = NA_real_,
-      qp_bimodality_slp = NA_real_, qp_bimodality_rho = NA_real_,
-      qp_bimodality_pval = NA_real_, qp_bimodality_mean = NA_real_,
-      qp_bimodality_median = NA_real_
+      qp_slope_sd_senn_slp = NA_real_, qp_slope_sd_linear_slp = NA_real_,
+      qp_slope_sd_spearman_rho = NA_real_, qp_slope_sd_spearman_pval = NA_real_,
+      qp_slope_sd_mk_rho = NA_real_, qp_slope_sd_mk_pval = NA_real_,
+      qp_slope_sd_mean = NA_real_, qp_slope_sd_median = NA_real_,
+      qp_bimodality_senn_slp = NA_real_, qp_bimodality_linear_slp = NA_real_,
+      qp_bimodality_spearman_rho = NA_real_, qp_bimodality_spearman_pval = NA_real_,
+      qp_bimodality_mk_rho = NA_real_, qp_bimodality_mk_pval = NA_real_,
+      qp_bimodality_mean = NA_real_, qp_bimodality_median = NA_real_
     ))
   }
 
@@ -3151,14 +3193,20 @@ calculate_qp_seasonality <- function(streamflow_data,
                               value_cols = "qp_bimodality", year_col = "water_year")
 
   result <- list(
-    qp_slope_sd_slp = sd_stats$qp_slope_sd_slp,
-    qp_slope_sd_rho = sd_stats$qp_slope_sd_rho,
-    qp_slope_sd_pval = sd_stats$qp_slope_sd_pval,
+    qp_slope_sd_senn_slp = sd_stats$qp_slope_sd_senn_slp,
+    qp_slope_sd_linear_slp = sd_stats$qp_slope_sd_linear_slp,
+    qp_slope_sd_spearman_rho = sd_stats$qp_slope_sd_spearman_rho,
+    qp_slope_sd_spearman_pval = sd_stats$qp_slope_sd_spearman_pval,
+    qp_slope_sd_mk_rho = sd_stats$qp_slope_sd_mk_rho,
+    qp_slope_sd_mk_pval = sd_stats$qp_slope_sd_mk_pval,
     qp_slope_sd_mean = sd_stats$qp_slope_sd_mean,
     qp_slope_sd_median = sd_stats$qp_slope_sd_median,
-    qp_bimodality_slp = if(nrow(bi_stats) > 0) bi_stats$qp_bimodality_slp else NA_real_,
-    qp_bimodality_rho = if(nrow(bi_stats) > 0) bi_stats$qp_bimodality_rho else NA_real_,
-    qp_bimodality_pval = if(nrow(bi_stats) > 0) bi_stats$qp_bimodality_pval else NA_real_,
+    qp_bimodality_senn_slp = if(nrow(bi_stats) > 0) bi_stats$qp_bimodality_senn_slp else NA_real_,
+    qp_bimodality_linear_slp = if(nrow(bi_stats) > 0) bi_stats$qp_bimodality_linear_slp else NA_real_,
+    qp_bimodality_spearman_rho = if(nrow(bi_stats) > 0) bi_stats$qp_bimodality_spearman_rho else NA_real_,
+    qp_bimodality_spearman_pval = if(nrow(bi_stats) > 0) bi_stats$qp_bimodality_spearman_pval else NA_real_,
+    qp_bimodality_mk_rho = if(nrow(bi_stats) > 0) bi_stats$qp_bimodality_mk_rho else NA_real_,
+    qp_bimodality_mk_pval = if(nrow(bi_stats) > 0) bi_stats$qp_bimodality_mk_pval else NA_real_,
     qp_bimodality_mean = if(nrow(bi_stats) > 0) bi_stats$qp_bimodality_mean else NA_real_,
     qp_bimodality_median = if(nrow(bi_stats) > 0) bi_stats$qp_bimodality_median else NA_real_
   )
@@ -3187,9 +3235,12 @@ calculate_average_storage <- function(streamflow_data) {
   if (length(years) < 10) {
     log_warn("Insufficient years for storage calculation", context = ctx)
     return(list(
-      avg_storage_slp = NA_real_,
-      avg_storage_rho = NA_real_,
-      avg_storage_pval = NA_real_,
+      avg_storage_senn_slp = NA_real_,
+      avg_storage_linear_slp = NA_real_,
+      avg_storage_spearman_rho = NA_real_,
+      avg_storage_spearman_pval = NA_real_,
+      avg_storage_mk_rho = NA_real_,
+      avg_storage_mk_pval = NA_real_,
       avg_storage_mean = NA_real_,
       avg_storage_median = NA_real_
     ))
@@ -3244,9 +3295,12 @@ calculate_average_storage <- function(streamflow_data) {
   if (is.null(annual_storage) || nrow(annual_storage) < 5) {
     log_warn("Could not calculate storage for enough years", context = ctx)
     return(list(
-      avg_storage_slp = NA_real_,
-      avg_storage_rho = NA_real_,
-      avg_storage_pval = NA_real_,
+      avg_storage_senn_slp = NA_real_,
+      avg_storage_linear_slp = NA_real_,
+      avg_storage_spearman_rho = NA_real_,
+      avg_storage_spearman_pval = NA_real_,
+      avg_storage_mk_rho = NA_real_,
+      avg_storage_mk_pval = NA_real_,
       avg_storage_mean = NA_real_,
       avg_storage_median = NA_real_
     ))
@@ -3258,9 +3312,12 @@ calculate_average_storage <- function(streamflow_data) {
                                    year_col = "water_year")
 
   result <- list(
-    avg_storage_slp = storage_stats$avg_storage_slp,
-    avg_storage_rho = storage_stats$avg_storage_rho,
-    avg_storage_pval = storage_stats$avg_storage_pval,
+    avg_storage_senn_slp = storage_stats$avg_storage_senn_slp,
+    avg_storage_linear_slp = storage_stats$avg_storage_linear_slp,
+    avg_storage_spearman_rho = storage_stats$avg_storage_spearman_rho,
+    avg_storage_spearman_pval = storage_stats$avg_storage_spearman_pval,
+    avg_storage_mk_rho = storage_stats$avg_storage_mk_rho,
+    avg_storage_mk_pval = storage_stats$avg_storage_mk_pval,
     avg_storage_mean = storage_stats$avg_storage_mean,
     avg_storage_median = storage_stats$avg_storage_median
   )

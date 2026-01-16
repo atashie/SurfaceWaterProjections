@@ -129,8 +129,17 @@ EXPECTED_METADATA_COLS <- c(
   "num_water_years", "start_water_year", "end_water_year"
 )
 
-# Signature column suffixes
-STAT_SUFFIXES <- c("_slp", "_rho", "_pval", "_mean", "_median")
+# Signature column suffixes (8 statistics per metric)
+STAT_SUFFIXES <- c(
+  "_senn_slp",      # Theil-Sen slope (robust non-parametric trend)
+  "_linear_slp",    # Linear regression slope (parametric trend)
+  "_spearman_rho",  # Spearman's rank correlation coefficient
+  "_spearman_pval", # Spearman's p-value for trend significance
+  "_mk_rho",        # Mann-Kendall tau (non-parametric trend correlation)
+  "_mk_pval",       # Mann-Kendall p-value
+  "_mean",          # Arithmetic mean across water years
+  "_median"         # Median across water years
+)
 
 # ==============================================================================
 # LOGGING SYSTEM
@@ -384,12 +393,15 @@ validate_gage_type <- function(gage_type, context = NULL) {
 # OUTPUT SCHEMA VALIDATION
 # ==============================================================================
 #
-# REQUIREMENT: Every signature produces exactly 5 statistics via generate_stats():
-#   _slp    = Theil-Sen slope (trend)
-#   _rho    = Spearman's rank correlation
-#   _pval   = P-value for trend significance
-#   _mean   = Arithmetic mean across water years
-#   _median = Median across water years
+# REQUIREMENT: Every signature produces exactly 8 statistics via generate_stats():
+#   _senn_slp     = Theil-Sen slope (robust non-parametric trend)
+#   _linear_slp   = Linear regression slope (parametric trend)
+#   _spearman_rho = Spearman's rank correlation coefficient
+#   _spearman_pval= Spearman's p-value for trend significance
+#   _mk_rho       = Mann-Kendall tau (non-parametric trend correlation)
+#   _mk_pval      = Mann-Kendall p-value for trend significance
+#   _mean         = Arithmetic mean across water years
+#   _median       = Median across water years
 #
 # EXCEPTIONS (explicitly listed below):
 #   - elasticity_static: Single value, not a time series
@@ -518,7 +530,7 @@ validate_output_schema <- function(output_df, strict = FALSE, context = NULL) {
 # Validate a single gage's output before adding to summary
 validate_gage_output <- function(gage_row, gage_id, context = NULL) {
   # Check for all-NA signature values (indicates calculation failure)
-  sig_cols <- grep("_(slp|rho|pval|mean|median)$", names(gage_row), value = TRUE)
+  sig_cols <- grep("_(senn_slp|linear_slp|spearman_rho|spearman_pval|mk_rho|mk_pval|mean|median)$", names(gage_row), value = TRUE)
 
   if (length(sig_cols) == 0) {
     log_warn("No signature columns found for gage:", gage_id, context = context)

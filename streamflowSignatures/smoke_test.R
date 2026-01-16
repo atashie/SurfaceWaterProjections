@@ -70,7 +70,7 @@ if (nrow(summary_output) > 0) {
   cat("Successfully processed:", nrow(summary_output), "gages\n")
   cat("Output columns:", ncol(summary_output), "\n")
   cat("Sample signature values:\n")
-  print(summary_output[1, .(gage_id, Qann_mean, Qann_slp, flashinessRB_mean, BFI_Eckhardt_mean)])
+  print(summary_output[1, .(gage_id, Qann_mean, Qann_senn_slp, flashinessRB_mean, BFI_Eckhardt_mean)])
   cat("\nSTATUS: SMOKE TEST PASSED\n")
 } else {
   cat("STATUS: SMOKE TEST FAILED - No gages processed\n")

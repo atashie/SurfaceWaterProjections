@@ -6,7 +6,7 @@ An R-based framework for extracting hydrological signatures from daily streamflo
 
 - **Multi-source data ingestion**: USGS NWIS, Canadian HYDAT, Caravan/HYSETS datasets
 - **Comprehensive signature suite**: Flow volumes, baseflow indices, recession parameters, pulse metrics, flashiness, and flow timing
-- **Robust trend analysis**: Theil-Sen slopes and Spearman correlations for each signature
+- **Robust trend analysis**: Multiple trend methods (Theil-Sen, linear regression, Mann-Kendall, Spearman) for each signature
 - **Quality control**: Configurable filters for data completeness and minimum record length
 - **Interactive visualization**: Shiny dashboard with maps and time series plots
 
@@ -19,7 +19,7 @@ An R-based framework for extracting hydrological signatures from daily streamflo
 install.packages(c(
   "data.table", "arrow", "lubridate",
   "dataRetrieval", "tidyhydat",
-  "zyp", "sf", "terra"
+  "zyp", "Kendall", "sf", "terra"
 ))
 
 # For visualization app
@@ -69,7 +69,7 @@ process_caravan_to_annual(
 | **Flashiness** | R-B Index | Richards-Baker flashiness index |
 | **Flow Timing** | D05-D95_day, D25_to_D75, Dmax | Cumulative flow timing |
 
-Each signature includes 5 statistics: `_slp` (trend), `_rho` (correlation), `_pval` (significance), `_mean`, `_median`.
+Each signature includes 8 statistics: `_senn_slp` (Theil-Sen trend), `_linear_slp` (linear trend), `_spearman_rho` (correlation), `_spearman_pval` (significance), `_mk_rho` (Mann-Kendall tau), `_mk_pval` (Mann-Kendall significance), `_mean`, `_median`.
 
 ## Output Format
 
@@ -79,7 +79,7 @@ The output CSV contains one row per gage with columns:
 |-------------|----------|-------------|
 | Metadata | gage_id, latitude, longitude, basin_area | Gage identification |
 | Record Info | num_water_years, start_water_year, end_water_year | Data coverage |
-| Signatures | Qann_slp, Qann_rho, Qann_pval, Qann_mean, Qann_median | Signature statistics |
+| Signatures | Qann_senn_slp, Qann_linear_slp, Qann_spearman_rho, ... | Signature statistics (8 per metric) |
 
 ## File Structure
 
@@ -154,13 +154,13 @@ See `CLAUDE.md` for detailed architecture documentation, code conventions, and d
 
 1. Create calculation function in `helperFunctions.R`
 2. Add function call in `process_signatures_from_parquet()`
-3. Follow naming convention: `{metric}_{stat}` (e.g., `NewMetric_slp`)
+3. Follow naming convention: `{metric}_{stat}` (e.g., `NewMetric_senn_slp`, `NewMetric_mk_pval`)
 4. Update documentation
 
 ## References
 
 - **Baseflow filters**: Eckhardt (2005), Lyne & Hollick (1979)
-- **Trend analysis**: Sen (1968) - Theil-Sen estimator
+- **Trend analysis**: Sen (1968) - Theil-Sen estimator, Mann & Kendall (1945) - Mann-Kendall test
 - **Flashiness**: Baker et al. (2004) - Richards-Baker Index
 - **Data sources**: USGS NWIS, Water Survey of Canada HYDAT, Caravan dataset
 

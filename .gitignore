@@ -5,4 +5,5 @@
 .Ruserdata
 .Renviron
 .streamflowSignatures/streamflowVisualizationApp/.Renviron
-.streamflowSignatures/dataOut
+streamflowSignatures/data_out/
+streamflowSignatures/test_output/
