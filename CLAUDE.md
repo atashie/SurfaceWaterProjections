@@ -72,6 +72,17 @@ Write code before the test? Delete it. Start over. No exceptions.
 - Validate outputs before returning
 - Handle errors with meaningful messages
 
+### Independent Code Review
+
+After implementing substantial code changes (>20 lines added/modified/deleted), invoke the `you-review` skill before committing. This spawns a separate Claude Sonnet agent to review changes with fresh eyes.
+
+**Why a separate agent?** The reviewer has no context from the implementation conversation, providing unbiased feedback on bugs, security issues, and code quality.
+
+**Triggers:**
+- Before commits with substantial changes
+- After completing plan-mode implementations
+- On explicit request (`/you-review`)
+
 ## Languages & Tools
 
 - **R**: Hydrological analysis, signature extraction
@@ -81,6 +92,7 @@ Write code before the test? Delete it. Start over. No exceptions.
 ## Available Claude Skills
 
 - `superpowers:test-driven-development` - TDD workflow guidance
+- `you-review` - Independent code review via Claude Sonnet agent (invoke after substantial changes)
 - `scientific-skills:matplotlib` - Visualization
 - `scientific-skills:geopandas` - Geospatial analysis
 - `scientific-skills:aeon` - Time series ML
