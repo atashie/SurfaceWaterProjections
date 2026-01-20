@@ -9,18 +9,20 @@
 ################################################################################################
 
 # Set the main directory where data and results will be stored
-main_dir = "C:/Users/arikt/Documents/GitHub/SurfaceWaterProjections/streamflowSignatures"
-metadata_dir = "D:/"
+# NOTE: This script expects to be run from the streamflowSignatures directory
+# Paths are configured in config.R
+# Load configuration and helper functions first to get path variables
+source("config.R")           # Centralized configuration
+source("helperFunctions.R")
+
+# Use metadata directory from config
+metadata_dir <- METADATA_DATA_DIR
 
 # Load configuration and helper functions
-source(file.path(main_dir, "config.R"))           # Centralized configuration (optional - can override below)
-source(file.path(main_dir, "helperFunctions.R"), local=FALSE)
 
 ################################################################################################
 # USER CONFIGURATION - MODIFY THESE SETTINGS AS NEEDED
 ################################################################################################
-
-
 # Analysis period
 start_date = as.Date("1973-01-01")  # Modern data period
 end_date = as.Date("2024-12-31")    # End of analysis period

@@ -34,3 +34,8 @@ nul
 
 # Data outputs
 data_out/
+# Auto-generated plots
+*.pdf
+
+# Large backup CSVs in archive
+archive/*.csv

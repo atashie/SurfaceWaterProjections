@@ -1,0 +1,327 @@
+﻿Summary Documentation for Streamflow Signatures (in helperFunctions.R)
+github repo here or here
+________________
+
+
+1. Glossary of Streamflow Signatures
+________________
+
+
+Flow Volume Metrics 
+* Qann: Annual mean streamflow.
+* Qwin: Winter mean streamflow.
+* Qspr: Spring mean streamflow.
+* Qsum: Summer mean streamflow.
+* Qfal: Fall mean streamflow.
+* Qxx: Flow percentiles (e.g., Q10, Q50, Q90).
+________________
+
+
+Baseflow Metrics 
+* BFI_Eckhardt: Baseflow index calculated using the Eckhardt filter.
+* BFI_LyneHollick: Baseflow index calculated using the Lyne-Hollick filter.
+________________
+
+
+Recession Metrics 
+* log_a_pointcloud: Median log(a) from point cloud analysis of all recession events.
+* log_a_events: Median log(a) from individual recession events.
+* b_pointcloud: Median recession exponent b from point cloud analysis.
+* b_events: Median b from individual events.
+* concavity: Difference in b between the first and second halves of recession events.
+* log_a_seasonality_amplitude_all: Seasonal amplitude of log(a) for all years.
+* log_a_seasonality_minimum_all: Julian date of minimum log(a) for all years.
+________________
+
+
+Pulse Metrics 
+* n_high_pulses_year: Number of high-flow pulses per year.
+* n_low_pulses_year: Number of low-flow pulses per year.
+* dur_high_pulses_year: Mean duration of high-flow pulses per year.
+* dur_low_pulses_year: Mean duration of low-flow pulses per year.
+* TQmean: Percentage of days with flow above the annual mean.
+* Flow_Reversals: Number of flow reversals (annual or seasonal).
+________________
+
+
+Flashiness Metrics 
+* R-B Index: Richards-Baker flashiness index.
+________________
+
+
+Flow Timing Metrics 
+* Dxx_day: Julian day when cumulative flow reaches a given percentile (e.g., D10, D50, D90).
+* D25_to_D75: Days between 25% and 75% cumulative flow.
+* Dmax: Julian day of maximum flow.
+________________
+
+
+2. Glossary of Statistical Metrics
+________________
+
+
+* slp: Theil-Sen slope, a robust linear trend estimator.
+* rho: Spearman's rank correlation coefficient, a non-parametric measure of monotonic trends.
+* pval: P-value associated with rho.
+* mean: Arithmetic mean of the signature across all years.
+* median: Median value of the signature across all years.
+________________
+
+
+3. Summary of Functions
+________________
+
+
+process_gages_rawData() 
+* Purpose: Processes raw gage data (USGS/Canadian) to calculate streamflow metrics for individual gages and save results to a file. Data are available up to the present day, but no climate data are directly available.
+* Requirements and Decisions: 
+   * A folder of USGS and HYDAT (Canadian) metadata must be stored locally in order to process watersheds.
+   * A minimum number of valid years (min_num_years) is required for a gage to be included.
+   * Data is filtered by a minimum flow threshold (min_Q_value_and_days). A watershed with fewer than the minimum days of > min_Q_value is not processed, but if the threshold is surpassed then non-zero flow is still passed to subsequent functions for processing.
+   * Missing or invalid years are excluded from analysis.
+________________
+
+
+process_caravan_gages() 
+* Purpose: Processes Caravan NetCDF timeseries data for watersheds, calculates streamflow metrics, and saves results. Coincident climate data are available, but the record of streamflow is truncated to as early as the early 2000s (as late as 2018 for HYSETS).
+* Requirements and Decisions: 
+   * Minimum years of valid data (min_num_years) are required for processing.
+   * Filters years based on minimum flow thresholds and valid days.
+   * Handles redundancy between datasets (e.g., CAMELS and HYSETS).
+________________
+
+
+generate_streamflow_dt() and generate_streamflow_dt_caravan() 
+* Purpose: Converts raw gage data (USGS/Canadian) or Caravan NetCDF data into a standardized streamflow data.table.
+* Requirements and Decisions: 
+   * Streamflow is provided in appropriate units (or converted, e.g., m³/s to mm/day).
+   * Filters data by specified date ranges and required years of data.
+   * Handles missing or invalid values (e.g., flagged data).
+   * Adds derived columns (e.g., year, month, day of year).
+________________
+
+
+calculate_flow_vols_by_year() 
+* Purpose: Calculates annual and seasonal flow volumes, as well as flow percentiles (e.g., Q1, Q10, Q50, Q90).
+* Requirements and Decisions: 
+   * Requires year, Q, month, and doy columns in input data.
+   * Seasonal periods are defined as: 
+      * Winter: December-February
+      * Spring: March-May
+      * Summer: June-August
+      * Fall: September-November
+   * Excludes years with insufficient data (<250 days).
+________________
+
+
+analyze_baseflow_indices() 
+* Purpose: Calculates baseflow indices (BFI) using Eckhardt and Lyne-Hollick digital filters.
+* Requirements and Decisions: 
+   * Streamflow (Q) must be valid for at least 250 days/year to calculate annual BFIs.
+   * Default parameters for Eckhardt filter: BFImax = 0.8, a = 0.98.
+   * Excludes years with >20% missing data.
+________________
+
+
+analyze_recession_parameters() 
+* Purpose: Analyzes recession events to calculate parameters like log(a), b, and concavity.
+* Requirements and Decisions: 
+   * Recession events are defined as periods of at least 5 consecutive days with monotonic decreases in flow (Q) and its derivative (|dQ/dt|).
+   * Watersheds with fewer than 25 event observations are excluded.
+   * Splits recession events temporally (first vs. second half) for concavity analysis.
+   * Fits sinusoidal models to analyze seasonal variation in log(a).
+________________
+
+
+analyze_flashiness_trends() 
+* Purpose: Calculates the Richards-Baker (RB) flashiness index by year and analyzes trends.
+* Requirements and Decisions: 
+   * Requires at least 30 valid days/year to calculate flashiness.
+   * Missing values are interpolated if <20% of the data is missing.
+________________
+
+
+calculate_pulse_metrics() 
+* Purpose: Calculates metrics for high/low flow pulses (e.g., frequency, duration) and flow reversals.
+* Requirements and Decisions: 
+   * High/low flow pulses are defined using the 90th and 10th percentiles of flow (Q).
+   * Years with <250 days of valid data are excluded.
+   * Calculates separate metrics for annual and period-of-record thresholds.
+   * Flow reversals are counted based on changes in flow direction exceeding 2% of current flow.
+________________
+
+
+analyze_flow_timing_trends() 
+* Purpose: Analyzes the timing of flow events (e.g., day of maximum flow, cumulative flow percentiles).
+* Requirements and Decisions: 
+   * Requires at least 300 valid days/year to calculate timing metrics.
+   * Calculates Julian days for cumulative flow percentiles (e.g., D10, D50).
+________________
+
+
+analyze_Q_PPT_relationships() 
+* Purpose: Analyzes runoff ratios (streamflow divided by precipitation) and their trends.
+* Requirements and Decisions: 
+   * Precipitation (PPT) data must be available alongside streamflow (Q).
+   * Calculates separate runoff ratios for annual and seasonal periods (winter, spring, summer, fall).
+   * Handles cases with near-zero precipitation by assigning NA to ratios.
+________________
+
+
+calculate_streamflow_elasticity() 
+* Purpose: Calculates streamflow elasticity, which measures how sensitive streamflow is to changes in precipitation. Based on Sawicz et al. (2011).
+* Requirements and Decisions: 
+   * Requires daily streamflow (Q) and precipitation (PPT) data.
+   * Minimum of 15 years of valid data required for elasticity calculation.
+   * Years with annual precipitation <10mm are excluded.
+   * Calculates both static elasticity (median of all annual values) and rolling window elasticity (11-year window by default).
+   * Annual elasticity formula: E = (dQ/dP) / (Q_mean/P_mean), where dQ = Q_year - Q_mean and dP = P_year - P_mean.
+   * Values ~1.0 indicate proportional response; values >1 indicate amplified streamflow response to precipitation changes.
+   * - Handles NA values by skipping years with >10% missing data.
+* Output: Returns ‘elasticity_static` (single value) plus the 8 standard statistics.
+________________
+
+
+calculate_qp_seasonality() 
+* Purpose: Quantifies the seasonality in the relationship between cumulative streamflow (Q) and cumulative precipitation (P). Based on Wrede et al. (2015).
+* Requirements and Decisions: 
+   * Requires daily streamflow (Q), precipitation (PPT), month, and day-of-water-year (dowy) columns.
+   * Minimum of 10 years of valid data required.
+   * Years with >10% missing Q or PPT data are excluded.
+   * Years with <300 valid days are excluded.
+   * Calculates 30-day rolling slope of cumulative Q vs cumulative P for each water year.
+   * Aggregates slopes to 12 monthly mean values per year.
+   * Two metrics are calculated per year:
+      * qp_slope_sd: Standard deviation of the 12 monthly slopes (higher values = more seasonal variation).
+      * qp_bimodality: Bimodality coefficient = (skewness² + 1) / kurtosis. Values >0.555 suggest bimodal/seasonal patterns.
+________________
+
+
+calculate_average_storage() 
+* Purpose: Estimates mean annual catchment storage using a simplified water balance approach. Based on Peters & Aulenbach (2011). Note: current implementation does not account for AET
+* Requirements and Decisions: 
+   * Requires daily streamflow (Q), precipitation (PPT), and day-of-water-year (dowy) columns.
+   * Minimum of 10 years of valid data required.
+   * Years with >10% missing Q or PPT data are excluded.
+   * Years with <300 valid days are excluded.
+   * Daily water balance: dS = P - Q (evapotranspiration is not estimated).
+   * Cumulative storage: S = cumsum(dS) for each water year.
+   * [account for aet losses??!!??]
+   * Units: millimeters (mm).
+________________
+
+
+
+
+
+
+________________
+
+
+## Part 2: utility functions
+________________
+
+
+integrate_daymet_with_streamflow() 
+* Purpose: Joins Daymet climate data (precipitation, temperature) to streamflow data based on date matching.
+* Requirements and Decisions: 
+   * Requires a pre-processed Daymet parquet file (`data_out/daymet_1980_2023.parquet`).
+   * Matches streamflow gage IDs to Daymet site IDs.
+   * Joins climate variables (PPT, tmin, tmax, swe, vp, srad) to streamflow data.table on Date.
+   * Reports coverage percentage; warns if <95% of dates have matching climate data.
+   * Renames `prcp` column to `PPT` for compatibility with existing Q-PPT analysis functions.
+________________
+
+
+convert_daymet_zip_to_parquet() 
+* Purpose: One-time conversion of Daymet ZIP archive (containing 44 annual CSV files) to a single optimized parquet file.
+* Requirements and Decisions: 
+   * Input: ZIP file containing daymet_1980.csv through daymet_2023.csv.
+   * Reconstructs the Date column from year, month, and row order (original CSVs lack a day column).
+   * Validates that each site has 365 or 366 days per year.
+   * Uses snappy compression for efficient storage (~70% reduction vs uncompressed).
+   * Output columns: site_id, Date, prcp, tmin, tmax, swe, vp, srad.
+* Output: 
+   * Single parquet file (~3.9 GB) containing ~98 million rows for 6,087 sites.
+
+
+________________
+
+
+
+
+
+
+________________
+
+
+## Part 3: Definitions
+________________
+
+
+Runoff Ratio Metrics 
+* annual_runoff_ratio: Annual streamflow divided by annual precipitation (Q/P).
+* winter_runoff_ratio: Winter (Dec-Feb) streamflow divided by winter precipitation.
+* spring_runoff_ratio: Spring (Mar-May) streamflow divided by spring precipitation.
+* summer_runoff_ratio: Summer (Jun-Aug) streamflow divided by summer precipitation.
+* fall_runoff_ratio: Fall (Sep-Nov) streamflow divided by fall precipitation.
+Streamflow Elasticity Metrics 
+* elasticity_static: Overall catchment elasticity - median of annual elasticity values. Measures how sensitively streamflow responds to precipitation changes. Values ~1.0 indicate proportional response; >1 indicates amplified response.
+* elasticity: Rolling window (11-year) elasticity values, used to detect trends in catchment sensitivity over time.
+Q-P Seasonality Metrics 
+* qp_slope_sd: Standard deviation of monthly cumulative Q-P slopes. Higher values indicate stronger seasonal variation in the streamflow-precipitation relationship.
+* qp_bimodality: Bimodality coefficient of the Q-P slope distribution. Values >0.555 suggest bimodal or strongly seasonal patterns.
+Storage Metrics 
+* avg_storage: Mean annual catchment storage (mm) derived from water balance.
+Statistical Metrics
+* _senn_slp | Theil-Sen slope | zyp::zyp.sen | Robust non-parametric trend detection |
+* _linear_slp | Linear regression slope | lm() | Parametric trend for comparison |
+* _spearman_rho | Spearman's rho | cor.test | Rank correlation with time |
+* _spearman_pval | Spearman p-value | cor.test | Significance of Spearman correlation |
+* _mk_rho | Mann-Kendall tau | Kendall::MannKendall | Non-parametric trend strength |
+* _mk_pval | Mann-Kendall p-value | Kendall::MannKendall | Significance of Mann-Kendall test |
+* _mean        | Arithmetic mean | mean() | Central tendency across all years |
+* _median | Median | median() | Robust central tendency |
+
+
+
+
+
+
+________________
+
+
+## Part 3: References
+________________
+
+
+* Peters, N. E., & Aulenbach, B. T. (2011). Water storage at the Panola Mountain Research Watershed, Georgia, USA. Hydrological Processes, 25(25), 3878-3889.
+* Sawicz, K., Wagener, T., Sivapalan, M., Troch, P. A., & Carrillo, G. (2011). Catchment classification: empirical analysis of hydrologic similarity based on catchment function in the eastern USA. Hydrology and Earth System Sciences, 15(9), 2895-2911.
+* Wrede, S., Fenicia, F., Martinez-Carreras, N., Juilleret, J., Hissler, C., Krein, A., ... & Pfister, L. (2015). Towards more systematic perceptual model development: a case study using 3 Luxembourgish catchments. Hydrological Processes, 29(12), 2731-2750.
+
+
+
+
+________________
+
+
+## Part 4: Automated Data Quality Flags
+________________
+
+
+
+
+  | Flag Column                       | Condition                        |
+  |-----------------------------------|----------------------------------|
+  | flagged_for_qann_range            | Qann_mean outside [0, 2000]      |
+  | flagged_for_bfi_eckhardt_range    | BFI outside [0, 1]               |
+  | flagged_for_bfi_lynehollick_range | BFI outside [0, 1]               |
+  | flagged_for_flashiness_range      | Flashiness outside [0, 2]        |
+  | flagged_for_tqmean_range          | TQmean outside [0, 100]          |
+  | flagged_for_d50_range             | D50 outside [1, 366]             |
+  | flagged_for_elasticity_range      | Elasticity outside [0.1, 5]      |
+  | flagged_for_runoff_ratio_range    | Runoff ratio outside [0.01, 1.5] |
+  | flagged_for_seasonal_sum          | Sum not within 20% of Qann       |
+  | flagged_for_percentile_order      | Q5<Q25<Q50<Q75<Q95 violated      |
+  | flagged_for_timing_order          | D5<D50<D95 violated              |
+  | flagged_for_high_na               | >30% signatures are NA           |

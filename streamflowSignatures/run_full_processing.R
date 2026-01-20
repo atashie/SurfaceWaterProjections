@@ -5,22 +5,13 @@
 # Output: data_out/streamflow_signatures_full_JAN2026.csv
 #
 # Expected runtime: 30-60 minutes for ~6,000 gages
+#
+# NOTE: This script expects to be run from the streamflowSignatures directory
+# Paths are configured in config.R - edit PARQUET_DATA_DIR there for your system
 ################################################################################
 
 # Clear environment
 rm(list = ls())
-
-# Set working directory to script location
-main_dir <- getwd()
-if (!file.exists(file.path(main_dir, "config.R"))) {
-  # Try to find config.R in parent or common locations
-  if (file.exists("../config.R")) {
-    main_dir <- dirname(getwd())
-  } else if (file.exists("streamflowSignatures/config.R")) {
-    main_dir <- file.path(getwd(), "streamflowSignatures")
-  }
-}
-setwd(main_dir)
 
 # Load configuration and functions
 cat("========== LOADING CONFIGURATION ==========\n")
@@ -35,16 +26,17 @@ set_log_file(log_file_path)
 cat("\n========== FULL SIGNATURE EXTRACTION ==========\n")
 cat("Start time:", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n\n")
 
-# Define paths
-parquet_path <- "D:/combined_streamflow_output/combined_streamflow_data.parquet"
-metadata_path <- "D:/combined_streamflow_output/combined_watershed_metadata.csv"
-daymet_path <- "data_out/daymet_1980_2023.parquet"
+# Define paths using config variables
+parquet_path <- file.path(PARQUET_DATA_DIR, "combined_streamflow_data.parquet")
+metadata_path <- file.path(PARQUET_DATA_DIR, "combined_watershed_metadata.csv")
+daymet_path <- DAYMET_PARQUET_PATH
 output_path <- "data_out/streamflow_signatures_full_JAN2026.csv"
 
 # Verify input files exist
 cat("Verifying input files...\n")
 if (!file.exists(parquet_path)) {
-  stop("Streamflow parquet not found: ", parquet_path)
+  stop("Streamflow parquet not found: ", parquet_path,
+       "\nEdit PARQUET_DATA_DIR in config.R or set STREAMFLOW_PARQUET_DIR environment variable")
 }
 if (!file.exists(metadata_path)) {
   stop("Metadata file not found: ", metadata_path)

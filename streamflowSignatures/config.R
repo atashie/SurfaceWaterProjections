@@ -1,6 +1,30 @@
 # Streamflow Signatures - Configuration File
 # Centralized parameters for data processing and signature extraction
 # Source this file before running processing scripts
+# ==============================================================================
+# USER-CONFIGURABLE PATHS (edit these for your system, or set environment vars)
+# ==============================================================================
+# These paths point to external data directories. Set via environment variables
+# or edit the defaults below to match your local setup.
+#
+# Environment variables (optional, override defaults):
+#   STREAMFLOW_PARQUET_DIR - Directory containing processed parquet files
+#   STREAMFLOW_CARAVAN_DIR - Directory containing Caravan NetCDF data
+#   STREAMFLOW_METADATA_DIR - Directory containing gage metadata files
+#   STREAMFLOW_DOWNLOADS_DIR - Directory for downloaded files
+
+PARQUET_DATA_DIR <- Sys.getenv("STREAMFLOW_PARQUET_DIR",
+                               unset = "D:/combined_streamflow_output")
+
+CARAVAN_DATA_DIR <- Sys.getenv("STREAMFLOW_CARAVAN_DIR",
+                               unset = "D:/Caravan-nc/usr/local/google/home/kratzert/Data/Caravan-Jan25-nc")
+
+METADATA_DATA_DIR <- Sys.getenv("STREAMFLOW_METADATA_DIR",
+                                unset = "D:/")
+
+DOWNLOADS_DIR <- Sys.getenv("STREAMFLOW_DOWNLOADS_DIR",
+                            unset = file.path(Sys.getenv("USERPROFILE", "~"), "Downloads"))
+
 
 # ==============================================================================
 # DATA QUALITY THRESHOLDS
@@ -421,7 +445,7 @@ EXPECTED_SIGNATURE_BASES <- c(
   # Flow percentiles (Q1 through Q99)
   "Q1", "Q5", "Q10", "Q20", "Q25", "Q30", "Q40", "Q50",
   "Q60", "Q70", "Q75", "Q80", "Q90", "Q95", "Q99",
-  "Q95.Q10",  # Ratio of high to low flows
+  "Q95-Q10",  # Ratio of high to low flows
   # Flow Duration Curve metrics
   "FDC90th", "FDCall", "FDCmid",
   # Baseflow indices

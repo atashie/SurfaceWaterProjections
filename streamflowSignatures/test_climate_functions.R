@@ -1,7 +1,7 @@
 # Quick validation of climate signature functions with synthetic data
+#
+# NOTE: This script expects to be run from the streamflowSignatures directory
 # Run with: Rscript test_climate_functions.R
-
-setwd("C:/Users/arikt/Documents/GitHub/SurfaceWaterProjections/streamflowSignatures")
 
 cat("Loading packages and functions...\n")
 suppressPackageStartupMessages({
@@ -16,7 +16,7 @@ cat("\n========== TESTING CLIMATE SIGNATURE FUNCTIONS ==========\n\n")
 
 # Test 1: load_daymet_for_gage
 cat("[TEST 1] load_daymet_for_gage\n")
-parquet_path <- "data_out/daymet_1980_2023.parquet"
+parquet_path <- DAYMET_PARQUET_PATH
 
 if (file.exists(parquet_path)) {
   daymet_data <- load_daymet_for_gage(
@@ -29,7 +29,7 @@ if (file.exists(parquet_path)) {
   cat(sprintf("  Columns: %s\n", paste(names(daymet_data), collapse = ", ")))
   cat("  PASS\n\n")
 } else {
-  cat("  SKIP - parquet file not found\n\n")
+  cat("  SKIP - parquet file not found at:", parquet_path, "\n\n")
 }
 
 # Test 2: calculate_streamflow_elasticity with synthetic data

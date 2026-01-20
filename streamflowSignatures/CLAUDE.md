@@ -184,25 +184,53 @@ library(aws.s3)       # S3 data storage
 streamflowSignatures/
 ├── CLAUDE.md                    # This file
 ├── README.md                    # User documentation
+├── SESSION_CONTEXT.md           # Session context notes
+│
+│ ## Core Configuration & Functions
 ├── config.R                     # Centralized configuration parameters
-├── helperFunctions.R            # CANONICAL - All core functions (45 functions)
-├── execute_extractStreamflowSignatureValuesAndTrends.R  # Main entry point
-├── caravan_to_annualized.R      # Caravan processing
-├── streamflowDataProcessing*.R  # Data ingestion scripts
-├── streamflowVisualizationApp/  # Shiny dashboard
-│   ├── app.R
+├── helperFunctions.R            # CANONICAL - All core functions (38+ functions)
+│
+│ ## Main Entry Points
+├── run_full_processing.R        # PRIMARY - Full signature extraction with climate data
+├── execute_extractStreamflowSignatureValuesAndTrends.R  # Alternative entry point
+├── caravan_to_annualized.R      # Caravan data processing
+│
+│ ## Data Processing Scripts (Legacy)
+├── streamflowDataProcessing.R                          # Raw USGS/HYDAT processing
+├── streamflowDataProcessing_Caravan.R                  # Caravan processing variant
+├── streamflowDataProcessing_USGS-and-Hydat.R          # Reference gage processing
+├── streamflowDataProcessing_USGS-and-HYDAT_fullTimeseries.R  # Full timeseries variant
+├── streamflowSignatures_wrapperForPreprocessedParquet.R      # Wrapper for pre-processed data
+│
+│ ## Testing & QA/QC
+├── smoke_test.R                 # Quick validation on subset (10 gages)
+├── test_climate_functions.R     # Climate function tests with synthetic data
+├── qa_qc_signatures.R           # Output validation and QA/QC checks
+├── visualize_qa_qc.R            # QA/QC visualization plots
+├── test.R                       # Development/exploratory tests (legacy)
+├── tests/                       # Unit test directory
+│   └── test_climate_signatures.R
+│
+│ ## Utilities
+├── run_conversion.R             # Daymet ZIP to Parquet conversion
+│
+│ ## Shiny Visualization App
+├── streamflowVisualizationApp/
+│   ├── app.R                    # Main Shiny application
 │   └── helperFunctions.R        # App-specific utilities (S3, legends)
-├── metadata/                    # Basin and gage metadata (41 files)
-│   ├── conterm_*.txt           # CONUS reference gage metadata
-│   ├── AKHIPR_*.txt            # Alaska reference gage metadata
-│   └── Canadian_gages_goodones.csv
-├── data_out/                    # Processed outputs
-└── archive/                     # Deprecated helper files (DO NOT USE)
+│
+│ ## Data & Metadata
+├── metadata/                    # Basin and gage metadata (42 files)
+├── data_out/                    # Processed outputs (gitignored)
+├── test_output/                 # Test outputs (gitignored)
+│
+└── archive/                     # Archived files (DO NOT USE)
     ├── helperFunction.R
     ├── helperFunctions_sept2025.R
     ├── helperFunctions_extractStreamflowSignatureValuesAndTrends.R
     ├── helperFunctions_processRawStreamflowToParquet.R
-    └── helperWrapperFunctions.R
+    ├── helperWrapperFunctions.R
+    └── test_code.txt
 ```
 
 ## Code Status
@@ -210,7 +238,13 @@ streamflowSignatures/
 | File | Status | Notes |
 |------|--------|-------|
 | `config.R` | **ACTIVE** | Centralized configuration - source before helperFunctions.R |
-| `helperFunctions.R` | **CANONICAL** | All 45 core functions - use this for all development |
+| `helperFunctions.R` | **CANONICAL** | All core functions - use this for all development |
+| `run_full_processing.R` | **PRIMARY** | Recommended entry point for full processing |
+| `smoke_test.R` | **ACTIVE** | Run for quick validation |
+| `qa_qc_signatures.R` | **ACTIVE** | Run after processing to validate outputs |
+| `visualize_qa_qc.R` | **ACTIVE** | Generate QA/QC visualizations |
+| `test_climate_functions.R` | **ACTIVE** | Test climate signatures with synthetic data |
+| `streamflowDataProcessing*.R` | **LEGACY** | Older data ingestion scripts - use sparingly |
 | `archive/*` | **ARCHIVED** | DO NOT USE - kept for reference only |
 
 ## Common Tasks
@@ -229,6 +263,43 @@ summary_output <- process_signatures_from_parquet(
   min_frac_good_data = MIN_FRAC_GOOD_DATA        # From config.R
 )
 ```
+
+### Run Full Processing Pipeline (Recommended)
+The easiest way to run a complete signature extraction with climate data:
+```bash
+# From the streamflowSignatures directory:
+Rscript run_full_processing.R
+```
+
+This script:
+- Loads configuration from `config.R`
+- Reads parquet data from `PARQUET_DATA_DIR` (configured in config.R)
+- Integrates Daymet climate data if available
+- Outputs to `data_out/streamflow_signatures_full_JAN2026.csv`
+- Logs progress to `data_out/processing_log_JAN2026.txt`
+
+**Prerequisites:** Edit `config.R` to set `PARQUET_DATA_DIR` to your data location.
+
+### Validate Output Quality
+After processing, run QA/QC validation:
+```r
+source("config.R")
+source("helperFunctions.R")
+source("qa_qc_signatures.R")
+```
+
+Or run the visualization script for diagnostic plots:
+```r
+source("visualize_qa_qc.R")
+# Outputs to data_out/qa_plots/
+```
+
+QA/QC checks include:
+- Range validation (e.g., BFI ∈ [0,1])
+- Baseflow consistency (BFI_Eckhardt < BFI_LyneHollick)
+- Elasticity constraints
+- Correlation checks between related metrics
+
 
 ### Process Caravan Data
 ```r

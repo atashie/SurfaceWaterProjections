@@ -1,10 +1,13 @@
 # Set the main directory where data and results will be stored
-main_dir = "C:/Users/arikt/Documents/GitHub/SurfaceWaterProjections/streamflowSignatures"
-metadata_dir = "D:/"
+# NOTE: This script expects to be run from the streamflowSignatures directory
+# Paths are configured in config.R
+source("config.R")
+source("helperFunctions.R")
+metadata_dir <- METADATA_DATA_DIR
 
 # Load configuration and helper functions
-source(file.path(main_dir, "config.R"))           # Centralized configuration (optional - can override below)
-source(file.path(main_dir, "helperFunctions.R"), local=FALSE)
+
+
 
 ################################################################################################
 # USER CONFIGURATION - MODIFY THESE SETTINGS AS NEEDED
@@ -278,7 +281,7 @@ library(dplyr)
 # Function to process Daymet NetCDF files for watersheds
 process_daymet_from_files <- function(
     watersheds_file,
-    downloads_dir = "C:/Users/arikt/Downloads",
+    downloads_dir = DOWNLOADS_DIR,
     output_dir = "daymet_processed_data",
     variable = "prcp",  # Can be: prcp, tmin, tmax, srad, vp, swe, dayl
     max_area_sqkm = 10000,
@@ -461,7 +464,7 @@ inspect_daymet_output <- function(output_dir, variable = "prcp") {
 # Execute processing for precipitation
 result_prcp <- process_daymet_from_files(
   watersheds_file = file.path(metadata_dir, "geospatial_derivedData/unified_watersheds_simplified.gpkg"),
-  downloads_dir = "C:/Users/arikt/Downloads",
+  downloads_dir = DOWNLOADS_DIR,
   output_dir = file.path(metadata_dir, "daymet_processed_data"),
   variable = "prcp",
   max_area_sqkm = 10000,

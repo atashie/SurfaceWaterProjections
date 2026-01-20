@@ -4038,7 +4038,7 @@ process_signatures_from_parquet <- function(
     output_file = "processed_signatures_from_parquet.csv",
     min_Q_value_and_days = c(0.0001, 30),
     min_num_years = 20,
-    min_frac_good_data = 0.9,
+    min_frac_good_data = 0.95,
     daymet_parquet_path = NULL  # Path to Daymet parquet for climate signatures
 ) {
 
