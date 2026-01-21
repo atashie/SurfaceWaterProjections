@@ -135,6 +135,8 @@ DAYMET_END_YEAR <- 2023
 # Streamflow elasticity parameters (Sawicz et al. 2011)
 ELASTICITY_WINDOW_YEARS <- 11      # Rolling window size for elasticity trends
 MIN_YEARS_ELASTICITY <- 15         # Minimum years required for elasticity calculation
+ELASTICITY_MIN_DATA_COMPLETENESS <- 0.9  # Minimum fraction of valid days per year (90%)
+ELASTICITY_MIN_ANNUAL_PPT <- 10    # Minimum annual precipitation in mm
 
 # Q-P seasonality parameters (Wrede et al. 2015)
 QP_SLOPE_WINDOW_DAYS <- 30         # Rolling window for cumulative Q-P slope calculation

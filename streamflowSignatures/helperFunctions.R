@@ -1457,10 +1457,15 @@ calculate_pulse_metrics <- function(streamflow_data) {
   # Process each year
   for (yr in years) {
     year_data <- streamflow_data[streamflow_data$water_year == yr, ]
-    
+
+    # Skip years with insufficient valid data (minimum days from config.R)
+    if (sum(!is.na(year_data$Q)) < MIN_NONA_DAYS_ANNUAL) {
+      next
+    }
+
     # Sort by day of year to ensure chronological order
     year_data <- year_data[order(year_data$dowy), ]
-    
+
     # Calculate year-specific thresholds
     q90_year <- quantile(year_data$Q, probs = 0.90, na.rm = TRUE)
     q10_year <- quantile(year_data$Q, probs = 0.10, na.rm = TRUE)
@@ -1822,8 +1827,8 @@ analyze_recession_parameters <- function(streamflow_data) {
         # Need at least min_length consecutive days
         is_recession <- TRUE
         
-        # Check next min_length days
-        for (j in 0:(min_length-2)) {
+        # Check next min_length consecutive decreases (requires min_length+1 points)
+        for (j in 0:(min_length-1)) {
           if (i+j+1 > n || is.na(Q_vector[i+j]) || is.na(Q_vector[i+j+1]) || 
               is.na(dQ_dt[i+j]) || is.na(dQ_dt[i+j+1])) {
             is_recession <- FALSE
@@ -2098,9 +2103,9 @@ analyze_recession_parameters <- function(streamflow_data) {
     }
   }
   
-  # Check if we have enough data overall
-  total_valid_years <- sum(!is.na(annual_metrics$b_events))
-  if (total_valid_years < 3) {
+  # Check if we have enough recession events overall (minimum 25 per RECESSION_MIN_EVENTS in config.R)
+  total_events <- length(all_recession_events)
+  if (total_events < RECESSION_MIN_EVENTS) {
     # Not enough data, return all NAs
     # Initialize results data frame with correct structure
     n_cols <- length(signatures_with_stats) * 5 + length(seasonality_signatures)
@@ -2947,14 +2952,24 @@ calculate_streamflow_elasticity <- function(streamflow_data,
   required_cols <- c("water_year", "Q", "PPT")
   validate_columns(streamflow_data, required_cols, "streamflow_data", context = ctx)
 
-  # Aggregate to annual totals
+  # Aggregate to annual totals with data quality check
   annual <- streamflow_data[, .(
     Q_annual = sum(Q, na.rm = TRUE),
-    P_annual = sum(PPT, na.rm = TRUE)
+    P_annual = sum(PPT, na.rm = TRUE),
+    n_valid_days = sum(!is.na(Q) & !is.na(PPT))
   ), by = water_year]
 
-  # Remove years with zero or very low precipitation
-  annual <- annual[P_annual > 10]  # At least 10mm/year
+  # Calculate expected days per water year (accounting for leap years)
+  annual[, expected_days := ifelse(
+    ((water_year %% 4 == 0) & (water_year %% 100 != 0)) | (water_year %% 400 == 0),
+    366, 365
+  )]
+
+  # Filter: remove years with >10% missing data (threshold from config.R)
+  annual <- annual[n_valid_days >= ELASTICITY_MIN_DATA_COMPLETENESS * expected_days]
+
+  # Remove years with zero or very low precipitation (threshold from config.R)
+  annual <- annual[P_annual > ELASTICITY_MIN_ANNUAL_PPT]
 
   if (nrow(annual) < MIN_YEARS_ELASTICITY) {
     log_warn("Insufficient years (", nrow(annual), ") for elasticity calculation",
