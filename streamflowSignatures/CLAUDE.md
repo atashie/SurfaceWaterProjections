@@ -52,8 +52,8 @@ Other `helperFunctions*.R` files are deprecated.
 | `config.R` | **ACTIVE** | Source first |
 | `helperFunctions.R` | **CANONICAL** | All core functions |
 | `run_full_processing.R` | **PRIMARY** | Main entry point |
-| `smoke_test.R` | **ACTIVE** | Quick validation |
-| `qa_qc_signatures.R` | **ACTIVE** | Output validation |
+| `tests/smoke_test.R` | **ACTIVE** | Quick validation |
+| `tests/qa_qc_signatures.R` | **ACTIVE** | Output validation |
 | `streamflowDataProcessing*.R` | **LEGACY** | Use sparingly |
 | `archive/*` | **DO NOT USE** | Reference only |
 
@@ -62,7 +62,7 @@ Other `helperFunctions*.R` files are deprecated.
 1. Create function in `helperFunctions.R` returning annual values
 2. Call `generate_stats()` to produce 8 statistics
 3. Add base name to `EXPECTED_SIGNATURE_BASES` in `config.R`
-4. Run `smoke_test.R` to verify
+4. Run `tests/smoke_test.R` to verify
 
 ## References
 

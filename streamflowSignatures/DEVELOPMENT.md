@@ -50,13 +50,13 @@ streamflowSignatures/
 ├── streamflowSignatures_wrapperForPreprocessedParquet.R      # Wrapper for pre-processed data
 │
 │ ## Testing & QA/QC
-├── smoke_test.R                 # Quick validation on subset (10 gages)
-├── test_climate_functions.R     # Climate function tests with synthetic data
-├── qa_qc_signatures.R           # Output validation and QA/QC checks
-├── visualize_qa_qc.R            # QA/QC visualization plots
 ├── test.R                       # Development/exploratory tests (legacy)
-├── tests/                       # Unit test directory
-│   └── test_climate_signatures.R
+├── tests/                       # All test and QA/QC files
+│   ├── smoke_test.R             # Quick validation on subset (10 gages)
+│   ├── test_climate_functions.R # Climate function tests with synthetic data
+│   ├── test_climate_signatures.R
+│   ├── qa_qc_signatures.R       # Output validation and QA/QC checks
+│   └── visualize_qa_qc.R        # QA/QC visualization plots
 │
 │ ## Utilities
 ├── run_conversion.R             # Daymet ZIP to Parquet conversion
@@ -123,13 +123,13 @@ After processing, run QA/QC validation:
 ```r
 source("config.R")
 source("helperFunctions.R")
-source("qa_qc_signatures.R")
+source("tests/qa_qc_signatures.R")
 ```
 
 Or run the visualization script for diagnostic plots:
 
 ```r
-source("visualize_qa_qc.R")
+source("tests/visualize_qa_qc.R")
 # Outputs to data_out/qa_plots/
 ```
 
@@ -178,7 +178,7 @@ process_caravan_to_annual(
 
 5. **Test with smoke test**:
    ```r
-   source("smoke_test.R")
+   source("tests/smoke_test.R")
    # Verify schema validation passes
    ```
 
@@ -195,14 +195,14 @@ Examples:
 ### Quick Validation (Smoke Test)
 
 ```r
-source("smoke_test.R")
+source("tests/smoke_test.R")
 # Runs on 10 gages, validates output schema
 ```
 
 ### Climate Function Tests
 
 ```r
-source("test_climate_functions.R")
+source("tests/test_climate_functions.R")
 # Tests climate signatures with synthetic data
 ```
 
