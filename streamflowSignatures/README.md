@@ -144,11 +144,15 @@ set_log_level("DEBUG")
 set_log_file("logs/processing.log")
 ```
 
-See `CLAUDE.md` for detailed documentation on logging functions and validation utilities.
+See `.claude/rules/validation.md` for detailed documentation on logging functions and validation utilities.
 
 ## Development
 
-See `CLAUDE.md` for detailed architecture documentation, code conventions, and development guidelines.
+See the following documentation:
+- `CLAUDE.md` - Claude Code instructions (rules and constraints)
+- `DEVELOPMENT.md` - Architecture, workflows, and common tasks
+- `SIGNATURES.md` - Detailed signature documentation
+- `CHANGELOG.md` - Bug fixes and version history
 
 ### Adding New Signatures
 

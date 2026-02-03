@@ -1,423 +1,72 @@
 # Streamflow Signatures Project
 
-## Overview
+R-based hydrological signature extraction from USGS, HYDAT, and Caravan data. Calculates many metrics with standardized trend analysis for all metrics.
 
-R-based system for extracting hydrological signatures from USGS, Canadian (HYDAT), and Caravan datasets. Calculates 100+ metrics with trend analysis for studying streamflow characteristics and their relationship to climate.
+## Canonical Code
 
-**Primary Research Goal**: Analyze synchrony between streamflow and climate patterns.
-**Secondary Goal**: Create comprehensive dataset for broader research community.
+**Always source in this order:**
+1. `config.R` - Configuration, logging, validation (source FIRST)
+2. `helperFunctions.R` - All core functions (45+ functions)
 
-## Architecture
+Other `helperFunctions*.R` files are deprecated.
 
-### Data Flow
-```
-Data Sources                    Processing                     Output
-────────────                    ──────────                     ──────
-USGS (dataRetrieval)  ──┐
-  (streamflow only)     ├──> Parquet Storage ──┐
-                        │                       │
-Canadian HYDAT  ────────┘                       ├──> Signature ──> CSV Summary
-  (streamflow only)                             │    Extraction     (550+ columns)
-                                                │
-Daymet (climate data)  ──> Parquet Storage ─────┘
-  (PPT, temp, SWE)         (joined at runtime)
+## Key Entry Points
 
-Alternative Pipeline:
-Caravan NetCDF ──────────────> Direct Processing ──> Caravan Output
-  (bundled Q + climate)        (annualized CSVs)
-```
-
-### Canonical Code
-- **`config.R`** - Configuration parameters, logging, validation functions (source FIRST)
-- **`helperFunctions.R`** - All core signature extraction functions (45+ functions)
-- Other `helperFunctions*.R` files are deprecated variants (see Code Status section)
-
-### Key Entry Points
-- `execute_extractStreamflowSignatureValuesAndTrends.R` - Main signature extraction workflow
-- `caravan_to_annualized.R` - Caravan data processing (includes climate variables)
-- `streamflowVisualizationApp/app.R` - Shiny dashboard with AWS S3 integration
+- `run_full_processing.R` - PRIMARY: Full signature extraction with climate
+- `caravan_to_annualized.R` - Caravan data processing - no longer a priority, as we preference processing "live" data via api from USGS and HYDAT
+- `streamflowVisualizationApp/app.R` - Shiny dashboard
 
 ## Critical Constraints
 
-1. **CSV Output Format**: MUST remain unchanged - downstream tools depend on exact column names and structure
-2. **Water Year Convention**: Oct 1 - Sep 30 (Northern Hemisphere standard)
-3. **Flow Units**: mm/day after conversion from raw API units (cfs for USGS, m³/s for Canadian)
+1. **CSV Output Format**: MUST remain unchanged - downstream tools depend on exact column names
+2. **Water Year**: Oct 1 - Sep 30
+3. **Flow Units**: mm/day (converted from cfs/m3s)
 4. **Minimum Data Requirements**:
-   - 20+ water years of valid data per gage
+   - 20+ water years per gage
    - 95% non-NA days per water year
-   - 30+ days above minimum flow threshold per water year
+   - 30+ days above minimum flow threshold
 
-## Signature Categories
+## Signature Statistics Rule
 
-> **Detailed Documentation**: See "Summary Documentation for Streamflow Signatures.docx" for comprehensive descriptions of each signature, including mathematical formulations, parameter choices, and scientific rationale.
+**Every signature MUST produce exactly 8 statistics using `generate_stats()`:**
 
-### 1. Flow Volumes (`calculate_flow_vols_by_year`)
-- **Qann**: Annual mean streamflow
-- **Qwin, Qspr, Qsum, Qfal**: Seasonal means (Dec-Feb, Mar-May, Jun-Aug, Sep-Nov)
-- **Q05-Q95**: Flow percentiles (Q05, Q10, Q20, Q25, Q30, Q40, Q50, Q60, Q70, Q75, Q80, Q90, Q95)
+| Suffix | Statistic |
+|--------|-----------|
+| `_senn_slp` | Theil-Sen slope |
+| `_linear_slp` | Linear regression slope |
+| `_spearman_rho` | Spearman correlation |
+| `_spearman_pval` | Spearman p-value |
+| `_mk_rho` | Mann-Kendall tau |
+| `_mk_pval` | Mann-Kendall p-value |
+| `_mean` | Arithmetic mean |
+| `_median` | Median |
 
-### 2. Baseflow (`analyze_baseflow_indices`)
-- **BFI_Eckhardt**: Baseflow index using Eckhardt recursive digital filter (BFImax=0.8, a=0.98)
-- **BFI_LyneHollick**: Baseflow index using Lyne-Hollick filter (alpha=0.925, 2 passes)
-
-### 3. Recession (`analyze_recession_parameters`)
-- **log_a_pointcloud, log_a_events**: Recession rate parameter from dQ/dt = a*Q^b
-- **b_pointcloud, b_events**: Recession exponent
-- **concavity**: Difference in b between first and second halves of recession
-- **log_a_seasonality_amplitude, log_a_seasonality_minimum**: Seasonal variation in recession
-
-### 4. Pulse Metrics (`calculate_pulse_metrics`)
-- **n_high_pulses_year, n_low_pulses_year**: Pulse counts (>90th, <10th percentile)
-- **dur_high_pulses_year, dur_low_pulses_year**: Mean pulse duration
-- **TQmean**: Percentage of days with flow above annual mean
-- **Flow_Reversals**: Direction changes in flow (annual and seasonal)
-
-### 5. Flashiness (`analyze_flashiness_trends`)
-- **R-B Index**: Richards-Baker flashiness index (sum of absolute day-to-day changes / total flow)
-
-### 6. Flow Timing (`analyze_flow_timing_trends`)
-- **D05_day through D95_day**: Day of water year when cumulative flow reaches percentile
-- **D25_to_D75**: Duration between 25% and 75% cumulative flow
-- **Dmax**: Day of maximum flow
-
-### 7. Q-PPT Relationships (`analyze_Q_PPT_relationships`) - *Requires Climate Data*
-- Runoff ratios by season (streamflow / precipitation)
-- Requires PPT column in input data (available via Daymet integration or Caravan)
-
-### 8. Streamflow Elasticity (`calculate_streamflow_elasticity`) - *Requires Climate Data*
-- **elasticity_static**: Overall catchment elasticity - median of annual elasticity values
-- **elasticity**: Rolling window (11-year) elasticity trend statistics
-- Elasticity measures sensitivity of streamflow to precipitation changes: E = (dQ/dP) / (Q_mean/P_mean)
-- Values ~1.0 indicate proportional response; >1 indicates amplified response
-- Citation: Sawicz et al. (2011)
-
-### 9. Q-P Seasonality (`calculate_qp_seasonality`) - *Requires Climate Data*
-- **qp_slope_sd**: Standard deviation of monthly cumulative Q-P slopes (measures seasonality strength)
-- **qp_bimodality**: Bimodality coefficient of Q-P relationship (values >0.555 suggest seasonal/bimodal patterns)
-- Calculated from 30-day rolling slopes of cumulative Q vs cumulative P
-- Citation: Wrede et al. (2015)
-
-### 10. Average Storage (`calculate_average_storage`) - *Requires Climate Data*
-- **avg_storage**: Mean annual catchment storage derived from simplified water balance
-- Cumulative storage calculated as S = cumsum(P - Q)
-- Annual storage interpolated at mean discharge for each water year
-- Units: mm
-- Citation: Peters & Aulenbach (2011)
-
-> **Known Limitation**: This calculation ignores evapotranspiration (ET), using only P - Q for the water balance. This simplification may overestimate storage in watersheds with significant ET losses. Future versions should incorporate ET estimation (e.g., Hargreaves-Samani from temperature data, or external ET products like MODIS ET).
-
-## Signature Statistics Standard (REQUIRED)
-
-### The Rule
-
-**Every signature MUST produce exactly 8 statistics using `generate_stats()`.**
-
-This is not optional. The downstream analysis pipeline, visualization app, and CSV schema all depend on this consistency.
-
-### The 8 Required Statistics
-
-| Suffix | Statistic | Method | Purpose |
-|--------|-----------|--------|---------|
-| `_senn_slp` | Theil-Sen slope | `zyp::zyp.sen` | Robust non-parametric trend detection |
-| `_linear_slp` | Linear regression slope | `lm()` | Parametric trend for comparison |
-| `_spearman_rho` | Spearman's rho | `cor.test` | Rank correlation with time |
-| `_spearman_pval` | Spearman p-value | `cor.test` | Significance of Spearman correlation |
-| `_mk_rho` | Mann-Kendall tau | `Kendall::MannKendall` | Non-parametric trend strength |
-| `_mk_pval` | Mann-Kendall p-value | `Kendall::MannKendall` | Significance of Mann-Kendall test |
-| `_mean` | Arithmetic mean | `mean()` | Central tendency across all years |
-| `_median` | Median | `median()` | Robust central tendency |
-
-### Why This Pattern?
-
-1. **Scientific consistency**: Trends in hydrological signatures are a primary research question
-2. **Multiple methods**: Compare parametric vs non-parametric approaches for robustness
-3. **Schema stability**: Downstream tools expect predictable column names
-4. **Automation**: `generate_stats()` handles edge cases (insufficient data, failed tests)
-
-### Exceptions
-
-Some signatures have additional columns beyond the standard 8:
-- `elasticity_static`: Overall catchment elasticity (single value, not a time series)
-- Recession seasonality: `log_a_seasonality_amplitude`, `log_a_seasonality_minimum`
-
-These exceptions are explicitly documented in `config.R` as `EXPECTED_ELASTICITY_STATIC` and `EXPECTED_RECESSION_SEASONALITY`.
-
-### Adding a New Signature
-
-1. Calculate the metric for each water year → `data.table` with `water_year` column
-2. Call `generate_stats(annual_data, value_cols = "metric_name", year_col = "water_year")`
-3. Return the result (8 columns: `metric_senn_slp`, `metric_linear_slp`, `metric_spearman_rho`, `metric_spearman_pval`, `metric_mk_rho`, `metric_mk_pval`, `metric_mean`, `metric_median`)
-4. Add base name to `EXPECTED_SIGNATURE_BASES` in `config.R`
-5. Run smoke test to verify schema validation passes
-
-## Dependencies
-
-```r
-# Core data handling
-library(data.table)
-library(arrow)        # Parquet I/O
-library(lubridate)    # Date handling
-
-# Data retrieval
-library(dataRetrieval) # USGS NWIS API
-library(tidyhydat)     # Canadian HYDAT database
-
-# Statistics
-library(zyp)          # Theil-Sen slope estimation
-library(Kendall)      # Mann-Kendall trend test
-library(mblm)         # Alternative Theil-Sen
-
-# Spatial (for basin delineation)
-library(sf)
-library(terra)
-
-# Visualization app
-library(shiny)
-library(leaflet)
-library(plotly)
-library(aws.s3)       # S3 data storage
-```
-
-## File Structure
-
-```
-streamflowSignatures/
-├── CLAUDE.md                    # This file
-├── README.md                    # User documentation
-├── SESSION_CONTEXT.md           # Session context notes
-│
-│ ## Core Configuration & Functions
-├── config.R                     # Centralized configuration parameters
-├── helperFunctions.R            # CANONICAL - All core functions (38+ functions)
-│
-│ ## Main Entry Points
-├── run_full_processing.R        # PRIMARY - Full signature extraction with climate data
-├── execute_extractStreamflowSignatureValuesAndTrends.R  # Alternative entry point
-├── caravan_to_annualized.R      # Caravan data processing
-│
-│ ## Data Processing Scripts (Legacy)
-├── streamflowDataProcessing.R                          # Raw USGS/HYDAT processing
-├── streamflowDataProcessing_Caravan.R                  # Caravan processing variant
-├── streamflowDataProcessing_USGS-and-Hydat.R          # Reference gage processing
-├── streamflowDataProcessing_USGS-and-HYDAT_fullTimeseries.R  # Full timeseries variant
-├── streamflowSignatures_wrapperForPreprocessedParquet.R      # Wrapper for pre-processed data
-│
-│ ## Testing & QA/QC
-├── smoke_test.R                 # Quick validation on subset (10 gages)
-├── test_climate_functions.R     # Climate function tests with synthetic data
-├── qa_qc_signatures.R           # Output validation and QA/QC checks
-├── visualize_qa_qc.R            # QA/QC visualization plots
-├── test.R                       # Development/exploratory tests (legacy)
-├── tests/                       # Unit test directory
-│   └── test_climate_signatures.R
-│
-│ ## Utilities
-├── run_conversion.R             # Daymet ZIP to Parquet conversion
-│
-│ ## Shiny Visualization App
-├── streamflowVisualizationApp/
-│   ├── app.R                    # Main Shiny application
-│   └── helperFunctions.R        # App-specific utilities (S3, legends)
-│
-│ ## Data & Metadata
-├── metadata/                    # Basin and gage metadata (42 files)
-├── data_out/                    # Processed outputs (gitignored)
-├── test_output/                 # Test outputs (gitignored)
-│
-└── archive/                     # Archived files (DO NOT USE)
-    ├── helperFunction.R
-    ├── helperFunctions_sept2025.R
-    ├── helperFunctions_extractStreamflowSignatureValuesAndTrends.R
-    ├── helperFunctions_processRawStreamflowToParquet.R
-    ├── helperWrapperFunctions.R
-    └── test_code.txt
-```
+**Exceptions** (documented in `config.R`):
+- `elasticity_static` - single value, not time series
+- `log_a_seasonality_amplitude`, `log_a_seasonality_minimum` - recession seasonality
 
 ## Code Status
 
 | File | Status | Notes |
 |------|--------|-------|
-| `config.R` | **ACTIVE** | Centralized configuration - source before helperFunctions.R |
-| `helperFunctions.R` | **CANONICAL** | All core functions - use this for all development |
-| `run_full_processing.R` | **PRIMARY** | Recommended entry point for full processing |
-| `smoke_test.R` | **ACTIVE** | Run for quick validation |
-| `qa_qc_signatures.R` | **ACTIVE** | Run after processing to validate outputs |
-| `visualize_qa_qc.R` | **ACTIVE** | Generate QA/QC visualizations |
-| `test_climate_functions.R` | **ACTIVE** | Test climate signatures with synthetic data |
-| `streamflowDataProcessing*.R` | **LEGACY** | Older data ingestion scripts - use sparingly |
-| `archive/*` | **ARCHIVED** | DO NOT USE - kept for reference only |
+| `config.R` | **ACTIVE** | Source first |
+| `helperFunctions.R` | **CANONICAL** | All core functions |
+| `run_full_processing.R` | **PRIMARY** | Main entry point |
+| `smoke_test.R` | **ACTIVE** | Quick validation |
+| `qa_qc_signatures.R` | **ACTIVE** | Output validation |
+| `streamflowDataProcessing*.R` | **LEGACY** | Use sparingly |
+| `archive/*` | **DO NOT USE** | Reference only |
 
-## Common Tasks
+## Adding New Signatures
 
-### Run Signature Extraction
-```r
-source("config.R")              # Load configuration
-source("helperFunctions.R")     # Load all functions
+1. Create function in `helperFunctions.R` returning annual values
+2. Call `generate_stats()` to produce 8 statistics
+3. Add base name to `EXPECTED_SIGNATURE_BASES` in `config.R`
+4. Run `smoke_test.R` to verify
 
-summary_output <- process_signatures_from_parquet(
-  parquet_file_path = "path/to/streamflow.parquet",
-  metadata_file_path = "path/to/metadata.csv",
-  output_file = "path/to/output.csv",
-  min_Q_value_and_days = MIN_Q_VALUE_AND_DAYS,  # From config.R
-  min_num_years = MIN_NUM_YEARS,                 # From config.R
-  min_frac_good_data = MIN_FRAC_GOOD_DATA        # From config.R
-)
-```
+## References
 
-### Run Full Processing Pipeline (Recommended)
-The easiest way to run a complete signature extraction with climate data:
-```bash
-# From the streamflowSignatures directory:
-Rscript run_full_processing.R
-```
-
-This script:
-- Loads configuration from `config.R`
-- Reads parquet data from `PARQUET_DATA_DIR` (configured in config.R)
-- Integrates Daymet climate data if available
-- Outputs to `data_out/streamflow_signatures_full_JAN2026.csv`
-- Logs progress to `data_out/processing_log_JAN2026.txt`
-
-**Prerequisites:** Edit `config.R` to set `PARQUET_DATA_DIR` to your data location.
-
-### Validate Output Quality
-After processing, run QA/QC validation:
-```r
-source("config.R")
-source("helperFunctions.R")
-source("qa_qc_signatures.R")
-```
-
-Or run the visualization script for diagnostic plots:
-```r
-source("visualize_qa_qc.R")
-# Outputs to data_out/qa_plots/
-```
-
-QA/QC checks include:
-- Range validation (e.g., BFI ∈ [0,1])
-- Baseflow consistency (BFI_Eckhardt < BFI_LyneHollick)
-- Elasticity constraints
-- Correlation checks between related metrics
-
-
-### Process Caravan Data
-```r
-source("helperFunctions.R")
-
-process_caravan_to_annual(
-  caravan_directory = "path/to/caravan/netcdf",
-  data_project = "camels",
-  min_num_years_data = 30,
-  start_date_filter = as.Date("1979-09-01"),
-  end_date_filter = as.Date("2025-06-01"),
-  output_dir = "annualized_caravan_data"
-)
-```
-
-### Add New Signature
-1. Create calculation function in `helperFunctions.R`
-2. Add call to `process_signatures_from_parquet()` signature extraction section
-3. Ensure output columns follow naming convention: `{metric}_{stat}` (e.g., `Qann_senn_slp`)
-4. Test with small dataset before full run
-
-## Data Sources
-
-### USGS (via dataRetrieval)
-- Parameter code: `00060` (Discharge, cubic feet per second)
-- Quality codes accepted: `A`, `A e`, `P`, `P e`
-- Conversion: cfs → mm/day using drainage area
-
-### Canadian HYDAT (via tidyhydat)
-- Parameter: Flow (m³/s)
-- Excludes regulated stations
-- Conversion: m³/s → mm/day using drainage area
-
-### Caravan
-- NetCDF format with daily streamflow + climate variables
-- Includes: PPT, SWE, temperature
-- Trade-off: Shorter records (ends ~2018-2020) but has climate data
-
-## Logging System
-
-The project includes a structured logging system in `config.R`:
-
-### Log Levels
-- `DEBUG` (10): Verbose debugging info (per-gage, per-year details)
-- `INFO` (20): Normal operation messages (default)
-- `WARN` (30): Warnings that don't stop processing
-- `ERROR` (40): Errors that may stop processing
-- `NONE` (100): Disable all logging
-
-### Usage
-```r
-source("config.R")
-
-# Set log level
-set_log_level("DEBUG")  # Show all messages
-set_log_level("WARN")   # Only warnings and errors
-
-# Enable file logging
-set_log_file("logs/processing.log")
-
-# Log messages with context
-log_info("Processing started", context = "my_function")
-log_warn("Missing data", context = "gage:01234567")
-log_error("File not found", context = "process_signatures")
-```
-
-## Input Validation Functions
-
-Available in `config.R` after sourcing:
-
-| Function | Purpose |
-|----------|---------|
-| `validate_file_exists(path, name, ext)` | Check file exists with optional extension |
-| `validate_directory(path, name, create)` | Check/create directory |
-| `validate_numeric(value, name, min, max)` | Numeric range validation |
-| `validate_columns(df, cols, name)` | Check data frame has required columns |
-| `validate_date(value, name)` | Date parameter validation |
-| `validate_gage_type(type)` | Validate gage type enum |
-
-## Output Validation
-
-```r
-# Validate output CSV schema
-result <- validate_output_schema(output_df, strict = FALSE)
-# Returns list with: valid, n_metadata_cols, n_signature_cols, missing columns
-
-# Validate single gage output
-validate_gage_output(gage_row, gage_id)
-# Checks for NA/Inf values, warns if >50% NA
-```
-
-## Known Issues Fixed (Jan 2026)
-
-### Metadata Lookup Bug
-- **Issue**: Data.table scoping caused all gages to receive the first row's metadata
-- **Root Cause**: `metadata_lookup[gage_id == gage_id]` compared column to itself (always TRUE)
-- **Fix**: Renamed `find_metadata()` parameter to `target_gage_id`
-- **Location**: `helperFunctions.R` line ~3425
-
-### Canadian Basin Area Missing
-- **Issue**: Basin area was hardcoded as `NA` for Canadian stations
-- **Impact**: Canadian gages had no drainage area in output
-- **Fix**: Now fetches `DRAINAGE_AREA_GROSS` from `tidyhydat::hy_stations()`
-- **Locations**:
-  - Metadata creation functions (for new processing)
-  - `process_signatures_from_parquet()` runtime fallback (for existing metadata)
-
-## Future Development
-
-### Climate Integration
-- Complete `analyze_Q_PPT_relationships()` for raw data pipeline
-- Add ERA5/PRISM data fetching for USGS/HYDAT gages
-- Implement synchrony metrics (cross-correlation, lag analysis)
-
-### Code Organization
-- ~~Consolidate active helper file variants into canonical `helperFunctions.R`~~ DONE
-- ~~Add centralized `config.R` for parameters~~ DONE
-- ~~Implement structured logging~~ DONE
-- ~~Fix metadata lookup bug~~ DONE
-- ~~Fix Canadian basin_area bug~~ DONE
-- Add unit tests
+- **@DEVELOPMENT.md** - Architecture, file structure, common tasks, workflows
+- **@SIGNATURES.md** - Detailed signature documentation (10 categories)
+- **@CHANGELOG.md** - Bug fixes, known issues, roadmap
+- **@.claude/rules/validation.md** - Logging and validation API reference
