@@ -12,6 +12,23 @@ All notable changes to the Streamflow Signatures project.
 
 ---
 
+## [February 2026]
+
+### Fixed
+
+#### Visualization App Gage ID Mismatch (HIGH)
+- **Issue**: Scatter plot incorrectly filtered out 3,647 valid gages as "failed QC"
+- **Root Cause**: App compared `gage_id` (with leading zeros, e.g., `01011000`) to metadata `gage_id` (without leading zeros, e.g., `1011000`)
+- **Additional Issue**: App redundantly applied `processing_status == "success"` filter already enforced during pre-processing
+- **Fix**: Removed `goodGages` filter from scatter plot; only `flagged_for_qann_range` is now applied
+- **Location**: `streamflowAndClimateVisualizationApp/app.R`
+
+### Added
+- Comprehensive workflow review document (`WORKFLOW_REVIEW.md`)
+- Documentation of gage ID format differences (`gage_id` vs `gage_id_metadata` columns)
+
+---
+
 ## [January 2026]
 
 ### Fixed
