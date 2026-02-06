@@ -23,9 +23,37 @@ All notable changes to the Streamflow Signatures project.
 - **Fix**: Removed `goodGages` filter from scatter plot; only `flagged_for_qann_range` is now applied
 - **Location**: `streamflowAndClimateVisualizationApp/app.R`
 
+#### Code Review Bug Fixes (Feb 2026)
+
+**HIGH severity:**
+- **H1**: `calculate_flow_vols_by_year()` — Renamed misleading variables from `annual_means`/`*_means` to `annual_totals`/`*_totals`; updated SIGNATURES.md to say "total" with units "mm" instead of "mean" with "mm/day"
+- **H2**: `calculate_flow_vols_by_year()` — Added 250-day minimum data filter per water year; previously years with as few as 1 day could pass through
+- **H3**: `analyze_recession_parameters()` — Fixed early-return schema: was producing 5 columns with wrong suffixes (`slp`, `rho`, `pval`), now produces correct 8 columns matching `STAT_SUFFIXES`
+- **H4**: `analyze_flow_timing_trends()` — `cumsum()` now handles NAs by replacing with 0 before accumulation; previously a single NA corrupted all D-day metrics for that year
+- **H5**: Canadian unit conversion — Replaced sentinel value `99999` with `NA` when basin area is missing; previously produced absurd Q values (~100,000+ mm/day)
+
+**MEDIUM severity:**
+- **M1**: `lyne_hollick_filter()` — Fixed multi-pass to use previous pass output as input; the forward pass was always referencing original Q regardless of pass number, making `passes=2` effectively single-pass
+- **M2**: `analyze_recession_parameters()` — Point cloud `log_a` now uses `b_pointcloud` instead of `median_b` from per-event fits
+- **M4**: `analyze_flashiness_trends()` — Added division-by-zero guard when all flow values are zero
+- **M5**: `count_flow_reversals()` — NA gaps are now interpolated instead of removed, preventing false adjacencies between non-adjacent days
+- **M6**: `calculate_qp_seasonality()` and `calculate_average_storage()` — Use `copy()` to prevent modifying parent data.table by reference via `:=`
+- **M7**: `calculate_qp_seasonality()` — Slopes now assigned to middle of rolling window instead of end
+- **M8**: `analyze_Q_PPT_relationships()` — Raised near-zero PPT threshold from 0.001mm to 10mm (annual) and 1mm (seasonal) to prevent extreme runoff ratios
+
+**LOW severity:**
+- **L1**: `generate_stats()` — Now explicitly sorts by year before trend calculations
+- **L3**: `analyze_baseflow_indices()` — Removed unused `doy` from required columns (only `dowy` is used)
+- **L5**: `process_signatures_from_parquet()` — Non-climate error handlers now log warnings instead of silently swallowing errors
+- **L7**: `analyze_flashiness_trends()` — Minimum-day check now counts non-NA values instead of total rows
+- **L8**: `process_signatures_from_parquet()` — Renamed loop variable from `gage_id` to `current_gage_id` to avoid data.table column name shadowing
+
 ### Added
 - Comprehensive workflow review document (`WORKFLOW_REVIEW.md`)
 - Documentation of gage ID format differences (`gage_id` vs `gage_id_metadata` columns)
+
+### Changed
+- SIGNATURES.md updated to match actual code: column names, metric counts, units, PPT thresholds, D-day naming (D5 not D05), recession seasonality variants
 
 ---
 

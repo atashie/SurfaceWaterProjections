@@ -696,7 +696,13 @@ generate_streamflow_dt <- function(dt, data_origin,
       
       # Convert from m^3/s to mm/day
       sqkm <- hy_stations(paste(dt$STATION_NUMBER))$DRAINAGE_AREA_GROSS
-      conversion <- ifelse(is.na(sqkm), 99999, 60 * 60 * 24 * 1e9 / (sqkm * 1e12))
+      if (is.na(sqkm)) {
+        log_warn("Missing basin area for Canadian gage", dt$STATION_NUMBER,
+                 "- Q will be NA (cannot convert units)", context = "process_gage")
+        conversion <- NA
+      } else {
+        conversion <- 60 * 60 * 24 * 1e9 / (sqkm * 1e12)
+      }
       streamy$Q <- as.numeric(streamy$Q_rawUnits) * conversion
       
       streamy$year  <- lubridate::year(streamy$Date)
@@ -831,6 +837,9 @@ generate_stats <- function(data, value_cols = NULL, year_col = "year", min_rows 
     stop(paste("Year column '", year_col, "' not found in data"))
   }
 
+  # Ensure data is sorted by year for trend calculations
+  data <- data[order(data[[year_col]]), ]
+
   # If value_cols not specified, use all numeric columns except year
   if (is.null(value_cols)) {
     numeric_cols <- names(data)[sapply(data, is.numeric)]
@@ -940,42 +949,53 @@ calculate_flow_vols_by_year = function(streamflow_data){
     missing <- required_cols[!required_cols %in% colnames(streamflow_data)]
     stop(paste("Missing required columns:", paste(missing, collapse=", ")))
   }
-  
-  # Calculate annual means
-  annual_means <- aggregate(Q ~ water_year, data=streamflow_data, FUN=sum, na.rm=TRUE)
-  
+
+  # Filter out water years with insufficient data (< MIN_NONA_DAYS_ANNUAL non-NA days)
+  years <- unique(streamflow_data$water_year)
+  valid_years <- c()
+  for (yr in years) {
+    yr_data <- streamflow_data[streamflow_data$water_year == yr, ]
+    if (sum(!is.na(yr_data$Q)) >= MIN_NONA_DAYS_ANNUAL) {
+      valid_years <- c(valid_years, yr)
+    }
+  }
+  streamflow_data <- streamflow_data[streamflow_data$water_year %in% valid_years, ]
+
+  # Calculate annual total flow (mm) by summing daily Q (mm/day)
+  annual_totals <- aggregate(Q ~ water_year, data=streamflow_data, FUN=sum, na.rm=TRUE)
+
   # Check if we have any valid annual data
-  if (nrow(annual_means) == 0) {
+  if (nrow(annual_totals) == 0) {
     # Return empty result with correct structure
-    return(generate_stats(data.frame(water_year = numeric()), 
-                          value_cols = character(), 
+    return(generate_stats(data.frame(water_year = numeric()),
+                          value_cols = character(),
                           year_col = "water_year"))
   }
-  
-  names(annual_means)[2] <- "Qann"
-  
-  # Calculate seasonal means
+
+  names(annual_totals)[2] <- "Qann"
+
+  # Calculate seasonal total flow (mm)
   winter <- streamflow_data[streamflow_data$month %in% c(12, 1, 2), ]
   spring <- streamflow_data[streamflow_data$month %in% c(3, 4, 5), ]
   summer <- streamflow_data[streamflow_data$month %in% c(6, 7, 8), ]
   fall <- streamflow_data[streamflow_data$month %in% c(9, 10, 11), ]
-  
-  winter_means <- aggregate(Q ~ water_year, data=winter, FUN=sum, na.rm=TRUE)
-  spring_means <- aggregate(Q ~ water_year, data=spring, FUN=sum, na.rm=TRUE)
-  summer_means <- aggregate(Q ~ water_year, data=summer, FUN=sum, na.rm=TRUE)
-  fall_means <- aggregate(Q ~ water_year, data=fall, FUN=sum, na.rm=TRUE)
-  
-  # Rename columns for seasonal means
-  if (nrow(winter_means) > 0) names(winter_means)[2] <- "Qwin"
-  if (nrow(spring_means) > 0) names(spring_means)[2] <- "Qspr"
-  if (nrow(summer_means) > 0) names(summer_means)[2] <- "Qsum"
-  if (nrow(fall_means) > 0) names(fall_means)[2] <- "Qfal"
-  
+
+  winter_totals <- aggregate(Q ~ water_year, data=winter, FUN=sum, na.rm=TRUE)
+  spring_totals <- aggregate(Q ~ water_year, data=spring, FUN=sum, na.rm=TRUE)
+  summer_totals <- aggregate(Q ~ water_year, data=summer, FUN=sum, na.rm=TRUE)
+  fall_totals <- aggregate(Q ~ water_year, data=fall, FUN=sum, na.rm=TRUE)
+
+  # Rename columns for seasonal totals
+  if (nrow(winter_totals) > 0) names(winter_totals)[2] <- "Qwin"
+  if (nrow(spring_totals) > 0) names(spring_totals)[2] <- "Qspr"
+  if (nrow(summer_totals) > 0) names(summer_totals)[2] <- "Qsum"
+  if (nrow(fall_totals) > 0) names(fall_totals)[2] <- "Qfal"
+
   # After seasonal aggregations, check if any are empty
-  if (nrow(winter_means) == 0) winter_means <- data.frame(water_year=numeric(), Qwin=numeric())
-  if (nrow(spring_means) == 0) spring_means <- data.frame(water_year=numeric(), Qspr=numeric())
-  if (nrow(summer_means) == 0) summer_means <- data.frame(water_year=numeric(), Qsum=numeric())
-  if (nrow(fall_means) == 0) fall_means <- data.frame(water_year=numeric(), Qfal=numeric())
+  if (nrow(winter_totals) == 0) winter_totals <- data.frame(water_year=numeric(), Qwin=numeric())
+  if (nrow(spring_totals) == 0) spring_totals <- data.frame(water_year=numeric(), Qspr=numeric())
+  if (nrow(summer_totals) == 0) summer_totals <- data.frame(water_year=numeric(), Qsum=numeric())
+  if (nrow(fall_totals) == 0) fall_totals <- data.frame(water_year=numeric(), Qfal=numeric())
   
   # Calculate flow percentiles by year with error handling
   calculate_percentile <- function(data, percentile) {
@@ -1018,13 +1038,13 @@ calculate_flow_vols_by_year = function(streamflow_data){
     q95_q10$`Q95-Q10` <- q95_q10$Q95 - q95_q10$Q10
     q95_q10 <- q95_q10[, c("water_year", "Q95-Q10")]
   } else {
-    q95_q10 <- data.frame(water_year = annual_means$water_year, `Q95-Q10` = NA)
+    q95_q10 <- data.frame(water_year = annual_totals$water_year, `Q95-Q10` = NA)
   }
-  
+
   # Merge all metrics into a single data frame
-  # Start with annual means
-  all_metrics <- annual_means
-  
+  # Start with annual totals
+  all_metrics <- annual_totals
+
   # Helper function for safe merging
   safe_merge <- function(df1, df2, by_col) {
     if (nrow(df2) == 0) {
@@ -1034,11 +1054,11 @@ calculate_flow_vols_by_year = function(streamflow_data){
     return(merge(df1, df2, by=by_col, all.x=TRUE))
   }
   
-  # Merge seasonal means
-  all_metrics <- safe_merge(all_metrics, winter_means, "water_year")
-  all_metrics <- safe_merge(all_metrics, spring_means, "water_year")
-  all_metrics <- safe_merge(all_metrics, summer_means, "water_year")
-  all_metrics <- safe_merge(all_metrics, fall_means, "water_year")
+  # Merge seasonal totals
+  all_metrics <- safe_merge(all_metrics, winter_totals, "water_year")
+  all_metrics <- safe_merge(all_metrics, spring_totals, "water_year")
+  all_metrics <- safe_merge(all_metrics, summer_totals, "water_year")
+  all_metrics <- safe_merge(all_metrics, fall_totals, "water_year")
   
   # Merge percentiles
   all_metrics <- safe_merge(all_metrics, q1, "water_year")
@@ -1212,17 +1232,16 @@ analyze_flashiness_trends <- function(streamflow_data) {
     year_data <- streamflow_data[streamflow_data$water_year == yr, ]
     
     
-    # Need sufficient data points for the year
-    if (nrow(year_data) < 30) {
+    # Need sufficient non-NA data points for the year
+    if (sum(!is.na(year_data$Q)) < 30) {
       next
     }
-    
+
     # Sort by day to ensure chronological order
     if ("dowy" %in% colnames(year_data)) {
       year_data <- year_data[order(year_data$dowy), ]
     }
-    
-    
+
     # Calculate RB index: sum of absolute day-to-day changes divided by total flow
     q_values <- year_data$Q
     
@@ -1238,9 +1257,13 @@ analyze_flashiness_trends <- function(streamflow_data) {
     
     # Calculate absolute day-to-day changes
     q_diff <- abs(diff(q_values))
-    
+
+    # Guard against division by zero (all flows are zero)
+    total_q <- sum(q_values, na.rm=TRUE)
+    if (total_q == 0) next
+
     # Calculate RB index
-    rb_index <- sum(q_diff, na.rm=TRUE) / sum(q_values, na.rm=TRUE)
+    rb_index <- sum(q_diff, na.rm=TRUE) / total_q
     
     # Store in flashiness_byYear
     flashiness_byYear$RB_index[flashiness_byYear$water_year == yr] <- rb_index
@@ -1304,9 +1327,12 @@ analyze_flow_timing_trends <- function(streamflow_data) {
       next
     }
     
-    # Calculate cumulative flow for each day
-    year_data$cum_flow <- cumsum(year_data$Q)
-    
+    # Replace NAs with 0 before cumsum (conservative: treats missing as zero flow)
+    # R's cumsum() propagates NAs, which would corrupt all subsequent values
+    q_for_cumsum <- year_data$Q
+    q_for_cumsum[is.na(q_for_cumsum)] <- 0
+    year_data$cum_flow <- cumsum(q_for_cumsum)
+
     # Calculate cumulative flow as percentage of total
     year_data$cum_pct <- (year_data$cum_flow / total_flow) * 100
     
@@ -1422,8 +1448,16 @@ calculate_pulse_metrics <- function(streamflow_data) {
   
   # Function to count flow reversals
   count_flow_reversals <- function(flow_vector, threshold_pct = 0.02) {
-    # Remove NAs
-    flow_clean <- flow_vector[!is.na(flow_vector)]
+    # Interpolate small NA gaps instead of removing them,
+    # to avoid creating false adjacencies between non-adjacent days
+    if (any(is.na(flow_vector))) {
+      non_na_idx <- which(!is.na(flow_vector))
+      if (length(non_na_idx) < 3) return(0)
+      flow_clean <- approx(non_na_idx, flow_vector[non_na_idx],
+                            xout = seq_len(length(flow_vector)), rule = 2)$y
+    } else {
+      flow_clean <- flow_vector
+    }
     n <- length(flow_clean)
     
     if (n < 3) return(0)
@@ -1548,38 +1582,41 @@ analyze_Q_PPT_relationships <- function(streamflow_data) {
   
   # Calculate annual totals
   annual_totals <- aggregate(cbind(Q, PPT) ~ water_year, data=streamflow_data, FUN=sum, na.rm=TRUE)
-  # Calculate annual runoff ratio, handling cases where PPT is zero or very small
-  annual_totals$annual_runoff_ratio <- ifelse(annual_totals$PPT > 0.001, 
-                                              annual_totals$Q / annual_totals$PPT, 
+  # Calculate annual runoff ratio; require minimum 10mm annual PPT (consistent with elasticity)
+  annual_totals$annual_runoff_ratio <- ifelse(annual_totals$PPT > ELASTICITY_MIN_ANNUAL_PPT,
+                                              annual_totals$Q / annual_totals$PPT,
                                               NA)
-  
+
   # Calculate seasonal totals and ratios
+  # Seasonal minimum PPT threshold: 1mm (avoids extreme ratios from near-zero PPT)
+  seasonal_min_ppt <- 1
+
   # Winter (December, January, February)
   winter <- streamflow_data[streamflow_data$month %in% c(12, 1, 2), ]
   winter_totals <- aggregate(cbind(Q, PPT) ~ water_year, data=winter, FUN=sum, na.rm=TRUE)
-  winter_totals$winter_runoff_ratio <- ifelse(winter_totals$PPT > 0.001, 
-                                              winter_totals$Q / winter_totals$PPT, 
+  winter_totals$winter_runoff_ratio <- ifelse(winter_totals$PPT > seasonal_min_ppt,
+                                              winter_totals$Q / winter_totals$PPT,
                                               NA)
-  
+
   # Spring (March, April, May)
   spring <- streamflow_data[streamflow_data$month %in% c(3, 4, 5), ]
   spring_totals <- aggregate(cbind(Q, PPT) ~ water_year, data=spring, FUN=sum, na.rm=TRUE)
-  spring_totals$spring_runoff_ratio <- ifelse(spring_totals$PPT > 0.001, 
-                                              spring_totals$Q / spring_totals$PPT, 
+  spring_totals$spring_runoff_ratio <- ifelse(spring_totals$PPT > seasonal_min_ppt,
+                                              spring_totals$Q / spring_totals$PPT,
                                               NA)
-  
+
   # Summer (June, July, August)
   summer <- streamflow_data[streamflow_data$month %in% c(6, 7, 8), ]
   summer_totals <- aggregate(cbind(Q, PPT) ~ water_year, data=summer, FUN=sum, na.rm=TRUE)
-  summer_totals$summer_runoff_ratio <- ifelse(summer_totals$PPT > 0.001, 
-                                              summer_totals$Q / summer_totals$PPT, 
+  summer_totals$summer_runoff_ratio <- ifelse(summer_totals$PPT > seasonal_min_ppt,
+                                              summer_totals$Q / summer_totals$PPT,
                                               NA)
-  
+
   # Fall (September, October, November)
   fall <- streamflow_data[streamflow_data$month %in% c(9, 10, 11), ]
   fall_totals <- aggregate(cbind(Q, PPT) ~ water_year, data=fall, FUN=sum, na.rm=TRUE)
-  fall_totals$fall_runoff_ratio <- ifelse(fall_totals$PPT > 0.001, 
-                                          fall_totals$Q / fall_totals$PPT, 
+  fall_totals$fall_runoff_ratio <- ifelse(fall_totals$PPT > seasonal_min_ppt,
+                                          fall_totals$Q / fall_totals$PPT,
                                           NA)
   
   # Combine all runoff ratios into a single dataframe by year
@@ -1629,8 +1666,8 @@ analyze_Q_PPT_relationships <- function(streamflow_data) {
 
 
 analyze_baseflow_indices <- function(streamflow_data) {
-  # Check if required columns exist
-  required_cols <- c("water_year", "Q", "doy")
+  # Check if required columns exist (dowy is used for sorting, not doy)
+  required_cols <- c("water_year", "Q", "dowy")
   if (!all(required_cols %in% colnames(streamflow_data))) {
     missing <- required_cols[!required_cols %in% colnames(streamflow_data)]
     stop(paste("Missing required columns:", paste(missing, collapse=", ")))
@@ -1664,48 +1701,48 @@ analyze_baseflow_indices <- function(streamflow_data) {
   # Function to apply Lyne-Hollick filter
   lyne_hollick_filter <- function(Q, alpha = 0.925, passes = 2) {
     n <- length(Q)
-    
-    # Apply filter in forward and backward directions for specified passes
-    quickflow <- Q
-    
+
+    # The input signal for each pass; first pass uses original Q,
+    # subsequent passes use baseflow from the previous pass
+    input_signal <- Q
+
     for (pass in 1:passes) {
-      # Forward pass
+      # Forward pass — filter the current input signal
       qf_forward <- numeric(n)
       qf_forward[1] <- 0
-      
+
       for (i in 2:n) {
-        if (!is.na(Q[i]) && !is.na(Q[i-1]) && !is.na(qf_forward[i-1])) {
-          qf_forward[i] <- alpha * qf_forward[i-1] + ((1 + alpha) / 2) * (Q[i] - Q[i-1])
-          # Constrain quickflow
-          qf_forward[i] <- max(0, min(qf_forward[i], Q[i]))
+        if (!is.na(input_signal[i]) && !is.na(input_signal[i-1]) && !is.na(qf_forward[i-1])) {
+          qf_forward[i] <- alpha * qf_forward[i-1] + ((1 + alpha) / 2) * (input_signal[i] - input_signal[i-1])
+          # Constrain quickflow to [0, input_signal]
+          qf_forward[i] <- max(0, min(qf_forward[i], input_signal[i]))
         } else {
           qf_forward[i] <- NA
         }
       }
-      
+
       # Backward pass
       qf_backward <- numeric(n)
       qf_backward[n] <- qf_forward[n]
-      
+
       for (i in (n-1):1) {
         if (!is.na(qf_forward[i]) && !is.na(qf_forward[i+1]) && !is.na(qf_backward[i+1])) {
           qf_backward[i] <- alpha * qf_backward[i+1] + ((1 + alpha) / 2) * (qf_forward[i] - qf_forward[i+1])
-          # Constrain quickflow
-          qf_backward[i] <- max(0, min(qf_backward[i], Q[i]))
+          # Constrain quickflow to [0, input_signal]
+          qf_backward[i] <- max(0, min(qf_backward[i], input_signal[i]))
         } else {
           qf_backward[i] <- NA
         }
       }
-      
-      quickflow <- qf_backward
+
+      # Baseflow from this pass becomes input for the next pass
+      input_signal <- input_signal - qf_backward
+      input_signal[input_signal < 0] <- 0
+      input_signal[is.na(Q)] <- NA
     }
-    
-    # Calculate baseflow as total flow minus quickflow
-    baseflow <- Q - quickflow
-    baseflow[baseflow < 0] <- 0
-    baseflow[is.na(Q)] <- NA
-    
-    return(baseflow)
+
+    # After all passes, input_signal holds the final baseflow
+    return(input_signal)
   }
   
   # Initialize data frame to store annual BFI values
@@ -2057,10 +2094,10 @@ analyze_recession_parameters <- function(streamflow_data) {
         # Fit b using point cloud
         pc_fit <- lm(log(all_dQ_dt) ~ log(all_Q))
         b_pointcloud <- coef(pc_fit)[2]
-        
-        # Calculate log(a) using median b
+
+        # Calculate log(a) using b_pointcloud (not median_b from per-event fits)
         # For each point: log(a) = log(-dQ/dt) - b*log(Q)
-        log_a_values_pc <- log(all_dQ_dt) - median_b * log(all_Q)
+        log_a_values_pc <- log(all_dQ_dt) - b_pointcloud * log(all_Q)
         log_a_pointcloud <- median(log_a_values_pc, na.rm = TRUE)
         
         annual_metrics$b_pointcloud[annual_metrics$water_year == yr] <- b_pointcloud
@@ -2106,21 +2143,17 @@ analyze_recession_parameters <- function(streamflow_data) {
   # Check if we have enough recession events overall (minimum 25 per RECESSION_MIN_EVENTS in config.R)
   total_events <- length(all_recession_events)
   if (total_events < RECESSION_MIN_EVENTS) {
-    # Not enough data, return all NAs
-    # Initialize results data frame with correct structure
-    n_cols <- length(signatures_with_stats) * 5 + length(seasonality_signatures)
-    result <- data.frame(matrix(NA, nrow=1, ncol=n_cols))
-    
-    # Set column names
+    # Not enough data, return all NAs with correct 8-statistic schema
     col_names <- c()
     for (sig in signatures_with_stats) {
-      for (stat in c("slp", "rho", "pval", "mean", "median")) {
-        col_names <- c(col_names, paste0(sig, "_", stat))
+      for (stat in STAT_SUFFIXES) {
+        col_names <- c(col_names, paste0(sig, stat))
       }
     }
     col_names <- c(col_names, seasonality_signatures)
+    result <- data.frame(matrix(NA, nrow=1, ncol=length(col_names)))
     colnames(result) <- col_names
-    
+
     return(result)
   }
   
@@ -3106,7 +3139,7 @@ calculate_qp_seasonality <- function(streamflow_data,
 
   # Calculate annual metrics
   annual_metrics <- rbindlist(lapply(years, function(yr) {
-    year_data <- streamflow_data[water_year == yr]
+    year_data <- copy(streamflow_data[water_year == yr])
 
     if (nrow(year_data) < 300) return(NULL)
 
@@ -3143,8 +3176,9 @@ calculate_qp_seasonality <- function(streamflow_data,
       delta_Q / delta_P
     })
 
-    # Associate slopes with months (use middle of window)
-    slope_months <- year_data$month[(slope_window_days):n]
+    # Associate slopes with months (use middle of window, not end)
+    mid_offsets <- (slope_window_days):n - floor(slope_window_days / 2)
+    slope_months <- year_data$month[mid_offsets]
 
     # Calculate monthly mean slopes
     slope_dt <- data.table(month = slope_months, slope = slopes)
@@ -3263,7 +3297,7 @@ calculate_average_storage <- function(streamflow_data) {
 
   # Calculate storage for each year
   annual_storage <- rbindlist(lapply(years, function(yr) {
-    year_data <- streamflow_data[water_year == yr]
+    year_data <- copy(streamflow_data[water_year == yr])
 
     if (nrow(year_data) < 300) return(NULL)
 
@@ -4198,48 +4232,49 @@ process_signatures_from_parquet <- function(
   
   # Process each unique gage
   for (i in seq_along(unique_gages)) {
-    gage_id <- unique_gages[i]
-    
+    # Use current_gage_id to avoid shadowing the data.table column name 'gage_id'
+    current_gage_id <- unique_gages[i]
+
     if (i %% 100 == 0) {
       log_info("Processing gage", i, "of", length(unique_gages), context = ctx)
     }
-    
+
     tryCatch({
       # Find metadata for this gage
-      gage_meta <- find_metadata(gage_id, metadata_lookup)
+      gage_meta <- find_metadata(current_gage_id, metadata_lookup)
 
       if (is.null(gage_meta)) {
-        unmatched_gages <- c(unmatched_gages, gage_id)
+        unmatched_gages <- c(unmatched_gages, current_gage_id)
         next
       }
 
       # If basin_area is NA and this looks like a Canadian gage (format: ##XX###),
       # try to fetch from tidyhydat
-      if (is.na(gage_meta$basin_area) && grepl("^[0-9]{2}[A-Z]{2}", gage_id)) {
+      if (is.na(gage_meta$basin_area) && grepl("^[0-9]{2}[A-Z]{2}", current_gage_id)) {
         gage_meta$basin_area <- tryCatch({
-          stn_info <- hy_stations(gage_id)
+          stn_info <- hy_stations(current_gage_id)
           as.numeric(stn_info$DRAINAGE_AREA_GROSS)
         }, error = function(e) NA_real_)
       }
 
       matched_gages <- matched_gages + 1
-      
+
       # Extract streamflow data for this gage
-      gage_flow <- streamflow_data[gage_id == unique_gages[i], ]
-      
+      gage_flow <- streamflow_data[gage_id == current_gage_id, ]
+
       if (nrow(gage_flow) == 0) {
-        log_debug("No data for gage", gage_id, context = ctx)
+        log_debug("No data for gage", current_gage_id, context = ctx)
         next
       }
 
       # Ensure required columns exist
       if (!"Date" %in% names(gage_flow)) {
-        log_warn("Missing Date column for gage", gage_id, context = ctx)
+        log_warn("Missing Date column for gage", current_gage_id, context = ctx)
         next
       }
 
       if (!"Q" %in% names(gage_flow)) {
-        log_warn("Missing Q column for gage", gage_id, context = ctx)
+        log_warn("Missing Q column for gage", current_gage_id, context = ctx)
         next
       }
 
@@ -4247,7 +4282,7 @@ process_signatures_from_parquet <- function(
       gage_flow <- gage_flow[!is.na(Q)]
 
       if (nrow(gage_flow) == 0) {
-        log_debug("No valid Q data for gage", gage_id, context = ctx)
+        log_debug("No valid Q data for gage", current_gage_id, context = ctx)
         next
       }
       
@@ -4276,15 +4311,15 @@ process_signatures_from_parquet <- function(
       if (has_daymet) {
         tryCatch({
           gage_flow <- integrate_daymet_with_streamflow(
-            gage_flow, gage_id, daymet_parquet_path
+            gage_flow, current_gage_id, daymet_parquet_path
           )
           gage_has_climate <- "PPT" %in% names(gage_flow) &&
                               sum(!is.na(gage_flow$PPT)) > 0
           if (gage_has_climate) {
-            log_debug("Climate data integrated for gage", gage_id, context = ctx)
+            log_debug("Climate data integrated for gage", current_gage_id, context = ctx)
           }
         }, error = function(e) {
-          log_warn("Could not integrate Daymet for gage", gage_id, ":",
+          log_warn("Could not integrate Daymet for gage", current_gage_id, ":",
                    e$message, context = ctx)
         })
       }
@@ -4303,7 +4338,7 @@ process_signatures_from_parquet <- function(
         if (nonzero_rows < min_Q_value_and_days[2]) {
           log_debug("WY", this_wy, "rejected: only", nonzero_rows,
                     "days > threshold (need", min_Q_value_and_days[2], ")",
-                    context = paste0(ctx, ":", gage_id))
+                    context = paste0(ctx, ":", current_gage_id))
           next
         }
 
@@ -4322,7 +4357,7 @@ process_signatures_from_parquet <- function(
           log_debug("WY", this_wy, "rejected: only", n_good_days,
                     "valid days (need", min_required_days, "for",
                     sprintf("%.1f%%", min_frac_good_data * 100), "coverage)",
-                    context = paste0(ctx, ":", gage_id))
+                    context = paste0(ctx, ":", current_gage_id))
           next
         }
 
@@ -4332,7 +4367,7 @@ process_signatures_from_parquet <- function(
 
       # Filter 3: Check minimum number of qualifying water years
       if (length(water_years_to_use) < min_num_years) {
-        log_debug("Insufficient qualifying water years for gage", gage_id,
+        log_debug("Insufficient qualifying water years for gage", current_gage_id,
                   "(", length(water_years_to_use), "water years)", context = ctx)
         next
       }
@@ -4346,31 +4381,45 @@ process_signatures_from_parquet <- function(
       # Calculate each metric group with error handling
       tryCatch({
         metrics_list$flow_vols <- calculate_flow_vols_by_year(streamflow_data_filtered)
-      }, error = function(e) NULL)
-      
+      }, error = function(e) {
+        log_warn("Flow volumes failed for gage", current_gage_id, ":", e$message, context = ctx)
+      })
+
       tryCatch({
         metrics_list$fdc_trends <- analyze_fdc_trends_from_streamflow(streamflow_data_filtered)
-      }, error = function(e) NULL)
-      
+      }, error = function(e) {
+        log_warn("FDC trends failed for gage", current_gage_id, ":", e$message, context = ctx)
+      })
+
       tryCatch({
         metrics_list$flashiness <- analyze_flashiness_trends(streamflow_data_filtered)
-      }, error = function(e) NULL)
-      
+      }, error = function(e) {
+        log_warn("Flashiness failed for gage", current_gage_id, ":", e$message, context = ctx)
+      })
+
       tryCatch({
         metrics_list$flow_timing <- analyze_flow_timing_trends(streamflow_data_filtered)
-      }, error = function(e) NULL)
-      
+      }, error = function(e) {
+        log_warn("Flow timing failed for gage", current_gage_id, ":", e$message, context = ctx)
+      })
+
       tryCatch({
         metrics_list$pulses <- calculate_pulse_metrics(streamflow_data_filtered)
-      }, error = function(e) NULL)
-      
+      }, error = function(e) {
+        log_warn("Pulse metrics failed for gage", current_gage_id, ":", e$message, context = ctx)
+      })
+
       tryCatch({
         metrics_list$baseflow <- analyze_baseflow_indices(streamflow_data_filtered)
-      }, error = function(e) NULL)
-      
+      }, error = function(e) {
+        log_warn("Baseflow indices failed for gage", current_gage_id, ":", e$message, context = ctx)
+      })
+
       tryCatch({
         metrics_list$recession <- analyze_recession_parameters(streamflow_data_filtered)
-      }, error = function(e) NULL)
+      }, error = function(e) {
+        log_warn("Recession parameters failed for gage", current_gage_id, ":", e$message, context = ctx)
+      })
 
       # ============= CLIMATE-DEPENDENT SIGNATURES =============
       if (gage_has_climate) {
@@ -4378,34 +4427,34 @@ process_signatures_from_parquet <- function(
         tryCatch({
           metrics_list$qtoppt <- analyze_Q_PPT_relationships(streamflow_data_filtered)
         }, error = function(e) {
-          log_debug("Q-PPT analysis failed for gage", gage_id, ":", e$message, context = ctx)
+          log_debug("Q-PPT analysis failed for gage", current_gage_id, ":", e$message, context = ctx)
         })
 
         # Streamflow elasticity (Sawicz et al. 2011)
         tryCatch({
           metrics_list$elasticity <- calculate_streamflow_elasticity(streamflow_data_filtered)
         }, error = function(e) {
-          log_debug("Elasticity calc failed for gage", gage_id, ":", e$message, context = ctx)
+          log_debug("Elasticity calc failed for gage", current_gage_id, ":", e$message, context = ctx)
         })
 
         # Q-P seasonality (Wrede et al. 2015)
         tryCatch({
           metrics_list$qp_seasonality <- calculate_qp_seasonality(streamflow_data_filtered)
         }, error = function(e) {
-          log_debug("Q-P seasonality calc failed for gage", gage_id, ":", e$message, context = ctx)
+          log_debug("Q-P seasonality calc failed for gage", current_gage_id, ":", e$message, context = ctx)
         })
 
         # Average storage (Peters & Aulenbach 2011)
         tryCatch({
           metrics_list$avg_storage <- calculate_average_storage(streamflow_data_filtered)
         }, error = function(e) {
-          log_debug("Storage calc failed for gage", gage_id, ":", e$message, context = ctx)
+          log_debug("Storage calc failed for gage", current_gage_id, ":", e$message, context = ctx)
         })
       }
 
       # Create output row
       gage_row <- data.table(
-        gage_id = gage_id,
+        gage_id = current_gage_id,
         gage_id_metadata = gage_meta$gage_id,  # Store the metadata version too
         latitude = gage_meta$latitude,
         longitude = gage_meta$longitude, 
@@ -4428,7 +4477,7 @@ process_signatures_from_parquet <- function(
       summary_output <- rbind(summary_output, gage_row, fill = TRUE)
 
     }, error = function(e) {
-      log_error("Error processing gage", gage_id, ":", e$message, context = ctx)
+      log_error("Error processing gage", current_gage_id, ":", e$message, context = ctx)
     })
 
     # Periodic save

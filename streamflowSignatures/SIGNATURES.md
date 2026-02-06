@@ -29,15 +29,20 @@ Each signature produces **8 statistics** via `generate_stats()`:
 
 | Metric | Description |
 |--------|-------------|
-| **Qann** | Annual mean streamflow |
-| **Qwin** | Winter mean (Dec-Feb) |
-| **Qspr** | Spring mean (Mar-May) |
-| **Qsum** | Summer mean (Jun-Aug) |
-| **Qfal** | Fall mean (Sep-Nov) |
-| **Q05-Q95** | Flow percentiles (Q05, Q10, Q20, Q25, Q30, Q40, Q50, Q60, Q70, Q75, Q80, Q90, Q95) |
+| **Qann** | Annual total streamflow |
+| **Qwin** | Winter total (Dec-Feb) |
+| **Qspr** | Spring total (Mar-May) |
+| **Qsum** | Summer total (Jun-Aug) |
+| **Qfal** | Fall total (Sep-Nov) |
+| **Q1-Q99** | Flow percentiles (Q1, Q5, Q10, Q20, Q25, Q30, Q40, Q50, Q60, Q70, Q75, Q80, Q90, Q95, Q99) |
+| **Q95-Q10** | Ratio of high to low flow percentiles |
 
 ### Units
-mm/day (after conversion from raw API units)
+- Qann, Qwin, Qspr, Qsum, Qfal: mm (total over period, summed from daily mm/day values)
+- Q percentiles: mm/day (daily flow at each percentile)
+
+### Data Quality
+Years with fewer than 250 non-NA days are excluded.
 
 ---
 
@@ -76,12 +81,17 @@ Analyzes recession curve behavior using dQ/dt = a*Q^b relationship.
 | **b_pointcloud** | Recession exponent (point cloud method) |
 | **b_events** | Recession exponent (event-based method) |
 | **concavity** | Difference in b between first and second halves of recession |
-| **log_a_seasonality_amplitude** | Seasonal amplitude in recession rate |
-| **log_a_seasonality_minimum** | Seasonal minimum day for recession rate |
+| **log_a_seasonality_amplitude_all** | Seasonal amplitude in recession rate (all data) |
+| **log_a_seasonality_amplitude_first_half** | Seasonal amplitude (first half of record) |
+| **log_a_seasonality_amplitude_last_half** | Seasonal amplitude (last half of record) |
+| **log_a_seasonality_minimum_all** | Seasonal minimum day for recession rate (all data) |
+| **log_a_seasonality_minimum_first_half** | Seasonal minimum day (first half of record) |
+| **log_a_seasonality_minimum_last_half** | Seasonal minimum day (last half of record) |
 
 ### Notes
 - Seasonality metrics are single values (exceptions to 8-statistic rule)
 - Documented in `config.R` as `EXPECTED_RECESSION_SEASONALITY`
+- Requires minimum 25 recession events (`RECESSION_MIN_EVENTS`)
 
 ---
 
@@ -110,7 +120,7 @@ Analyzes recession curve behavior using dQ/dt = a*Q^b relationship.
 
 | Metric | Description |
 |--------|-------------|
-| **R-B Index** | Richards-Baker flashiness index |
+| **flashinessRB** | Richards-Baker flashiness index |
 
 ### Formula
 ```
@@ -132,11 +142,15 @@ Baker, D.B., et al. (2004). A new flashiness index: characteristics and applicat
 
 | Metric | Description |
 |--------|-------------|
-| **D05_day** | Day of water year when cumulative flow reaches 5% |
+| **D5_day** | Day of water year when cumulative flow reaches 5% |
 | **D10_day** | Day of water year when cumulative flow reaches 10% |
-| **D25_day** | Day of water year when cumulative flow reaches 25% |
+| **D20_day** | Day of water year when cumulative flow reaches 20% |
+| **D30_day** | Day of water year when cumulative flow reaches 30% |
+| **D40_day** | Day of water year when cumulative flow reaches 40% |
 | **D50_day** | Day of water year when cumulative flow reaches 50% (center of mass) |
-| **D75_day** | Day of water year when cumulative flow reaches 75% |
+| **D60_day** | Day of water year when cumulative flow reaches 60% |
+| **D70_day** | Day of water year when cumulative flow reaches 70% |
+| **D80_day** | Day of water year when cumulative flow reaches 80% |
 | **D90_day** | Day of water year when cumulative flow reaches 90% |
 | **D95_day** | Day of water year when cumulative flow reaches 95% |
 | **D25_to_D75** | Duration between 25% and 75% cumulative flow (days) |
@@ -145,6 +159,7 @@ Baker, D.B., et al. (2004). A new flashiness index: characteristics and applicat
 ### Notes
 - Day 1 = October 1 (start of water year)
 - Day 365/366 = September 30 (end of water year)
+- NAs in daily flow are treated as zero for cumulative sum calculations
 
 ---
 
@@ -156,13 +171,17 @@ Baker, D.B., et al. (2004). A new flashiness index: characteristics and applicat
 
 ### Metrics
 
-| Metric | Description |
-|--------|-------------|
-| **RR_ann** | Annual runoff ratio (Q/P) |
-| **RR_win** | Winter runoff ratio |
-| **RR_spr** | Spring runoff ratio |
-| **RR_sum** | Summer runoff ratio |
-| **RR_fal** | Fall runoff ratio |
+| Metric | Code Name | Description |
+|--------|-----------|-------------|
+| **annual_runoff_ratio** | `annual_runoff_ratio` | Annual runoff ratio (Q/P) |
+| **winter_runoff_ratio** | `winter_runoff_ratio` | Winter runoff ratio |
+| **spring_runoff_ratio** | `spring_runoff_ratio` | Spring runoff ratio |
+| **summer_runoff_ratio** | `summer_runoff_ratio` | Summer runoff ratio |
+| **fall_runoff_ratio** | `fall_runoff_ratio` | Fall runoff ratio |
+
+### PPT Thresholds
+- Annual: minimum 10mm PPT required (below returns NA)
+- Seasonal: minimum 1mm PPT required (below returns NA)
 
 ---
 
@@ -257,12 +276,13 @@ Peters, N.E., & Aulenbach, B.T. (2011). Water storage at the Panola Mountain Res
 
 | Category | Function | Requires Climate | Notes |
 |----------|----------|------------------|-------|
-| Flow Volumes | `calculate_flow_vols_by_year` | No | 18 metrics |
+| Flow Volumes | `calculate_flow_vols_by_year` | No | 22 metrics (5 totals + 16 percentiles + Q95-Q10) |
+| FDC | `analyze_fdc_trends_from_streamflow` | No | 3 metrics (FDCall, FDC90th, FDCmid) |
 | Baseflow | `analyze_baseflow_indices` | No | 2 metrics |
-| Recession | `analyze_recession_parameters` | No | 5 metrics + 2 seasonality |
-| Pulse Metrics | `calculate_pulse_metrics` | No | 6 metrics |
+| Recession | `analyze_recession_parameters` | No | 5 metrics + 6 seasonality |
+| Pulse Metrics | `calculate_pulse_metrics` | No | 15 metrics |
 | Flashiness | `analyze_flashiness_trends` | No | 1 metric |
-| Flow Timing | `analyze_flow_timing_trends` | No | 9 metrics |
+| Flow Timing | `analyze_flow_timing_trends` | No | 13 metrics |
 | Q-PPT Relationships | `analyze_Q_PPT_relationships` | Yes | 5 metrics |
 | Elasticity | `calculate_streamflow_elasticity` | Yes | 1 metric + 1 static |
 | Q-P Seasonality | `calculate_qp_seasonality` | Yes | 2 metrics |
