@@ -347,7 +347,8 @@ process_gages_rawToRaw <- function(gages_df, gage_type, min_num_years, start_dat
     end_year = integer(),
     num_days = integer(),
     processing_status = character(),
-    error_message = character()
+    error_message = character(),
+    area_normalized = logical()
   )
   
   # Process in chunks for memory efficiency
@@ -392,7 +393,8 @@ process_gages_rawToRaw <- function(gages_df, gage_type, min_num_years, start_dat
       end_year = NA_integer_,
       num_days = NA_integer_,
       processing_status = "processing",
-      error_message = NA_character_
+      error_message = NA_character_,
+      area_normalized = !is.na(basin_area)
     )
     
     tryCatch({
@@ -660,7 +662,13 @@ generate_streamflow_dt <- function(dt, data_origin,
       # Convert to mm/day using drainage area (sqkm) from metadata row
       gage_id <- gage_data$site_no[1]
       sqkm <- dt$DRAIN_SQKM[dt$STAID == gage_id]
-      conversion <- 60 * 60 * 24 / (sqkm * 3280.84^3) * 1e6
+      if (is.na(sqkm)) {
+        log_warn("Missing basin area for USGS gage", gage_id,
+                 "- Q kept in raw units (cfs), not area-normalized", context = "process_gage")
+        conversion <- 1
+      } else {
+        conversion <- 60 * 60 * 24 / (sqkm * 3280.84^3) * 1e6
+      }
       streamy$Q <- as.numeric(streamy$Q_rawUnits) * conversion
       
       streamy$year  <- lubridate::year(streamy$Date)
@@ -698,8 +706,8 @@ generate_streamflow_dt <- function(dt, data_origin,
       sqkm <- hy_stations(paste(dt$STATION_NUMBER))$DRAINAGE_AREA_GROSS
       if (is.na(sqkm)) {
         log_warn("Missing basin area for Canadian gage", dt$STATION_NUMBER,
-                 "- Q will be NA (cannot convert units)", context = "process_gage")
-        conversion <- NA
+                 "- Q kept in raw units (m3/s), not area-normalized", context = "process_gage")
+        conversion <- 1
       } else {
         conversion <- 60 * 60 * 24 * 1e9 / (sqkm * 1e12)
       }
