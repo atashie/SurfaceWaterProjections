@@ -36,7 +36,7 @@ DOWNLOADS_DIR <- Sys.getenv("STREAMFLOW_DOWNLOADS_DIR",
 MIN_Q_VALUE_AND_DAYS <- c(0.0001, 30)
 
 # Minimum number of "good" water years required for a gage to be processed
-MIN_NUM_YEARS <- 20
+MIN_NUM_YEARS <- 30
 
 # Minimum fraction of non-NA days per water year to count as "good"
 MIN_FRAC_GOOD_DATA <- 0.95

@@ -31,6 +31,7 @@ All notable changes to the Streamflow Signatures project.
 - **H3**: `analyze_recession_parameters()` — Fixed early-return schema: was producing 5 columns with wrong suffixes (`slp`, `rho`, `pval`), now produces correct 8 columns matching `STAT_SUFFIXES`
 - **H4**: `analyze_flow_timing_trends()` — `cumsum()` now handles NAs by replacing with 0 before accumulation; previously a single NA corrupted all D-day metrics for that year
 - **H5**: Canadian unit conversion — Replaced sentinel value `99999` with `NA` when basin area is missing; previously produced absurd Q values (~100,000+ mm/day)
+- **H5 follow-up**: Missing basin area — The H5 fix (`conversion = NA`) caused all Q values to become NA, silently dropping gages at the qualifying-years gate. Now sets `conversion = 1` to keep raw units (cfs for USGS, m3/s for Canadian) and adds `area_normalized` flag to `watershed_metadata.csv`. Also added the same NA guard for USGS gages (previously unprotected).
 
 **MEDIUM severity:**
 - **M1**: `lyne_hollick_filter()` — Fixed multi-pass to use previous pass output as input; the forward pass was always referencing original Q regardless of pass number, making `passes=2` effectively single-pass
@@ -51,6 +52,7 @@ All notable changes to the Streamflow Signatures project.
 ### Added
 - Comprehensive workflow review document (`WORKFLOW_REVIEW.md`)
 - Documentation of gage ID format differences (`gage_id` vs `gage_id_metadata` columns)
+- `area_normalized` column in `watershed_metadata.csv` — `TRUE` when basin area is available and Q is in mm/day, `FALSE` when basin area is missing and Q is in raw units
 
 ### Changed
 - SIGNATURES.md updated to match actual code: column names, metric counts, units, PPT thresholds, D-day naming (D5 not D05), recession seasonality variants

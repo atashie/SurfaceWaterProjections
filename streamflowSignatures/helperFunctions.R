@@ -324,7 +324,9 @@ process_gages_rawToRaw <- function(gages_df, gage_type, min_num_years, start_dat
                                    chunk_size = 1000) {
   
   storage_format <- match.arg(storage_format)
-  
+  force(start_date)
+  force(end_date)
+
   # Create output directory if it doesn't exist
   if (!dir.exists(output_dir)) {
     dir.create(output_dir, recursive = TRUE)
@@ -662,7 +664,7 @@ generate_streamflow_dt <- function(dt, data_origin,
       # Convert to mm/day using drainage area (sqkm) from metadata row
       gage_id <- gage_data$site_no[1]
       sqkm <- dt$DRAIN_SQKM[dt$STAID == gage_id]
-      if (is.na(sqkm)) {
+      if (length(sqkm) == 0 || is.na(sqkm)) {
         log_warn("Missing basin area for USGS gage", gage_id,
                  "- Q kept in raw units (cfs), not area-normalized", context = "process_gage")
         conversion <- 1
@@ -704,7 +706,7 @@ generate_streamflow_dt <- function(dt, data_origin,
       
       # Convert from m^3/s to mm/day
       sqkm <- hy_stations(paste(dt$STATION_NUMBER))$DRAINAGE_AREA_GROSS
-      if (is.na(sqkm)) {
+      if (length(sqkm) == 0 || is.na(sqkm)) {
         log_warn("Missing basin area for Canadian gage", dt$STATION_NUMBER,
                  "- Q kept in raw units (m3/s), not area-normalized", context = "process_gage")
         conversion <- 1
