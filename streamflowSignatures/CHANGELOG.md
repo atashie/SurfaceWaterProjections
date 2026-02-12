@@ -14,6 +14,26 @@ All notable changes to the Streamflow Signatures project.
 
 ## [February 2026]
 
+### Added
+
+#### Signature Cross-Correlation Plot (Means vs Trends)
+- **New Shiny dashboard section**: Interactive scatter plot showing how pairwise signature relationships in spatial patterns (means across gages) compare to relationships in temporal trends (Theil-Sen slopes across gages)
+- **Architecture**: Pre-computed offline to avoid startup delay; CSV loaded from S3 (~4,556 pairs)
+- **Features**:
+  - Each point = one ordered pair (A → B); x = Theil-Sen slope of z-scored means, y = Theil-Sen slope of z-scored trends
+  - 13-category color coding (Flow Volume, Flow Percentiles, FDC, Baseflow, Recession, Pulse Metrics, Flow Reversals, Flashiness, Flow Timing, Runoff Ratios, Elasticity, Q-P Seasonality, Average Storage)
+  - Category checkbox filter to show/hide groups
+  - 1:1 reference line showing where spatial and temporal co-variation are equal
+  - Click any point to reveal gage-level detail panel with two scatter plots (A_mean vs B_mean, A_senn_slp vs B_senn_slp) including Theil-Sen trend lines and Spearman statistics
+- **New files**:
+  - `precompute_cross_signature_analysis.R` — Offline script computing all pairwise slopes across 68 metrics × 5,691 gages, uploads CSV to S3
+  - `streamflowAndClimateVisualizationApp/cross_signature_analysis.csv` — Pre-computed output (4,556 rows)
+- **Modified files**:
+  - `streamflowAndClimateVisualizationApp/app.R` — Added category constants, UI section, and server logic
+  - `streamflowAndClimateVisualizationApp/helperFunctions.R` — Added `fast_theil_sen_slope()` utility for batch Theil-Sen computation
+
+### Fixed
+
 ### Fixed
 
 #### Visualization App Gage ID Mismatch (HIGH)

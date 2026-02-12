@@ -43,6 +43,16 @@ s3_bucket_name <- S3_BUCKET_NAME
 readRenviron(".Renviron")
 check_aws_credentials()
 
+# Pre-open Arrow datasets for reuse (avoids reconnection on every gage change)
+message("Pre-opening Arrow datasets from S3...")
+streamflow_dataset <- arrow::open_dataset(
+  paste0("s3://", S3_BUCKET_NAME, "/streamflow/combined_streamflow_data_09feb2026.parquet")
+)
+daymet_dataset <- arrow::open_dataset(
+  paste0("s3://", S3_BUCKET_NAME, "/streamflow/daymet_1980_2023.parquet")
+)
+message("Arrow datasets ready for reuse")
+
 # Read and filter metadata
 message("Loading metadata from S3...")
 metadata_raw <- read_csv_from_s3_direct(
@@ -87,6 +97,78 @@ message(paste("Created watershed lookup with", length(watershed_lookup), "basins
 mean_columns <- grep("_mean$", names(signature_data), value = TRUE)
 metric_names <- gsub("_mean$", "", mean_columns)
 message(paste("Found", length(metric_names), "metrics:", paste(head(metric_names, 3), collapse = ", "), "..."))
+
+# === SIGNATURE CATEGORIES FOR CROSS-CORRELATION PLOT ===
+SIGNATURE_CATEGORIES <- list(
+  "Flow Volume" = c("Qann", "Qwin", "Qspr", "Qsum", "Qfal"),
+  "Flow Percentiles" = c("Q1", "Q5", "Q10", "Q20", "Q25", "Q30", "Q40",
+                          "Q50", "Q60", "Q70", "Q75", "Q80", "Q90", "Q95",
+                          "Q99", "Q95.Q10"),
+  "FDC" = c("FDC90th", "FDCall", "FDCmid"),
+  "Baseflow" = c("BFI_Eckhardt", "BFI_LyneHollick"),
+  "Recession" = c("log_a_pointcloud", "log_a_events", "b_pointcloud",
+                   "b_events", "concavity"),
+  "Pulse Metrics" = c("n_high_pulses_year", "n_low_pulses_year",
+                       "n_high_pulses_all", "n_low_pulses_all",
+                       "dur_high_pulses_year", "dur_low_pulses_year",
+                       "dur_high_pulses_all", "dur_low_pulses_all",
+                       "TQmean"),
+  "Flow Reversals" = c("Flow_Reversals_annual", "Flow_Reversals_winter",
+                        "Flow_Reversals_spring", "Flow_Reversals_summer",
+                        "Flow_Reversals_fall"),
+  "Flashiness" = c("flashinessRB"),
+  "Flow Timing" = c("D5_day", "D10_day", "D20_day", "D30_day", "D40_day",
+                     "D50_day", "D60_day", "D70_day", "D80_day", "D90_day",
+                     "D95_day", "D25_to_D75", "Dmax"),
+  "Runoff Ratios" = c("annual_runoff_ratio", "winter_runoff_ratio",
+                       "spring_runoff_ratio", "summer_runoff_ratio",
+                       "fall_runoff_ratio"),
+  "Elasticity" = c("elasticity"),
+  "Q-P Seasonality" = c("qp_slope_sd", "qp_bimodality"),
+  "Average Storage" = c("avg_storage")
+)
+
+# Reverse lookup: metric name -> category
+signature_category_lookup <- character(0)
+for (cat_name in names(SIGNATURE_CATEGORIES)) {
+  for (m in SIGNATURE_CATEGORIES[[cat_name]]) {
+    signature_category_lookup[m] <- cat_name
+  }
+}
+
+# 13 distinct colors for dark "superhero" theme
+CATEGORY_COLORS <- c(
+  "Flow Volume"      = "#1f77b4",  # blue
+  "Flow Percentiles" = "#ff7f0e",  # orange
+  "FDC"              = "#2ca02c",  # green
+  "Baseflow"         = "#d62728",  # red
+  "Recession"        = "#9467bd",  # purple
+  "Pulse Metrics"    = "#8c564b",  # brown
+  "Flow Reversals"   = "#e377c2",  # pink
+  "Flashiness"       = "#7f7f7f",  # gray
+  "Flow Timing"      = "#bcbd22",  # olive
+  "Runoff Ratios"    = "#17becf",  # cyan
+  "Elasticity"       = "#aec7e8",  # light blue
+  "Q-P Seasonality"  = "#ffbb78",  # light orange
+  "Average Storage"  = "#98df8a"   # light green
+)
+
+# Load pre-computed cross-signature analysis data
+message("Loading cross-signature analysis data from S3...")
+cross_sig_data <- tryCatch({
+  read_csv_from_s3_direct(
+    bucket = S3_BUCKET_NAME,
+    object_key = "streamflow/cross_signature_analysis.csv"
+  )
+}, error = function(e) {
+  message(paste("Warning: Could not load cross-signature data:", e$message))
+  NULL
+})
+if (!is.null(cross_sig_data)) {
+  message(paste("Loaded", nrow(cross_sig_data), "cross-signature pairs"))
+} else {
+  message("Cross-signature plot will be unavailable")
+}
 
 # Define statistic choices for dropdowns
 stat_choices <- list(
@@ -290,6 +372,16 @@ ui <- fluidPage(
   fluidRow(
     column(
       12,
+      checkboxInput(
+        "scatter_filter_high_qann",
+        label = "Exclude gages with Qann > 2000 mm",
+        value = TRUE
+      )
+    )
+  ),
+  fluidRow(
+    column(
+      12,
       withSpinner(
         plotlyOutput("signature_scatter_plot", height = MAP_HEIGHT_LARGE),
         type = SPINNER_TYPE,
@@ -303,6 +395,77 @@ ui <- fluidPage(
       tags$p(
         textOutput("scatter_removed_note", inline = TRUE),
         style = "color: #888; font-size: 12px; margin-top: 5px;"
+      )
+    )
+  ),
+
+  # === SIGNATURE CROSS-CORRELATION SECTION ===
+  fluidRow(
+    column(12, hr(), h3("Signature Cross-Correlation: Means vs Trends"))
+  ),
+  fluidRow(
+    column(
+      12,
+      tags$p(
+        paste("Each point represents an ordered pair of signatures (A \u2192 B).",
+              "X-axis = Theil-Sen slope of z-scored means (spatial co-variation);",
+              "Y-axis = Theil-Sen slope of z-scored trends (temporal co-variation).",
+              "Points near the 1:1 line indicate signatures whose spatial and temporal",
+              "relationships are consistent."),
+        style = "color: #aaa; font-size: 13px; margin-bottom: 15px;"
+      )
+    )
+  ),
+  fluidRow(
+    column(
+      3,
+      checkboxGroupInput(
+        "cross_category_filter",
+        label = "Filter by Category (from):",
+        choices = names(SIGNATURE_CATEGORIES),
+        selected = names(SIGNATURE_CATEGORIES)
+      )
+    ),
+    column(
+      9,
+      withSpinner(
+        plotlyOutput("cross_sig_plot", height = "600px"),
+        type = SPINNER_TYPE,
+        color = SPINNER_COLOR
+      )
+    )
+  ),
+  fluidRow(
+    column(
+      12,
+      tags$p(
+        textOutput("cross_sig_note", inline = TRUE),
+        style = "color: #888; font-size: 12px; margin-top: 5px;"
+      )
+    )
+  ),
+  # Detail panel: visible only after clicking a point
+  conditionalPanel(
+    condition = "output.cross_detail_visible",
+    fluidRow(
+      column(12, hr(), h4(textOutput("cross_detail_title", inline = TRUE)))
+    ),
+    fluidRow(
+      column(
+        6,
+        withSpinner(
+          plotlyOutput("cross_detail_means", height = "400px"),
+          type = SPINNER_TYPE,
+          color = SPINNER_COLOR
+        )
+      ),
+      column(
+        6,
+        withSpinner(
+          plotlyOutput("cross_detail_slopes", height = "400px"),
+          type = SPINNER_TYPE,
+          color = SPINNER_COLOR
+        )
       )
     )
   )
@@ -380,7 +543,9 @@ server <- function(input, output, session) {
       leafletProxy("gage_map") %>%
         clearGroup("Selected Watershed")
 
-      if (nrow(selected_metadata) > 0 && !is.na(selected_metadata$Downstream_HB_ID)) {
+      if (nrow(selected_metadata) > 0 &&
+          "Downstream_HB_ID" %in% names(selected_metadata) &&
+          !is.na(selected_metadata$Downstream_HB_ID[1])) {
         downstream_hb_id <- selected_metadata$Downstream_HB_ID[1]
         hb_id_str <- as.character(downstream_hb_id)
 
@@ -425,8 +590,9 @@ server <- function(input, output, session) {
 
   # === REACTIVE DATA LOADING ===
 
-  # Single-gage streamflow cache (prevents refetch when toggling weather layers)
+  # Single-gage caches (prevent refetch when toggling weather layers)
   cached_streamflow <- reactiveVal(list(gage_id = NULL, data = NULL))
+  cached_daymet <- reactiveVal(list(gage_id = NULL, data = NULL))
 
   # Streamflow data with caching
   streamflow_data <- reactive({
@@ -439,12 +605,12 @@ server <- function(input, output, session) {
     }
 
     # Fetch and cache new data
-    data <- read_streamflow_by_gage_id(gage_id = input$gage_selector)
+    data <- read_streamflow_by_gage_id(gage_id = input$gage_selector, dataset = streamflow_dataset)
     cached_streamflow(list(gage_id = input$gage_selector, data = data))
     return(data)
   })
 
-  # Daymet climate data (loaded when weather layers are selected)
+  # Daymet climate data with caching (prevents refetch when toggling weather layers)
   daymet_data <- reactive({
     req(input$gage_selector)
 
@@ -453,7 +619,16 @@ server <- function(input, output, session) {
       return(data.table())
     }
 
-    read_daymet_by_gage_id(gage_id = input$gage_selector)
+    # Return cached data if same gage
+    cache <- cached_daymet()
+    if (!is.null(cache$gage_id) && cache$gage_id == input$gage_selector) {
+      return(cache$data)
+    }
+
+    # Fetch and cache new data
+    data <- read_daymet_by_gage_id(gage_id = input$gage_selector, dataset = daymet_dataset)
+    cached_daymet(list(gage_id = input$gage_selector, data = data))
+    return(data)
   })
 
   # === HYDROGRAPH WITH WEATHER OVERLAYS ===
@@ -781,13 +956,11 @@ server <- function(input, output, session) {
     })
   })
 
-  # Update all 6 maps when metric or point size changes (via leafletProxy)
-  observe({
-    req(input$metric_selector, input$point_size)
+  # Store last-used metric and point size to detect which input changed
+  last_metric <- reactiveVal(NULL)
 
-    base_col <- input$metric_selector
-    point_size <- input$point_size
-
+  # Shared function to render all 6 maps (used by both metric and point_size observers)
+  render_metric_maps <- function(base_col, point_size) {
     # Get p-value column for significance highlighting
     mk_pval_col <- paste0(base_col, "_mk_pval")
     spearman_pval_col <- paste0(base_col, "_spearman_pval")
@@ -795,7 +968,7 @@ server <- function(input, output, session) {
 
     lapply(STAT_TYPES, function(stat_type) {
       col_name <- paste0(base_col, "_", stat_type)
-      col_name_display <- gsub("_", " ", col_name)  # Reuse gsub result
+      col_name_display <- gsub("_", " ", col_name)
       map_id <- paste0("metric_map_", stat_type)
 
       # Handle column-not-found with control message
@@ -871,7 +1044,7 @@ server <- function(input, output, session) {
             stroke = TRUE,
             weight = marker_weights,
             popup = hover_text_valid,
-            label = label_text,  # Vectorized labels (no lapply)
+            label = label_text,
             group = "Valid Data"
           ) %>%
           addLegend(
@@ -907,6 +1080,21 @@ server <- function(input, output, session) {
           )
       }
     })
+  }
+
+  # Full redraw when metric changes (palette recalculation needed)
+  observeEvent(input$metric_selector, {
+    req(input$point_size)
+    last_metric(input$metric_selector)
+    render_metric_maps(input$metric_selector, input$point_size)
+  })
+
+  # Lightweight redraw when only point size changes (reuses same palette)
+  observeEvent(input$point_size, {
+    req(input$metric_selector)
+    # Skip if this is the initial render (metric observer handles it)
+    if (is.null(last_metric())) return()
+    render_metric_maps(input$metric_selector, input$point_size)
   })
 
   # === CUSTOM SCATTER PLOT ===
@@ -933,7 +1121,7 @@ server <- function(input, output, session) {
     # Start with all signature data (non-NA on selected columns)
     all_data <- signature_data %>%
       select(gage_id, all_of(c(x_col, y_col)),
-             any_of(scatter_filter_flag)) %>%
+             any_of(c(scatter_filter_flag, "Qann_mean"))) %>%
       filter(!is.na(!!sym(x_col)), !is.na(!!sym(y_col)))
 
     n_total <- nrow(all_data)
@@ -945,9 +1133,20 @@ server <- function(input, output, session) {
       before <- nrow(plot_data)
       plot_data <- plot_data %>%
         filter(is.na(!!sym(scatter_filter_flag)) | !!sym(scatter_filter_flag) == TRUE)
-      n_removed_qann <- before - nrow(plot_data)
-      if (n_removed_qann > 0) {
-        removal_reasons$not_area_normalized <- n_removed_qann
+      n_removed_area <- before - nrow(plot_data)
+      if (n_removed_area > 0) {
+        removal_reasons$not_area_normalized <- n_removed_area
+      }
+    }
+
+    # Filter out gages with high Qann (> 2000 mm) when toggle is on
+    if (isTRUE(input$scatter_filter_high_qann) && "Qann_mean" %in% names(plot_data)) {
+      before <- nrow(plot_data)
+      plot_data <- plot_data %>%
+        filter(is.na(Qann_mean) | Qann_mean <= 2000)
+      n_removed_high_qann <- before - nrow(plot_data)
+      if (n_removed_high_qann > 0) {
+        removal_reasons$high_qann <- n_removed_high_qann
       }
     }
 
@@ -1070,11 +1269,261 @@ server <- function(input, output, session) {
       if (!is.null(reasons$not_area_normalized)) {
         parts <- c(parts, paste0(reasons$not_area_normalized, " not area-normalized"))
       }
+      if (!is.null(reasons$high_qann)) {
+        parts <- c(parts, paste0(reasons$high_qann, " with Qann > 2000 mm"))
+      }
       paste0("Showing ", n_plotted, " watersheds. Removed: ",
              paste(parts, collapse = ", "), ".")
     } else {
       paste0("Showing ", n_plotted, " watersheds.")
     }
+  })
+
+  # === SIGNATURE CROSS-CORRELATION SERVER LOGIC ===
+
+  # Reactive: selected pair from click
+  selected_cross_pair <- reactiveVal(NULL)
+
+  # Reactive: filter cross-sig data by selected categories
+  cross_sig_filtered <- reactive({
+    req(cross_sig_data)
+    cats <- input$cross_category_filter
+    if (is.null(cats) || length(cats) == 0) return(data.table())
+    cross_sig_data[from_category %in% cats]
+  })
+
+  # Main cross-correlation scatter plot
+  output$cross_sig_plot <- renderPlotly({
+    filt <- cross_sig_filtered()
+
+    if (nrow(filt) == 0) {
+      return(
+        plot_ly() %>%
+          layout(
+            title = "Select at least one category",
+            xaxis = list(title = "Mean-to-Mean Slope"),
+            yaxis = list(title = "Trend-to-Trend Slope")
+          )
+      )
+    }
+
+    # Encode pair identity in customdata for click handler
+    filt[, pair_key := paste0(from_metric, "|", to_metric)]
+
+    # Build per-category traces for proper legend
+    p <- plot_ly(source = "cross_sig_click")
+
+    unique_cats <- unique(filt$from_category)
+    for (cat in unique_cats) {
+      sub <- filt[from_category == cat]
+      color <- CATEGORY_COLORS[cat]
+      if (is.na(color)) color <- "#ffffff"
+
+      p <- p %>% add_trace(
+        x = sub$mean_slope,
+        y = sub$trend_slope,
+        type = "scatter",
+        mode = "markers",
+        name = cat,
+        customdata = sub$pair_key,
+        marker = list(
+          color = color,
+          size = 7,
+          opacity = 0.75,
+          line = list(color = "rgba(255,255,255,0.3)", width = 0.5)
+        ),
+        hovertemplate = paste0(
+          "<b>%{customdata}</b><br>",
+          "Mean slope: %{x:.3f}<br>",
+          "Trend slope: %{y:.3f}",
+          "<extra>", cat, "</extra>"
+        )
+      )
+    }
+
+    # Axis range for 1:1 line
+    all_vals <- c(filt$mean_slope, filt$trend_slope)
+    ax_min <- min(all_vals, na.rm = TRUE) * 1.1
+    ax_max <- max(all_vals, na.rm = TRUE) * 1.1
+
+    p <- p %>% layout(
+      title = list(text = "Cross-Signature: Spatial Patterns vs Temporal Trends", x = 0.5),
+      xaxis = list(
+        title = "Mean-to-Mean Theil-Sen Slope (spatial)",
+        zeroline = TRUE,
+        zerolinecolor = "rgba(255,255,255,0.3)",
+        zerolinewidth = 1
+      ),
+      yaxis = list(
+        title = "Trend-to-Trend Theil-Sen Slope (temporal)",
+        zeroline = TRUE,
+        zerolinecolor = "rgba(255,255,255,0.3)",
+        zerolinewidth = 1
+      ),
+      showlegend = TRUE,
+      legend = list(
+        orientation = "v",
+        yanchor = "top",
+        y = 1,
+        xanchor = "left",
+        x = 1.02,
+        font = list(size = 10)
+      ),
+      shapes = list(
+        # 1:1 reference line
+        list(
+          type = "line",
+          x0 = ax_min, x1 = ax_max,
+          y0 = ax_min, y1 = ax_max,
+          line = list(color = "rgba(255,255,255,0.4)", width = 1, dash = "dash")
+        )
+      )
+    )
+
+    p
+  })
+
+  # Handle click events on cross-sig plot
+  observeEvent(event_data("plotly_click", source = "cross_sig_click"), {
+    click <- event_data("plotly_click", source = "cross_sig_click")
+    if (!is.null(click) && !is.null(click$customdata)) {
+      pair_key <- click$customdata
+      parts <- strsplit(as.character(pair_key), "\\|")[[1]]
+      if (length(parts) == 2) {
+        selected_cross_pair(list(from = parts[1], to = parts[2]))
+      }
+    }
+  })
+
+  # Boolean reactive for conditionalPanel visibility
+  output$cross_detail_visible <- reactive({
+    !is.null(selected_cross_pair())
+  })
+  outputOptions(output, "cross_detail_visible", suspendWhenHidden = FALSE)
+
+  # Detail title
+  output$cross_detail_title <- renderText({
+    pair <- selected_cross_pair()
+    req(pair)
+    paste0("Detail: ", pair$from, " \u2192 ", pair$to)
+  })
+
+  # Info note for cross-sig section
+  output$cross_sig_note <- renderText({
+    filt <- cross_sig_filtered()
+    n_pairs <- nrow(filt)
+    n_cats <- length(unique(filt$from_category))
+    n_metrics <- length(unique(c(filt$from_metric, filt$to_metric)))
+    if (n_pairs > 0 && !is.null(cross_sig_data)) {
+      n_gages <- cross_sig_data$n_gages_mean[1]
+      paste0(n_pairs, " pairs shown from ", n_cats, " categories (",
+             n_metrics, " metrics). Based on ~", n_gages, " gages.")
+    } else {
+      "No pairs to display."
+    }
+  })
+
+  # Helper to build a detail scatter of metric A vs metric B with trend line
+  build_detail_scatter <- function(x_vals, y_vals, x_label, y_label, gage_ids, title_prefix) {
+    valid <- complete.cases(x_vals, y_vals)
+    x_v <- x_vals[valid]; y_v <- y_vals[valid]; ids <- gage_ids[valid]
+
+    if (length(x_v) < 3) {
+      return(plot_ly() %>% layout(title = paste(title_prefix, "- Insufficient data")))
+    }
+
+    # Calculate statistics
+    sen_result <- calculate_theil_sen(x_v, y_v)
+    spearman_result <- calculate_spearman(x_v, y_v)
+
+    p <- plot_ly() %>%
+      add_trace(
+        x = x_v, y = y_v,
+        type = "scatter", mode = "markers",
+        text = ids,
+        marker = list(color = "rgba(52, 152, 219, 0.6)", size = 5,
+                       line = list(color = "white", width = 0.5)),
+        name = "Gages",
+        hovertemplate = paste0("<b>Gage:</b> %{text}<br>",
+                                "<b>", x_label, ":</b> %{x:.4f}<br>",
+                                "<b>", y_label, ":</b> %{y:.4f}<extra></extra>")
+      )
+
+    # Theil-Sen trend line
+    if (!is.na(sen_result$slope) && !is.na(sen_result$intercept)) {
+      x_range <- range(x_v)
+      y_line <- sen_result$intercept + sen_result$slope * x_range
+      p <- p %>% add_trace(
+        x = x_range, y = y_line,
+        type = "scatter", mode = "lines",
+        line = list(color = "red", dash = "dash", width = 2),
+        name = paste0("Theil-Sen (", round(sen_result$slope, 4), ")"),
+        hoverinfo = "skip"
+      )
+    }
+
+    subtitle <- paste0(
+      "Theil-Sen: ", ifelse(is.na(sen_result$slope), "N/A", round(sen_result$slope, 4)),
+      " | Spearman rho: ", ifelse(is.na(spearman_result$rho), "N/A", round(spearman_result$rho, 3)),
+      " | p: ", ifelse(is.na(spearman_result$pval), "N/A", format(spearman_result$pval, digits = 3, scientific = TRUE))
+    )
+
+    p <- p %>% layout(
+      title = list(
+        text = paste0(title_prefix, "<br><span style='font-size:11px;'>", subtitle, "</span>"),
+        x = 0.5
+      ),
+      xaxis = list(title = x_label),
+      yaxis = list(title = y_label),
+      showlegend = TRUE,
+      legend = list(orientation = "h", yanchor = "bottom", y = 1.02, xanchor = "right", x = 1)
+    )
+
+    p
+  }
+
+  # Detail scatter: A_mean vs B_mean
+  output$cross_detail_means <- renderPlotly({
+    pair <- selected_cross_pair()
+    req(pair)
+
+    from_col <- paste0(pair$from, "_mean")
+    to_col <- paste0(pair$to, "_mean")
+    req(from_col %in% names(signature_data), to_col %in% names(signature_data))
+
+    # Use same area_normalized filter as scatter plot
+    plot_dt <- signature_data[is.na(area_normalized) | area_normalized == TRUE]
+
+    build_detail_scatter(
+      x_vals = plot_dt[[from_col]],
+      y_vals = plot_dt[[to_col]],
+      x_label = paste0(pair$from, " (mean)"),
+      y_label = paste0(pair$to, " (mean)"),
+      gage_ids = plot_dt$gage_id,
+      title_prefix = "Means: Gage-Level Scatter"
+    )
+  })
+
+  # Detail scatter: A_senn_slp vs B_senn_slp
+  output$cross_detail_slopes <- renderPlotly({
+    pair <- selected_cross_pair()
+    req(pair)
+
+    from_col <- paste0(pair$from, "_senn_slp")
+    to_col <- paste0(pair$to, "_senn_slp")
+    req(from_col %in% names(signature_data), to_col %in% names(signature_data))
+
+    # Use same area_normalized filter as scatter plot
+    plot_dt <- signature_data[is.na(area_normalized) | area_normalized == TRUE]
+
+    build_detail_scatter(
+      x_vals = plot_dt[[from_col]],
+      y_vals = plot_dt[[to_col]],
+      x_label = paste0(pair$from, " (Theil-Sen slope)"),
+      y_label = paste0(pair$to, " (Theil-Sen slope)"),
+      gage_ids = plot_dt$gage_id,
+      title_prefix = "Trends: Gage-Level Scatter"
+    )
   })
 }
 

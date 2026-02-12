@@ -441,3 +441,33 @@ get_weather_var_info <- function() {
     )
   )
 }
+
+# === FAST THEIL-SEN FOR BATCH USE ===
+
+#' Lightweight Theil-Sen slope estimator for batch pairwise computations
+#'
+#' Avoids zyp.sen formula overhead. For n > 500, samples pairs to keep runtime
+#' manageable while preserving slope estimate accuracy.
+#'
+#' @param x Numeric vector (independent variable)
+#' @param y Numeric vector (dependent variable)
+#' @return Numeric scalar: median pairwise slope, or NA if insufficient data
+fast_theil_sen_slope <- function(x, y) {
+  valid <- complete.cases(x, y)
+  x <- x[valid]; y <- y[valid]
+  n <- length(x)
+  if (n < 3) return(NA_real_)
+  if (n > 500) {
+    set.seed(42)
+    idx_i <- sample.int(n, 50000, replace = TRUE)
+    idx_j <- sample.int(n, 50000, replace = TRUE)
+    keep <- idx_i != idx_j & (x[idx_i] != x[idx_j])
+    slopes <- (y[idx_i[keep]] - y[idx_j[keep]]) / (x[idx_i[keep]] - x[idx_j[keep]])
+  } else {
+    idx <- combn(n, 2)
+    dx <- x[idx[2, ]] - x[idx[1, ]]
+    nonzero <- dx != 0
+    slopes <- (y[idx[2, nonzero]] - y[idx[1, nonzero]]) / dx[nonzero]
+  }
+  median(slopes, na.rm = TRUE)
+}
