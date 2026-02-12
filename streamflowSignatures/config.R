@@ -14,7 +14,7 @@
 #   STREAMFLOW_DOWNLOADS_DIR - Directory for downloaded files
 
 PARQUET_DATA_DIR <- Sys.getenv("STREAMFLOW_PARQUET_DIR",
-                               unset = "D:/combined_streamflow_output")
+                               unset = "combined_streamflow_output")
 
 CARAVAN_DATA_DIR <- Sys.getenv("STREAMFLOW_CARAVAN_DIR",
                                unset = "D:/Caravan-nc/usr/local/google/home/kratzert/Data/Caravan-Jan25-nc")
@@ -36,7 +36,7 @@ DOWNLOADS_DIR <- Sys.getenv("STREAMFLOW_DOWNLOADS_DIR",
 MIN_Q_VALUE_AND_DAYS <- c(0.0001, 30)
 
 # Minimum number of "good" water years required for a gage to be processed
-MIN_NUM_YEARS <- 30
+MIN_NUM_YEARS <- 20
 
 # Minimum fraction of non-NA days per water year to count as "good"
 MIN_FRAC_GOOD_DATA <- 0.95
@@ -122,7 +122,7 @@ PROGRESS_INTERVAL <- 500
 DAYMET_ZIP_PATH <- "data_out/daymet_1980_2023.zip"
 
 # Path to converted parquet file (processed data with Date column)
-DAYMET_PARQUET_PATH <- "data_out/daymet_1980_2023.parquet"
+DAYMET_PARQUET_PATH <- "D:/processedOuts_feb2026/daymet_1980_2023.parquet"
 
 # Daymet date range
 DAYMET_START_YEAR <- 1980

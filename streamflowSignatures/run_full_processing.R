@@ -2,7 +2,7 @@
 # Full Streamflow Signature Processing Script
 #
 # Processes all available streamflow gages with climate data integration
-# Output: data_out/streamflow_signatures_full_JAN2026.csv
+# Output: data_out/streamflow_signatures_full_FEB2026.csv
 #
 # Expected runtime: 30-60 minutes for ~6,000 gages
 #
@@ -20,7 +20,7 @@ source("helperFunctions.R")
 
 # Configure logging
 set_log_level("INFO")
-log_file_path <- "data_out/processing_log_JAN2026.txt"
+log_file_path <- "data_out/processing_log_FEB2026.txt"
 set_log_file(log_file_path)
 
 cat("\n========== FULL SIGNATURE EXTRACTION ==========\n")
@@ -30,7 +30,7 @@ cat("Start time:", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n\n")
 parquet_path <- file.path(PARQUET_DATA_DIR, "combined_streamflow_data.parquet")
 metadata_path <- file.path(PARQUET_DATA_DIR, "combined_watershed_metadata.csv")
 daymet_path <- DAYMET_PARQUET_PATH
-output_path <- "data_out/streamflow_signatures_full_JAN2026.csv"
+output_path <- "data_out/streamflow_signatures_full_FEB2026.csv"
 
 # Verify input files exist
 cat("Verifying input files...\n")

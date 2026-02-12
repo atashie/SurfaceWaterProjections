@@ -1,0 +1,12 @@
+name: streamflowAndClimateVisualizationApp
+title: streamflowAndClimateVisualizationApp
+username: climateai
+account: climateai
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 16586134
+bundleId: 11570570
+url: https://climateai.shinyapps.io/streamflowAndClimateVisualizationApp/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE

@@ -1,0 +1,8 @@
+streamflowVisualizationApp/.Rproj.user
+streamflowAndClimateVisualizationApp/.Rproj.user
+*.gpkg
+*.RData
+*.rds
+data_out/
+test_output/
+archive/

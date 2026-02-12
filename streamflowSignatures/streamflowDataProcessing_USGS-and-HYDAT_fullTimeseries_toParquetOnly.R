@@ -5,10 +5,7 @@ source("config.R")
 source("helperFunctions.R")
 metadata_dir <- "D://gagesMetadata"#METADATA_DATA_DIR
 output_dir <- "D://processedOuts_feb2026"
-start_date <- DEFAULT_START_DATE
-end_date   <- DEFAULT_END_DATE
-min_num_years <- MIN_NUM_YEARS
-min_Q_value_and_days <- MIN_Q_VALUE_AND_DAYS
+
 # Load configuration and helper functions
 
 

@@ -4125,11 +4125,13 @@ process_signatures_from_parquet <- function(
 
   # Validate Daymet parquet if provided
   has_daymet <- FALSE
+  daymet_dataset <- NULL  # lazy Arrow dataset for batch loading
   if (!is.null(daymet_parquet_path)) {
     if (file.exists(daymet_parquet_path)) {
       validate_file_exists(daymet_parquet_path, "daymet_parquet_path",
                            required_ext = "parquet", context = ctx)
       has_daymet <- TRUE
+      daymet_dataset <- arrow::open_dataset(daymet_parquet_path, format = "parquet")
       log_info("Daymet data available - climate signatures will be calculated",
                context = ctx)
     } else {
@@ -4149,22 +4151,26 @@ process_signatures_from_parquet <- function(
 
   log_info("Reading parquet file and metadata...", context = ctx)
 
-  # Read the combined parquet file
-  streamflow_data <- tryCatch({
-    arrow::read_parquet(parquet_file_path)
+  # Open parquet lazily via Arrow to avoid loading entire dataset into memory
+  # (111M+ rows can exceed available RAM on 16 GB systems)
+  streamflow_dataset <- tryCatch({
+    arrow::open_dataset(parquet_file_path, format = "parquet")
   }, error = function(e) {
-    log_error("Failed to read parquet file:", e$message, context = ctx)
-    stop(paste0("Failed to read parquet file: ", e$message))
+    log_error("Failed to open parquet file:", e$message, context = ctx)
+    stop(paste0("Failed to open parquet file: ", e$message))
   })
-  streamflow_data <- as.data.table(streamflow_data)
-  
+
   # Check the structure of the data
-  log_info("Data columns:", paste(names(streamflow_data), collapse = ", "), context = ctx)
-  log_info("Number of rows:", nrow(streamflow_data), context = ctx)
+  parquet_cols <- names(streamflow_dataset)
+  log_info("Data columns:", paste(parquet_cols, collapse = ", "), context = ctx)
 
   # Validate streamflow data structure
-  validate_columns(streamflow_data, c("gage_id", "Date", "Q"),
-                   df_name = "streamflow_data", context = ctx)
+  required_cols <- c("gage_id", "Date", "Q")
+  missing_cols <- setdiff(required_cols, parquet_cols)
+  if (length(missing_cols) > 0) {
+    stop(paste0("streamflow_data missing required columns: ",
+                paste(missing_cols, collapse = ", ")))
+  }
 
   # Read metadata - ensure gage_id is character
   metadata <- tryCatch({
@@ -4175,13 +4181,78 @@ process_signatures_from_parquet <- function(
   })
   metadata[, gage_id := as.character(gage_id)]
   log_info("Number of gages in metadata:", nrow(metadata), context = ctx)
-  
+
   # Initialize output data table
   summary_output <- data.table()
-  
-  # Get list of unique gage IDs from the parquet data
-  unique_gages <- unique(as.character(streamflow_data$gage_id))
-  log_info("Found", length(unique_gages), "unique gages in parquet file", context = ctx)
+
+  # Get list of unique gage IDs from the parquet data (lightweight Arrow query)
+  all_streamflow_gages <- streamflow_dataset |>
+    dplyr::distinct(gage_id) |>
+    dplyr::collect()
+  all_streamflow_gages <- as.character(all_streamflow_gages$gage_id)
+  log_info("Found", length(all_streamflow_gages), "unique gages in streamflow parquet", context = ctx)
+
+  # If Daymet is available, iterate over Daymet site_ids (guarantees climate data)
+  # Build a mapping: streamflow_gage_id -> daymet_site_id
+  daymet_id_for_gage <- character(0)  # named vector: names=streamflow_id, values=daymet_id
+
+  if (has_daymet && !is.null(daymet_dataset)) {
+    daymet_site_ids <- daymet_dataset |>
+      dplyr::distinct(site_id) |>
+      dplyr::collect()
+    daymet_site_ids <- as.character(daymet_site_ids$site_id)
+    log_info("Found", length(daymet_site_ids), "unique sites in Daymet parquet", context = ctx)
+
+    # For each Daymet site_id, find the matching streamflow gage_id
+    matched_streamflow_ids <- character(0)
+    unmatched_daymet_ids <- character(0)
+
+    for (d_id in daymet_site_ids) {
+      # Try exact match first
+      if (d_id %in% all_streamflow_gages) {
+        matched_streamflow_ids <- c(matched_streamflow_ids, d_id)
+        daymet_id_for_gage[d_id] <- d_id
+        next
+      }
+      # Try adding leading zeros (1-4)
+      found <- FALSE
+      for (num_zeros in 1:4) {
+        padded_id <- sprintf(paste0("%0", nchar(d_id) + num_zeros, "d"), as.numeric(d_id))
+        if (padded_id %in% all_streamflow_gages) {
+          matched_streamflow_ids <- c(matched_streamflow_ids, padded_id)
+          daymet_id_for_gage[padded_id] <- d_id
+          found <- TRUE
+          break
+        }
+      }
+      if (found) next
+      # Try stripping leading zeros
+      stripped_id <- gsub("^0+", "", d_id)
+      if (stripped_id != d_id && stripped_id != "" && stripped_id %in% all_streamflow_gages) {
+        matched_streamflow_ids <- c(matched_streamflow_ids, stripped_id)
+        daymet_id_for_gage[stripped_id] <- d_id
+        next
+      }
+      unmatched_daymet_ids <- c(unmatched_daymet_ids, d_id)
+    }
+
+    unique_gages <- matched_streamflow_ids
+    log_info("Matched", length(unique_gages), "of", length(daymet_site_ids),
+             "Daymet sites to streamflow gages", context = ctx)
+    if (length(unmatched_daymet_ids) > 0) {
+      log_warn(length(unmatched_daymet_ids), "Daymet sites had no matching streamflow gage",
+               context = ctx)
+      if (length(unmatched_daymet_ids) <= 20) {
+        log_debug("Unmatched Daymet IDs:", paste(unmatched_daymet_ids, collapse = ", "),
+                  context = ctx)
+      }
+    }
+  } else {
+    # No Daymet: fall back to streamflow-only iteration
+    unique_gages <- all_streamflow_gages
+    log_info("No Daymet data - iterating over", length(unique_gages), "streamflow gages",
+             context = ctx)
+  }
   
   # Create a lookup table for metadata with multiple possible formats
   # important for USGS data where IDs often have leading 0s that may be dropped
@@ -4239,7 +4310,15 @@ process_signatures_from_parquet <- function(
   # Track matching statistics
   matched_gages <- 0
   unmatched_gages <- character()
-  
+
+  # Batch loading: load groups of gages from parquet at a time to balance
+  # memory usage (~1-2 GB per batch) vs speed (fast data.table lookups within batch)
+  BATCH_SIZE <- 500
+  n_batches <- ceiling(length(unique_gages) / BATCH_SIZE)
+  log_info("Processing in", n_batches, "batches of up to", BATCH_SIZE, "gages", context = ctx)
+  streamflow_batch <- NULL  # current batch data
+  daymet_batch <- NULL       # current batch of Daymet climate data
+
   # Process each unique gage
   for (i in seq_along(unique_gages)) {
     # Use current_gage_id to avoid shadowing the data.table column name 'gage_id'
@@ -4247,6 +4326,50 @@ process_signatures_from_parquet <- function(
 
     if (i %% 100 == 0) {
       log_info("Processing gage", i, "of", length(unique_gages), context = ctx)
+    }
+
+    # Load a new batch of streamflow + Daymet data when needed
+    if ((i - 1) %% BATCH_SIZE == 0) {
+      batch_start <- i
+      batch_end <- min(i + BATCH_SIZE - 1, length(unique_gages))
+      batch_ids <- unique_gages[batch_start:batch_end]
+      batch_num <- ceiling(i / BATCH_SIZE)
+      log_info("Loading streamflow batch", batch_num, "of", n_batches,
+               "(gages", batch_start, "-", batch_end, ")", context = ctx)
+
+      # Free previous batches before loading new ones
+      if (!is.null(streamflow_batch)) {
+        rm(streamflow_batch)
+        if (!is.null(daymet_batch)) rm(daymet_batch)
+        gc(verbose = FALSE)
+      }
+
+      streamflow_batch <- streamflow_dataset |>
+        dplyr::filter(gage_id %in% batch_ids) |>
+        dplyr::collect() |>
+        as.data.table()
+      setkey(streamflow_batch, gage_id)
+
+      # Also batch-load Daymet data for these gages (translate to Daymet IDs)
+      if (has_daymet && !is.null(daymet_dataset)) {
+        batch_daymet_ids <- unname(daymet_id_for_gage[batch_ids])
+        batch_daymet_ids <- batch_daymet_ids[!is.na(batch_daymet_ids)]
+        daymet_batch <- tryCatch({
+          daymet_dataset |>
+            dplyr::filter(site_id %in% batch_daymet_ids) |>
+            dplyr::collect() |>
+            as.data.table()
+        }, error = function(e) {
+          log_warn("Failed to batch-load Daymet data:", e$message, context = ctx)
+          NULL
+        })
+        if (!is.null(daymet_batch) && nrow(daymet_batch) > 0) {
+          setkey(daymet_batch, site_id)
+          log_info("Loaded Daymet data for batch:", nrow(daymet_batch), "rows", context = ctx)
+        } else {
+          daymet_batch <- NULL
+        }
+      }
     }
 
     tryCatch({
@@ -4269,8 +4392,8 @@ process_signatures_from_parquet <- function(
 
       matched_gages <- matched_gages + 1
 
-      # Extract streamflow data for this gage
-      gage_flow <- streamflow_data[gage_id == current_gage_id, ]
+      # Extract streamflow data for this gage from the current batch
+      gage_flow <- streamflow_batch[gage_id == current_gage_id]
 
       if (nrow(gage_flow) == 0) {
         log_debug("No data for gage", current_gage_id, context = ctx)
@@ -4318,15 +4441,28 @@ process_signatures_from_parquet <- function(
 
       # ============= INTEGRATE CLIMATE DATA =============
       gage_has_climate <- FALSE
-      if (has_daymet) {
+      if (has_daymet && !is.null(daymet_batch)) {
         tryCatch({
-          gage_flow <- integrate_daymet_with_streamflow(
-            gage_flow, current_gage_id, daymet_parquet_path
-          )
-          gage_has_climate <- "PPT" %in% names(gage_flow) &&
-                              sum(!is.na(gage_flow$PPT)) > 0
-          if (gage_has_climate) {
-            log_debug("Climate data integrated for gage", current_gage_id, context = ctx)
+          # Use pre-loaded batch data instead of per-gage parquet scan
+          # Look up the Daymet site_id that corresponds to this streamflow gage_id
+          daymet_id <- daymet_id_for_gage[current_gage_id]
+          gage_climate <- if (!is.na(daymet_id)) daymet_batch[site_id == daymet_id] else data.table()
+          if (nrow(gage_climate) > 0) {
+            gage_climate <- copy(gage_climate)  # avoid modifying batch by reference
+            gage_climate[, site_id := NULL]  # drop site_id before merge
+            gage_flow <- merge(gage_flow, gage_climate, by = "Date", all.x = TRUE)
+            # Rename prcp to PPT for compatibility
+            if ("prcp" %in% names(gage_flow)) {
+              setnames(gage_flow, "prcp", "PPT")
+            }
+            gage_has_climate <- "PPT" %in% names(gage_flow) &&
+                                sum(!is.na(gage_flow$PPT)) > 0
+            if (gage_has_climate) {
+              log_debug("Climate data integrated for gage", current_gage_id, context = ctx)
+            }
+          } else {
+            log_warn("No Daymet data found for gage:", current_gage_id,
+                     context = "integrate_daymet_batch")
           }
         }, error = function(e) {
           log_warn("Could not integrate Daymet for gage", current_gage_id, ":",
@@ -4473,7 +4609,8 @@ process_signatures_from_parquet <- function(
         num_water_years = length(water_years_to_use),  # Changed from num_years
         start_water_year = min(water_years_to_use),     # Changed from start_year
         end_water_year = max(water_years_to_use),       # Changed from end_year
-        num_upstream_basins = gage_meta$num_upstream_basins
+        num_upstream_basins = gage_meta$num_upstream_basins,
+        area_normalized = gage_meta$area_normalized
       )
       
       # Add calculated metrics
