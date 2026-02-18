@@ -844,6 +844,7 @@ server <- function(input, output, session) {
               side = "right",
               autorange = "reversed",  # Bars descend from top
               showgrid = FALSE,
+              zeroline = FALSE,
               position = axis_position
             )
 
@@ -887,6 +888,7 @@ server <- function(input, output, session) {
                 overlaying = "y",
                 side = "right",
                 showgrid = FALSE,
+                zeroline = FALSE,
                 range = c(temp_min, temp_max),
                 position = axis_position
               )
@@ -913,6 +915,7 @@ server <- function(input, output, session) {
               overlaying = "y",
               side = "right",
               showgrid = FALSE,
+              zeroline = FALSE,
               rangemode = "tozero",  # Ensures y-axis starts at 0
               position = axis_position
             )
@@ -938,6 +941,7 @@ server <- function(input, output, session) {
               overlaying = "y",
               side = "right",
               showgrid = FALSE,
+              zeroline = FALSE,
               position = axis_position
             )
 
