@@ -789,6 +789,9 @@ server <- function(input, output, session) {
       )
     )
 
+    # Default x-domain (will be adjusted if weather layers are added)
+    x_domain_end <- 0.95
+
     if (length(weather_layers) > 0) {
       daymet <- daymet_data()
 
@@ -796,10 +799,17 @@ server <- function(input, output, session) {
         # Join by date range of streamflow
         daymet <- daymet[Date >= min(data$Date) & Date <= max(data$Date)]
 
-        axis_position <- 1.0
         # Dynamic offset based on number of weather layers
         n_layers <- length(weather_layers)
         axis_offset <- if (n_layers <= 2) 0.12 else if (n_layers <= 4) 0.09 else 0.07
+
+        # Start first axis slightly inward to prevent clipping at edge
+        axis_position <- 0.97
+
+        # Calculate where the last axis will be positioned
+        final_axis_position <- axis_position - (n_layers - 1) * axis_offset
+        # Shrink x-domain to end before the last axis (with small buffer)
+        x_domain_end <- max(0.5, final_axis_position - 0.08)
 
         # Abbreviated titles when 3+ layers to reduce overlap
         use_short_titles <- n_layers >= 3
@@ -959,7 +969,7 @@ server <- function(input, output, session) {
           title = "Date",
           type = "date",
           rangeslider = list(type = "date"),
-          domain = c(0, 0.85)  # Leave room for multiple y-axes
+          domain = c(0, x_domain_end)  # Dynamically adjusted for weather y-axes
         ),
         hovermode = "x unified",
         showlegend = TRUE,
