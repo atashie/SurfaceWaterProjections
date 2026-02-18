@@ -192,6 +192,7 @@ read_rasterbrick_from_s3 <- function(bucket, object_key) {
 
 #' Read parquet data from S3 for a specific ID value
 #' Handles leading zero variations in a single query
+#' Includes retry logic for S3 connection errors (SIGPIPE, broken pipe, etc.)
 #'
 #' @param id_value The ID to filter on
 #' @param id_column Column name containing the ID
@@ -208,25 +209,43 @@ read_parquet_by_id <- function(id_value, id_column, bucket, parquet_key,
   require(dplyr)
   require(data.table)
 
-  # Open dataset if not provided (fallback for standalone use)
-  if (is.null(dataset)) {
-    s3_parquet_url <- paste0("s3://", bucket, "/", parquet_key)
-    message(paste("Reading", data_name, "from S3 for", id_column, ":", id_value))
-    dataset <- open_dataset(s3_parquet_url)
+  # Helper function to perform the actual query
+  perform_query <- function(ds) {
+    ids_to_try <- unique(c(as.character(id_value), paste0("0", id_value)))
+    query <- ds %>% filter(!!sym(id_column) %in% ids_to_try)
+    if (!is.null(select_cols)) {
+      query <- query %>% select(all_of(select_cols))
+    }
+    query %>% collect()
   }
 
-  # Try both ID formats in single query (avoids double S3 round-trip)
-  ids_to_try <- unique(c(as.character(id_value), paste0("0", id_value)))
+  # Build S3 URL for fresh connections
+  s3_parquet_url <- paste0("s3://", bucket, "/", parquet_key)
 
-  # Build query with column selection
-  query <- dataset %>%
-    filter(!!sym(id_column) %in% ids_to_try)
+  # Try with provided dataset first, retry with fresh connection on error
 
-  if (!is.null(select_cols)) {
-    query <- query %>% select(all_of(select_cols))
-  }
-
-  filtered_data <- query %>% collect()
+  filtered_data <- tryCatch({
+    if (is.null(dataset)) {
+      message(paste("Reading", data_name, "from S3 for", id_column, ":", id_value))
+      dataset <- open_dataset(s3_parquet_url)
+    }
+    perform_query(dataset)
+  }, error = function(e) {
+    # Check if this is a connection-related error
+    if (grepl("SIGPIPE|connection|reset|broken pipe|ignoring", e$message, ignore.case = TRUE)) {
+      message(paste("Connection error for", data_name, "- retrying with fresh dataset..."))
+      tryCatch({
+        fresh_dataset <- open_dataset(s3_parquet_url)
+        perform_query(fresh_dataset)
+      }, error = function(e2) {
+        warning(paste("Retry failed for", data_name, ":", e2$message))
+        return(data.table())  # Return empty data.table on failure
+      })
+    } else {
+      warning(paste("Error reading", data_name, ":", e$message))
+      return(data.table())  # Return empty data.table on non-connection errors
+    }
+  })
 
   if (nrow(filtered_data) == 0) {
     message(paste("No", data_name, "found for", id_column, ":", id_value))
@@ -259,6 +278,7 @@ read_streamflow_by_gage_id <- function(gage_id,
 # === DAYMET CLIMATE DATA READER ===
 
 #' Read Daymet climate data for a specific gage from S3 parquet
+#' Includes retry logic for S3 connection errors (SIGPIPE, broken pipe, etc.)
 #'
 #' @param gage_id The gage ID (site_id in the parquet)
 #' @param bucket S3 bucket name
@@ -273,45 +293,64 @@ read_daymet_by_gage_id <- function(gage_id,
   require(dplyr)
   require(data.table)
 
-  # Open dataset to check schema for date column name (case-insensitive)
-  if (is.null(dataset)) {
-    s3_parquet_url <- paste0("s3://", bucket, "/", parquet_key)
-    message(paste("Reading Daymet climate data from S3 for site_id:", gage_id))
-    dataset <- open_dataset(s3_parquet_url)
+  s3_parquet_url <- paste0("s3://", bucket, "/", parquet_key)
+
+  # Helper function to perform query on a dataset
+  perform_daymet_query <- function(ds) {
+    col_names <- names(ds)
+    date_col <- if ("Date" %in% col_names) "Date" else if ("date" %in% col_names) "date" else NULL
+
+    if (is.null(date_col)) {
+      message("Warning: No date column found in Daymet data")
+      return(data.table())
+    }
+
+    needed_cols <- c("site_id", date_col, "prcp", "tmin", "tmax", "swe", "vp", "srad")
+    available_cols <- intersect(needed_cols, col_names)
+    ids_to_try <- unique(c(as.character(gage_id), paste0("0", gage_id)))
+
+    result <- ds %>%
+      filter(site_id %in% ids_to_try) %>%
+      select(all_of(available_cols)) %>%
+      collect() %>%
+      as.data.table()
+
+    if (nrow(result) > 0 && date_col == "date") {
+      setnames(result, "date", "Date")
+    }
+    if (nrow(result) > 0 && "Date" %in% names(result)) {
+      result[, Date := as.Date(Date)]
+    }
+
+    return(result)
   }
 
-  # Check schema for actual date column name
-  col_names <- names(dataset)
-  date_col <- if ("Date" %in% col_names) "Date" else if ("date" %in% col_names) "date" else NULL
-
-  if (is.null(date_col)) {
-    message("Warning: No date column found in Daymet data")
-    return(data.table())
-  }
-
-  # Build select list with actual date column name (select at query time for performance)
-  needed_cols <- c("site_id", date_col, "prcp", "tmin", "tmax", "swe", "vp", "srad")
-  available_cols <- intersect(needed_cols, col_names)
-
-  # Try both ID formats in single query
-  ids_to_try <- unique(c(as.character(gage_id), paste0("0", gage_id)))
-
-  result <- dataset %>%
-    filter(site_id %in% ids_to_try) %>%
-    select(all_of(available_cols)) %>%
-    collect() %>%
-    as.data.table()
+  # Try with provided dataset first, retry with fresh connection on error
+  result <- tryCatch({
+    if (is.null(dataset)) {
+      message(paste("Reading Daymet climate data from S3 for site_id:", gage_id))
+      dataset <- open_dataset(s3_parquet_url)
+    }
+    perform_daymet_query(dataset)
+  }, error = function(e) {
+    if (grepl("SIGPIPE|connection|reset|broken pipe|ignoring", e$message, ignore.case = TRUE)) {
+      message(paste("Connection error for Daymet data - retrying with fresh dataset..."))
+      tryCatch({
+        fresh_dataset <- open_dataset(s3_parquet_url)
+        perform_daymet_query(fresh_dataset)
+      }, error = function(e2) {
+        warning(paste("Retry failed for Daymet data:", e2$message))
+        return(data.table())
+      })
+    } else {
+      warning(paste("Error reading Daymet data:", e$message))
+      return(data.table())
+    }
+  })
 
   if (nrow(result) == 0) {
     message(paste("No Daymet climate data found for site_id:", gage_id))
-    return(data.table())
   }
-
-  # Normalize date column name to "Date"
-  if (date_col == "date") {
-    setnames(result, "date", "Date")
-  }
-  result[, Date := as.Date(Date)]
 
   return(result)
 }

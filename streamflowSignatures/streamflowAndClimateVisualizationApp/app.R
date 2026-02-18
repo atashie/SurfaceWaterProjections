@@ -43,6 +43,11 @@ s3_bucket_name <- S3_BUCKET_NAME
 readRenviron(".Renviron")
 check_aws_credentials()
 
+# Suppress Arrow threading warnings on shinyapps.io
+# This prevents "Can't detect correct thread for auto_deleter_background" spam
+options(arrow.use_threads = FALSE)
+Sys.setenv(ARROW_USE_THREADS = "false")
+
 # Pre-open Arrow datasets for reuse (avoids reconnection on every gage change)
 message("Pre-opening Arrow datasets from S3...")
 streamflow_dataset <- arrow::open_dataset(
@@ -604,10 +609,22 @@ server <- function(input, output, session) {
       return(cache$data)
     }
 
-    # Fetch and cache new data
-    data <- read_streamflow_by_gage_id(gage_id = input$gage_selector, dataset = streamflow_dataset)
-    cached_streamflow(list(gage_id = input$gage_selector, data = data))
-    return(data)
+    # Fetch and cache new data with error handling
+    tryCatch({
+      data <- read_streamflow_by_gage_id(gage_id = input$gage_selector, dataset = streamflow_dataset)
+      if (nrow(data) > 0) {
+        cached_streamflow(list(gage_id = input$gage_selector, data = data))
+      }
+      return(data)
+    }, error = function(e) {
+      showNotification(
+        "Error loading streamflow data. Please try selecting a different gage or refresh the page.",
+        type = "error",
+        duration = 8
+      )
+      message(paste("Streamflow data error:", e$message))
+      return(data.table())  # Return empty data.table to prevent downstream errors
+    })
   })
 
   # Daymet climate data with caching (prevents refetch when toggling weather layers)
@@ -625,15 +642,44 @@ server <- function(input, output, session) {
       return(cache$data)
     }
 
-    # Fetch and cache new data
-    data <- read_daymet_by_gage_id(gage_id = input$gage_selector, dataset = daymet_dataset)
-    cached_daymet(list(gage_id = input$gage_selector, data = data))
-    return(data)
+    # Fetch and cache new data with error handling
+    tryCatch({
+      data <- read_daymet_by_gage_id(gage_id = input$gage_selector, dataset = daymet_dataset)
+      if (nrow(data) > 0) {
+        cached_daymet(list(gage_id = input$gage_selector, data = data))
+      }
+      return(data)
+    }, error = function(e) {
+      showNotification(
+        "Error loading weather data. Weather overlays may be unavailable.",
+        type = "warning",
+        duration = 5
+      )
+      message(paste("Daymet data error:", e$message))
+      return(data.table())  # Return empty data.table to prevent downstream errors
+    })
   })
 
   # === HYDROGRAPH WITH WEATHER OVERLAYS ===
   output$streamflow_plot <- renderPlotly({
     data <- streamflow_data()
+
+    # Handle empty data gracefully (e.g., after connection error)
+    if (nrow(data) == 0 || !("Q" %in% names(data))) {
+      return(
+        plot_ly() %>%
+          layout(
+            title = list(text = "No data available", font = list(size = 14)),
+            annotations = list(
+              list(
+                text = "Unable to load streamflow data. Please try selecting a different gage.",
+                x = 0.5, y = 0.5, xref = "paper", yref = "paper",
+                showarrow = FALSE, font = list(size = 12, color = "gray")
+              )
+            )
+          )
+      )
+    }
 
     selected_metadata <- goodGages[goodGages$gage_id == input$gage_selector, ]
     plot_title <- paste("Streamflow for Gage", input$gage_selector)
