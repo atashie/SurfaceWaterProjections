@@ -808,8 +808,8 @@ server <- function(input, output, session) {
 
         # Calculate where the last axis will be positioned
         final_axis_position <- axis_position - (n_layers - 1) * axis_offset
-        # Shrink x-domain to end before the last axis (with small buffer)
-        x_domain_end <- max(0.5, final_axis_position - 0.08)
+        # Shrink x-domain to end just before the last axis (minimal buffer)
+        x_domain_end <- max(0.5, final_axis_position - 0.02)
 
         # Abbreviated titles when 3+ layers to reduce overlap
         use_short_titles <- n_layers >= 3
