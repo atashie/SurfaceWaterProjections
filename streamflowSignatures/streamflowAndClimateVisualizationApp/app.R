@@ -797,11 +797,29 @@ server <- function(input, output, session) {
         daymet <- daymet[Date >= min(data$Date) & Date <= max(data$Date)]
 
         axis_position <- 1.0
-        axis_offset <- 0.08
+        # Dynamic offset based on number of weather layers
+        n_layers <- length(weather_layers)
+        axis_offset <- if (n_layers <= 2) 0.12 else if (n_layers <= 4) 0.09 else 0.07
+
+        # Abbreviated titles when 3+ layers to reduce overlap
+        use_short_titles <- n_layers >= 3
+        short_titles <- list(
+          prcp = "Precip",
+          temp = "Temp",
+          swe = "SWE",
+          vp = "VP",
+          srad = "Srad"
+        )
 
         for (i in seq_along(weather_layers)) {
           var_name <- weather_layers[i]
           var_info <- weather_info[[var_name]]
+          # Use short title if crowded, otherwise full label
+          axis_title <- if (use_short_titles && !is.null(short_titles[[var_name]])) {
+            paste0(short_titles[[var_name]], " (", var_info$unit, ")")
+          } else {
+            paste0(var_info$label, " (", var_info$unit, ")")
+          }
 
           yaxis_num <- i + 1
           yaxis_name <- paste0("y", yaxis_num)
@@ -821,7 +839,7 @@ server <- function(input, output, session) {
               )
 
             yaxis_list[[yaxis_key]] <- list(
-              title = paste0(var_info$label, " (", var_info$unit, ")"),
+              title = axis_title,
               overlaying = "y",
               side = "right",
               autorange = "reversed",  # Bars descend from top
@@ -865,7 +883,7 @@ server <- function(input, output, session) {
                 )
 
               yaxis_list[[yaxis_key]] <- list(
-                title = "Temperature (\u00B0C)",
+                title = axis_title,
                 overlaying = "y",
                 side = "right",
                 showgrid = FALSE,
@@ -875,6 +893,31 @@ server <- function(input, output, session) {
 
               axis_position <- axis_position - axis_offset
             }
+
+          } else if (var_name == "swe" && var_name %in% names(daymet)) {
+            # Snow Water Equivalent: force y-axis to start at 0 (SWE cannot be negative)
+            p <- p %>%
+              add_trace(
+                x = daymet$Date,
+                y = daymet[[var_name]],
+                type = "scatter",
+                mode = "lines",
+                name = var_info$label,
+                line = list(color = var_info$color, width = 1),
+                yaxis = yaxis_name,
+                hovertemplate = paste0("Date: %{x}<br>", var_info$label, ": %{y:.1f} ", var_info$unit, "<extra></extra>")
+              )
+
+            yaxis_list[[yaxis_key]] <- list(
+              title = axis_title,
+              overlaying = "y",
+              side = "right",
+              showgrid = FALSE,
+              rangemode = "tozero",  # Ensures y-axis starts at 0
+              position = axis_position
+            )
+
+            axis_position <- axis_position - axis_offset
 
           } else if (var_name %in% names(daymet)) {
             # Other variables as lines
@@ -891,7 +934,7 @@ server <- function(input, output, session) {
               )
 
             yaxis_list[[yaxis_key]] <- list(
-              title = paste0(var_info$label, " (", var_info$unit, ")"),
+              title = axis_title,
               overlaying = "y",
               side = "right",
               showgrid = FALSE,
