@@ -4603,14 +4603,26 @@ process_signatures_from_parquet <- function(
         gage_id = current_gage_id,
         gage_id_metadata = gage_meta$gage_id,  # Store the metadata version too
         latitude = gage_meta$latitude,
-        longitude = gage_meta$longitude, 
+        longitude = gage_meta$longitude,
         basin_area = gage_meta$basin_area,
         gage_type = gage_meta$gage_type,
         num_water_years = length(water_years_to_use),  # Changed from num_years
         start_water_year = min(water_years_to_use),     # Changed from start_year
         end_water_year = max(water_years_to_use),       # Changed from end_year
         num_upstream_basins = gage_meta$num_upstream_basins,
-        area_normalized = gage_meta$area_normalized
+        area_normalized = gage_meta$area_normalized,
+        # Human interference metadata (from GAGES-II / HYDAT)
+        NDAMS_2009 = if ("NDAMS_2009" %in% names(gage_meta)) gage_meta$NDAMS_2009 else NA_real_,
+        MAJ_DDENS_2009 = if ("MAJ_DDENS_2009" %in% names(gage_meta)) gage_meta$MAJ_DDENS_2009 else NA_real_,
+        STOR_NID_2009 = if ("STOR_NID_2009" %in% names(gage_meta)) gage_meta$STOR_NID_2009 else NA_real_,
+        IMPNLCD06 = if ("IMPNLCD06" %in% names(gage_meta)) gage_meta$IMPNLCD06 else NA_real_,
+        DEVNLCD06 = if ("DEVNLCD06" %in% names(gage_meta)) gage_meta$DEVNLCD06 else NA_real_,
+        FRESHW_WITHDRAWAL = if ("FRESHW_WITHDRAWAL" %in% names(gage_meta)) gage_meta$FRESHW_WITHDRAWAL else NA_real_,
+        HYDRO_DISTURB_INDX = if ("HYDRO_DISTURB_INDX" %in% names(gage_meta)) gage_meta$HYDRO_DISTURB_INDX else NA_real_,
+        CLASS = if ("CLASS" %in% names(gage_meta)) gage_meta$CLASS else NA_character_,
+        RHBN = if ("RHBN" %in% names(gage_meta)) gage_meta$RHBN else NA,
+        REGULATED = if ("REGULATED" %in% names(gage_meta)) gage_meta$REGULATED else NA,
+        human_interference_class = if ("human_interference_class" %in% names(gage_meta)) gage_meta$human_interference_class else NA_character_
       )
       
       # Add calculated metrics
@@ -4665,4 +4677,361 @@ process_signatures_from_parquet <- function(
 
   log_info("Signature extraction complete", context = ctx)
   return(summary_output)
+}
+
+
+# ==============================================================================
+# HUMAN INTERFERENCE METADATA FUNCTIONS
+# ==============================================================================
+
+#' Load GAGES-II files for a specific region (CONUS or AKHIPR)
+#'
+#' Internal helper function to read and merge GAGES-II text files.
+#'
+#' @param gages_dir Path to directory containing GAGES-II files
+#' @param file_list Named list of file names to load
+#' @param region_name Region identifier for logging
+#' @return data.table with STAID and extracted columns
+load_gages_ii_region <- function(gages_dir, file_list, region_name) {
+  ctx <- paste0("load_gages_ii_region:", region_name)
+
+  result <- NULL
+
+  for (file_type in names(file_list)) {
+    file_path <- file.path(gages_dir, file_list[[file_type]])
+
+    if (!file.exists(file_path)) {
+      log_debug("GAGES-II file not found:", file_path, context = ctx)
+      next
+    }
+
+    cols_to_keep <- GAGES_II_COLUMNS[[file_type]]
+    if (is.null(cols_to_keep)) {
+      log_warn("No column specification for file type:", file_type, context = ctx)
+      next
+    }
+
+    tryCatch({
+      dt <- fread(file_path, colClasses = c("STAID" = "character"))
+
+      # Keep only specified columns that exist
+      available_cols <- intersect(cols_to_keep, names(dt))
+      if (!"STAID" %in% available_cols) {
+        log_warn("STAID column missing in:", file_path, context = ctx)
+        next
+      }
+
+      dt <- dt[, ..available_cols]
+
+      if (is.null(result)) {
+        result <- dt
+      } else {
+        result <- merge(result, dt, by = "STAID", all = TRUE)
+      }
+
+      log_debug("Loaded", nrow(dt), "rows from", basename(file_path), context = ctx)
+
+    }, error = function(e) {
+      log_warn("Failed to load", file_path, ":", e$message, context = ctx)
+    })
+  }
+
+  if (is.null(result)) {
+    result <- data.table(STAID = character())
+  }
+
+  return(result)
+}
+
+
+#' Load GAGES-II Human Interference Metadata
+#'
+#' Loads and combines human interference columns from GAGES-II text files
+#' for CONUS and Alaska/Hawaii/PR gages.
+#'
+#' @param gages_dir Path to directory containing GAGES-II text files.
+#'   Defaults to GAGES_II_DIR from config.R
+#' @return data.table with STAID and interference columns:
+#'   NDAMS_2009, MAJ_DDENS_2009, STOR_NID_2009, IMPNLCD06, DEVNLCD06,
+#'   FRESHW_WITHDRAWAL, HYDRO_DISTURB_INDX, CLASS
+load_gages_ii_interference <- function(gages_dir = GAGES_II_DIR) {
+  ctx <- "load_gages_ii_interference"
+  log_info("Loading GAGES-II human interference metadata from:", gages_dir, context = ctx)
+
+  validate_directory(gages_dir, "gages_dir", context = ctx)
+
+  # Load CONUS files
+  conus_data <- load_gages_ii_region(gages_dir, GAGES_II_FILES_CONUS, "CONUS")
+  log_info("Loaded CONUS GAGES-II data:", nrow(conus_data), "gages", context = ctx)
+
+  # Load AKHIPR files
+  akhipr_data <- load_gages_ii_region(gages_dir, GAGES_II_FILES_AKHIPR, "AKHIPR")
+  log_info("Loaded AKHIPR GAGES-II data:", nrow(akhipr_data), "gages", context = ctx)
+
+  # Combine (AKHIPR may not have all columns)
+  combined <- rbind(conus_data, akhipr_data, fill = TRUE)
+
+  # Replace sentinel missing value (-999) with NA
+  numeric_cols <- names(combined)[sapply(combined, is.numeric)]
+  for (col in numeric_cols) {
+    combined[get(col) == GAGES_II_MISSING_VALUE, (col) := NA]
+  }
+
+  # Standardize CLASS values
+  if ("CLASS" %in% names(combined)) {
+    combined[, CLASS := trimws(CLASS)]
+    combined[CLASS == "", CLASS := NA_character_]
+  }
+
+  log_info("Loaded GAGES-II interference data for", nrow(combined), "total gages", context = ctx)
+
+  return(combined)
+}
+
+
+#' Load Canadian HYDAT Human Interference Metadata
+#'
+#' Extracts RHBN designation and regulation status from tidyhydat database.
+#'
+#' @param station_numbers Character vector of Canadian station numbers (optional).
+#'   If NULL, loads data for all stations.
+#' @return data.table with gage_id and interference columns:
+#'   RHBN (Reference Hydrometric Basin Network flag),
+#'   REGULATED (station regulation status),
+#'   human_interference_class (unified classification)
+load_canadian_interference <- function(station_numbers = NULL) {
+  ctx <- "load_canadian_interference"
+
+  if (!requireNamespace("tidyhydat", quietly = TRUE)) {
+    log_warn("tidyhydat package not available - skipping Canadian interference metadata",
+             context = ctx)
+    return(data.table(
+      gage_id = character(),
+      RHBN = logical(),
+      REGULATED = logical(),
+      human_interference_class = character()
+    ))
+  }
+
+  log_info("Loading Canadian HYDAT interference metadata", context = ctx)
+
+  # Get station information (includes RHBN flag)
+  stations <- tryCatch({
+    if (is.null(station_numbers)) {
+      as.data.table(tidyhydat::hy_stations())
+    } else {
+      as.data.table(tidyhydat::hy_stations(station_numbers))
+    }
+  }, error = function(e) {
+    log_error("Failed to load hy_stations:", e$message, context = ctx)
+    return(NULL)
+  })
+
+  if (is.null(stations) || nrow(stations) == 0) {
+    return(data.table(
+      gage_id = character(),
+      RHBN = logical(),
+      REGULATED = logical(),
+      human_interference_class = character()
+    ))
+  }
+
+  # Get regulation information
+  regulation <- tryCatch({
+    if (is.null(station_numbers)) {
+      as.data.table(tidyhydat::hy_stn_regulation())
+    } else {
+      as.data.table(tidyhydat::hy_stn_regulation(station_numbers))
+    }
+  }, error = function(e) {
+    log_warn("Failed to load hy_stn_regulation:", e$message, context = ctx)
+    data.table(STATION_NUMBER = character(), REGULATED = logical())
+  })
+
+  # Select relevant columns from stations
+  station_cols <- c("STATION_NUMBER", "RHBN")
+  available_cols <- intersect(station_cols, names(stations))
+  stations <- stations[, ..available_cols]
+
+  # Merge with regulation status
+  if ("STATION_NUMBER" %in% names(regulation) && "REGULATED" %in% names(regulation)) {
+    # Keep most recent regulation status per station (any TRUE = regulated)
+    regulation <- regulation[, .(REGULATED = any(REGULATED, na.rm = TRUE)),
+                             by = STATION_NUMBER]
+    stations <- merge(stations, regulation, by = "STATION_NUMBER", all.x = TRUE)
+  } else {
+    stations[, REGULATED := NA]
+  }
+
+  # Ensure RHBN column exists
+  if (!"RHBN" %in% names(stations)) {
+    stations[, RHBN := NA]
+  }
+
+  # Create human interference classification based on RHBN only
+  # RHBN = TRUE means reference (minimal human impact)
+  # RHBN = FALSE means non-reference
+  # RHBN = NA means unknown
+  stations[, human_interference_class := fcase(
+    RHBN == TRUE, "reference",
+    RHBN == FALSE, "non-reference",
+    default = "unknown"
+  )]
+
+  # Rename for consistency with pipeline
+  setnames(stations, "STATION_NUMBER", "gage_id")
+
+  log_info("Loaded Canadian interference data for", nrow(stations), "stations", context = ctx)
+
+  return(stations)
+}
+
+
+#' Enrich Combined Watershed Metadata with Human Interference Data
+#'
+#' Adds human interference columns from GAGES-II (USGS) and Canadian HYDAT
+#' to existing combined_watershed_metadata.csv file.
+#'
+#' @param metadata_file_path Path to combined_watershed_metadata.csv
+#' @param gages_ii_dir Path to GAGES-II data directory.
+#'   Defaults to GAGES_II_DIR from config.R
+#' @param output_file_path Path for enriched output. If NULL, overwrites input file.
+#' @return data.table with enriched metadata including interference columns
+enrich_metadata_with_interference <- function(
+    metadata_file_path,
+    gages_ii_dir = GAGES_II_DIR,
+    output_file_path = NULL
+) {
+  ctx <- "enrich_metadata_with_interference"
+
+  log_info("========== ENRICHING METADATA WITH HUMAN INTERFERENCE DATA ==========",
+           context = ctx)
+
+  # Load existing metadata
+  validate_file_exists(metadata_file_path, "metadata_file_path",
+                       required_ext = "csv", context = ctx)
+  metadata <- fread(metadata_file_path, colClasses = c("gage_id" = "character"))
+  log_info("Loaded metadata with", nrow(metadata), "gages", context = ctx)
+
+  # Initialize interference columns with NA
+  interference_cols <- c(
+    "NDAMS_2009", "MAJ_DDENS_2009", "STOR_NID_2009",
+    "IMPNLCD06", "DEVNLCD06", "FRESHW_WITHDRAWAL",
+    "HYDRO_DISTURB_INDX", "CLASS", "RHBN", "REGULATED",
+    "human_interference_class"
+  )
+  for (col in interference_cols) {
+    if (!col %in% names(metadata)) {
+      if (col %in% c("RHBN", "REGULATED")) {
+        metadata[, (col) := NA]
+      } else if (col %in% c("CLASS", "human_interference_class")) {
+        metadata[, (col) := NA_character_]
+      } else {
+        metadata[, (col) := NA_real_]
+      }
+    }
+  }
+
+  # Load GAGES-II data
+  gages_ii_data <- load_gages_ii_interference(gages_ii_dir)
+
+  # Create lookup with both original and stripped gage IDs
+  if (nrow(gages_ii_data) > 0) {
+    gages_ii_data[, gage_id_stripped := gsub("^0+", "", STAID)]
+  }
+
+  # Load Canadian data
+  canadian_gages <- metadata[gage_type %in% c("Canada", "CANADIAN"), gage_id]
+  canadian_data <- load_canadian_interference(canadian_gages)
+
+  # Join GAGES-II data to USGS gages
+  usgs_idx <- which(metadata$gage_type == "USGS")
+  if (length(usgs_idx) > 0 && nrow(gages_ii_data) > 0) {
+    log_info("Joining GAGES-II data to", length(usgs_idx), "USGS gages", context = ctx)
+
+    usgs_matched <- 0
+    for (i in usgs_idx) {
+      gage_id_orig <- metadata$gage_id[i]
+      gage_id_stripped <- gsub("^0+", "", gage_id_orig)
+
+      # Try exact match first, then stripped
+      match_row <- gages_ii_data[STAID == gage_id_orig]
+      if (nrow(match_row) == 0) {
+        match_row <- gages_ii_data[gage_id_stripped == gage_id_stripped]
+      }
+
+      if (nrow(match_row) > 0) {
+        match_row <- match_row[1]  # Take first if multiple
+        usgs_matched <- usgs_matched + 1
+
+        # Copy GAGES-II columns
+        for (col in c("NDAMS_2009", "MAJ_DDENS_2009", "STOR_NID_2009",
+                      "IMPNLCD06", "DEVNLCD06", "FRESHW_WITHDRAWAL",
+                      "HYDRO_DISTURB_INDX", "CLASS")) {
+          if (col %in% names(match_row)) {
+            set(metadata, i, col, match_row[[col]])
+          }
+        }
+
+        # Compute human_interference_class for USGS based on CLASS column
+        # CLASS = "Ref" -> reference, CLASS = "Non-ref" -> non-reference, else -> unknown
+        class_val <- match_row$CLASS
+        if (!is.na(class_val) && nchar(class_val) > 0) {
+          interference_class <- ifelse(class_val == "Ref", "reference", "non-reference")
+        } else {
+          interference_class <- "unknown"
+        }
+        set(metadata, i, "human_interference_class", interference_class)
+      }
+    }
+
+    log_info("GAGES-II match rate:", usgs_matched, "/", length(usgs_idx),
+             sprintf("(%.1f%%)", 100 * usgs_matched / length(usgs_idx)), context = ctx)
+  }
+
+  # Join Canadian data
+  canadian_idx <- which(metadata$gage_type %in% c("Canada", "CANADIAN"))
+  if (length(canadian_idx) > 0 && nrow(canadian_data) > 0) {
+    log_info("Joining HYDAT data to", length(canadian_idx), "Canadian gages", context = ctx)
+
+    canadian_matched <- 0
+    for (i in canadian_idx) {
+      gage_id_orig <- metadata$gage_id[i]
+      match_row <- canadian_data[gage_id == gage_id_orig]
+
+      if (nrow(match_row) > 0) {
+        match_row <- match_row[1]
+        canadian_matched <- canadian_matched + 1
+
+        for (col in c("RHBN", "REGULATED", "human_interference_class")) {
+          if (col %in% names(match_row)) {
+            set(metadata, i, col, match_row[[col]])
+          }
+        }
+      }
+    }
+
+    log_info("Canadian HYDAT match rate:", canadian_matched, "/", length(canadian_idx),
+             sprintf("(%.1f%%)", 100 * canadian_matched / length(canadian_idx)), context = ctx)
+  }
+
+  # Save enriched metadata
+  if (is.null(output_file_path)) {
+    output_file_path <- metadata_file_path
+  }
+  fwrite(metadata, output_file_path)
+  log_info("Saved enriched metadata to:", output_file_path, context = ctx)
+
+  # Summary statistics
+  log_info("========== ENRICHMENT SUMMARY ==========", context = ctx)
+  log_info("Total gages:", nrow(metadata), context = ctx)
+  if ("human_interference_class" %in% names(metadata)) {
+    class_counts <- table(metadata$human_interference_class, useNA = "ifany")
+    for (class_name in names(class_counts)) {
+      log_info("  ", ifelse(is.na(class_name), "NA", class_name), ":",
+               class_counts[class_name], context = ctx)
+    }
+  }
+
+  return(metadata)
 }

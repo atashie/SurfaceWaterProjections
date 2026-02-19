@@ -129,6 +129,52 @@ DAYMET_START_YEAR <- 1980
 DAYMET_END_YEAR <- 2023
 
 # ==============================================================================
+# HUMAN INTERFERENCE METADATA (GAGES-II)
+# ==============================================================================
+
+# Path to GAGES-II metadata directory
+GAGES_II_DIR <- Sys.getenv("GAGES_II_DIR", unset = "D:/gagesMetadata")
+
+# GAGES-II files to load (CONUS)
+GAGES_II_FILES_CONUS <- list(
+  hydromod_dams = "conterm_hydromod_dams.txt",
+  pop_infrastr = "conterm_pop_infrastr.txt",
+  hydromod_other = "conterm_hydromod_other.txt",
+  bas_classif = "conterm_bas_classif.txt",
+  lc06_basin = "conterm_lc06_basin.txt"
+)
+
+# GAGES-II files to load (Alaska/Hawaii/Puerto Rico)
+GAGES_II_FILES_AKHIPR <- list(
+  hydromod_dams = "AKHIPR_hydromod_dams.txt",
+  pop_infrastr = "AKHIPR_pop_infrastr.txt",
+  hydromod_other = "AKHIPR_hydromod_other.txt",
+  bas_classif = "AKHIPR_bas_classif.txt"
+  # Note: AKHIPR does not have lc06_basin file
+)
+
+# Columns to extract from each GAGES-II file type
+GAGES_II_COLUMNS <- list(
+  hydromod_dams = c("STAID", "NDAMS_2009", "MAJ_DDENS_2009", "STOR_NID_2009"),
+  pop_infrastr = c("STAID", "IMPNLCD06"),
+  hydromod_other = c("STAID", "FRESHW_WITHDRAWAL"),
+  bas_classif = c("STAID", "CLASS", "HYDRO_DISTURB_INDX"),
+  lc06_basin = c("STAID", "DEVNLCD06")
+)
+
+# Missing value sentinel in GAGES-II files
+GAGES_II_MISSING_VALUE <- -999
+
+# Human interference metadata columns (for schema validation)
+EXPECTED_INTERFERENCE_COLS <- c(
+  "NDAMS_2009", "MAJ_DDENS_2009", "STOR_NID_2009",
+  "IMPNLCD06", "DEVNLCD06", "FRESHW_WITHDRAWAL",
+  "HYDRO_DISTURB_INDX", "CLASS",
+  "RHBN", "REGULATED",
+  "human_interference_class"
+)
+
+# ==============================================================================
 # CLIMATE SIGNATURE PARAMETERS
 # ==============================================================================
 
@@ -152,7 +198,12 @@ QP_SLOPE_WINDOW_DAYS <- 30         # Rolling window for cumulative Q-P slope cal
 # (This helps ensure backward compatibility)
 EXPECTED_METADATA_COLS <- c(
   "gage_id", "latitude", "longitude", "basin_area", "gage_type",
-  "num_water_years", "start_water_year", "end_water_year"
+  "num_water_years", "start_water_year", "end_water_year",
+  # Human interference metadata (optional - may be NA for gages without GAGES-II data)
+  "NDAMS_2009", "MAJ_DDENS_2009", "STOR_NID_2009",
+  "IMPNLCD06", "DEVNLCD06", "FRESHW_WITHDRAWAL",
+  "HYDRO_DISTURB_INDX", "CLASS", "RHBN", "REGULATED",
+  "human_interference_class"
 )
 
 # Signature column suffixes (8 statistics per metric)
@@ -605,6 +656,9 @@ print_config <- function() {
   cat("  ECKHARDT_BFIMAX:", ECKHARDT_BFIMAX, "\n")
   cat("  ECKHARDT_ALPHA:", ECKHARDT_ALPHA, "\n")
   cat("  LYNE_HOLLICK_ALPHA:", LYNE_HOLLICK_ALPHA, "\n")
+  cat("\nHuman Interference Metadata:\n")
+  cat("  GAGES_II_DIR:", GAGES_II_DIR, "\n")
+  cat("  GAGES_II_DIR exists:", dir.exists(GAGES_II_DIR), "\n")
   cat("\nLogging:\n")
   cat("  LOG_LEVEL:", names(LOG_LEVELS)[LOG_LEVELS == LOG_LEVEL], "\n")
   cat("  LOG_FILE:", ifelse(is.null(LOG_FILE), "None (console only)", LOG_FILE), "\n")
