@@ -17,7 +17,7 @@ if (basename(project_dir) == "tests") {
 
 # Source config and helper functions
 source(file.path(project_dir, "config.R"))
-source(file.path(project_dir, "helperFunctions.R"))
+source(file.path(project_dir, "R", "helperFunctions.R"))
 
 # ==============================================================================
 # TEST UTILITIES

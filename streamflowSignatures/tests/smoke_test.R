@@ -12,7 +12,7 @@ metadata_dir <- "D:"
 
 # Load config and functions
 source(file.path(main_dir, "config.R"))
-source(file.path(main_dir, "helperFunctions.R"))
+source(file.path(main_dir, "R", "helperFunctions.R"))
 
 # Set log level
 set_log_level("INFO")

@@ -1,7 +1,7 @@
 # Quick validation of climate signature functions with synthetic data
 #
 # NOTE: This script expects to be run from the streamflowSignatures directory
-# Run with: Rscript test_climate_functions.R
+# Run with: Rscript tests/test_climate_functions.R
 
 cat("Loading packages and functions...\n")
 suppressPackageStartupMessages({
@@ -10,7 +10,7 @@ suppressPackageStartupMessages({
   library(lubridate)
 })
 source("config.R")
-source("helperFunctions.R")
+source("R/helperFunctions.R")
 
 cat("\n========== TESTING CLIMATE SIGNATURE FUNCTIONS ==========\n\n")
 
@@ -45,7 +45,7 @@ synth_data <- rbindlist(lapply(seq_along(years), function(i) {
   data.table(
     water_year = yr,
     Q = Q_annual[i] / n_days,
-    prcp = P_annual[i] / n_days,
+    PPT = P_annual[i] / n_days,
     month = rep(1:12, each = ceiling(n_days/12))[1:n_days],
     dowy = 1:n_days
   )
@@ -68,12 +68,12 @@ synth_seasonal <- rbindlist(lapply(years, function(yr) {
   months <- rep(1:12, each = ceiling(n_days/12))[1:n_days]
   # Higher Q/P ratio in winter months
   seasonal_factor <- ifelse(months %in% c(12, 1, 2), 0.8, 0.3)
-  prcp <- abs(rnorm(n_days, 5, 2))
-  Q <- prcp * seasonal_factor + abs(rnorm(n_days, 0, 0.1))
+  PPT <- abs(rnorm(n_days, 5, 2))
+  Q <- PPT * seasonal_factor + abs(rnorm(n_days, 0, 0.1))
   data.table(
     water_year = yr,
     Q = Q,
-    prcp = prcp,
+    PPT = PPT,
     month = months,
     dowy = 1:n_days
   )
@@ -89,12 +89,12 @@ cat("[TEST 4] calculate_average_storage\n")
 years <- 1980:2000
 synth_storage <- rbindlist(lapply(years, function(yr) {
   n_days <- ifelse(yr %% 4 == 0, 366, 365)
-  prcp <- abs(rnorm(n_days, 3, 2))
+  PPT <- abs(rnorm(n_days, 3, 2))
   Q <- abs(rnorm(n_days, 2, 1))
   data.table(
     water_year = yr,
     Q = Q,
-    prcp = prcp,
+    PPT = PPT,
     month = rep(1:12, each = ceiling(n_days/12))[1:n_days],
     dowy = 1:n_days
   )

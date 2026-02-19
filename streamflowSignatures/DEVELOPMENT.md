@@ -33,24 +33,21 @@ streamflowSignatures/
 ├── SIGNATURES.md                # Detailed signature documentation
 ├── CHANGELOG.md                 # Bug fixes, version history
 │
-│ ## Core Configuration & Functions
+│ ## Core Configuration
 ├── config.R                     # Centralized configuration parameters
-├── helperFunctions.R            # CANONICAL - All core functions (45+ functions)
 │
 │ ## Main Entry Points
 ├── run_full_processing.R        # PRIMARY - Full signature extraction with climate data
-├── execute_extractStreamflowSignatureValuesAndTrends.R  # Alternative entry point
-├── caravan_to_annualized.R      # Caravan data processing
+├── run_ingest_usgs_hydat.R      # Raw USGS/HYDAT data ingestion to parquet
+├── run_caravan_processing.R     # Caravan data processing
 │
-│ ## Data Processing Scripts (Legacy)
-├── streamflowDataProcessing.R                          # Raw USGS/HYDAT processing
-├── streamflowDataProcessing_Caravan.R                  # Caravan processing variant
-├── streamflowDataProcessing_USGS-and-Hydat.R          # Reference gage processing
-├── streamflowDataProcessing_USGS-and-HYDAT_fullTimeseries.R  # Full timeseries variant
-├── streamflowSignatures_wrapperForPreprocessedParquet.R      # Wrapper for pre-processed data
+│ ## Helper Functions & Utilities
+├── R/                           # All helper functions and utility scripts
+│   ├── helperFunctions.R        # CANONICAL - All core functions (45+ functions)
+│   ├── run_conversion.R         # Daymet ZIP to Parquet conversion
+│   └── precompute_cross_signature_analysis.R  # Offline computation
 │
 │ ## Testing & QA/QC
-├── test.R                       # Development/exploratory tests (legacy)
 ├── tests/                       # All test and QA/QC files
 │   ├── smoke_test.R             # Quick validation on subset (10 gages)
 │   ├── test_climate_functions.R # Climate function tests with synthetic data
@@ -58,11 +55,11 @@ streamflowSignatures/
 │   ├── qa_qc_signatures.R       # Output validation and QA/QC checks
 │   └── visualize_qa_qc.R        # QA/QC visualization plots
 │
-│ ## Utilities
-├── run_conversion.R             # Daymet ZIP to Parquet conversion
+│ ## Logs
+├── logs/                        # Processing logs (gitignored)
 │
 │ ## Shiny Visualization App
-├── streamflowVisualizationApp/
+├── streamflowAndClimateVisualizationApp/
 │   ├── app.R                    # Main Shiny application
 │   └── helperFunctions.R        # App-specific utilities (S3, legends)
 │
@@ -71,13 +68,16 @@ streamflowSignatures/
 ├── data_out/                    # Processed outputs (gitignored)
 ├── test_output/                 # Test outputs (gitignored)
 │
-└── archive/                     # Archived files (DO NOT USE)
-    ├── helperFunction.R
-    ├── helperFunctions_sept2025.R
-    ├── helperFunctions_extractStreamflowSignatureValuesAndTrends.R
-    ├── helperFunctions_processRawStreamflowToParquet.R
-    ├── helperWrapperFunctions.R
-    └── test_code.txt
+│ ## Archived/Deprecated
+├── archive/                     # Archived files (DO NOT USE)
+│   ├── helperFunction.R
+│   ├── helperFunctions_sept2025.R
+│   ├── streamflowDataProcessing*.R  # Legacy processing scripts
+│   └── test_code.txt
+│
+└── orphans/                     # Orphaned files (DO NOT USE)
+    ├── helperFunctions.txt      # Redundant text copy
+    └── streamflowVisualizationApp/  # Deprecated visualization app
 ```
 
 ## Common Tasks
@@ -86,7 +86,7 @@ streamflowSignatures/
 
 ```r
 source("config.R")              # Load configuration
-source("helperFunctions.R")     # Load all functions
+source("R/helperFunctions.R")   # Load all functions
 
 summary_output <- process_signatures_from_parquet(
   parquet_file_path = "path/to/streamflow.parquet",
@@ -122,7 +122,7 @@ After processing, run QA/QC validation:
 
 ```r
 source("config.R")
-source("helperFunctions.R")
+source("R/helperFunctions.R")
 source("tests/qa_qc_signatures.R")
 ```
 
@@ -142,7 +142,7 @@ QA/QC checks include:
 ### Process Caravan Data
 
 ```r
-source("helperFunctions.R")
+source("R/helperFunctions.R")
 
 process_caravan_to_annual(
   caravan_directory = "path/to/caravan/netcdf",
@@ -158,7 +158,7 @@ process_caravan_to_annual(
 
 ### Step-by-Step Process
 
-1. **Create calculation function** in `helperFunctions.R`
+1. **Create calculation function** in `R/helperFunctions.R`
    - Function should accept daily data and return annual values
    - Use `data.table` for the return value with a `water_year` column
 

@@ -6,15 +6,16 @@ R-based hydrological signature extraction from USGS, HYDAT, and Caravan data. Ca
 
 **Always source in this order:**
 1. `config.R` - Configuration, logging, validation (source FIRST)
-2. `helperFunctions.R` - All core functions (45+ functions)
+2. `R/helperFunctions.R` - All core functions (45+ functions)
 
-Other `helperFunctions*.R` files are deprecated.
+Other `helperFunctions*.R` files in `archive/` are deprecated.
 
 ## Key Entry Points
 
 - `run_full_processing.R` - PRIMARY: Full signature extraction with climate
-- `caravan_to_annualized.R` - Caravan data processing - no longer a priority, as we preference processing "live" data via api from USGS and HYDAT
-- `streamflowVisualizationApp/app.R` - Shiny dashboard
+- `run_ingest_usgs_hydat.R` - Raw USGS/HYDAT data ingestion to parquet
+- `run_caravan_processing.R` - Caravan data processing (lower priority)
+- `streamflowAndClimateVisualizationApp/app.R` - Shiny dashboard
 
 ## Critical Constraints
 
@@ -50,16 +51,17 @@ Other `helperFunctions*.R` files are deprecated.
 | File | Status | Notes |
 |------|--------|-------|
 | `config.R` | **ACTIVE** | Source first |
-| `helperFunctions.R` | **CANONICAL** | All core functions |
+| `R/helperFunctions.R` | **CANONICAL** | All core functions |
 | `run_full_processing.R` | **PRIMARY** | Main entry point |
+| `run_ingest_usgs_hydat.R` | **ACTIVE** | Raw data ingestion |
 | `tests/smoke_test.R` | **ACTIVE** | Quick validation |
 | `tests/qa_qc_signatures.R` | **ACTIVE** | Output validation |
-| `streamflowDataProcessing*.R` | **LEGACY** | Use sparingly |
 | `archive/*` | **DO NOT USE** | Reference only |
+| `orphans/*` | **DO NOT USE** | Deprecated files |
 
 ## Adding New Signatures
 
-1. Create function in `helperFunctions.R` returning annual values
+1. Create function in `R/helperFunctions.R` returning annual values
 2. Call `generate_stats()` to produce 8 statistics
 3. Add base name to `EXPECTED_SIGNATURE_BASES` in `config.R`
 4. Run `tests/smoke_test.R` to verify

@@ -29,8 +29,9 @@ install.packages(c("shiny", "leaflet", "plotly", "aws.s3"))
 ### Extract Signatures from Parquet
 
 ```r
-# Source helper functions
-source("helperFunctions.R")
+# Source config and helper functions
+source("config.R")
+source("R/helperFunctions.R")
 
 # Process signatures
 summary_output <- process_signatures_from_parquet(
@@ -46,7 +47,8 @@ summary_output <- process_signatures_from_parquet(
 ### Process Caravan Data
 
 ```r
-source("helperFunctions.R")
+source("config.R")
+source("R/helperFunctions.R")
 
 process_caravan_to_annual(
   caravan_directory = "path/to/caravan/netcdf",
@@ -85,12 +87,16 @@ The output CSV contains one row per gage with columns:
 
 ```
 streamflowSignatures/
-├── helperFunctions.R              # Core functions (canonical)
-├── execute_*_.R                   # Entry point scripts
-├── caravan_to_annualized.R        # Caravan processing
-├── streamflowVisualizationApp/    # Shiny dashboard
+├── config.R                       # Configuration (source first)
+├── R/helperFunctions.R            # Core functions (canonical)
+├── run_full_processing.R          # PRIMARY entry point
+├── run_ingest_usgs_hydat.R        # Raw data ingestion
+├── run_caravan_processing.R       # Caravan processing
+├── tests/                         # Test suite
+├── streamflowAndClimateVisualizationApp/  # Shiny dashboard
 ├── metadata/                      # Basin/gage metadata
-└── data_out/                      # Output files
+├── logs/                          # Processing logs (gitignored)
+└── data_out/                      # Output files (gitignored)
 ```
 
 ## Data Sources
@@ -109,7 +115,7 @@ NetCDF files containing daily streamflow plus climate variables (precipitation, 
 Launch the Shiny dashboard:
 
 ```r
-shiny::runApp("streamflowVisualizationApp")
+shiny::runApp("streamflowAndClimateVisualizationApp")
 ```
 
 Features:
@@ -156,7 +162,7 @@ See the following documentation:
 
 ### Adding New Signatures
 
-1. Create calculation function in `helperFunctions.R`
+1. Create calculation function in `R/helperFunctions.R`
 2. Add function call in `process_signatures_from_parquet()`
 3. Follow naming convention: `{metric}_{stat}` (e.g., `NewMetric_senn_slp`, `NewMetric_mk_pval`)
 4. Update documentation

@@ -16,7 +16,7 @@ rm(list = ls())
 # Load configuration and functions
 cat("========== LOADING CONFIGURATION ==========\n")
 source("config.R")
-source("helperFunctions.R")
+source("R/helperFunctions.R")
 
 # Configure logging
 set_log_level("INFO")

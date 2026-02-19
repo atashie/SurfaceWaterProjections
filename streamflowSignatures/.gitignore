@@ -24,6 +24,9 @@ test_output/
 logs/
 *.log
 
+# Orphaned files (deprecated code, redundant files)
+orphans/
+
 # Environment files (may contain secrets)
 .Renviron
 
