@@ -3630,9 +3630,25 @@ concatenate_with_metadata <- function(input_dirs, output_dir = "combined_streamf
   }
   
   # Save combined metadata
-  fwrite(all_metadata, file.path(output_dir, "combined_watershed_metadata.csv"))
+  combined_metadata_path <- file.path(output_dir, "combined_watershed_metadata.csv")
+  fwrite(all_metadata, combined_metadata_path)
   cat("Combined metadata saved with", nrow(all_metadata), "watersheds\n")
-  
+
+  # Enrich with human interference metadata (GAGES-II for USGS, HYDAT for Canadian)
+  cat("\nEnriching metadata with human interference data...\n")
+  tryCatch({
+    all_metadata <- enrich_metadata_with_interference(
+      metadata_file_path = combined_metadata_path,
+      gages_ii_dir = GAGES_II_DIR
+    )
+    cat("Human interference metadata enrichment complete\n")
+  }, error = function(e) {
+    log_warn("Human interference enrichment failed:", e$message,
+             context = "concatenate_with_metadata")
+    cat("Warning: Human interference enrichment failed:", e$message, "\n")
+    cat("Continuing without enrichment...\n")
+  })
+
   # Print summary statistics
   cat("\nMetadata summary:\n")
   cat("Total watersheds:", nrow(all_metadata), "\n")

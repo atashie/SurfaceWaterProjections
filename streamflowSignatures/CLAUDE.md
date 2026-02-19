@@ -71,4 +71,3 @@ Other `helperFunctions*.R` files in `archive/` are deprecated.
 - **@DEVELOPMENT.md** - Architecture, file structure, common tasks, workflows
 - **@SIGNATURES.md** - Detailed signature documentation (10 categories)
 - **@CHANGELOG.md** - Bug fixes, known issues, roadmap
-- **@.claude/rules/validation.md** - Logging and validation API reference

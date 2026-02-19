@@ -32,7 +32,20 @@ All notable changes to the Streamflow Signatures project.
   - `streamflowAndClimateVisualizationApp/app.R` — Added category constants, UI section, and server logic
   - `streamflowAndClimateVisualizationApp/helperFunctions.R` — Added `fast_theil_sen_slope()` utility for batch Theil-Sen computation
 
-### Fixed
+#### Human Interference Metadata Integration
+- **New feature**: Watershed metadata is automatically enriched with human interference indicators during data processing
+- **USGS gages (from GAGES-II)**: NDAMS_2009 (dam count), MAJ_DDENS_2009 (dam density), STOR_NID_2009 (dam storage), IMPNLCD06 (impervious %), DEVNLCD06 (developed %), FRESHW_WITHDRAWAL, HYDRO_DISTURB_INDX (0-20 scale), CLASS (Ref/Non-ref)
+- **Canadian gages (from HYDAT)**: RHBN (Reference Hydrometric Basin Network flag), REGULATED (regulation status)
+- **Unified classification**: `human_interference_class` column with values: reference, non-reference, unknown
+- **New functions in helperFunctions.R**:
+  - `load_gages_ii_interference()` — Load GAGES-II metadata
+  - `load_canadian_interference()` — Load HYDAT metadata via tidyhydat
+  - `enrich_metadata_with_interference()` — Enrich combined metadata
+- **Integration**: `concatenate_with_metadata()` now automatically calls enrichment
+- **New utility scripts** (in R/):
+  - `run_enrich_metadata.R` — Manual enrichment utility
+  - `run_regenerate_metadata.R` — Regenerate and enrich metadata
+- **New config**: `GAGES_II_DIR`, `GAGES_II_FILES_*`, `GAGES_II_COLUMNS`, `EXPECTED_INTERFERENCE_COLS` in config.R
 
 ### Fixed
 

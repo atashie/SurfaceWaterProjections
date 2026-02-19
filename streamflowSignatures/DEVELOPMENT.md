@@ -45,6 +45,8 @@ streamflowSignatures/
 ├── R/                           # All helper functions and utility scripts
 │   ├── helperFunctions.R        # CANONICAL - All core functions (45+ functions)
 │   ├── run_conversion.R         # Daymet ZIP to Parquet conversion
+│   ├── run_enrich_metadata.R    # Human interference metadata enrichment (utility)
+│   ├── run_regenerate_metadata.R # Regenerate combined metadata (utility)
 │   └── precompute_cross_signature_analysis.R  # Offline computation
 │
 │ ## Testing & QA/QC
@@ -229,6 +231,38 @@ testthat::test_dir("tests/")
 - NetCDF format with daily streamflow + climate variables
 - Includes: PPT, SWE, temperature
 - Trade-off: Shorter records (ends ~2018-2020) but has climate data
+
+## Human Interference Metadata
+
+Watershed metadata is automatically enriched with human interference indicators when `concatenate_with_metadata()` is called during data processing.
+
+### Data Sources
+
+**USGS Gages (GAGES-II):**
+- Location: `D:/gagesMetadata/` (configured via `GAGES_II_DIR` in config.R)
+- Files: `conterm_hydromod_dams.txt`, `conterm_bas_classif.txt`, etc.
+- Columns extracted: NDAMS_2009, MAJ_DDENS_2009, STOR_NID_2009, IMPNLCD06, DEVNLCD06, FRESHW_WITHDRAWAL, HYDRO_DISTURB_INDX, CLASS
+
+**Canadian Gages (HYDAT via tidyhydat):**
+- RHBN: Reference Hydrometric Basin Network designation
+- REGULATED: Station regulation status from `hy_stn_regulation()`
+
+### Unified Classification
+
+The `human_interference_class` column provides a unified classification:
+- **reference**: USGS gages with CLASS="Ref" or Canadian gages with RHBN=TRUE
+- **non-reference**: USGS gages with CLASS="Non-ref" or Canadian gages with RHBN=FALSE
+- **unknown**: Gages without classification data
+
+### Manual Enrichment
+
+To re-enrich existing metadata (one-time use):
+
+```r
+source("config.R")
+source("R/helperFunctions.R")
+source("R/run_enrich_metadata.R")
+```
 
 ## Dependencies
 

@@ -64,14 +64,22 @@ process_caravan_to_annual(
 
 | Category | Metrics | Description |
 |----------|---------|-------------|
-| **Flow Volumes** | Qann, Qwin, Qspr, Qsum, Qfal, Q05-Q95 | Annual/seasonal means and percentiles |
+| **Flow Volumes** | Qann, Qwin, Qspr, Qsum, Qfal, Q1-Q99 | Annual/seasonal totals and percentiles |
+| **FDC** | FDCall, FDC90th, FDCmid | Flow duration curve slopes |
 | **Baseflow** | BFI_Eckhardt, BFI_LyneHollick | Groundwater contribution indices |
 | **Recession** | log_a, b, concavity, seasonality | Recession curve parameters |
-| **Pulse** | n_pulses, dur_pulses, TQmean, reversals | High/low flow event characteristics |
-| **Flashiness** | R-B Index | Richards-Baker flashiness index |
-| **Flow Timing** | D05-D95_day, D25_to_D75, Dmax | Cumulative flow timing |
+| **Pulse** | n_pulses, dur_pulses, TQmean | High/low flow event characteristics |
+| **Flow Reversals** | annual, seasonal | Direction change frequency |
+| **Flashiness** | flashinessRB | Richards-Baker flashiness index |
+| **Flow Timing** | D5-D95_day, D25_to_D75, Dmax | Cumulative flow timing |
+| **Runoff Ratios** | annual, seasonal (requires climate) | Q/P ratios by season |
+| **Elasticity** | elasticity, elasticity_static (requires climate) | Streamflow sensitivity to precipitation |
+| **Q-P Seasonality** | qp_slope_sd, qp_bimodality (requires climate) | Precipitation-runoff relationship |
+| **Average Storage** | avg_storage (requires climate) | Mean catchment storage |
 
 Each signature includes 8 statistics: `_senn_slp` (Theil-Sen trend), `_linear_slp` (linear trend), `_spearman_rho` (correlation), `_spearman_pval` (significance), `_mk_rho` (Mann-Kendall tau), `_mk_pval` (Mann-Kendall significance), `_mean`, `_median`.
+
+**Note:** Climate-dependent signatures require Daymet climate data to be integrated.
 
 ## Output Format
 
@@ -81,7 +89,35 @@ The output CSV contains one row per gage with columns:
 |-------------|----------|-------------|
 | Metadata | gage_id, latitude, longitude, basin_area | Gage identification |
 | Record Info | num_water_years, start_water_year, end_water_year | Data coverage |
+| Human Interference | NDAMS_2009, HYDRO_DISTURB_INDX, CLASS, human_interference_class | Watershed disturbance indicators |
 | Signatures | Qann_senn_slp, Qann_linear_slp, Qann_spearman_rho, ... | Signature statistics (8 per metric) |
+
+## Human Interference Metadata
+
+Watershed metadata is automatically enriched with human interference indicators:
+
+### USGS Gages (from GAGES-II)
+| Column | Description |
+|--------|-------------|
+| NDAMS_2009 | Number of dams upstream |
+| MAJ_DDENS_2009 | Major dam density |
+| STOR_NID_2009 | Total dam storage |
+| IMPNLCD06 | Impervious surface (%) |
+| DEVNLCD06 | Developed area (%) |
+| FRESHW_WITHDRAWAL | Freshwater withdrawal |
+| HYDRO_DISTURB_INDX | Composite disturbance index (0-20) |
+| CLASS | Reference classification (Ref/Non-ref) |
+
+### Canadian Gages (from HYDAT)
+| Column | Description |
+|--------|-------------|
+| RHBN | Reference Hydrometric Basin Network flag |
+| REGULATED | Station regulation status |
+
+### Unified Classification
+| Column | Values | Description |
+|--------|--------|-------------|
+| human_interference_class | reference, non-reference, unknown | Unified classification across data sources |
 
 ## File Structure
 
@@ -119,9 +155,10 @@ shiny::runApp("streamflowAndClimateVisualizationApp")
 ```
 
 Features:
-- Interactive map of gage locations
-- Time series plots (linear and log scale)
-- Annual pattern visualization
+- Interactive map with signature trend visualization (2x3 grid)
+- Hydrograph with weather overlay (precipitation, SWE, temperature)
+- Scatter plots with custom metric selection
+- Cross-signature correlation analysis (spatial vs temporal patterns)
 - Multi-gage comparison
 
 ## Configuration
@@ -150,7 +187,7 @@ set_log_level("DEBUG")
 set_log_file("logs/processing.log")
 ```
 
-See `.claude/rules/validation.md` for detailed documentation on logging functions and validation utilities.
+See `config.R` for logging functions and validation utilities.
 
 ## Development
 
