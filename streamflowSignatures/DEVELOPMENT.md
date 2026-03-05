@@ -31,6 +31,7 @@ streamflowSignatures/
 ├── README.md                    # User documentation
 ├── DEVELOPMENT.md               # This file
 ├── SIGNATURES.md                # Detailed signature documentation
+├── SIGNATURE_GUIDELINES.md      # Collaborative guidelines (auto-synced from Google Doc)
 ├── CHANGELOG.md                 # Bug fixes, version history
 │
 │ ## Core Configuration
