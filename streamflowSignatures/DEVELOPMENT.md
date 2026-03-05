@@ -233,6 +233,35 @@ testthat::test_dir("tests/")
 - Includes: PPT, SWE, temperature
 - Trade-off: Shorter records (ends ~2018-2020) but has climate data
 
+## Parquet Data Files
+
+### Active Parquet Files (Use These)
+
+| File | Location | Created | Description |
+|------|----------|---------|-------------|
+| `combined_streamflow_data_09feb2026.parquet` | `D:/processedOuts_feb2026/` | Feb 2026 | Current streamflow parquet with bug fixes |
+| `combined_watershed_metadata_09feb2026.csv` | `D:/processedOuts_feb2026/` | Feb 2026 | Corresponding metadata |
+| `daymet_1980_2023.parquet` | `D:/processedOuts_feb2026/` | Feb 2026 | Climate data (PPT, temp, SWE) |
+
+### Deprecated Parquet Files (DO NOT USE)
+
+| File | Location | Issue |
+|------|----------|-------|
+| `combined_streamflow_data.parquet` | `D:/combined_streamflow_output/` | **CORRUPTED** - Contains 99999 multiplier bug for Canadian gages without basin area |
+| `combined_watershed_metadata.csv` | `D:/combined_streamflow_output/` | Outdated metadata |
+| `streamflowSignature_summaryData_OCT2025.csv` | `D:/combined_streamflow_output/` | Generated from corrupted parquet |
+
+### The 99999 Bug
+
+The October 2025 parquet was created with buggy code that applied `conversion = 99999` for Canadian gages without basin area, instead of keeping values in raw units. This resulted in Q values ~100,000x too high.
+
+**Example (gage 08ND025):**
+- Raw HYDAT: 785.6 m³/s
+- Corrupted parquet: 78,557,297 "mm/day" (785.6 × 99999)
+- Fixed parquet: 785.6 (raw m³/s, flagged as `area_normalized = FALSE`)
+
+See CHANGELOG.md entry for "H5 follow-up" for full details of the fix.
+
 ## Human Interference Metadata
 
 Watershed metadata is automatically enriched with human interference indicators when `concatenate_with_metadata()` is called during data processing.

@@ -4114,7 +4114,9 @@ process_signatures_from_parquet <- function(
     min_Q_value_and_days = c(0.0001, 30),
     min_num_years = 20,
     min_frac_good_data = 0.95,
-    daymet_parquet_path = NULL  # Path to Daymet parquet for climate signatures
+    daymet_parquet_path = NULL,  # Path to Daymet parquet for climate signatures
+    start_water_year = NULL,     # Earliest water year to include (e.g., 1993)
+    end_water_year = NULL        # Latest water year to include (e.g., 2022)
 ) {
 
   ctx <- "process_signatures_from_parquet"
@@ -4138,6 +4140,26 @@ process_signatures_from_parquet <- function(
                    min_val = 1, context = ctx)
   validate_numeric(min_frac_good_data, "min_frac_good_data",
                    min_val = 0, max_val = 1, context = ctx)
+
+  # Validate water year range parameters
+  if (!is.null(start_water_year)) {
+    validate_numeric(start_water_year, "start_water_year", min_val = 1900, max_val = 2100, context = ctx)
+    log_info("Water year range filter: start_water_year =", start_water_year, context = ctx)
+  }
+  if (!is.null(end_water_year)) {
+    validate_numeric(end_water_year, "end_water_year", min_val = 1900, max_val = 2100, context = ctx)
+    log_info("Water year range filter: end_water_year =", end_water_year, context = ctx)
+  }
+  if (!is.null(start_water_year) && !is.null(end_water_year)) {
+    if (start_water_year > end_water_year) {
+      log_error("start_water_year (", start_water_year, ") > end_water_year (", end_water_year, ")", context = ctx)
+      stop("start_water_year must be <= end_water_year")
+    }
+    potential_years <- end_water_year - start_water_year + 1
+    if (potential_years < min_num_years) {
+      log_warn("Water year range (", potential_years, " years) is less than min_num_years (", min_num_years, ")", context = ctx)
+    }
+  }
 
   # Validate Daymet parquet if provided
   has_daymet <- FALSE
@@ -4487,9 +4509,32 @@ process_signatures_from_parquet <- function(
       }
 
       # ============= APPLY WATER YEAR BASED FILTERS =============
+
+      # Filter 1: Restrict to specified water year range (if provided)
+      if (!is.null(start_water_year)) {
+        n_before <- nrow(gage_flow)
+        gage_flow <- gage_flow[water_year >= start_water_year]
+        log_debug("Filtered to water_year >=", start_water_year, ":",
+                  n_before, "->", nrow(gage_flow), "rows",
+                  context = paste0(ctx, ":", current_gage_id))
+      }
+      if (!is.null(end_water_year)) {
+        n_before <- nrow(gage_flow)
+        gage_flow <- gage_flow[water_year <= end_water_year]
+        log_debug("Filtered to water_year <=", end_water_year, ":",
+                  n_before, "->", nrow(gage_flow), "rows",
+                  context = paste0(ctx, ":", current_gage_id))
+      }
+
+      # Skip gage if no data remains after water year filtering
+      if (nrow(gage_flow) == 0) {
+        log_debug("Gage", current_gage_id, "has no data in specified water year range", context = ctx)
+        next
+      }
+
       # Filter 2: Check each water year for minimum days above threshold
       # Filter 2b: Check each water year for minimum fraction of non-NA data
-      
+
       water_years_to_use <- NULL
       
       for (this_wy in unique(gage_flow$water_year)) {
@@ -4625,6 +4670,8 @@ process_signatures_from_parquet <- function(
         num_water_years = length(water_years_to_use),  # Changed from num_years
         start_water_year = min(water_years_to_use),     # Changed from start_year
         end_water_year = max(water_years_to_use),       # Changed from end_year
+        analysis_start_water_year = start_water_year,    # Requested analysis range start (or NA if unrestricted)
+        analysis_end_water_year = end_water_year,        # Requested analysis range end (or NA if unrestricted)
         num_upstream_basins = gage_meta$num_upstream_basins,
         area_normalized = gage_meta$area_normalized,
         # Human interference metadata (from GAGES-II / HYDAT)

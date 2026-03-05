@@ -19,6 +19,13 @@ All notable changes to the Streamflow Signatures project.
 ### Fixed
 - **Terminology**: `analyze_flow_timing_trends()` — Renamed internal variable `julday_max` to `timing_by_year` and fixed comments to correctly say "day of water year" instead of "Julian day" (code was already correct, but naming was misleading)
 
+### Deprecated
+- **Corrupted Parquet File**: Marked `D:/combined_streamflow_output/combined_streamflow_data.parquet` (October 2025) as **DO NOT USE**
+  - **Issue**: Contains 99999 multiplier bug for Canadian gages without basin area
+  - **Impact**: Q values ~100,000x too high for affected gages (e.g., 08ND025: 78.5M instead of 785.6)
+  - **Use instead**: `D:/processedOuts_feb2026/combined_streamflow_data_09feb2026.parquet`
+  - **Documentation**: Added "Parquet Data Files" section to DEVELOPMENT.md with active vs deprecated file list
+
 ### Guidelines Document TODOs
 <!-- New suggestions from hydrology colleagues will be tracked here -->
 <!-- Format: - [ ] Description (source: section name in guidelines doc) -->
