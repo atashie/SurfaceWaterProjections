@@ -71,3 +71,42 @@ Other `helperFunctions*.R` files in `archive/` are deprecated.
 - **@DEVELOPMENT.md** - Architecture, file structure, common tasks, workflows
 - **@SIGNATURES.md** - Detailed signature documentation (10 categories)
 - **@CHANGELOG.md** - Bug fixes, known issues, roadmap
+- **@SIGNATURE_GUIDELINES.md** - Collaborative guidelines from hydrology colleagues (auto-synced)
+
+## Session-Start Workflow: Guidelines Sync
+
+**At the start of each session**, sync the collaborative guidelines document:
+
+1. **Fetch fresh content** from the Google Doc:
+   ```
+   URL: https://docs.google.com/document/u/1/d/e/2PACX-1vSVjtqLKk1r9TczxLEBhlnzfBWbm1TQVfvqERm-jEwLISZTEWx73ofV4Ng9H0JaXA/pub
+   ```
+
+2. **Save to `SIGNATURE_GUIDELINES.md`** (overwrite previous content)
+
+3. **Compare with previous version** to identify changes:
+   - New signature definitions or requirements
+   - Updated QA/QC flags or thresholds
+   - New function requirements or parameters
+   - Comments or suggestions from colleagues
+
+4. **Add new TODOs to `CHANGELOG.md`** under `[Unreleased]` → `### Guidelines Document TODOs`
+
+5. **Present changes to user**:
+   > "Guidelines document has X new/changed items. Would you like to review and implement?"
+
+6. **Implementation workflow**: For each suggestion:
+   - Create todo item
+   - Implement the change
+   - Run `tests/smoke_test.R` to verify
+   - Mark todo complete
+
+## Changelog Maintenance
+
+**CHANGELOG.md must be kept updated consistently:**
+
+1. **Document all code changes** - Every bug fix, feature, or modification
+2. **Track guidelines implementation** - When implementing suggestions from `SIGNATURE_GUIDELINES.md`
+3. **Use date-based versioning** - Format: `[Month Year]` (e.g., `[March 2026]`)
+4. **Severity labels** - Use HIGH/MEDIUM/LOW for bug fixes
+5. **New suggestions** - Add under `[Unreleased]` → `### Guidelines Document TODOs`

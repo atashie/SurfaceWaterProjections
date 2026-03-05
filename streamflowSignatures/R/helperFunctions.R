@@ -1302,19 +1302,19 @@ analyze_flow_timing_trends <- function(streamflow_data) {
     stop(paste("Missing required columns:", paste(missing, collapse=", ")))
   }
   
-  # Create a data frame to store Julian days when cumulative flow reaches each percentile
+  # Create a data frame to store day of water year when cumulative flow reaches each percentile
   years <- unique(streamflow_data$water_year)
-  julday_max <- data.frame(water_year = years)
+  timing_by_year <- data.frame(water_year = years)
   
   # Define percentiles
   percentiles <- c(5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95)
   
   # Initialize columns for all metrics
   for (p in percentiles) {
-    julday_max[[paste0("D", p, "_day")]] <- NA
+    timing_by_year[[paste0("D", p, "_day")]] <- NA
   }
-  julday_max$D25_to_D75 <- NA
-  julday_max$Dmax <- NA
+  timing_by_year$D25_to_D75 <- NA
+  timing_by_year$Dmax <- NA
   
   # For each year, find the day when cumulative flow reaches each percentile threshold
   for (yr in years) {
@@ -1353,7 +1353,7 @@ analyze_flow_timing_trends <- function(streamflow_data) {
       
       # If there are days above threshold, take the first one
       if (length(above_threshold) > 0) {
-        julday_max[julday_max$water_year == yr, paste0("D", p, "_day")] <- 
+        timing_by_year[timing_by_year$water_year == yr, paste0("D", p, "_day")] <- 
           year_data$dowy[above_threshold[1]]
       }
     }
@@ -1366,13 +1366,13 @@ analyze_flow_timing_trends <- function(streamflow_data) {
     if (length(above_25) > 0 && length(above_75) > 0) {
       day_25 <- year_data$dowy[above_25[1]]
       day_75 <- year_data$dowy[above_75[1]]
-      julday_max[julday_max$water_year == yr, "D25_to_D75"] <- day_75 - day_25
+      timing_by_year[timing_by_year$water_year == yr, "D25_to_D75"] <- day_75 - day_25
     }
     
     # Calculate Dmax (day of maximum discharge)
     max_Q_idx <- which.max(year_data$Q)
     if (length(max_Q_idx) > 0) {
-      julday_max[julday_max$water_year == yr, "Dmax"] <- year_data$dowy[max_Q_idx]
+      timing_by_year[timing_by_year$water_year == yr, "Dmax"] <- year_data$dowy[max_Q_idx]
     }
   }
   
@@ -1380,10 +1380,10 @@ analyze_flow_timing_trends <- function(streamflow_data) {
   metric_columns <- c(paste0("D", percentiles, "_day"), "D25_to_D75", "Dmax")
   
   # Use generate_stats to calculate all statistics at once
-  result <- generate_stats(julday_max, value_cols = metric_columns, year_col = "water_year")
+  result <- generate_stats(timing_by_year, value_cols = metric_columns, year_col = "water_year")
   
-  # Add julday_max as an attribute to the result
-  attr(result, "julday_max") <- julday_max
+  # Add timing_by_year as an attribute to the result
+  attr(result, "timing_by_year") <- timing_by_year
   
   return(result)
 }

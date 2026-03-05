@@ -10,6 +10,19 @@ All notable changes to the Streamflow Signatures project.
 - Add ERA5/PRISM data fetching for USGS/HYDAT gages
 - Implement synchrony metrics (cross-correlation, lag analysis)
 
+### Added
+- **Collaborative Guidelines Workflow**: Set up auto-sync of `SIGNATURE_GUIDELINES.md` from [Google Doc](https://docs.google.com/document/u/1/d/e/2PACX-1vSVjtqLKk1r9TczxLEBhlnzfBWbm1TQVfvqERm-jEwLISZTEWx73ofV4Ng9H0JaXA/pub) at session start
+- Renamed `Summary Documentation for Streamflow Signatures.docx.txt` to `SIGNATURE_GUIDELINES.md`
+- Added session-start workflow instructions to `CLAUDE.md`
+- Added changelog maintenance requirements to `CLAUDE.md`
+
+### Fixed
+- **Terminology**: `analyze_flow_timing_trends()` — Renamed internal variable `julday_max` to `timing_by_year` and fixed comments to correctly say "day of water year" instead of "Julian day" (code was already correct, but naming was misleading)
+
+### Guidelines Document TODOs
+<!-- New suggestions from hydrology colleagues will be tracked here -->
+<!-- Format: - [ ] Description (source: section name in guidelines doc) -->
+
 ---
 
 ## [February 2026]

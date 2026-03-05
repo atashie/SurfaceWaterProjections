@@ -2,7 +2,7 @@
 
 Detailed documentation of all hydrological signatures calculated by this project.
 
-> **Comprehensive Documentation**: See "Summary Documentation for Streamflow Signatures.docx" for mathematical formulations, parameter choices, and scientific rationale.
+> **Comprehensive Documentation**: See `SIGNATURE_GUIDELINES.md` for mathematical formulations, parameter choices, and scientific rationale. This file is auto-synced from the [collaborative Google Doc](https://docs.google.com/document/u/1/d/e/2PACX-1vSVjtqLKk1r9TczxLEBhlnzfBWbm1TQVfvqERm-jEwLISZTEWx73ofV4Ng9H0JaXA/pub).
 
 ## Overview
 
