@@ -6,7 +6,7 @@ A framework for extracting hydrological signatures from daily streamflow data, w
 
 **Primary:**
 1. **Data Processing** — Ingest raw streamflow data (USGS, HYDAT, Caravan), clean and filter by configurable quality thresholds, collate metadata, and produce standardized parquet/CSV outputs.
-2. **Signature Extraction** — Calculate 100+ hydrological signatures under strict guardrails. Methodology is updatable by domain experts via a [plain-English guidelines document](https://docs.google.com/document/u/1/d/e/2PACX-1vSVjtqLKk1r9TczxLEBhlnzfBWbm1TQVfvqERm-jEwLISZTEWx73ofV4Ng9H0JaXA/pub) (`SIGNATURE_GUIDELINES.md`) — hydrologists define what to calculate, and code implements those definitions.
+2. **Signature Extraction** — Calculate 100+ hydrological signatures under strict guardrails. Methodology is updatable by domain experts via a [plain-English guidelines document](https://docs.google.com/document/u/1/d/e/2PACX-1vSVjtqLKk1r9TczxLEBhlnzfBWbm1TQVfvqERm-jEwLISZTEWx73ofV4Ng9H0JaXA/pub) (`docs/SIGNATURE_GUIDELINES.md`) — hydrologists define what to calculate, and code implements those definitions.
 
 **Secondary:**
 3. **Visualization** — Interactive Shiny dashboard for exploring signatures, trends, and cross-signature relationships across thousands of gages.

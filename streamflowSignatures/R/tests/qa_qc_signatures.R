@@ -12,6 +12,9 @@ rm(list = ls())
 main_dir <- getwd()
 if (!file.exists(file.path(main_dir, "config.R"))) {
   main_dir <- dirname(main_dir)
+  if (!file.exists(file.path(main_dir, "config.R"))) {
+    main_dir <- dirname(main_dir)
+  }
   setwd(main_dir)
 }
 

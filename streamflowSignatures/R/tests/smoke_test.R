@@ -5,8 +5,12 @@
 # Paths - auto-detect based on script location
 main_dir <- getwd()
 if (!file.exists(file.path(main_dir, "config.R"))) {
-  # Try parent if running from subdirectory
+  # Try parent if running from subdirectory (e.g., R/)
   main_dir <- dirname(main_dir)
+  if (!file.exists(file.path(main_dir, "config.R"))) {
+    # Try grandparent (e.g., R/tests/)
+    main_dir <- dirname(main_dir)
+  }
 }
 metadata_dir <- "D:"
 
