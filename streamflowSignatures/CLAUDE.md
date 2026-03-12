@@ -1,6 +1,25 @@
 # Streamflow Signatures Project
 
-R-based hydrological signature extraction from USGS, HYDAT, and Caravan data. Calculates many metrics with standardized trend analysis for all metrics.
+## Project Context
+
+This project has two primary goals and two secondary goals:
+
+1. **Data Processing** — Ingest raw streamflow data (USGS, HYDAT, Caravan), clean/filter/collate metadata, standardize outputs.
+2. **Signature Extraction** — Extract 100+ hydrological signatures under strict guardrails. Domain experts update methodology via plain-English instructions in `docs/SIGNATURE_GUIDELINES.md`; code implements those definitions.
+3. **Visualization** (secondary) — Shiny dashboard for broader audience exploration.
+4. **Cross-Language Implementations** (secondary) — R is canonical; Python and Julia produce near-identical results for community sharing (future: publishable packages/libraries).
+
+## Multi-Language Architecture
+
+This project provides identical signature calculations in R (canonical), Python, and Julia:
+
+| Directory | Language | Status | Description |
+|-----------|----------|--------|-------------|
+| `R/` | R | **Canonical** | Reference implementation - all changes start here |
+| `python/` | Python | Active | Port of R signatures |
+| `julia/` | Julia | Planned | Port of R signatures |
+
+**Change Workflow**: R is canonical. Changes are made in R first, then propagated to Python/Julia. Golden outputs from R validate other implementations.
 
 ## Canonical Code
 
@@ -54,35 +73,34 @@ Other `helperFunctions*.R` files in `archive/` are deprecated.
 | `R/helperFunctions.R` | **CANONICAL** | All core functions |
 | `run_full_processing.R` | **PRIMARY** | Main entry point |
 | `run_ingest_usgs_hydat.R` | **ACTIVE** | Raw data ingestion |
-| `tests/smoke_test.R` | **ACTIVE** | Quick validation |
-| `tests/qa_qc_signatures.R` | **ACTIVE** | Output validation |
+| `R/tests/smoke_test.R` | **ACTIVE** | Quick validation |
+| `R/tests/qa_qc_signatures.R` | **ACTIVE** | Output validation |
 | `archive/*` | **DO NOT USE** | Reference only |
-| `orphans/*` | **DO NOT USE** | Deprecated files |
 
 ## Adding New Signatures
 
 1. Create function in `R/helperFunctions.R` returning annual values
 2. Call `generate_stats()` to produce 8 statistics
 3. Add base name to `EXPECTED_SIGNATURE_BASES` in `config.R`
-4. Run `tests/smoke_test.R` to verify
+4. Run `R/tests/smoke_test.R` to verify
 
 ## References
 
-- **@DEVELOPMENT.md** - Architecture, file structure, common tasks, workflows
-- **@SIGNATURES.md** - Detailed signature documentation (10 categories)
+- **@docs/DEVELOPMENT.md** - Architecture, file structure, common tasks, workflows
+- **@docs/SIGNATURES.md** - Detailed signature documentation (10 categories)
 - **@CHANGELOG.md** - Bug fixes, known issues, roadmap
-- **@SIGNATURE_GUIDELINES.md** - Collaborative guidelines from hydrology colleagues (auto-synced)
+- **@docs/SIGNATURE_GUIDELINES.md** - Collaborative guidelines from hydrology colleagues (auto-synced)
 
 ## Session-Start Workflow: Guidelines Sync
 
-**At the start of each session**, sync the collaborative guidelines document:
+The guidelines document is a core design feature: domain experts write plain-English signature definitions and QA/QC requirements, and those are translated into code. **At the start of each session**, sync the collaborative guidelines document:
 
 1. **Fetch fresh content** from the Google Doc:
    ```
    URL: https://docs.google.com/document/u/1/d/e/2PACX-1vSVjtqLKk1r9TczxLEBhlnzfBWbm1TQVfvqERm-jEwLISZTEWx73ofV4Ng9H0JaXA/pub
    ```
 
-2. **Save to `SIGNATURE_GUIDELINES.md`** (overwrite previous content)
+2. **Save to `docs/SIGNATURE_GUIDELINES.md`** (overwrite previous content)
 
 3. **Compare with previous version** to identify changes:
    - New signature definitions or requirements
@@ -98,7 +116,7 @@ Other `helperFunctions*.R` files in `archive/` are deprecated.
 6. **Implementation workflow**: For each suggestion:
    - Create todo item
    - Implement the change
-   - Run `tests/smoke_test.R` to verify
+   - Run `R/tests/smoke_test.R` to verify
    - Mark todo complete
 
 ## Changelog Maintenance
@@ -106,7 +124,19 @@ Other `helperFunctions*.R` files in `archive/` are deprecated.
 **CHANGELOG.md must be kept updated consistently:**
 
 1. **Document all code changes** - Every bug fix, feature, or modification
-2. **Track guidelines implementation** - When implementing suggestions from `SIGNATURE_GUIDELINES.md`
+2. **Track guidelines implementation** - When implementing suggestions from `docs/SIGNATURE_GUIDELINES.md`
 3. **Use date-based versioning** - Format: `[Month Year]` (e.g., `[March 2026]`)
 4. **Severity labels** - Use HIGH/MEDIUM/LOW for bug fixes
 5. **New suggestions** - Add under `[Unreleased]` → `### Guidelines Document TODOs`
+
+## Claude Skill Maintenance
+
+**Update `claude-skill/streamflow-signatures.md` whenever:**
+
+1. **User feedback** - Recurring questions, confusion points, or feature requests
+2. **Novel findings** - New understanding of signatures, edge cases, or best practices
+3. **Workflow updates** - Changes to processing pipelines, data formats, or validation
+4. **Methodology changes** - Updated formulas, parameters, or statistical approaches
+5. **Cross-language updates** - When Python/Julia implementations are added or modified
+
+The skill helps users interpret outputs, understand methodology, and troubleshoot issues.

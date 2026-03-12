@@ -1,6 +1,16 @@
 # Streamflow Signatures
 
-An R-based framework for extracting hydrological signatures from daily streamflow data. Processes data from USGS, Canadian HYDAT, and Caravan datasets to calculate 100+ metrics characterizing flow regimes, trends, and variability.
+A framework for extracting hydrological signatures from daily streamflow data, with implementations in R (canonical), Python, and Julia. Processes data from USGS, Canadian HYDAT, and Caravan datasets to calculate 100+ metrics characterizing flow regimes, trends, and variability.
+
+## Project Goals
+
+**Primary:**
+1. **Data Processing** — Ingest raw streamflow data (USGS, HYDAT, Caravan), clean and filter by configurable quality thresholds, collate metadata, and produce standardized parquet/CSV outputs.
+2. **Signature Extraction** — Calculate 100+ hydrological signatures under strict guardrails. Methodology is updatable by domain experts via a [plain-English guidelines document](https://docs.google.com/document/u/1/d/e/2PACX-1vSVjtqLKk1r9TczxLEBhlnzfBWbm1TQVfvqERm-jEwLISZTEWx73ofV4Ng9H0JaXA/pub) (`SIGNATURE_GUIDELINES.md`) — hydrologists define what to calculate, and code implements those definitions.
+
+**Secondary:**
+3. **Visualization** — Interactive Shiny dashboard for exploring signatures, trends, and cross-signature relationships across thousands of gages.
+4. **Cross-Language Implementations** — Python and Julia ports produce near-identical results to the R canonical implementation (98.5% of columns have Spearman rho >= 0.99). Goal: publishable packages/libraries for community use.
 
 ## Features
 
@@ -125,10 +135,15 @@ Watershed metadata is automatically enriched with human interference indicators:
 streamflowSignatures/
 ├── config.R                       # Configuration (source first)
 ├── R/helperFunctions.R            # Core functions (canonical)
+├── R/tests/                       # R test suite
 ├── run_full_processing.R          # PRIMARY entry point
 ├── run_ingest_usgs_hydat.R        # Raw data ingestion
 ├── run_caravan_processing.R       # Caravan processing
-├── tests/                         # Test suite
+├── python/                        # Python implementation
+├── julia/                         # Julia implementation
+├── config/                        # Cross-language config
+├── golden-outputs/                # R reference outputs for validation
+├── docs/                          # Extended documentation & benchmarks
 ├── streamflowAndClimateVisualizationApp/  # Shiny dashboard
 ├── metadata/                      # Basin/gage metadata
 ├── logs/                          # Processing logs (gitignored)
@@ -192,10 +207,13 @@ See `config.R` for logging functions and validation utilities.
 ## Development
 
 See the following documentation:
-- `CLAUDE.md` - Claude Code instructions (rules and constraints)
-- `DEVELOPMENT.md` - Architecture, workflows, and common tasks
-- `SIGNATURES.md` - Detailed signature documentation
+- `docs/DEVELOPMENT.md` - Architecture, workflows, and common tasks
+- `docs/SIGNATURES.md` - Detailed signature documentation
 - `CHANGELOG.md` - Bug fixes and version history
+- `CLAUDE.md` - Claude Code instructions (rules and constraints)
+- `python/README.md` - Python implementation quickstart
+- `julia/README.md` - Julia implementation quickstart
+- `docs/CROSS_LANGUAGE_STATUS.md` - Cross-language alignment detail
 
 ### Adding New Signatures
 

@@ -24,9 +24,6 @@ test_output/
 logs/
 *.log
 
-# Orphaned files (deprecated code, redundant files)
-orphans/
-
 # Environment files (may contain secrets)
 .Renviron
 
@@ -37,8 +34,23 @@ nul
 
 # Data outputs
 data_out/
+
 # Auto-generated plots
 *.pdf
 
-# Large backup CSVs in archive
+# Large files in archive
 archive/*.csv
+
+# Benchmark outputs (large CSVs)
+docs/benchmarks/*.csv
+docs/benchmarks/*.json
+docs/benchmarks/diagnostics/
+
+# Python artifacts
+__pycache__/
+*.egg-info/
+.pytest_cache/
+*.pyc
+
+# Julia artifacts
+julia/Manifest.toml
