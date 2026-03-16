@@ -15,69 +15,50 @@ pip install numpy pandas pyarrow scipy
 ## Quick Start
 
 ```python
-import pandas as pd
 from streamflow_signatures import (
-    add_water_year_columns,
-    # Simple signatures
-    calculate_flow_vols_by_year,
-    analyze_flashiness_trends,
-    analyze_flow_timing_trends,
-    analyze_fdc_trends,
-    # Complex signatures
-    analyze_baseflow_indices,
-    analyze_recession_parameters,
-    calculate_pulse_metrics,
-    # Climate-dependent signatures
-    analyze_Q_PPT_relationships,
-    calculate_streamflow_elasticity,
-    calculate_qp_seasonality,
-    calculate_average_storage,
+    read_parquet, add_water_year_columns,
+    filter_qualifying_years, calculate_all_signatures,
 )
 
-# Load your streamflow data
-df = pd.read_parquet("path/to/streamflow.parquet")
-
-# Add water year columns if not present (auto-detects "Date" or "date" column)
+# Load data (auto-normalizes columns: Date->date, site_id->gage_id, prcp->PPT)
+df = read_parquet("path/to/streamflow.parquet")
 df = add_water_year_columns(df)
 
-# Calculate signatures for a single gage
+# Optional: merge climate data for climate-dependent signatures
+climate = read_parquet("path/to/daymet.parquet")
+climate = add_water_year_columns(climate)
+df = df.merge(climate[["gage_id", "date", "PPT"]], on=["gage_id", "date"], how="left")
+
+# Process a single gage
 gage_data = df[df["gage_id"] == "01011000"]
 
-# Calculate flow volume signatures (22 metrics x 8 statistics)
-flow_vols = calculate_flow_vols_by_year(gage_data)
-
-# Calculate flashiness (1 metric x 8 statistics)
-flashiness = analyze_flashiness_trends(gage_data)
-
-# Calculate timing signatures (13 metrics x 8 statistics)
-timing = analyze_flow_timing_trends(gage_data)
-
-# Calculate FDC signatures (3 metrics x 8 statistics)
-fdc = analyze_fdc_trends(gage_data)
-
-# Calculate baseflow indices (2 metrics x 8 statistics)
-baseflow = analyze_baseflow_indices(gage_data)
-
-# Calculate recession parameters (5 metrics x 8 statistics + 6 seasonality)
-recession = analyze_recession_parameters(gage_data)
-
-# Calculate pulse metrics (10 metrics x 8 statistics)
-pulses = calculate_pulse_metrics(gage_data)
-
-# Climate-dependent signatures (require PPT column in data)
-# runoff_ratios = analyze_Q_PPT_relationships(gage_data)
-# elasticity = calculate_streamflow_elasticity(gage_data)
-# qp_season = calculate_qp_seasonality(gage_data)
-# storage = calculate_average_storage(gage_data)
-
-# Combine all signatures
-all_signatures = {
-    **flow_vols, **flashiness, **timing, **fdc,
-    **baseflow, **recession, **pulses,
-    # Add climate signatures if PPT data available:
-    # **runoff_ratios, **elasticity, **qp_season, **storage
-}
+# Filter to qualifying water years (3-stage filter matching R)
+qual_years, qualifies = filter_qualifying_years(gage_data)
+if qualifies:
+    gage_data = gage_data[gage_data["water_year"].isin(qual_years)]
+    results = calculate_all_signatures(gage_data, has_climate="PPT" in gage_data.columns)
+    # results is a dict: {"Qann_mean": 450.2, "Qann_senn_slp": -0.3, ...}
 ```
+
+## Data Setup
+
+Production data paths (edit in scripts or set environment variables):
+
+| File | Default Path |
+|------|-------------|
+| Streamflow | `D:\processedOuts_feb2026\combined_streamflow_data_09feb2026.parquet` |
+| Climate (Daymet) | `D:\processedOuts_feb2026\daymet_1980_2023.parquet` |
+| Metadata | `D:\processedOuts_feb2026\combined_watershed_metadata_09feb2026.parquet` |
+
+## Smoke Test
+
+```bash
+# Edit paths in tests/smoke_test.py if needed, then:
+cd python
+python tests/smoke_test.py
+```
+
+Runs 10 hardcoded gages through the full pipeline with validation checks.
 
 ## Input Data Format
 
@@ -93,6 +74,7 @@ Streamflow data must be a DataFrame with these columns:
 | `dowy` | int | Day of water year (1-366) |
 
 Use `add_water_year_columns()` to add the temporal columns if you only have `date`.
+The `read_parquet()` function auto-normalizes common column name variants (`Date`->`date`, `site_id`->`gage_id`, `prcp`->`PPT`).
 
 ## Output Statistics
 
@@ -116,7 +98,7 @@ Each signature metric produces 8 statistics:
 - **Flow Volumes** (`calculate_flow_vols_by_year`): 22 metrics
   - Qann, Qwin, Qspr, Qsum, Qfal (seasonal totals)
   - Q1, Q5, Q10, ..., Q99 (percentiles)
-  - Q95-Q10 (high-low difference)
+  - Q95_Q10 (high-low difference)
 
 - **Flashiness** (`analyze_flashiness_trends`): 1 metric
   - Richards-Baker flashiness index
@@ -127,9 +109,9 @@ Each signature metric produces 8 statistics:
   - Dmax (day of maximum discharge)
 
 - **Flow Duration Curve** (`analyze_fdc_trends`): 3 metrics
-  - FDC_all (overall slope)
-  - FDC_90th (low flow slope)
-  - FDC_mid (mid-range slope)
+  - FDCall (overall slope)
+  - FDC90th (low flow slope)
+  - FDCmid (mid-range slope)
 
 ### Complex Signatures
 
@@ -165,16 +147,25 @@ Each signature metric produces 8 statistics:
 - **Average Storage** (`calculate_average_storage`): 1 metric
   - avg_storage (catchment storage at mean discharge, mm)
 
+## Individual Signature Functions
+
+For fine-grained control, call individual signature functions instead of `calculate_all_signatures()`:
+
+```python
+from streamflow_signatures import calculate_flow_vols_by_year, analyze_baseflow_indices
+
+flow_vols = calculate_flow_vols_by_year(gage_data)  # returns dict
+baseflow = analyze_baseflow_indices(gage_data)       # returns dict
+```
+
+## Production Reference
+
+For full-scale benchmark processing (all 7,000+ gages), see `docs/benchmarks/run_python_benchmark.py`.
+
 ## Cross-Language Validation
 
 This Python implementation is validated against the canonical R implementation.
-Run validation tests:
-
-```bash
-pytest tests/test_against_golden.py
-```
-
-Golden reference outputs are generated by R and stored in `../golden-outputs/`.
+Golden reference outputs from R are stored in `../golden-outputs/`.
 
 ## License
 

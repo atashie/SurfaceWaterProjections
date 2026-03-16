@@ -43,12 +43,16 @@ include("qp_seasonality.jl")
 include("storage.jl")
 include("qa_qc.jl")
 include("metadata.jl")
+include("signatures.jl")
 
 # Export stats functions
 export generate_stats, theil_sen_slope, mann_kendall_test
 
 # Export I/O functions
-export read_parquet, write_signatures, add_water_year_columns
+export read_parquet, write_signatures, add_water_year_columns, filter_qualifying_years
+
+# Export high-level functions
+export calculate_all_signatures
 
 # Export simple signatures
 export calculate_flow_vols_by_year

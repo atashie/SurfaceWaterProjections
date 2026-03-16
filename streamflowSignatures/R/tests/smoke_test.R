@@ -22,8 +22,8 @@ source(file.path(main_dir, "R", "helperFunctions.R"))
 set_log_level("INFO")
 
 # Input/output paths
-parquet_path <- file.path(metadata_dir, "combined_streamflow_output/combined_streamflow_data.parquet")
-metadata_path <- file.path(metadata_dir, "combined_streamflow_output/combined_watershed_metadata.csv")
+parquet_path <- file.path(metadata_dir, "processedOuts_feb2026/combined_streamflow_data_09feb2026.parquet")
+metadata_path <- file.path(metadata_dir, "processedOuts_feb2026/combined_watershed_metadata_09feb2026.csv")
 output_path <- file.path(main_dir, "test_output/smoke_test_signatures.csv")
 
 # Create output directory

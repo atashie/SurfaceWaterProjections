@@ -23,120 +23,6 @@ const METADATA_PATH = raw"D:\processedOuts_feb2026\combined_watershed_metadata_0
 const OUTPUT_DIR = @__DIR__
 
 
-function calculate_all_signatures(gage_data::DataFrame, has_climate::Bool=false; gage_id::String="unknown")::Dict{String, Any}
-    results = Dict{String, Any}()
-
-    # Non-climate signatures
-    try
-        merge!(results, calculate_flow_vols_by_year(gage_data))
-    catch e
-        @warn "calculate_flow_vols_by_year failed for gage $gage_id" exception=(e, catch_backtrace())
-    end
-
-    try
-        merge!(results, analyze_flashiness_trends(gage_data))
-    catch e
-        @warn "analyze_flashiness_trends failed for gage $gage_id" exception=(e, catch_backtrace())
-    end
-
-    try
-        merge!(results, analyze_flow_timing_trends(gage_data))
-    catch e
-        @warn "analyze_flow_timing_trends failed for gage $gage_id" exception=(e, catch_backtrace())
-    end
-
-    try
-        merge!(results, analyze_fdc_trends(gage_data))
-    catch e
-        @warn "analyze_fdc_trends failed for gage $gage_id" exception=(e, catch_backtrace())
-    end
-
-    try
-        merge!(results, analyze_baseflow_indices(gage_data))
-    catch e
-        @warn "analyze_baseflow_indices failed for gage $gage_id" exception=(e, catch_backtrace())
-    end
-
-    try
-        merge!(results, analyze_recession_parameters(gage_data))
-    catch e
-        @warn "analyze_recession_parameters failed for gage $gage_id" exception=(e, catch_backtrace())
-    end
-
-    try
-        merge!(results, calculate_pulse_metrics(gage_data))
-    catch e
-        @warn "calculate_pulse_metrics failed for gage $gage_id" exception=(e, catch_backtrace())
-    end
-
-    # Climate-dependent signatures
-    if has_climate && "PPT" in names(gage_data)
-        try
-            merge!(results, analyze_Q_PPT_relationships(gage_data))
-        catch e
-            @warn "analyze_Q_PPT_relationships failed for gage $gage_id" exception=(e, catch_backtrace())
-        end
-
-        try
-            merge!(results, calculate_streamflow_elasticity(gage_data))
-        catch e
-            @warn "calculate_streamflow_elasticity failed for gage $gage_id" exception=(e, catch_backtrace())
-        end
-
-        try
-            merge!(results, calculate_qp_seasonality(gage_data))
-        catch e
-            @warn "calculate_qp_seasonality failed for gage $gage_id" exception=(e, catch_backtrace())
-        end
-
-        try
-            merge!(results, calculate_average_storage(gage_data))
-        catch e
-            @warn "calculate_average_storage failed for gage $gage_id" exception=(e, catch_backtrace())
-        end
-    end
-
-    return results
-end
-
-
-function filter_qualifying_years(gage_data::DataFrame;
-        min_q_value::Real=CFG_MIN_Q_VALUE,
-        min_days_above::Int=CFG_MIN_DAYS_ABOVE_THRESHOLD,
-        min_frac_good::Real=CFG_MIN_FRAC_GOOD_DATA,
-        min_num_years::Int=CFG_MIN_NUM_YEARS)
-    """Filter water years per-gage matching R's process_signatures_from_parquet().
-
-    Three-stage per-year filtering:
-    1. Per water year, check at least min_days_above days with Q > min_q_value
-    2. Per water year, check data completeness (>= min_frac_good of expected days)
-    3. Gage qualifies if >= min_num_years pass both sub-checks
-
-    Returns (qualifying_years, gage_qualifies) tuple.
-    """
-    qualifying = Int[]
-    for wy in unique(gage_data.water_year)
-        yr_data = gage_data[gage_data.water_year .== wy, :]
-        q = yr_data.Q
-
-        # Count non-NA values (handle both missing and NaN)
-        n_nona = sum(x -> !ismissing(x) && (x isa Number ? !isnan(x) : true), q)
-
-        # Sub-check 1: days above threshold
-        n_above = sum(x -> !ismissing(x) && (x isa Number ? (!isnan(x) && x > min_q_value) : false), q)
-        n_above < min_days_above && continue
-
-        # Sub-check 2: data completeness (accounting for leap years)
-        # Water year Y spans Oct 1 (Y-1) to Sep 30 (Y)
-        expected_days = isleapyear(wy) ? 366 : 365
-        min_good = floor(Int, expected_days * min_frac_good)
-        n_nona < min_good && continue
-
-        push!(qualifying, wy)
-    end
-    return qualifying, length(qualifying) >= min_num_years
-end
-
 
 function main()
     println("=" ^ 70)
@@ -161,12 +47,7 @@ function main()
         return 1
     end
 
-    streamflow = DataFrame(Parquet2.Dataset(STREAMFLOW_PATH))
-
-    # Rename Date to date for consistency
-    if "Date" in names(streamflow)
-        rename!(streamflow, :Date => :date)
-    end
+    streamflow = read_parquet(STREAMFLOW_PATH)  # auto-normalizes columns
 
     # Check if water_year columns already exist
     if !("water_year" in names(streamflow))
@@ -185,18 +66,7 @@ function main()
     has_climate = false
     local climate
     if isfile(CLIMATE_PATH)
-        climate = DataFrame(Parquet2.Dataset(CLIMATE_PATH))
-
-        # Standardize column names
-        if "Date" in names(climate)
-            rename!(climate, :Date => :date)
-        end
-        if "site_id" in names(climate)
-            rename!(climate, :site_id => :gage_id)
-        end
-        if "prcp" in names(climate)
-            rename!(climate, :prcp => :PPT)
-        end
+        climate = read_parquet(CLIMATE_PATH)  # auto-normalizes columns
 
         # Add water year columns if needed
         if !("water_year" in names(climate))

@@ -8,7 +8,6 @@ Uses per-year quality filtering matching R's process_signatures_from_parquet().
 import sys
 import json
 import time
-import calendar
 from pathlib import Path
 from datetime import datetime
 
@@ -21,19 +20,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "python"))
 from streamflow_signatures import (
     read_parquet,
     add_water_year_columns,
-    # Non-climate signatures
-    calculate_flow_vols_by_year,
-    analyze_flashiness_trends,
-    analyze_flow_timing_trends,
-    analyze_fdc_trends,
-    analyze_baseflow_indices,
-    analyze_recession_parameters,
-    calculate_pulse_metrics,
-    # Climate-dependent signatures
-    analyze_Q_PPT_relationships,
-    calculate_streamflow_elasticity,
-    calculate_qp_seasonality,
-    calculate_average_storage,
+    filter_qualifying_years,
+    calculate_all_signatures,
 )
 from streamflow_signatures.qa_qc import compute_qa_flags
 from streamflow_signatures.metadata import load_gages_ii_interference
@@ -53,108 +41,6 @@ CLIMATE_PATH = Path(os.environ.get("CLIMATE_PATH", os.path.join(_DATA_DIR, "daym
 METADATA_PATH = Path(os.environ.get("METADATA_PATH", os.path.join(_DATA_DIR, "combined_watershed_metadata_09feb2026.csv")))
 OUTPUT_DIR = Path(__file__).parent
 
-
-def calculate_all_signatures(gage_data: pd.DataFrame, has_climate: bool = False) -> dict:
-    """Calculate all signatures for a single gage."""
-    results = {}
-
-    # Non-climate signatures
-    try:
-        results.update(calculate_flow_vols_by_year(gage_data))
-    except Exception:
-        pass
-
-    try:
-        results.update(analyze_flashiness_trends(gage_data))
-    except Exception:
-        pass
-
-    try:
-        results.update(analyze_flow_timing_trends(gage_data))
-    except Exception:
-        pass
-
-    try:
-        results.update(analyze_fdc_trends(gage_data))
-    except Exception:
-        pass
-
-    try:
-        results.update(analyze_baseflow_indices(gage_data))
-    except Exception:
-        pass
-
-    try:
-        results.update(analyze_recession_parameters(gage_data))
-    except Exception:
-        pass
-
-    try:
-        results.update(calculate_pulse_metrics(gage_data))
-    except Exception:
-        pass
-
-    # Climate-dependent signatures
-    if has_climate and "PPT" in gage_data.columns:
-        try:
-            results.update(analyze_Q_PPT_relationships(gage_data))
-        except Exception:
-            pass
-
-        try:
-            results.update(calculate_streamflow_elasticity(gage_data))
-        except Exception:
-            pass
-
-        try:
-            results.update(calculate_qp_seasonality(gage_data))
-        except Exception:
-            pass
-
-        try:
-            results.update(calculate_average_storage(gage_data))
-        except Exception:
-            pass
-
-    return results
-
-
-def filter_qualifying_years(gage_data: pd.DataFrame,
-                            min_q_value: float = MIN_Q_VALUE,
-                            min_days_above: int = MIN_DAYS_ABOVE_THRESHOLD,
-                            min_frac_good: float = MIN_FRAC_GOOD_DATA,
-                            min_num_years: int = MIN_NUM_YEARS):
-    """Filter water years per-gage matching R's process_signatures_from_parquet().
-
-    Three-stage per-year filtering:
-    1. Per water year, check at least min_days_above days with Q > min_q_value
-    2. Per water year, check data completeness (>= min_frac_good of expected days)
-    3. Gage qualifies if >= min_num_years pass both sub-checks
-
-    Returns (qualifying_years, gage_qualifies) tuple.
-    """
-    qualifying_years = []
-    for wy in gage_data["water_year"].unique():
-        yr_data = gage_data[gage_data["water_year"] == wy]
-        q = yr_data["Q"]
-        n_nona = q.notna().sum()
-
-        # Sub-check 1: days above threshold
-        n_above = (q > min_q_value).sum()
-        if n_above < min_days_above:
-            continue
-
-        # Sub-check 2: data completeness (accounting for leap years)
-        # Water year Y spans Oct 1 (Y-1) to Sep 30 (Y)
-        # Leap year if year Y is leap (Feb is in the water year)
-        expected_days = 366 if calendar.isleap(wy) else 365
-        min_good_days = int(expected_days * min_frac_good)
-        if n_nona < min_good_days:
-            continue
-
-        qualifying_years.append(wy)
-
-    return qualifying_years, len(qualifying_years) >= min_num_years
 
 
 def main():
@@ -180,15 +66,7 @@ def main():
         print(f"ERROR: Streamflow file not found: {STREAMFLOW_PATH}")
         sys.exit(1)
 
-    streamflow = read_parquet(str(STREAMFLOW_PATH))
-
-    # Rename Date to date for consistency
-    if "Date" in streamflow.columns:
-        streamflow = streamflow.rename(columns={"Date": "date"})
-
-    # Ensure date column is datetime type
-    if "date" in streamflow.columns:
-        streamflow["date"] = pd.to_datetime(streamflow["date"])
+    streamflow = read_parquet(str(STREAMFLOW_PATH))  # auto-normalizes columns
 
     # Check if water_year columns already exist
     if "water_year" not in streamflow.columns:
@@ -209,22 +87,7 @@ def main():
 
     has_climate = False
     if CLIMATE_PATH.exists():
-        climate = read_parquet(str(CLIMATE_PATH))
-
-        # Standardize column names
-        rename_map = {}
-        if "Date" in climate.columns:
-            rename_map["Date"] = "date"
-        if "site_id" in climate.columns:
-            rename_map["site_id"] = "gage_id"
-        if "prcp" in climate.columns:
-            rename_map["prcp"] = "PPT"
-        if rename_map:
-            climate = climate.rename(columns=rename_map)
-
-        # Ensure date column is datetime type
-        if "date" in climate.columns:
-            climate["date"] = pd.to_datetime(climate["date"])
+        climate = read_parquet(str(CLIMATE_PATH))  # auto-normalizes columns
 
         t1 = time.perf_counter()
         print(f"  Loaded {len(climate):,} rows in {t1-t0:.2f}s")

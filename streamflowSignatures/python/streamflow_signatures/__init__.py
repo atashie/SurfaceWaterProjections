@@ -18,7 +18,8 @@ from daily streamflow (and optionally climate) data. All signatures produce
 __version__ = "0.1.0"
 
 from .stats import generate_stats, theil_sen_slope, mann_kendall_test
-from .io import read_parquet, write_signatures, validate_schema, add_water_year_columns
+from .io import read_parquet, write_signatures, validate_schema, add_water_year_columns, filter_qualifying_years
+from .signatures import calculate_all_signatures
 from .flow_volumes import calculate_flow_vols_by_year
 from .flashiness import analyze_flashiness_trends
 from .timing import analyze_flow_timing_trends
@@ -41,6 +42,9 @@ __all__ = [
     "write_signatures",
     "validate_schema",
     "add_water_year_columns",
+    "filter_qualifying_years",
+    # High-level
+    "calculate_all_signatures",
     # Signatures - Simple (no climate data required)
     "calculate_flow_vols_by_year",
     "analyze_flashiness_trends",

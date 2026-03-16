@@ -4,10 +4,13 @@ I/O functions for reading and writing streamflow signature data.
 Handles parquet input, CSV output, and schema validation.
 """
 
-from typing import Optional, List, Dict, Union
+from typing import Optional, List, Dict, Tuple, Union
+import calendar
 from pathlib import Path
 import pandas as pd
 import pyarrow.parquet as pq
+
+from .config import MIN_NUM_YEARS, MIN_FRAC_GOOD_DATA, MIN_Q_VALUE, MIN_DAYS_ABOVE_THRESHOLD
 
 
 # Schema constants matching R config.R
@@ -77,6 +80,7 @@ def read_parquet(
     file_path: Union[str, Path],
     columns: Optional[List[str]] = None,
     gage_ids: Optional[List[str]] = None,
+    normalize_columns: bool = True,
 ) -> pd.DataFrame:
     """
     Read streamflow data from a parquet file.
@@ -89,6 +93,10 @@ def read_parquet(
         Specific columns to read. If None, reads all columns.
     gage_ids : list of str, optional
         Filter to specific gage IDs. If None, reads all gages.
+    normalize_columns : bool, default True
+        Auto-rename common column variants to standard names:
+        Date->date, site_id->gage_id, prcp->PPT. Also ensures
+        date column is pd.Timestamp.
 
     Returns
     -------
@@ -110,6 +118,22 @@ def read_parquet(
         df = pq.read_table(file_path, columns=columns).to_pandas()
     else:
         df = pq.read_table(file_path).to_pandas()
+
+    # Normalize column names
+    if normalize_columns:
+        rename_map = {}
+        if "Date" in df.columns and "date" not in df.columns:
+            rename_map["Date"] = "date"
+        if "site_id" in df.columns and "gage_id" not in df.columns:
+            rename_map["site_id"] = "gage_id"
+        if "prcp" in df.columns and "PPT" not in df.columns:
+            rename_map["prcp"] = "PPT"
+        if rename_map:
+            df = df.rename(columns=rename_map)
+
+        # Ensure date column is datetime
+        if "date" in df.columns and not pd.api.types.is_datetime64_any_dtype(df["date"]):
+            df["date"] = pd.to_datetime(df["date"])
 
     # Filter to specific gages if requested
     if gage_ids is not None and "gage_id" in df.columns:
@@ -267,3 +291,58 @@ def add_water_year_columns(df: pd.DataFrame, date_col: str = "date") -> pd.DataF
     df["dowy"] = (df[date_col] - wy_start).dt.days + 1
 
     return df
+
+
+def filter_qualifying_years(
+    gage_data: pd.DataFrame,
+    min_q_value: float = MIN_Q_VALUE,
+    min_days_above: int = MIN_DAYS_ABOVE_THRESHOLD,
+    min_frac_good: float = MIN_FRAC_GOOD_DATA,
+    min_num_years: int = MIN_NUM_YEARS,
+) -> Tuple[List[int], bool]:
+    """Filter water years per-gage matching R's process_signatures_from_parquet().
+
+    Three-stage per-year filtering:
+    1. Per water year, check at least min_days_above days with Q > min_q_value
+    2. Per water year, check data completeness (>= min_frac_good of expected days)
+    3. Gage qualifies if >= min_num_years pass both sub-checks
+
+    Parameters
+    ----------
+    gage_data : pd.DataFrame
+        DataFrame for a single gage with water_year and Q columns.
+    min_q_value : float
+        Minimum Q threshold for sub-check 1.
+    min_days_above : int
+        Minimum days above min_q_value per water year.
+    min_frac_good : float
+        Minimum fraction of expected days with non-NA Q per water year.
+    min_num_years : int
+        Minimum number of qualifying water years for gage to pass.
+
+    Returns
+    -------
+    tuple of (list[int], bool)
+        (qualifying_years, gage_qualifies)
+    """
+    qualifying_years = []
+    for wy in gage_data["water_year"].unique():
+        yr_data = gage_data[gage_data["water_year"] == wy]
+        q = yr_data["Q"]
+        n_nona = q.notna().sum()
+
+        # Sub-check 1: days above threshold
+        n_above = (q > min_q_value).sum()
+        if n_above < min_days_above:
+            continue
+
+        # Sub-check 2: data completeness (accounting for leap years)
+        # Water year Y spans Oct 1 (Y-1) to Sep 30 (Y)
+        expected_days = 366 if calendar.isleap(wy) else 365
+        min_good_days = int(expected_days * min_frac_good)
+        if n_nona < min_good_days:
+            continue
+
+        qualifying_years.append(wy)
+
+    return qualifying_years, len(qualifying_years) >= min_num_years

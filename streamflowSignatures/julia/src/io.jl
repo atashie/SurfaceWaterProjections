@@ -16,15 +16,32 @@ const TEMPORAL_COLS = ["water_year", "month", "dowy"]
 
 
 """
-    read_parquet(path::String) -> DataFrame
+    read_parquet(path::String; normalize_columns::Bool=true) -> DataFrame
 
 Read a parquet file into a DataFrame.
+
+If `normalize_columns` is true (default), auto-renames common column variants
+to standard names: Date->date, site_id->gage_id, prcp->PPT.
 """
-function read_parquet(path::String)
+function read_parquet(path::String; normalize_columns::Bool=true)
     if !isfile(path)
         error("File not found: $path")
     end
-    return DataFrame(Parquet2.Dataset(path))
+    df = DataFrame(Parquet2.Dataset(path))
+
+    if normalize_columns
+        if "Date" in names(df) && !("date" in names(df))
+            rename!(df, :Date => :date)
+        end
+        if "site_id" in names(df) && !("gage_id" in names(df))
+            rename!(df, :site_id => :gage_id)
+        end
+        if "prcp" in names(df) && !("PPT" in names(df))
+            rename!(df, :prcp => :PPT)
+        end
+    end
+
+    return df
 end
 
 
@@ -143,41 +160,41 @@ end
 
 
 """
-    filter_valid_years(df::DataFrame; min_days=250, max_na_frac=0.1) -> DataFrame
+    filter_qualifying_years(gage_data::DataFrame; kwargs...) -> (Vector{Int}, Bool)
 
-Filter to water years with sufficient data.
+Filter water years per-gage matching R's process_signatures_from_parquet().
 
-Parameters
-----------
-df : DataFrame
-    Input data with water_year and Q columns
-min_days : Int
-    Minimum days per water year
-max_na_frac : Float64
-    Maximum fraction of NA values allowed
+Three-stage per-year filtering:
+1. Per water year, check at least min_days_above days with Q > min_q_value
+2. Per water year, check data completeness (>= min_frac_good of expected days)
+3. Gage qualifies if >= min_num_years pass both sub-checks
 
-Returns
--------
-DataFrame
-    Filtered data with only valid years
+Returns (qualifying_years, gage_qualifies) tuple.
 """
-function filter_valid_years(
-    df::DataFrame;
-    min_days::Int=250,
-    max_na_frac::Float64=0.1
-)
-    # Group by water year and calculate stats
-    year_stats = combine(
-        groupby(df, :water_year),
-        :Q => length => :n_days,
-        :Q => (x -> sum(ismissing.(x) .| isnan.(x)) / length(x)) => :na_frac
-    )
+function filter_qualifying_years(gage_data::DataFrame;
+        min_q_value::Real=CFG_MIN_Q_VALUE,
+        min_days_above::Int=CFG_MIN_DAYS_ABOVE_THRESHOLD,
+        min_frac_good::Real=CFG_MIN_FRAC_GOOD_DATA,
+        min_num_years::Int=CFG_MIN_NUM_YEARS)
+    qualifying = Int[]
+    for wy in unique(gage_data.water_year)
+        yr_data = gage_data[gage_data.water_year .== wy, :]
+        q = yr_data.Q
 
-    # Filter to valid years
-    valid_years = year_stats[
-        (year_stats.n_days .>= min_days) .& (year_stats.na_frac .<= max_na_frac),
-        :water_year
-    ]
+        # Count non-NA values (handle both missing and NaN)
+        n_nona = sum(x -> !ismissing(x) && (x isa Number ? !isnan(x) : true), q)
 
-    return df[in.(df.water_year, Ref(Set(valid_years))), :]
+        # Sub-check 1: days above threshold
+        n_above = sum(x -> !ismissing(x) && (x isa Number ? (!isnan(x) && x > min_q_value) : false), q)
+        n_above < min_days_above && continue
+
+        # Sub-check 2: data completeness (accounting for leap years)
+        # Water year Y spans Oct 1 (Y-1) to Sep 30 (Y)
+        expected_days = isleapyear(wy) ? 366 : 365
+        min_good = floor(Int, expected_days * min_frac_good)
+        n_nona < min_good && continue
+
+        push!(qualifying, wy)
+    end
+    return qualifying, length(qualifying) >= min_num_years
 end
