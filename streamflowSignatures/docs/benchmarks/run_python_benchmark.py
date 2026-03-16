@@ -36,17 +36,21 @@ from streamflow_signatures import (
     calculate_average_storage,
 )
 from streamflow_signatures.qa_qc import compute_qa_flags
+from streamflow_signatures.metadata import load_gages_ii_interference
 from streamflow_signatures.config import (
     MIN_NUM_YEARS,
     MIN_FRAC_GOOD_DATA,
     MIN_Q_VALUE,
     MIN_DAYS_ABOVE_THRESHOLD,
+    GAGES_II_DIR,
 )
 
-# Configuration
-STREAMFLOW_PATH = Path(r"D:\processedOuts_feb2026\combined_streamflow_data_09feb2026.parquet")
-CLIMATE_PATH = Path(r"D:\processedOuts_feb2026\daymet_1980_2023.parquet")
-METADATA_PATH = Path(r"D:\processedOuts_feb2026\combined_watershed_metadata_09feb2026.csv")
+# Configuration — override with environment variables or edit defaults below
+import os
+_DATA_DIR = os.environ.get("STREAMFLOW_PARQUET_DIR", r"D:\processedOuts_feb2026")
+STREAMFLOW_PATH = Path(os.environ.get("STREAMFLOW_PATH", os.path.join(_DATA_DIR, "combined_streamflow_data_09feb2026.parquet")))
+CLIMATE_PATH = Path(os.environ.get("CLIMATE_PATH", os.path.join(_DATA_DIR, "daymet_1980_2023.parquet")))
+METADATA_PATH = Path(os.environ.get("METADATA_PATH", os.path.join(_DATA_DIR, "combined_watershed_metadata_09feb2026.csv")))
 OUTPUT_DIR = Path(__file__).parent
 
 
@@ -332,13 +336,14 @@ def main():
         if "basin_area_km2" in metadata.columns:
             metadata = metadata.rename(columns={"basin_area_km2": "basin_area"})
 
-        # Select metadata columns to merge (matching R output structure)
+        # Select basic metadata columns to merge
         metadata_cols = [
             "gage_id",
             "latitude",
             "longitude",
             "basin_area",
             "gage_type",
+            "area_normalized",
         ]
 
         # Only keep columns that exist in metadata
@@ -353,6 +358,46 @@ def main():
             )
         else:
             print("  Warning: No metadata columns found to merge")
+
+        # Enrich with human interference metadata from GAGES-II
+        print("  Loading GAGES-II interference metadata...")
+        gages_ii = load_gages_ii_interference(GAGES_II_DIR)
+        if len(gages_ii) > 0 and "STAID" in gages_ii.columns:
+            gages_ii["STAID"] = gages_ii["STAID"].astype(str)
+            # Match by gage_id (USGS gages have numeric IDs matching STAID)
+            interference_cols = [
+                "NDAMS_2009", "MAJ_DDENS_2009", "STOR_NID_2009",
+                "IMPNLCD06", "DEVNLCD06", "FRESHW_WITHDRAWAL",
+                "HYDRO_DISTURB_INDX", "CLASS",
+            ]
+            avail_int_cols = [c for c in interference_cols if c in gages_ii.columns]
+            gages_ii_subset = gages_ii[["STAID"] + avail_int_cols].rename(
+                columns={"STAID": "gage_id"}
+            )
+            results_df = results_df.merge(gages_ii_subset, on="gage_id", how="left")
+            n_matched = results_df[avail_int_cols[0]].notna().sum() if avail_int_cols else 0
+            print(f"  Matched {n_matched} gages with GAGES-II data")
+
+            # Compute human_interference_class from CLASS (USGS) and gage_type (Canadian)
+            def classify_interference(row):
+                if pd.notna(row.get("CLASS")):
+                    cls = str(row["CLASS"]).strip()
+                    if cls == "Ref":
+                        return "reference"
+                    elif cls == "Non-ref":
+                        return "non-reference"
+                return "unknown"
+
+            results_df["human_interference_class"] = results_df.apply(
+                classify_interference, axis=1
+            )
+
+            # Add empty RHBN/REGULATED columns (Canadian HYDAT not available from Python)
+            results_df["RHBN"] = np.nan
+            results_df["REGULATED"] = np.nan
+            print(f"  Interference columns added: {len(avail_int_cols) + 3}")
+        else:
+            print("  Warning: GAGES-II data not available")
     else:
         print(f"  Warning: Metadata file not found: {METADATA_PATH}")
 
@@ -360,10 +405,15 @@ def main():
     print("  Computing QA/QC flags...")
     results_df = compute_qa_flags(results_df)
 
-    # Organize columns: gage_id first, then metadata, then signatures, then flags
+    # Organize columns: gage_id first, then metadata, then interference, then signatures, then flags
     metadata_order = [
         "gage_id", "latitude", "longitude", "basin_area",
-        "gage_type", "num_water_years", "start_water_year", "end_water_year"
+        "gage_type", "num_water_years", "start_water_year", "end_water_year",
+        "area_normalized",
+        "NDAMS_2009", "MAJ_DDENS_2009", "STOR_NID_2009",
+        "IMPNLCD06", "DEVNLCD06", "FRESHW_WITHDRAWAL",
+        "HYDRO_DISTURB_INDX", "CLASS", "RHBN", "REGULATED",
+        "human_interference_class",
     ]
     flag_cols = [c for c in results_df.columns if c.startswith("flagged_")]
     signature_cols = [c for c in results_df.columns

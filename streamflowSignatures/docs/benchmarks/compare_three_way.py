@@ -59,6 +59,7 @@ def normalize_col(col):
     """Normalize column name for cross-language matching.
     Handles Q95-Q10 vs Q95_Q10 and FDC_all vs FDCall naming."""
     col = col.replace("-", "_")
+    col = col.replace(".", "_")  # R uses dots (Q95.Q10), Python/Julia use underscores
     col = col.replace("FDC_all", "FDCall")
     col = col.replace("FDC_90th", "FDC90th")
     col = col.replace("FDC_mid", "FDCmid")

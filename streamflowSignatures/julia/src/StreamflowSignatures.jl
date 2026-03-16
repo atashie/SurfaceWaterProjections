@@ -42,6 +42,7 @@ include("elasticity.jl")
 include("qp_seasonality.jl")
 include("storage.jl")
 include("qa_qc.jl")
+include("metadata.jl")
 
 # Export stats functions
 export generate_stats, theil_sen_slope, mann_kendall_test
@@ -68,6 +69,9 @@ export calculate_average_storage
 
 # Export QA/QC functions
 export compute_qa_flags, get_flag_columns
+
+# Export metadata functions
+export load_gages_ii_interference, enrich_signatures_with_metadata
 
 # Export config constants (used by benchmark runners)
 export CFG_MIN_NUM_YEARS, CFG_MIN_FRAC_GOOD_DATA, CFG_MIN_Q_VALUE,

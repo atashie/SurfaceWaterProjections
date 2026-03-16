@@ -65,7 +65,7 @@ def calculate_flow_vols_by_year(
     if missing:
         raise ValueError(f"Missing required columns: {missing}")
 
-    df = streamflow_data.copy()
+    df = streamflow_data
 
     # Filter to water years with sufficient data
     year_counts = df.groupby("water_year")["Q"].apply(lambda x: x.notna().sum())

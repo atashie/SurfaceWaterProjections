@@ -18,6 +18,20 @@ require(ecmwfr)  # For accessing ERA5 data
 require(terra)   # For spatial operations
 require(ncdf4)
 
+# Helper to wrap metric calculations with error handling
+# Returns the function result on success, NULL on error (with logging)
+safe_calculate <- function(fn, data, gage_id, label, ctx, log_level = "warn") {
+  tryCatch({
+    fn(data)
+  }, error = function(e) {
+    if (log_level == "warn") {
+      log_warn(label, "failed for gage", gage_id, ":", e$message, context = ctx)
+    } else {
+      log_debug(label, "failed for gage", gage_id, ":", e$message, context = ctx)
+    }
+    NULL
+  })
+}
 
 ##### Streamflow signatures
 # tools:
@@ -199,59 +213,24 @@ process_gages_rawData <- function(gages_df, gage_type, min_num_years, start_date
       
       # Calculate all streamflow metrics
       cat("Calculating metrics for gage", gage_id, "...\n")
-      
-      # Initialize empty metric results in case of errors
-      metrics_flow_vols <- NULL
-      metrics_fdc_trends <- NULL
-      metrics_flashiness <- NULL
-      metrics_flow_timing <- NULL
-      metrics_pulses <- NULL
-      metrics_baseflow <- NULL
-      metrics_recession <- NULL
-      
-      # Calculate each metric with error handling
-      tryCatch({
-        metrics_flow_vols <- calculate_flow_vols_by_year(streamflow_data_filtered)
-      }, error = function(e) {
-        cat("Error calculating flow volumes for gage", gage_id, ":", e$message, "\n")
-      })
-      
-      tryCatch({
-        metrics_fdc_trends <- analyze_fdc_trends_from_streamflow(streamflow_data_filtered)
-      }, error = function(e) {
-        cat("Error calculating FDC trends for gage", gage_id, ":", e$message, "\n")
-      })
-      
-      tryCatch({
-        metrics_flashiness <- analyze_flashiness_trends(streamflow_data_filtered)
-      }, error = function(e) {
-        cat("Error calculating flashiness for gage", gage_id, ":", e$message, "\n")
-      })
-      
-      tryCatch({
-        metrics_flow_timing <- analyze_flow_timing_trends(streamflow_data_filtered)
-      }, error = function(e) {
-        cat("Error calculating flow timing for gage", gage_id, ":", e$message, "\n")
-      })
-      
-      tryCatch({
-        metrics_pulses <- calculate_pulse_metrics(streamflow_data_filtered)
-      }, error = function(e) {
-        cat("Error calculating pulse metrics for gage", gage_id, ":", e$message, "\n")
-      })
-      
-      tryCatch({
-        metrics_baseflow <- analyze_baseflow_indices(streamflow_data_filtered)
-      }, error = function(e) {
-        cat("Error calculating baseflow indices for gage", gage_id, ":", e$message, "\n")
-      })
-      
-      tryCatch({
-        metrics_recession <- analyze_recession_parameters(streamflow_data_filtered)
-      }, error = function(e) {
-        cat("Error calculating recession indices for gage", gage_id, ":", e$message, "\n")
-      })
-      
+
+      ctx_raw <- "process_gages_rawData"
+      metric_specs_raw <- list(
+        list(name = "flow_vols",  fn = calculate_flow_vols_by_year,        label = "Flow volumes"),
+        list(name = "fdc_trends", fn = analyze_fdc_trends_from_streamflow, label = "FDC trends"),
+        list(name = "flashiness", fn = analyze_flashiness_trends,          label = "Flashiness"),
+        list(name = "flow_timing",fn = analyze_flow_timing_trends,         label = "Flow timing"),
+        list(name = "pulses",     fn = calculate_pulse_metrics,            label = "Pulse metrics"),
+        list(name = "baseflow",   fn = analyze_baseflow_indices,           label = "Baseflow indices"),
+        list(name = "recession",  fn = analyze_recession_parameters,       label = "Recession parameters")
+      )
+
+      metrics_list_raw <- list()
+      for (spec in metric_specs_raw) {
+        metrics_list_raw[[spec$name]] <- safe_calculate(spec$fn, streamflow_data_filtered,
+                                                         gage_id, spec$label, ctx_raw)
+      }
+
       # Create a row for this gage with base information
       gage_row <- data.table(
         gage_id = gage_id,
@@ -264,29 +243,12 @@ process_gages_rawData <- function(gages_df, gage_type, min_num_years, start_date
         end_year = max(years_to_use),
         num_upstream_basins = num_upstream_basins
       )
-      
-      # Combine base gage info with calculated metrics
-      # Only add metrics that were successfully calculated
-      if (!is.null(metrics_flow_vols)) {
-        gage_row <- cbind(gage_row, as.data.table(metrics_flow_vols))
-      }
-      if (!is.null(metrics_fdc_trends)) {
-        gage_row <- cbind(gage_row, as.data.table(metrics_fdc_trends))
-      }
-      if (!is.null(metrics_flashiness)) {
-        gage_row <- cbind(gage_row, as.data.table(metrics_flashiness))
-      }
-      if (!is.null(metrics_flow_timing)) {
-        gage_row <- cbind(gage_row, as.data.table(metrics_flow_timing))
-      }
-      if (!is.null(metrics_pulses)) {
-        gage_row <- cbind(gage_row, as.data.table(metrics_pulses))
-      }
-      if (!is.null(metrics_baseflow)) {
-        gage_row <- cbind(gage_row, as.data.table(metrics_baseflow))
-      }
-      if (!is.null(metrics_recession)) {
-        gage_row <- cbind(gage_row, as.data.table(metrics_recession))
+
+      # Combine base gage info with successfully calculated metrics
+      for (metric_name in names(metrics_list_raw)) {
+        if (!is.null(metrics_list_raw[[metric_name]])) {
+          gage_row <- cbind(gage_row, as.data.table(metrics_list_raw[[metric_name]]))
+        }
       }
       
       # Add NA columns for Q-PPT metrics that we can't calculate
@@ -971,7 +933,11 @@ calculate_flow_vols_by_year = function(streamflow_data){
   }
   streamflow_data <- streamflow_data[streamflow_data$water_year %in% valid_years, ]
 
-  # Calculate annual total flow (mm) by summing daily Q (mm/day)
+  # Calculate annual total flow (mm) by summing daily Q (mm/day).
+  # na.rm=TRUE sums available days rather than discarding years with minor gaps.
+  # Safe here because the 250-day filter above guarantees substantial valid data per year.
+  # Trade-off: if a year has a few missing days, the total is slightly underestimated
+  # rather than lost entirely — standard practice for hydrological time series.
   annual_totals <- aggregate(Q ~ water_year, data=streamflow_data, FUN=sum, na.rm=TRUE)
 
   # Check if we have any valid annual data
@@ -990,6 +956,10 @@ calculate_flow_vols_by_year = function(streamflow_data){
   summer <- streamflow_data[streamflow_data$month %in% c(6, 7, 8), ]
   fall <- streamflow_data[streamflow_data$month %in% c(9, 10, 11), ]
 
+  # Seasonal sums also use na.rm=TRUE. Edge case: a season could have all NAs
+  # while the year passes the 250-day filter (e.g., all winter days missing).
+  # In that rare case sum returns 0 rather than NA — acceptable given the annual
+  # completeness guarantee and standard hydrological practice.
   winter_totals <- aggregate(Q ~ water_year, data=winter, FUN=sum, na.rm=TRUE)
   spring_totals <- aggregate(Q ~ water_year, data=spring, FUN=sum, na.rm=TRUE)
   summer_totals <- aggregate(Q ~ water_year, data=summer, FUN=sum, na.rm=TRUE)
@@ -1171,7 +1141,7 @@ analyze_fdc_trends_from_streamflow <- function(streamflow_data) {
     # Calculate slopes for different segments of the FDC
     if (n >= 10) {
       # Use log-transformed flow for better fit
-      fdc$log_flow <- log10(fdc$flow + 1e-10)  # Add small constant to handle zeros
+      fdc$log_flow <- log10(fdc$flow + FDC_FLOW_FLOOR)  # Small constant to handle zeros
       
       # Overall slope
       all_model <- try(lm(log_flow ~ exceedance, data=fdc), silent=TRUE)
@@ -1687,24 +1657,34 @@ analyze_baseflow_indices <- function(streamflow_data) {
   eckhardt_filter <- function(Q, BFImax = 0.8, a = 0.98) {
     n <- length(Q)
     baseflow <- numeric(n)
-    baseflow[1] <- Q[1] * BFImax  # Initialize with fraction of first flow
-    
-    for (i in 2:n) {
-      if (!is.na(Q[i]) && !is.na(Q[i-1]) && !is.na(baseflow[i-1])) {
-        # Eckhardt filter equation
-        numerator <- (1 - BFImax) * a * baseflow[i-1] + (1 - a) * BFImax * Q[i]
-        denominator <- 1 - a * BFImax
-        baseflow[i] <- numerator / denominator
-        
-        # Baseflow cannot exceed total flow
-        baseflow[i] <- min(baseflow[i], Q[i])
-        # Baseflow cannot be negative
-        baseflow[i] <- max(baseflow[i], 0)
-      } else {
-        baseflow[i] <- NA
-      }
+
+    # Initialize matching Python/Julia: min(BFImax * Q[1], Q[1]) if valid and > 0
+    if (!is.na(Q[1]) && Q[1] > 0) {
+      baseflow[1] <- min(Q[1] * BFImax, Q[1])
+    } else {
+      baseflow[1] <- 0
     }
-    
+
+    for (i in 2:n) {
+      if (is.na(Q[i])) {
+        # Forward-fill: carry previous baseflow through gap.
+        # Baseflow (groundwater component) changes slowly, so this is
+        # hydrologically defensible for short gaps. Prevents NaN cascade
+        # that would lose all post-gap baseflow, creating a numerator/
+        # denominator mismatch in BFI calculation.
+        # Matches Python and Julia implementations (Round 5 fix).
+        baseflow[i] <- baseflow[i - 1]
+        next
+      }
+      # Normal Eckhardt filter equation — baseflow[i-1] is always valid
+      # because forward-fill guarantees no NA propagation
+      numerator <- (1 - BFImax) * a * baseflow[i-1] + (1 - a) * BFImax * Q[i]
+      denominator <- 1 - a * BFImax
+      baseflow[i] <- numerator / denominator
+      baseflow[i] <- min(baseflow[i], Q[i])
+      baseflow[i] <- max(baseflow[i], 0)
+    }
+
     return(baseflow)
   }
   
@@ -1958,7 +1938,17 @@ analyze_recession_parameters <- function(streamflow_data) {
     })
   }
   
-  # Function to fit sinusoidal model to log(a) values
+  # Fit sinusoidal model to recession log(a) values as a function of day-of-year.
+  #
+  # Model: log(a) = B1*sin(2*pi*doy/365) + B2*cos(2*pi*doy/365) + C
+  #   Amplitude = sqrt(B1^2 + B2^2)
+  #   Phase (days) = atan2(-B2, B1) * 365 / (2*pi)
+  #   Minimum doy = phase + 273.75 days (3/4 cycle offset from maximum)
+  #
+  # @param doy_values Numeric vector of day-of-year values
+
+  # @param log_a_values Numeric vector of log(a) recession rate values
+  # @return List with amplitude (dimensionless) and minimum_doy (1-365)
   fit_sinusoidal_model <- function(doy_values, log_a_values) {
     # Remove NA values
     valid_idx <- which(!is.na(log_a_values) & !is.na(doy_values))
@@ -4013,92 +4003,8 @@ process_gages <- function(gages_df, gage_type, min_num_years, start_date, end_da
   return(summary_output)
 }
 
- # original version of generate_streamflow_dt() 
-generate_streamflow_dt_og <- function(dt, data_origin, 
-                                      min_num_years = 20, 
-                                      start_date = as.Date("1900-01-01"), 
-                                      end_date = as.Date("2024-12-31")) {
-  # Check that data_origin is valid; if not, warn and return NA.
-  if (!data_origin %in% c("USGS", "Canada")) {
-    warning("Invalid data_origin provided. It must be either 'USGS' or 'Canada'. Returning NA.")
-    return(NULL)
-  }
-  
-  # Ensure dt is a data.table for consistency.
-  if (!inherits(dt, "data.table")) {
-    dt <- as.data.table(dt)
-  }
-  
-  output <- NA  # Default output
-  
-  if (data_origin == "USGS") {
-    gage_data <- readNWISdv(siteNumber = dt$STAID,
-                            parameterCd = "00060",
-                            startDate = "1900-01-01", endDate = as.character(end_date))
-    gage_data <- subset(gage_data, Date > start_date)
-    gage_id <- gage_data$site_no[1]
-    
-    if (nrow(gage_data) > 365 * min_num_years & last(gage_data$Date) > start_date) {
-      names(gage_data)[4] <- "Q_rawUnits"
-      # Remove flagged data (assumes column 5 holds flags)
-      gage_data$Q_rawUnits[-which(gage_data[, 5] %in% c("A", "A e", "P", "P e"))] <- NA
-      
-      streamy <- gage_data[, c("Date", "Q_rawUnits")]
-      
-      # Convert to mm/day using drainage area from dt
-      sqkm <- dt$DRAIN_SQKM[dt$STAID == gage_id]
-      conversion <- 60 * 60 * 24 / (sqkm * 3280.84^3) * 1e6
-      streamy$Q <- as.numeric(streamy$Q_rawUnits) * conversion
-      streamy$year = year(streamy$Date)
-      streamy$month = month(streamy$Date)
-      streamy$doy = yday(streamy$Date)
-      
-      # Add water year information
-      wy_info <- calculate_water_year_info(streamy$Date)
-      streamy$water_year <- wy_info$water_year
-      streamy$dowy <- wy_info$dowy
-      
-      output <- streamy
-    } else {
-      message("Insufficient Data to Process")
-      output <- NA
-    }
-  }
-  
-  if (data_origin == "Canada") {
-    can_stream <- hy_daily(station_number = paste(dt$STATION_NUMBER))
-    can_stream_only <- subset(can_stream, Parameter == "Flow")
-    
-    if ("Flow" %in% can_stream$Parameter & last(can_stream_only$Date) > start_date & 
-        nrow(can_stream_only) > 365 * min_num_years) {
-      stream_all <- cbind.data.frame(as.Date(can_stream_only$Date), can_stream_only$Value)
-      colnames(stream_all) <- c("Date", "Q_rawUnits")
-      streamy <- subset(stream_all, Date > start_date)
-      
-      # Converting to mm/day for m^3/s
-      sqkm <- hy_stations(paste(dt$STATION_NUMBER))$DRAINAGE_AREA_GROSS
-      conversion <- ifelse(is.na(sqkm), 99999, 60 * 60 * 24 * 1e9 / (sqkm * 1e12))
-      streamy$Q <- as.numeric(streamy$Q_rawUnits) * conversion
-      
-      # Add temporal information
-      streamy$year = year(streamy$Date)
-      streamy$month = month(streamy$Date)
-      streamy$doy = yday(streamy$Date)
-      
-      # Add water year information
-      wy_info <- calculate_water_year_info(streamy$Date)
-      streamy$water_year <- wy_info$water_year
-      streamy$dowy <- wy_info$dowy
-      
-      output <- streamy
-    } else {
-      message("Insufficient Data to Process")
-      output <- NA
-    }
-  }
-  
-  return(output)
-}
+ # generate_streamflow_dt_og() — moved to archive/deprecated_generate_streamflow_dt_og.R
+ # Superseded by the parquet-based pipeline in process_signatures_from_parquet()
 
 
 
@@ -4255,7 +4161,7 @@ process_signatures_from_parquet <- function(
       # Try adding leading zeros (1-4)
       found <- FALSE
       for (num_zeros in 1:4) {
-        padded_id <- sprintf(paste0("%0", nchar(d_id) + num_zeros, "d"), as.numeric(d_id))
+        padded_id <- paste0(strrep("0", num_zeros), d_id)
         if (padded_id %in% all_streamflow_gages) {
           matched_streamflow_ids <- c(matched_streamflow_ids, padded_id)
           daymet_id_for_gage[padded_id] <- d_id
@@ -4292,40 +4198,38 @@ process_signatures_from_parquet <- function(
              context = ctx)
   }
   
-  # Create a lookup table for metadata with multiple possible formats
-  # important for USGS data where IDs often have leading 0s that may be dropped
-  metadata_lookup <- data.table()
-  for (i in 1:nrow(metadata)) {
-    meta_row <- metadata[i]
-    base_id <- as.character(meta_row$gage_id)
-    
-    # Store the original metadata row
-    metadata_lookup <- rbind(metadata_lookup, meta_row, fill = TRUE)
-    
-    # Also store versions with leading zeros removed (if they exist)
-    stripped_id <- gsub("^0+", "", base_id)
-    if (stripped_id != base_id && stripped_id != "") {
-      alt_row <- copy(meta_row)
-      alt_row$gage_id <- stripped_id
-      metadata_lookup <- rbind(metadata_lookup, alt_row, fill = TRUE)
-    }
+  # Create a keyed lookup table for metadata with multiple possible ID formats
+  # Important for USGS data where IDs often have leading 0s that may be dropped.
+  # Vectorized construction (replaces O(n²) row-by-row rbind loop).
+  metadata_lookup <- copy(metadata)
+  metadata_lookup[, gage_id := as.character(gage_id)]
+
+  # Build alternate-ID rows for entries with leading zeros
+  stripped_ids <- gsub("^0+", "", metadata_lookup$gage_id)
+  has_leading_zeros <- stripped_ids != metadata_lookup$gage_id & stripped_ids != ""
+  if (any(has_leading_zeros)) {
+    alt_rows <- copy(metadata_lookup[has_leading_zeros])
+    alt_rows[, gage_id := stripped_ids[has_leading_zeros]]
+    metadata_lookup <- rbind(metadata_lookup, alt_rows, fill = TRUE)
   }
-  
+
+  # Key the table for O(1) lookup
+  setkey(metadata_lookup, gage_id)
+
   # Function to find metadata for a gage ID, trying different formats
   # NOTE: Parameter named target_gage_id to avoid data.table scoping collision
   # with the 'gage_id' column in metadata_lookup
   find_metadata <- function(target_gage_id, metadata_lookup) {
     target_gage_id <- as.character(target_gage_id)
 
-    # First try exact match
-    meta <- metadata_lookup[gage_id == target_gage_id]
+    # O(1) keyed lookup — exact match
+    meta <- metadata_lookup[.(target_gage_id), nomatch = NULL]
     if (nrow(meta) > 0) return(meta[1])
 
     # Try adding leading zeros (up to 4)
     for (num_zeros in 1:4) {
-      padded_id <- sprintf(paste0("%0", nchar(target_gage_id) + num_zeros, "d"),
-                           as.numeric(target_gage_id))
-      meta <- metadata_lookup[gage_id == padded_id]
+      padded_id <- paste0(strrep("0", num_zeros), target_gage_id)
+      meta <- metadata_lookup[.(padded_id), nomatch = NULL]
       if (nrow(meta) > 0) {
         log_debug("Found match for", target_gage_id, "as", padded_id, context = ctx)
         return(meta[1])
@@ -4335,7 +4239,7 @@ process_signatures_from_parquet <- function(
     # Try removing leading zeros
     stripped_id <- gsub("^0+", "", target_gage_id)
     if (stripped_id != target_gage_id && stripped_id != "") {
-      meta <- metadata_lookup[gage_id == stripped_id]
+      meta <- metadata_lookup[.(stripped_id), nomatch = NULL]
       if (nrow(meta) > 0) {
         log_debug("Found match for", target_gage_id, "as", stripped_id, context = ctx)
         return(meta[1])
@@ -4349,9 +4253,15 @@ process_signatures_from_parquet <- function(
   matched_gages <- 0
   unmatched_gages <- character()
 
+  # Per-metric success counters (for R5 coverage tracking)
+  all_metric_names <- c("flow_vols", "fdc_trends", "flashiness", "flow_timing",
+                        "pulses", "baseflow", "recession",
+                        "qtoppt", "elasticity", "qp_seasonality", "avg_storage")
+  metric_success <- setNames(integer(length(all_metric_names)), all_metric_names)
+
   # Batch loading: load groups of gages from parquet at a time to balance
   # memory usage (~1-2 GB per batch) vs speed (fast data.table lookups within batch)
-  BATCH_SIZE <- 500
+  BATCH_SIZE <- PROCESSING_BATCH_SIZE  # From config.R
   n_batches <- ceiling(length(unique_gages) / BATCH_SIZE)
   log_info("Processing in", n_batches, "batches of up to", BATCH_SIZE, "gages", context = ctx)
   streamflow_batch <- NULL  # current batch data
@@ -4379,7 +4289,6 @@ process_signatures_from_parquet <- function(
       if (!is.null(streamflow_batch)) {
         rm(streamflow_batch)
         if (!is.null(daymet_batch)) rm(daymet_batch)
-        gc(verbose = FALSE)
       }
 
       streamflow_batch <- streamflow_dataset |>
@@ -4584,79 +4493,42 @@ process_signatures_from_parquet <- function(
       
       # Initialize metric results
       metrics_list <- list()
-      
-      # Calculate each metric group with error handling
-      tryCatch({
-        metrics_list$flow_vols <- calculate_flow_vols_by_year(streamflow_data_filtered)
-      }, error = function(e) {
-        log_warn("Flow volumes failed for gage", current_gage_id, ":", e$message, context = ctx)
-      })
 
-      tryCatch({
-        metrics_list$fdc_trends <- analyze_fdc_trends_from_streamflow(streamflow_data_filtered)
-      }, error = function(e) {
-        log_warn("FDC trends failed for gage", current_gage_id, ":", e$message, context = ctx)
-      })
+      # Non-climate metric specifications: name, function, label
+      non_climate_specs <- list(
+        list(name = "flow_vols",  fn = calculate_flow_vols_by_year,            label = "Flow volumes"),
+        list(name = "fdc_trends", fn = analyze_fdc_trends_from_streamflow,     label = "FDC trends"),
+        list(name = "flashiness", fn = analyze_flashiness_trends,              label = "Flashiness"),
+        list(name = "flow_timing",fn = analyze_flow_timing_trends,             label = "Flow timing"),
+        list(name = "pulses",     fn = calculate_pulse_metrics,                label = "Pulse metrics"),
+        list(name = "baseflow",   fn = analyze_baseflow_indices,               label = "Baseflow indices"),
+        list(name = "recession",  fn = analyze_recession_parameters,           label = "Recession parameters")
+      )
 
-      tryCatch({
-        metrics_list$flashiness <- analyze_flashiness_trends(streamflow_data_filtered)
-      }, error = function(e) {
-        log_warn("Flashiness failed for gage", current_gage_id, ":", e$message, context = ctx)
-      })
-
-      tryCatch({
-        metrics_list$flow_timing <- analyze_flow_timing_trends(streamflow_data_filtered)
-      }, error = function(e) {
-        log_warn("Flow timing failed for gage", current_gage_id, ":", e$message, context = ctx)
-      })
-
-      tryCatch({
-        metrics_list$pulses <- calculate_pulse_metrics(streamflow_data_filtered)
-      }, error = function(e) {
-        log_warn("Pulse metrics failed for gage", current_gage_id, ":", e$message, context = ctx)
-      })
-
-      tryCatch({
-        metrics_list$baseflow <- analyze_baseflow_indices(streamflow_data_filtered)
-      }, error = function(e) {
-        log_warn("Baseflow indices failed for gage", current_gage_id, ":", e$message, context = ctx)
-      })
-
-      tryCatch({
-        metrics_list$recession <- analyze_recession_parameters(streamflow_data_filtered)
-      }, error = function(e) {
-        log_warn("Recession parameters failed for gage", current_gage_id, ":", e$message, context = ctx)
-      })
+      for (spec in non_climate_specs) {
+        result <- safe_calculate(spec$fn, streamflow_data_filtered, current_gage_id, spec$label, ctx, "warn")
+        if (!is.null(result)) {
+          metrics_list[[spec$name]] <- result
+          metric_success[[spec$name]] <- metric_success[[spec$name]] + 1L
+        }
+      }
 
       # ============= CLIMATE-DEPENDENT SIGNATURES =============
       if (gage_has_climate) {
-        # Q-PPT runoff ratios
-        tryCatch({
-          metrics_list$qtoppt <- analyze_Q_PPT_relationships(streamflow_data_filtered)
-        }, error = function(e) {
-          log_debug("Q-PPT analysis failed for gage", current_gage_id, ":", e$message, context = ctx)
-        })
+        climate_specs <- list(
+          list(name = "qtoppt",        fn = analyze_Q_PPT_relationships,   label = "Q-PPT analysis"),
+          list(name = "elasticity",    fn = calculate_streamflow_elasticity,label = "Elasticity calc"),
+          list(name = "qp_seasonality",fn = calculate_qp_seasonality,      label = "Q-P seasonality calc"),
+          list(name = "avg_storage",   fn = calculate_average_storage,     label = "Storage calc")
+        )
 
-        # Streamflow elasticity (Sawicz et al. 2011)
-        tryCatch({
-          metrics_list$elasticity <- calculate_streamflow_elasticity(streamflow_data_filtered)
-        }, error = function(e) {
-          log_debug("Elasticity calc failed for gage", current_gage_id, ":", e$message, context = ctx)
-        })
-
-        # Q-P seasonality (Wrede et al. 2015)
-        tryCatch({
-          metrics_list$qp_seasonality <- calculate_qp_seasonality(streamflow_data_filtered)
-        }, error = function(e) {
-          log_debug("Q-P seasonality calc failed for gage", current_gage_id, ":", e$message, context = ctx)
-        })
-
-        # Average storage (Peters & Aulenbach 2011)
-        tryCatch({
-          metrics_list$avg_storage <- calculate_average_storage(streamflow_data_filtered)
-        }, error = function(e) {
-          log_debug("Storage calc failed for gage", current_gage_id, ":", e$message, context = ctx)
-        })
+        for (spec in climate_specs) {
+          result <- safe_calculate(spec$fn, streamflow_data_filtered, current_gage_id, spec$label, ctx, "debug")
+          if (!is.null(result)) {
+            metrics_list[[spec$name]] <- result
+            metric_success[[spec$name]] <- metric_success[[spec$name]] + 1L
+          }
+        }
       }
 
       # Create output row
@@ -4720,6 +4592,13 @@ process_signatures_from_parquet <- function(
     log_info("Could not match to metadata:", length(unmatched_gages), context = ctx)
     log_info("Successfully processed:", nrow(summary_output), context = ctx)
     log_info("Results saved to:", output_file, context = ctx)
+
+    # Per-metric success summary
+    log_info("--- Per-metric success counts ---", context = ctx)
+    for (mn in names(metric_success)) {
+      log_info(sprintf("  %-20s %d / %d gages", mn, metric_success[[mn]], nrow(summary_output)),
+               context = ctx)
+    }
 
     # Validate output schema
     validation_result <- validate_output_schema(summary_output, strict = FALSE,

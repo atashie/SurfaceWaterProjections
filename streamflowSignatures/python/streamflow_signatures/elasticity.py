@@ -69,7 +69,7 @@ def calculate_streamflow_elasticity(
     if missing:
         raise ValueError(f"Missing required columns: {missing}")
 
-    df = streamflow_data.copy()
+    df = streamflow_data
 
     # Aggregate to annual totals with data quality check
     annual = df.groupby("water_year").agg({

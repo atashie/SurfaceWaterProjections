@@ -18,17 +18,21 @@ from .config import (
 )
 
 
-# GAGES-II file definitions
+# GAGES-II file definitions (matching R's config.R)
 GAGES_II_FILES_CONUS = {
-    "dams": "conterm_hydromod_dams.txt",
-    "class": "conterm_bas_classif.txt",
-    "landuse": "conterm_bas_morph.txt",
+    "hydromod_dams": "conterm_hydromod_dams.txt",
+    "pop_infrastr": "conterm_pop_infrastr.txt",
+    "hydromod_other": "conterm_hydromod_other.txt",
+    "bas_classif": "conterm_bas_classif.txt",
+    "lc06_basin": "conterm_lc06_basin.txt",
 }
 
 GAGES_II_FILES_AKHIPR = {
-    "dams": "akhipr_hydromod_dams.txt",
-    "class": "akhipr_bas_classif.txt",
-    "landuse": "akhipr_bas_morph.txt",
+    "hydromod_dams": "AKHIPR_hydromod_dams.txt",
+    "pop_infrastr": "AKHIPR_pop_infrastr.txt",
+    "hydromod_other": "AKHIPR_hydromod_other.txt",
+    "bas_classif": "AKHIPR_bas_classif.txt",
+    # Note: AKHIPR does not have lc06_basin file
 }
 
 # Sentinel value for missing data in GAGES-II
@@ -116,9 +120,9 @@ def _load_gages_ii_region(gages_dir: str, files: Dict[str, str]) -> pd.DataFrame
         try:
             df = pd.read_csv(
                 filepath,
-                sep="\t",
                 na_values=["-999", "NA", ""],
-                dtype={"STAID": str}
+                dtype={"STAID": str},
+                encoding="latin-1",
             )
 
             # Ensure STAID is string

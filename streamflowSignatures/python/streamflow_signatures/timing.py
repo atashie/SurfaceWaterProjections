@@ -53,7 +53,7 @@ def analyze_flow_timing_trends(
     if missing:
         raise ValueError(f"Missing required columns: {missing}")
 
-    df = streamflow_data.copy()
+    df = streamflow_data
 
     # Get unique years
     years = df["water_year"].unique()
@@ -66,9 +66,14 @@ def analyze_flow_timing_trends(
     timing_by_year = pd.DataFrame(index=range(len(years)), columns=columns)
     timing_by_year["water_year"] = years
 
+    # Build a lookup from water_year to row index for fast assignment
+    yr_to_idx = {yr: i for i, yr in enumerate(years)}
+
     # Calculate timing metrics for each year
-    for idx, yr in enumerate(years):
-        year_data = df[df["water_year"] == yr].copy()
+    for yr, year_data in df.groupby("water_year", sort=False):
+        year_data = year_data.copy()  # needed because we mutate below (fillna)
+
+        idx = yr_to_idx[yr]
 
         # Check minimum data requirement
         if len(year_data) < min_days:

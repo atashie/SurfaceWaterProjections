@@ -176,7 +176,7 @@ def calculate_pulse_metrics(
     if missing:
         raise ValueError(f"Missing required columns: {missing}")
 
-    df = streamflow_data.copy()
+    df = streamflow_data
 
     # Calculate overall percentiles for entire period (from config)
     q90_all = df["Q"].quantile(HIGH_PULSE_PERCENTILE)
@@ -205,8 +205,8 @@ def calculate_pulse_metrics(
     })
 
     # Process each year
-    for idx, yr in enumerate(years):
-        year_data = df[df["water_year"] == yr].copy()
+    for yr, year_data in df.groupby("water_year", sort=False):
+        year_data = year_data.copy()  # needed because we mutate below (sort_values)
 
         # Skip years with insufficient data
         non_na_count = year_data["Q"].notna().sum()
@@ -254,22 +254,24 @@ def calculate_pulse_metrics(
         summer_reversals = count_flow_reversals(Q[summer_mask]) if summer_mask.sum() >= 30 else np.nan
         fall_reversals = count_flow_reversals(Q[fall_mask]) if fall_mask.sum() >= 30 else np.nan
 
+        # Store results using year-based lookup
+        yr_mask = pulse_metrics["water_year"] == yr
         # Store results - year-specific thresholds
-        pulse_metrics.loc[idx, "n_high_pulses_year"] = high_pulses['n_pulses']
-        pulse_metrics.loc[idx, "n_low_pulses_year"] = low_pulses['n_pulses']
-        pulse_metrics.loc[idx, "dur_high_pulses_year"] = high_pulses['mean_duration']
-        pulse_metrics.loc[idx, "dur_low_pulses_year"] = low_pulses['mean_duration']
+        pulse_metrics.loc[yr_mask, "n_high_pulses_year"] = high_pulses['n_pulses']
+        pulse_metrics.loc[yr_mask, "n_low_pulses_year"] = low_pulses['n_pulses']
+        pulse_metrics.loc[yr_mask, "dur_high_pulses_year"] = high_pulses['mean_duration']
+        pulse_metrics.loc[yr_mask, "dur_low_pulses_year"] = low_pulses['mean_duration']
         # Store results - period-of-record thresholds (*_all metrics)
-        pulse_metrics.loc[idx, "n_high_pulses_all"] = high_pulses_all['n_pulses']
-        pulse_metrics.loc[idx, "n_low_pulses_all"] = low_pulses_all['n_pulses']
-        pulse_metrics.loc[idx, "dur_high_pulses_all"] = high_pulses_all['mean_duration']
-        pulse_metrics.loc[idx, "dur_low_pulses_all"] = low_pulses_all['mean_duration']
-        pulse_metrics.loc[idx, "TQmean"] = tqmean_pct
-        pulse_metrics.loc[idx, "Flow_Reversals_annual"] = annual_reversals
-        pulse_metrics.loc[idx, "Flow_Reversals_winter"] = winter_reversals
-        pulse_metrics.loc[idx, "Flow_Reversals_spring"] = spring_reversals
-        pulse_metrics.loc[idx, "Flow_Reversals_summer"] = summer_reversals
-        pulse_metrics.loc[idx, "Flow_Reversals_fall"] = fall_reversals
+        pulse_metrics.loc[yr_mask, "n_high_pulses_all"] = high_pulses_all['n_pulses']
+        pulse_metrics.loc[yr_mask, "n_low_pulses_all"] = low_pulses_all['n_pulses']
+        pulse_metrics.loc[yr_mask, "dur_high_pulses_all"] = high_pulses_all['mean_duration']
+        pulse_metrics.loc[yr_mask, "dur_low_pulses_all"] = low_pulses_all['mean_duration']
+        pulse_metrics.loc[yr_mask, "TQmean"] = tqmean_pct
+        pulse_metrics.loc[yr_mask, "Flow_Reversals_annual"] = annual_reversals
+        pulse_metrics.loc[yr_mask, "Flow_Reversals_winter"] = winter_reversals
+        pulse_metrics.loc[yr_mask, "Flow_Reversals_spring"] = spring_reversals
+        pulse_metrics.loc[yr_mask, "Flow_Reversals_summer"] = summer_reversals
+        pulse_metrics.loc[yr_mask, "Flow_Reversals_fall"] = fall_reversals
 
     # Get metric columns
     metric_cols = [c for c in pulse_metrics.columns if c != "water_year"]

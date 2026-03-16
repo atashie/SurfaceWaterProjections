@@ -111,7 +111,12 @@ signatures = calculate_flow_vols_by_year(df)
 
 ### Julia
 
-Coming soon.
+```julia
+using StreamflowSignatures
+df = CSV.read("streamflow_data.csv", DataFrame)
+df = add_water_year_columns(df)
+signatures = calculate_flow_vols_by_year(df)
+```
 
 ## References
 
@@ -119,9 +124,14 @@ Coming soon.
 - **SIGNATURE_GUIDELINES.md**: Collaborative guidelines from hydrology team
 - **METHODOLOGY.md**: Mathematical specifications (planned)
 
+## Cross-Language Alignment
+
+When debugging divergences between R, Python, and Julia implementations, use the **cross-language-alignment** skill. It provides a systematic 4-phase workflow, a 9-pattern divergence taxonomy, and the Iron Rule (one fix at a time, benchmark after each, revert if worse).
+
 ## Getting Help
 
 If this skill doesn't answer your question, check:
 1. The SIGNATURES.md file for detailed metric documentation
 2. The CHANGELOG.md for known issues and recent fixes
 3. The DEVELOPMENT.md for architecture and workflow details
+4. The **cross-language-alignment** skill for debugging cross-language divergences

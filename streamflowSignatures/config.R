@@ -14,7 +14,7 @@
 #   STREAMFLOW_DOWNLOADS_DIR - Directory for downloaded files
 
 PARQUET_DATA_DIR <- Sys.getenv("STREAMFLOW_PARQUET_DIR",
-                               unset = "combined_streamflow_output")
+                               unset = "D:/processedOuts_feb2026")
 
 CARAVAN_DATA_DIR <- Sys.getenv("STREAMFLOW_CARAVAN_DIR",
                                unset = "D:/Caravan-nc/usr/local/google/home/kratzert/Data/Caravan-Jan25-nc")
@@ -86,6 +86,13 @@ RECESSION_MIN_DAYS <- 5
 RECESSION_MIN_EVENTS <- 25
 
 # ==============================================================================
+# FDC (FLOW DURATION CURVE) PARAMETERS
+# ==============================================================================
+
+# Small constant added to flow values before log10 transform to handle zeros
+FDC_FLOW_FLOOR <- 1e-10
+
+# ==============================================================================
 # PULSE ANALYSIS PARAMETERS
 # ==============================================================================
 
@@ -110,6 +117,9 @@ USGS_ACCEPTED_CODES <- c("A", "A e", "P", "P e")
 
 # Number of gages per chunk when saving to parquet
 PARQUET_CHUNK_SIZE <- 1000
+
+# Number of gages per batch during signature processing
+PROCESSING_BATCH_SIZE <- 500
 
 # Progress reporting interval (number of gages)
 PROGRESS_INTERVAL <- 500
@@ -186,6 +196,7 @@ ELASTICITY_MIN_ANNUAL_PPT <- 10    # Minimum annual precipitation in mm
 
 # Q-P seasonality parameters (Wrede et al. 2015)
 QP_SLOPE_WINDOW_DAYS <- 30         # Rolling window for cumulative Q-P slope calculation
+QP_MIN_YEARS <- 10                 # Minimum years required for Q-P seasonality calculation
 
 # Average storage parameters (Peters & Aulenbach 2011)
 # Note: Simplified water balance uses P - Q only (no ET estimation)
@@ -197,7 +208,8 @@ QP_SLOPE_WINDOW_DAYS <- 30         # Rolling window for cumulative Q-P slope cal
 # Expected output columns for CSV schema validation
 # (This helps ensure backward compatibility)
 EXPECTED_METADATA_COLS <- c(
-  "gage_id", "latitude", "longitude", "basin_area", "gage_type",
+  "gage_id", "gage_id_metadata", "latitude", "longitude", "basin_area",
+  "gage_type", "area_normalized",
   "num_water_years", "start_water_year", "end_water_year",
   # Human interference metadata (optional - may be NA for gages without GAGES-II data)
   "NDAMS_2009", "MAJ_DDENS_2009", "STOR_NID_2009",

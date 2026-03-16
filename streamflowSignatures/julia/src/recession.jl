@@ -22,7 +22,7 @@ function ols_slope_intercept(x::AbstractVector{<:Real}, y::AbstractVector{<:Real
     numerator = sum((x .- x_mean) .* (y .- y_mean))
     denominator = sum((x .- x_mean).^2)
 
-    if denominator == 0
+    if abs(denominator) < 1e-10
         return (NaN, NaN)
     end
 
@@ -399,21 +399,26 @@ function analyze_recession_parameters(df::DataFrame; min_events::Int=CFG_RECESSI
 
         # Find row index for this year
         yr_idx = findfirst(annual_data.water_year .== yr)
+        yr_idx === nothing && continue
 
         # Per-year point cloud analysis — assign independently of events (matching R/Python)
         if length(year_pc_Q) > 10
             log_Q = log.(year_pc_Q)
             log_dQdt = log.(year_pc_dQdt)
 
-            # Fit using OLS (lm() in R, linregress in Python)
-            b_pc, _ = ols_slope_intercept(log_Q, log_dQdt)
+            # Skip near-singular data (matching R's lm() QR rank check)
+            # R's tolerance is .Machine$double.eps^0.5 ≈ 1.49e-8
+            if var(log_Q) >= 1e-8
+                # Fit using OLS (lm() in R, linregress in Python)
+                b_pc, _ = ols_slope_intercept(log_Q, log_dQdt)
 
-            if !isnan(b_pc)
-                log_a_values_pc = log_dQdt .- b_pc .* log_Q
-                log_a_pc = median(log_a_values_pc)
+                if !isnan(b_pc)
+                    log_a_values_pc = log_dQdt .- b_pc .* log_Q
+                    log_a_pc = median(log_a_values_pc)
 
-                annual_data[yr_idx, :log_a_pointcloud] = log_a_pc
-                annual_data[yr_idx, :b_pointcloud] = b_pc
+                    annual_data[yr_idx, :log_a_pointcloud] = log_a_pc
+                    annual_data[yr_idx, :b_pointcloud] = b_pc
+                end
             end
         end
 

@@ -57,24 +57,18 @@ def analyze_flashiness_trends(
     if missing:
         raise ValueError(f"Missing required columns: {missing}")
 
-    df = streamflow_data.copy()
+    df = streamflow_data
 
-    # Get unique years
-    years = df["water_year"].unique()
-
-    # Initialize results DataFrame
-    flashiness_by_year = pd.DataFrame({
-        "water_year": years,
-        "RB_index": np.nan,
-    })
+    # Collect results as list of dicts (P13: avoid pre-allocation + boolean .loc)
+    results_list = []
 
     # Calculate R-B index for each year
-    for yr in years:
-        year_data = df[df["water_year"] == yr].copy()
+    for yr, year_data in df.groupby("water_year", sort=False):
 
         # Check minimum data requirement
         non_na_count = year_data["Q"].notna().sum()
         if non_na_count < min_days:
+            results_list.append({"water_year": yr, "RB_index": np.nan})
             continue
 
         # Sort by day of water year if available
@@ -87,6 +81,7 @@ def analyze_flashiness_trends(
         # Check missing value fraction
         na_frac = np.isnan(q_values).sum() / len(q_values)
         if na_frac > max_missing_frac:
+            results_list.append({"water_year": yr, "RB_index": np.nan})
             continue
 
         # Interpolate missing values if some are present
@@ -109,15 +104,16 @@ def analyze_flashiness_trends(
 
         # Guard against division by zero
         if total_q == 0:
+            results_list.append({"water_year": yr, "RB_index": np.nan})
             continue
 
         # Calculate R-B index
         rb_index = np.nansum(q_diff) / total_q
 
         # Store result
-        flashiness_by_year.loc[
-            flashiness_by_year["water_year"] == yr, "RB_index"
-        ] = rb_index
+        results_list.append({"water_year": yr, "RB_index": rb_index})
+
+    flashiness_by_year = pd.DataFrame(results_list)
 
     # Generate statistics
     result = generate_stats(

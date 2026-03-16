@@ -58,7 +58,7 @@ end
 
 
 """
-    analyze_fdc_trends(df::DataFrame; min_days=250) -> Dict
+    analyze_fdc_trends(df::DataFrame; min_days=CFG_FDC_MIN_DAYS) -> Dict
 
 Calculate flow duration curve signature trends.
 
@@ -81,7 +81,7 @@ Returns
 Dict{String, Float64}
     Dictionary of signature statistics (3 metrics × 8 stats = 24 values)
 """
-function analyze_fdc_trends(df::DataFrame; min_days::Int=250)
+function analyze_fdc_trends(df::DataFrame; min_days::Int=CFG_FDC_MIN_DAYS)
     result = Dict{String, Float64}()
     metrics = ["FDCall", "FDC90th", "FDCmid"]
 
@@ -113,7 +113,12 @@ function analyze_fdc_trends(df::DataFrame; min_days::Int=250)
     )
 
     years = unique(df.water_year)
-    annual_data = DataFrame()
+    annual_data = DataFrame(
+        water_year = years,
+        FDCall = fill(NaN, length(years)),
+        FDC90th = fill(NaN, length(years)),
+        FDCmid = fill(NaN, length(years))
+    )
 
     for yr in years
         year_mask = coalesce.(df.water_year .== yr, false)
@@ -128,13 +133,12 @@ function analyze_fdc_trends(df::DataFrame; min_days::Int=250)
             continue
         end
 
-        row = Dict{String, Any}("water_year" => yr)
+        yr_idx = findfirst(annual_data.water_year .== yr)
+        yr_idx === nothing && continue
 
         for (metric, range) in fdc_ranges
-            row[metric] = calculate_fdc_slope(year_Q, range)
+            annual_data[yr_idx, Symbol(metric)] = calculate_fdc_slope(year_Q, range)
         end
-
-        push!(annual_data, row; cols=:union)
     end
 
     if nrow(annual_data) < 3

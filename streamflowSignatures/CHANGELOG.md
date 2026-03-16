@@ -9,11 +9,117 @@ All notable changes to the Streamflow Signatures project.
 - Complete `analyze_Q_PPT_relationships()` for raw data pipeline
 - Add ERA5/PRISM data fetching for USGS/HYDAT gages
 - Implement synchrony metrics (cross-correlation, lag analysis)
-- **Python FDC column naming (LOW)**: Python CSV still uses `FDC_all/FDC_90th/FDC_mid`; should rename to match R/Julia `FDCall/FDC90th/FDCmid`
+
+### Code Quality Improvements Round 2 (March 2026)
+
+**R16: Eckhardt BFI Forward-Fill (HIGH — confirmed: all 3 languages now identical)**:
+- **Issue**: R's `eckhardt_filter()` set `baseflow[i] <- NA` when Q[i] is NA, cascading NAs through the recursive filter. Python/Julia were fixed in Round 5 to forward-fill, but R (canonical) was not updated. This was the source of R-Python BFI_Eckhardt rho ~0.989-0.990.
+- **Fix**: Applied forward-fill to R: when Q[i] is NA, `baseflow[i] <- baseflow[i-1]`. Also aligned initialization to `min(Q[1] * BFImax, Q[1])` when Q[1] > 0, else 0, matching Python/Julia. All 3 languages now use identical Eckhardt filter logic.
+- **Location**: `R/helperFunctions.R` `eckhardt_filter()`
+- **Confirmed**: Full benchmark re-run (March 15, 2026) verified R16 produces identical alignment: 505 perfect, 42 good, 4 poor (same as Round 5). BFI_Eckhardt fully resolved across all 3 languages.
+
+**P11: Per-Year Boolean Indexing → groupby (HIGH — Python performance)**:
+- **Issue**: 8 modules used `df[df["water_year"] == yr]` in per-year loops — millions of boolean mask operations.
+- **Fix**: Replaced with `df.groupby("water_year", sort=False)` in baseflow, recession, flashiness, timing, fdc, pulses, qp_seasonality, storage. Estimated 30-40% Python benchmark speedup.
+- **Locations**: All 8 affected modules in `python/streamflow_signatures/`
+
+**P12: Redundant `.copy()` Removal (HIGH — Python performance)**:
+- **Issue**: All 11 modules started with `df = streamflow_data.copy()` (unnecessary since functions don't mutate input).
+- **Fix**: Changed to `df = streamflow_data` in all 11 modules. Retained `.copy()` inside per-year loops only where year_data is mutated (5 modules).
+- **Locations**: All 11 modules in `python/streamflow_signatures/`
+
+**P13: `.loc` Boolean Assignment → List Accumulation (MEDIUM — Python performance)**:
+- **Issue**: `flashiness.py` and `fdc.py` used boolean scan per `.loc` assignment per year.
+- **Fix**: Replaced pre-allocation + boolean `.loc` with list-of-dicts accumulation + single `pd.DataFrame()` construction.
+- **Locations**: `python/streamflow_signatures/flashiness.py`, `python/streamflow_signatures/fdc.py`
+
+**J13: OLS Denominator Guard (HIGH — Julia correctness)**:
+- **Issue**: `ols_slope_intercept()` used `denominator == 0` (exact float comparison that almost never triggers).
+- **Fix**: Changed to `abs(denominator) < 1e-10` matching `linear_slope()` in stats.jl.
+- **Location**: `julia/src/recession.jl`
+
+**J14: DataFrame Pre-allocation (HIGH — Julia performance)**:
+- **Issue**: 5 modules used `DataFrame()` + `push!(row; cols=:union)` requiring schema reconciliation per push.
+- **Fix**: Pre-allocated DataFrames with `fill(NaN, length(years))` and direct `annual_data[yr_idx, :col]` indexing.
+- **Locations**: `julia/src/flow_volumes.jl`, `julia/src/fdc.jl`, `julia/src/timing.jl`, `julia/src/pulses.jl`, `julia/src/runoff_ratios.jl`
+
+**Benchmark Infrastructure Fix**:
+- **compare_three_way.py**: Added dot-to-underscore normalization in `normalize_col()` for R's `Q95.Q10` vs Python/Julia's `Q95_Q10`. Previously 8 columns were silently excluded from comparison.
+- **R15: run_full_processing.R paths**: Updated to reference `combined_streamflow_data_09feb2026.parquet` (was referencing corrupted Oct 2025 file). Updated `config.R` default `PARQUET_DATA_DIR` to `D:/processedOuts_feb2026`.
+
+**Benchmark Re-Run Results (March 15, 2026 — Post-Round 2 Code Quality)**:
+- Re-ran full R pipeline (5h 13m, 5,707 gages, 572 cols), Python benchmark (133 min, 7,369 gages), and Julia benchmark (9.78 min, 7,369 gages)
+- Note: R and Python ran concurrently — timings are unreliable for performance comparison. Julia ran solo (9.78 min, comparable to previous 9.6 min).
+- Three-way comparison results (551 common columns, 5,707 common gages):
+  - R-Python: **4** poor columns (unchanged — all recession pointcloud)
+  - R-Julia: **4** poor columns (unchanged — all recession pointcloud)
+  - Python-Julia: **0** poor columns (min rho = 0.9976)
+  - 505 perfect (>=0.999), 42 good (0.99-0.999), 4 poor (<0.99)
+  - BFI_Eckhardt: Confirmed fully resolved from R side (R16 forward-fill working)
+  - Results identical to Round 5, confirming R16/P11/P12/P13/J13/J14 did not regress any correlations
+- P11/P12 Python performance impact could not be assessed due to concurrent R execution
+
+**GAGES-II Metadata Enrichment in Python/Julia Benchmarks (March 2026)**:
+- **Issue**: Python/Julia benchmark outputs lacked the 13 human interference metadata columns that R includes (NDAMS_2009, MAJ_DDENS_2009, STOR_NID_2009, IMPNLCD06, DEVNLCD06, FRESHW_WITHDRAWAL, HYDRO_DISTURB_INDX, CLASS, RHBN, REGULATED, human_interference_class, area_normalized, gage_type).
+- **Fix**: Added GAGES-II loading and enrichment to both `run_python_benchmark.py` and `run_julia_benchmark.jl`. Updated `metadata_order` to include all interference columns. RHBN/REGULATED columns are present but empty (HYDAT integration is R-only for now).
+- **Bug fixes in metadata module**: Both `python/streamflow_signatures/metadata.py` and `julia/src/metadata.jl` had incorrect file definitions (wrong filenames, wrong delimiter, missing files). Fixed to match R's `config.R`: 5 CONUS files + 4 AKHIPR files, CSV format, `latin-1` encoding for Python, `STAID` read as String in Julia.
+- **Locations**: `docs/benchmarks/run_python_benchmark.py`, `docs/benchmarks/run_julia_benchmark.jl`, `python/streamflow_signatures/metadata.py`, `julia/src/metadata.jl`
+
+### Code Quality Improvements (March 2026)
+
+Cross-language code review covering ~9,000+ lines across R, Python, and Julia.
+Full findings documented in `docs/CODE_REVIEW.md`.
+
+**HIGH priority fixes:**
+
+- **R1: O(n²) metadata lookup** — Replaced row-by-row `rbind` loop (O(n²)) with vectorized `data.table` construction + `setkey()` for O(1) lookup. ~35 second speedup per 7,000-gage run.
+  - Location: `R/helperFunctions.R` metadata_lookup construction
+- **R2: DRY violations** — Extracted `safe_calculate()` helper function and refactored 11 repeated tryCatch blocks into loop structures in both `process_gages_rawData()` and `process_signatures_from_parquet()`. Reduced ~100 lines.
+  - Locations: `R/helperFunctions.R` lines ~214-267 and ~4598-4673
+- **P1: Row-wise water year calculation** — Replaced `.apply()` lambda with vectorized pandas datetime arithmetic for ~50x speedup in `dowy` computation.
+  - Location: `python/streamflow_signatures/io.py` `add_water_year_columns()`
+- **J1: Unchecked findfirst result** — Added `yr_idx === nothing && continue` guard to prevent potential crash on edge-case data.
+  - Location: `julia/src/recession.jl` line ~401
+
+**MEDIUM priority fixes:**
+
+- **R3: FDC magic number** — Moved hardcoded `1e-10` flow floor to `FDC_FLOW_FLOOR` in `config.R`.
+- **R4: Hardcoded BATCH_SIZE** — Moved to `PROCESSING_BATCH_SIZE` in `config.R`; removed unnecessary mid-loop `gc()` call.
+- **R5: Per-metric success tracking** — Added `metric_success` counters to `process_signatures_from_parquet()` with summary report at end of processing.
+- **R6: Dead code removal** — Moved `generate_streamflow_dt_og()` to `archive/deprecated_generate_streamflow_dt_og.R` (contains the 99999 bug).
+- **R7: Missing docstring** — Added documentation for `fit_sinusoidal_model()` explaining the sinusoidal formula and phase-to-minimum-day conversion.
+- **P5: Hardcoded benchmark paths** — Made `STREAMFLOW_PATH`, `CLIMATE_PATH`, `METADATA_PATH` configurable via environment variables in `run_python_benchmark.py`.
+- **J4: Double Float64 conversion** — Removed redundant `copy()` in `flashiness.jl` (`Float64.(Q)` already creates a new array).
+
+**Bug fix (found during verification):**
+
+- **R 4.5.1 sprintf compatibility** — `sprintf("%d", as.numeric(id))` fails in R 4.5.1 when `as.numeric()` returns a double (stricter type checking than R 4.3). Affected both the Daymet ID matching loop and `find_metadata()`. Replaced with `paste0(strrep("0", num_zeros), id)` which is simpler and works for all ID types including non-numeric Canadian gage IDs.
+  - Locations: `R/helperFunctions.R` Daymet ID loop and `find_metadata()`
 
 ### Fixed
 
+#### Cross-Language Alignment Round 5 — Final 4 Columns (March 2026)
+
+**Python Eckhardt Filter NaN Forward-Fill (3 cols, BFI_Eckhardt trend stats)**:
+- **Issue**: BFI_Eckhardt trend stats (linear_slp, mk_pval, spearman_pval) had R-Py rho ~0.989-0.990; R-Jl = 1.000
+- **Root Cause**: Python's Eckhardt filter cascaded NaN (one NaN Q → all subsequent baseflow = NaN), while Julia forward-fills baseflow on NaN Q (no cascade). R also cascades, but R's `sum(Q, na.rm=TRUE)` denominator includes post-gap Q values, while Python's paired masking excluded them — creating a denominator mismatch. The previous Round 4 attempt to fix the denominator was wrong (made things worse). The correct fix is to eliminate the cascade.
+- **Fix**: Changed Python's `eckhardt_filter()` to forward-fill baseflow when Q is NaN (matching Julia). Also aligned initialization: `baseflow[0] = min(BFImax * Q[0], Q[0])` when Q[0] > 0, else 0.0 (matching Julia). With forward-fill, paired masking becomes equivalent to total valid Q since baseflow is never NaN where Q is valid.
+- **Location**: `python/streamflow_signatures/baseflow.py` lines 46-67
+
+**Recession Pointcloud Near-Singularity Check (4 cols, Python + Julia)**:
+- **Issue**: Recession pointcloud p-values had R-Py rho ~0.85-0.91. Previously deemed "irreducible library-level OLS differences."
+- **Root Cause**: R's `lm()` uses QR decomposition with rank checking — it rejects near-singular design matrices where `var(log(Q))` is near zero (low-flow plateaus). Python's `linregress()` (LAPACK SVD) and Julia's custom OLS handle these gracefully, returning extreme slopes instead of failing. For marginal gages (3-4 valid pointcloud years), R fails on 1-2 near-singular years → n < 3 → MK returns p=1.0, while Python/Julia succeed → real p-values.
+- **Fix**: Added `var(log_Q) < 1e-8` check before OLS fitting in both Python and Julia pointcloud analysis. When variance is below threshold, the year is skipped (remains NA), matching R's `lm()` + `tryCatch` behavior. Threshold tuned from initial 1e-10 to 1e-8 (closer to R's `.Machine$double.eps^0.5 ≈ 1.49e-8`). Improved Py-Jl agreement but could not fully replicate R's QR rank-checking — these 4 columns remain irreducible.
+- **Locations**: `python/streamflow_signatures/recession.py` line 388, `julia/src/recession.jl` line 409
+- **Note**: Only applied at pointcloud call site, NOT in `ols_slope_intercept()` itself (used by event fitting where the issue doesn't apply)
+
 #### Cross-Language Alignment Round 4 — Final Column Fixes (March 2026)
+
+**Constant-Series Mann-Kendall — Reverted (LOW — investigated, made things worse)**:
+- **Issue**: R's `Kendall::MannKendall()` returns tau=0, p=1 for constant series. Python scipy returns NaN; Julia returns NaN when var_S <= 0.
+- **Attempted Fix**: Added constant-series check returning (0.0, 1.0) in Python and Julia.
+- **Reverted**: Benchmarking showed this WORSENED correlations — added 5 new poor columns (n_low_pulses_all/year mk_rho, Q1/Q5/Q10 mk_rho). Root cause: Python/Julia produce constant series for some gages where R computes non-constant values (subtle differences in underlying signature calculations). Before the fix, NaN excluded these edge-case gages from correlation. After the fix, tau=0.0 conflicted with R's real tau values.
+- **Status**: Reverted to NaN behavior. The constant-series gages are excluded from Spearman correlation, which is the correct behavior when the underlying signature values differ.
 
 **Python BFI_Eckhardt Denominator — No Fix (3 cols, investigated)**:
 - **Issue**: BFI_Eckhardt trend stats (linear_slp, mk_pval, spearman_pval) had R-Py rho ~0.989-0.990; R-Jl = 1.000
@@ -30,8 +136,50 @@ All notable changes to the Streamflow Signatures project.
 - **Fix**: Changed `np.std(...)` to `np.std(..., ddof=1)` for both `qp_slope_sd` and bimodality calculations.
 - **Location**: `python/streamflow_signatures/qp_seasonality.py` lines 145, 157
 
+**Julia Flashiness NaN Interpolation (MEDIUM — 1 gage outlier, affects all flashiness cols)**:
+- **Issue**: Gage 02244440 had Julia flashiness ~26x higher than R/Python (0.496 vs 0.019). Systematic assessment found this was the only gage-level outlier in flashiness.
+- **Root Cause**: Julia removed NaN values and compacted the array before computing `diff()`, creating artificial jumps between non-adjacent days. R uses `approx()` (linear interpolation) and Python uses `np.interp` to fill NaN gaps, preserving temporal adjacency. Additionally, Julia was missing the `max_missing_frac > 0.2` check that R and Python apply.
+- **Fix**: Rewrote `calculate_flashiness()` to interpolate NaN values using linear interpolation (matching R's `approx()` and Python's `np.interp`). Added `na_frac > 0.2` guard in `analyze_flashiness_trends()` matching R/Python.
+- **Location**: `julia/src/flashiness.jl` lines 24-64, 95-107
+
+**FDC90th Config min_days — Partially Reverted (MEDIUM — investigated)**:
+- **Issue**: Python produced 42 extra NaN values for FDC90th where R had valid values. R uses hardcoded `min_days=30` while config had `min_days=250`.
+- **Attempted Fix**: Changed `config/signatures_config.json` `fdc.min_days` from 250 to 30.
+- **Partially Reverted**: Benchmarking showed changing min_days to 30 added FDC90th_mk_pval as a new poor column (R-Py rho 0.988). Years with only 30-249 days have very few data points in the 90th percentile exceedance range, making FDC90th slopes noisy. Config reverted to min_days=250.
+- **Kept**: Python negative Q filter (`q_values = q_values[q_values >= 0]`) before log10 — this is a genuine bugfix preventing `-inf` from `linregress`. Julia `fdc.jl` now uses `CFG_FDC_MIN_DAYS` instead of hardcoded 250 (both resolve to 250, but config-driven is cleaner).
+- **Locations**: `python/streamflow_signatures/fdc.py` line 79, `julia/src/fdc.jl` line 84
+
 **Recession Pointcloud P-Values — No Fix (4 cols, irreducible)**:
 - **Investigation**: Thorough comparison found NO algorithmic difference across all 3 languages. 286 of 975 gages have R producing mk_pval=1.000 (n < 3 valid pointcloud years) while Python/Julia compute real p-values (n=3-4). Caused by implementation-level differences in how R's `lm()` vs Python's `linregress()` vs Julia's OLS handle edge-case fits. These 4 columns will remain < 0.99.
+
+**Benchmark Re-Run Results (March 14, 2026 — Post-Round 5)**:
+- Re-ran Python benchmark (69 min, 7,369 gages) and Julia benchmark (9.6 min, 7,369 gages) after Round 5 fixes
+- Three-way comparison results:
+  - R-Python: 6 → **4** poor columns (3 BFI_Eckhardt resolved by forward-fill)
+  - R-Julia: 4 → **4** poor columns (unchanged — all recession pointcloud)
+  - Python-Julia: 3 → **0** poor columns (BFI_Eckhardt resolved → perfect pairwise alignment)
+  - BFI_Eckhardt: All 3 cols now rho >= 0.99 (was 0.914-0.979 — fully resolved)
+  - Recession pointcloud: 4 cols remain at rho ~0.84-0.91 (near-singularity guard improved Py-Jl but R divergence irreducible)
+- 505 of 551 columns have rho >= 0.999 across all 3 pairs (Perfect)
+- 42 additional columns >= 0.99 (Good)
+- Only 4 columns remain below 0.99 (all recession pointcloud p-values)
+- Median rho = 1.000 for all 3 pairs
+- Python-Julia: min rho = 0.9976 (was 0.9137) — **zero poor columns**
+- Benchmark outputs saved to `docs/benchmarks/`
+
+**Benchmark Re-Run Results (March 13, 2026 — Post-Round 4)**:
+- Re-ran Python benchmark (82 min, 7,369 gages) and Julia benchmark (14 min, 7,369 gages) after Round 4 fixes
+- Three-way comparison results:
+  - R-Python: 7 → **6** poor columns (qp_slope_sd resolved, BFI_Eckhardt_spearman_pval crossed 0.99)
+  - R-Julia: 5 → **4** poor columns (qp_slope_sd resolved)
+  - Python-Julia: 3 → **3** poor columns (unchanged — all BFI Eckhardt borderline)
+  - qp_slope_sd: ALL rho > 0.99 (was 0.990 — fully resolved by mid-point + ddof fix)
+  - BFI_Eckhardt: R-Py rho 0.989-0.990 (unchanged — denominator fix was reverted)
+- 499 of 551 columns have rho >= 0.999 across all 3 pairs (Perfect)
+- 45 additional columns >= 0.99 (Good)
+- Only 7 columns remain below 0.99 (4 recession pointcloud + 3 BFI Eckhardt)
+- Median rho = 1.000 for all 3 pairs
+- Benchmark outputs saved to `docs/benchmarks/`
 
 #### Cross-Language Alignment Round 3 — Recession, BFI, Stats Pre-Filtering (March 2026)
 

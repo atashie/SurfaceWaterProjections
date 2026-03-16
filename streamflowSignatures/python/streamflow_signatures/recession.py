@@ -277,7 +277,7 @@ def analyze_recession_parameters(
     if missing:
         raise ValueError(f"Missing required columns: {missing}")
 
-    df = streamflow_data.copy()
+    df = streamflow_data
 
     # Define signatures
     signatures_with_stats = ["log_a_pointcloud", "log_a_events", "b_pointcloud",
@@ -306,10 +306,8 @@ def analyze_recession_parameters(
     # Store all recession events with timing
     all_recession_events = []
 
-    # Process each year
-    for yr in years:
-        year_data = df[df["water_year"] == yr].copy()
-        year_data = year_data.sort_values("dowy")
+    # Process each year (df already sorted by water_year and dowy)
+    for yr, year_data in df.groupby("water_year", sort=False):
 
         Q = year_data["Q"].values
         dowy = year_data["dowy"].values
@@ -381,16 +379,23 @@ def analyze_recession_parameters(
             try:
                 all_Q = np.array(all_Q)
                 all_dQ_dt = np.array(all_dQ_dt)
+                log_Q = np.log(all_Q)
+                log_dQ_dt = np.log(all_dQ_dt)
 
-                result = scipy_stats.linregress(np.log(all_Q), np.log(all_dQ_dt))
-                b_pointcloud = result.slope
+                # Skip near-singular data (matching R's lm() QR rank check)
+                # R's tolerance is .Machine$double.eps^0.5 ≈ 1.49e-8
+                if np.var(log_Q) < 1e-8:
+                    pass  # Year remains NA
+                else:
+                    result = scipy_stats.linregress(log_Q, log_dQ_dt)
+                    b_pointcloud = result.slope
 
-                # Calculate log(a) using b_pointcloud
-                log_a_values_pc = np.log(all_dQ_dt) - b_pointcloud * np.log(all_Q)
-                log_a_pointcloud = np.median(log_a_values_pc)
+                    # Calculate log(a) using b_pointcloud
+                    log_a_values_pc = log_dQ_dt - b_pointcloud * log_Q
+                    log_a_pointcloud = np.median(log_a_values_pc)
 
-                annual_metrics.loc[annual_metrics["water_year"] == yr, "b_pointcloud"] = b_pointcloud
-                annual_metrics.loc[annual_metrics["water_year"] == yr, "log_a_pointcloud"] = log_a_pointcloud
+                    annual_metrics.loc[annual_metrics["water_year"] == yr, "b_pointcloud"] = b_pointcloud
+                    annual_metrics.loc[annual_metrics["water_year"] == yr, "log_a_pointcloud"] = log_a_pointcloud
             except Exception:
                 pass
 

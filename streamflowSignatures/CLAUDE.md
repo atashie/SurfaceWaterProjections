@@ -17,7 +17,7 @@ This project provides identical signature calculations in R (canonical), Python,
 |-----------|----------|--------|-------------|
 | `R/` | R | **Canonical** | Reference implementation - all changes start here |
 | `python/` | Python | Active | Port of R signatures |
-| `julia/` | Julia | Planned | Port of R signatures |
+| `julia/` | Julia | Active | Port of R signatures |
 
 **Change Workflow**: R is canonical. Changes are made in R first, then propagated to Python/Julia. Golden outputs from R validate other implementations.
 

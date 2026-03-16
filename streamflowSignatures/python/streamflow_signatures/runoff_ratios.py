@@ -57,7 +57,7 @@ def analyze_Q_PPT_relationships(
     if missing:
         raise ValueError(f"Missing required columns: {missing}")
 
-    df = streamflow_data.copy()
+    df = streamflow_data
 
     # Drop rows where either Q or PPT is NaN before summing
     # Matches R's aggregate(cbind(Q, PPT) ~ water_year, na.action=na.omit)

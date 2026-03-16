@@ -329,10 +329,10 @@ function main()
             rename!(metadata, :basin_area_km2 => :basin_area)
         end
 
-        # Select metadata columns to merge (matching R output structure)
+        # Select basic metadata columns to merge
         metadata_cols = [
             "gage_id", "latitude", "longitude", "basin_area",
-            "gage_type"
+            "gage_type", "area_normalized"
         ]
 
         # Only keep columns that exist in metadata
@@ -343,6 +343,44 @@ function main()
             results_df = leftjoin(results_df, metadata[:, Symbol.(available_meta_cols)], on=:gage_id)
         else
             println("  Warning: No metadata columns found to merge")
+        end
+
+        # Enrich with human interference metadata from GAGES-II
+        println("  Loading GAGES-II interference metadata...")
+        gages_ii = load_gages_ii_interference()
+        if nrow(gages_ii) > 0 && "STAID" in names(gages_ii)
+            gages_ii.STAID = string.(gages_ii.STAID)
+            interference_cols = [
+                "NDAMS_2009", "MAJ_DDENS_2009", "STOR_NID_2009",
+                "IMPNLCD06", "DEVNLCD06", "FRESHW_WITHDRAWAL",
+                "HYDRO_DISTURB_INDX", "CLASS",
+            ]
+            avail_int_cols = [c for c in interference_cols if c in names(gages_ii)]
+            gages_subset = select(gages_ii, vcat(["STAID"], avail_int_cols))
+            rename!(gages_subset, :STAID => :gage_id)
+            results_df = leftjoin(results_df, gages_subset, on=:gage_id)
+            n_matched = sum(.!ismissing.(results_df[!, Symbol(avail_int_cols[1])]))
+            println("  Matched $n_matched gages with GAGES-II data")
+
+            # Compute human_interference_class from CLASS
+            results_df[!, :human_interference_class] = map(results_df[!, :CLASS]) do cls
+                if ismissing(cls)
+                    "unknown"
+                elseif strip(string(cls)) == "Ref"
+                    "reference"
+                elseif strip(string(cls)) == "Non-ref"
+                    "non-reference"
+                else
+                    "unknown"
+                end
+            end
+
+            # Add empty RHBN/REGULATED columns (Canadian HYDAT not available from Julia)
+            results_df[!, :RHBN] = fill(missing, nrow(results_df))
+            results_df[!, :REGULATED] = fill(missing, nrow(results_df))
+            println("  Interference columns added: $(length(avail_int_cols) + 3)")
+        else
+            println("  Warning: GAGES-II data not available")
         end
     else
         println("  Warning: Metadata file not found: $METADATA_PATH")
@@ -355,7 +393,12 @@ function main()
     # Organize columns: gage_id first, then metadata, then signatures, then flags
     metadata_order = [
         "gage_id", "latitude", "longitude", "basin_area",
-        "gage_type", "num_water_years", "start_water_year", "end_water_year"
+        "gage_type", "num_water_years", "start_water_year", "end_water_year",
+        "area_normalized",
+        "NDAMS_2009", "MAJ_DDENS_2009", "STOR_NID_2009",
+        "IMPNLCD06", "DEVNLCD06", "FRESHW_WITHDRAWAL",
+        "HYDRO_DISTURB_INDX", "CLASS", "RHBN", "REGULATED",
+        "human_interference_class",
     ]
     flag_cols = [c for c in names(results_df) if startswith(c, "flagged_")]
     signature_cols = [c for c in names(results_df)

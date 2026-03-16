@@ -61,7 +61,7 @@ def calculate_average_storage(
     if missing:
         raise ValueError(f"Missing required columns: {missing}")
 
-    df = streamflow_data.copy()
+    df = streamflow_data
     years = df["water_year"].unique()
 
     # Return NAs if insufficient years
@@ -71,8 +71,8 @@ def calculate_average_storage(
     # Calculate storage for each year
     annual_storage = []
 
-    for yr in years:
-        year_data = df[df["water_year"] == yr].copy()
+    for yr, year_data in df.groupby("water_year", sort=False):
+        year_data = year_data.copy()  # needed because we mutate below (fillna)
 
         if len(year_data) < min_days_per_year:
             continue

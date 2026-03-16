@@ -47,18 +47,22 @@ function load_gages_ii_interference(gages_dir::String=CFG_GAGES_II_DIR)
         return DataFrame()
     end
 
-    # CONUS files
+    # CONUS files (matching R's config.R)
     conus_files = Dict(
-        "dams" => "conterm_hydromod_dams.txt",
-        "class" => "conterm_bas_classif.txt",
-        "landuse" => "conterm_bas_morph.txt"
+        "hydromod_dams" => "conterm_hydromod_dams.txt",
+        "pop_infrastr" => "conterm_pop_infrastr.txt",
+        "hydromod_other" => "conterm_hydromod_other.txt",
+        "bas_classif" => "conterm_bas_classif.txt",
+        "lc06_basin" => "conterm_lc06_basin.txt",
     )
 
     # AKHIPR files (Alaska, Hawaii, Puerto Rico)
     akhipr_files = Dict(
-        "dams" => "akhipr_hydromod_dams.txt",
-        "class" => "akhipr_bas_classif.txt",
-        "landuse" => "akhipr_bas_morph.txt"
+        "hydromod_dams" => "AKHIPR_hydromod_dams.txt",
+        "pop_infrastr" => "AKHIPR_pop_infrastr.txt",
+        "hydromod_other" => "AKHIPR_hydromod_other.txt",
+        "bas_classif" => "AKHIPR_bas_classif.txt",
+        # Note: AKHIPR does not have lc06_basin file
     )
 
     combined_data = DataFrame()
@@ -110,7 +114,8 @@ function load_gages_ii_region(gages_dir::String, files::Dict)
         end
 
         try
-            df = CSV.read(filepath, DataFrame; delim='\t', missingstring=["-999", "NA", ""])
+            df = CSV.read(filepath, DataFrame; missingstring=["-999", "NA", ""],
+                          types=Dict("STAID" => String))
 
             # Ensure STAID is string
             if "STAID" in names(df)

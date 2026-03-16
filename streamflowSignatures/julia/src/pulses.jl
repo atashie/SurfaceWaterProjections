@@ -255,7 +255,23 @@ function calculate_pulse_metrics(df::DataFrame; min_days::Int=250)
     q10_all = quantile(Q_all_valid, 0.10)
 
     years = unique(df.water_year)
-    annual_data = DataFrame()
+    annual_data = DataFrame(
+        water_year = years,
+        n_high_pulses_year = fill(NaN, length(years)),
+        n_low_pulses_year = fill(NaN, length(years)),
+        dur_high_pulses_year = fill(NaN, length(years)),
+        dur_low_pulses_year = fill(NaN, length(years)),
+        n_high_pulses_all = fill(NaN, length(years)),
+        n_low_pulses_all = fill(NaN, length(years)),
+        dur_high_pulses_all = fill(NaN, length(years)),
+        dur_low_pulses_all = fill(NaN, length(years)),
+        TQmean = fill(NaN, length(years)),
+        Flow_Reversals_annual = fill(NaN, length(years)),
+        Flow_Reversals_winter = fill(NaN, length(years)),
+        Flow_Reversals_spring = fill(NaN, length(years)),
+        Flow_Reversals_summer = fill(NaN, length(years)),
+        Flow_Reversals_fall = fill(NaN, length(years))
+    )
 
     for yr in years
         year_mask = df.water_year .== yr
@@ -282,44 +298,41 @@ function calculate_pulse_metrics(df::DataFrame; min_days::Int=250)
         high_threshold = quantile(Q_valid, 0.90)
         low_threshold = quantile(Q_valid, 0.10)
 
-        row = Dict{String, Any}("water_year" => yr)
+        yr_idx = findfirst(annual_data.water_year .== yr)
+        yr_idx === nothing && continue
 
         # High and low pulses using year-specific thresholds
         n_high, dur_high = count_pulses(Q_year, high_threshold, true)
         n_low, dur_low = count_pulses(Q_year, low_threshold, false)
 
-        row["n_high_pulses_year"] = n_high
-        row["n_low_pulses_year"] = n_low
-        row["dur_high_pulses_year"] = dur_high
-        row["dur_low_pulses_year"] = dur_low
+        annual_data[yr_idx, :n_high_pulses_year] = n_high
+        annual_data[yr_idx, :n_low_pulses_year] = n_low
+        annual_data[yr_idx, :dur_high_pulses_year] = dur_high
+        annual_data[yr_idx, :dur_low_pulses_year] = dur_low
 
         # High and low pulses using period-of-record thresholds (*_all metrics)
         n_high_all, dur_high_all = count_pulses(Q_year, q90_all, true)
         n_low_all, dur_low_all = count_pulses(Q_year, q10_all, false)
 
-        row["n_high_pulses_all"] = n_high_all
-        row["n_low_pulses_all"] = n_low_all
-        row["dur_high_pulses_all"] = dur_high_all
-        row["dur_low_pulses_all"] = dur_low_all
+        annual_data[yr_idx, :n_high_pulses_all] = n_high_all
+        annual_data[yr_idx, :n_low_pulses_all] = n_low_all
+        annual_data[yr_idx, :dur_high_pulses_all] = dur_high_all
+        annual_data[yr_idx, :dur_low_pulses_all] = dur_low_all
 
         # TQmean
-        row["TQmean"] = calculate_tqmean(Q_year)
+        annual_data[yr_idx, :TQmean] = calculate_tqmean(Q_year)
 
         # Flow reversals - annual
-        row["Flow_Reversals_annual"] = count_flow_reversals(Q_year)
+        annual_data[yr_idx, :Flow_Reversals_annual] = count_flow_reversals(Q_year)
 
         # Seasonal reversals
         for (season, months) in SEASONS
             month_mask = [coalesce(m, 0) in months for m in year_df.month]
             if sum(month_mask) >= 30
                 season_Q = Q_year[month_mask]
-                row["Flow_Reversals_$season"] = count_flow_reversals(season_Q)
-            else
-                row["Flow_Reversals_$season"] = NaN
+                annual_data[yr_idx, Symbol("Flow_Reversals_$season")] = count_flow_reversals(season_Q)
             end
         end
-
-        push!(annual_data, row; cols=:union)
     end
 
     if nrow(annual_data) < 3

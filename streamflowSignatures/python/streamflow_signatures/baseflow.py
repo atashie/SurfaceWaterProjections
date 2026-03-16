@@ -45,21 +45,26 @@ def eckhardt_filter(Q: np.ndarray, BFImax: float = ECKHARDT_BFIMAX, a: float = E
     """
     n = len(Q)
     baseflow = np.zeros(n)
-    baseflow[0] = Q[0] * BFImax if not np.isnan(Q[0]) else np.nan
+
+    # Initialize (matching Julia: min(BFImax * Q[1], Q[1]) if valid and > 0, else 0)
+    if not np.isnan(Q[0]) and Q[0] > 0:
+        baseflow[0] = min(BFImax * Q[0], Q[0])
+    else:
+        baseflow[0] = 0.0
 
     for i in range(1, n):
-        if np.isnan(Q[i]) or np.isnan(Q[i-1]) or np.isnan(baseflow[i-1]):
-            baseflow[i] = np.nan
-        else:
-            # Eckhardt filter equation
-            numerator = (1 - BFImax) * a * baseflow[i-1] + (1 - a) * BFImax * Q[i]
-            denominator = 1 - a * BFImax
-            baseflow[i] = numerator / denominator
-
-            # Baseflow cannot exceed total flow
-            baseflow[i] = min(baseflow[i], Q[i])
-            # Baseflow cannot be negative
-            baseflow[i] = max(baseflow[i], 0)
+        if np.isnan(Q[i]):
+            # Forward-fill baseflow on NaN Q (matching Julia — no cascade)
+            baseflow[i] = baseflow[i - 1]
+            continue
+        # Normal computation — baseflow[i-1] is always valid due to forward-fill
+        numerator = (1 - BFImax) * a * baseflow[i - 1] + (1 - a) * BFImax * Q[i]
+        denominator = 1 - a * BFImax
+        baseflow[i] = numerator / denominator
+        # Baseflow cannot exceed total flow
+        baseflow[i] = min(baseflow[i], Q[i])
+        # Baseflow cannot be negative
+        baseflow[i] = max(baseflow[i], 0)
 
     return baseflow
 
@@ -168,9 +173,9 @@ def analyze_baseflow_indices(
     if missing:
         raise ValueError(f"Missing required columns: {missing}")
 
-    df = streamflow_data.copy()
+    df = streamflow_data
 
-    # Get unique years
+    # Get unique years for pre-allocating results
     years = df["water_year"].unique()
 
     # Initialize results DataFrame
@@ -181,8 +186,8 @@ def analyze_baseflow_indices(
     })
 
     # Process each year
-    for yr in years:
-        year_data = df[df["water_year"] == yr].copy()
+    for yr, year_data in df.groupby("water_year", sort=False):
+        year_data = year_data.copy()  # needed because we mutate below (sort_values)
 
         # Skip years with insufficient data
         if len(year_data) < min_days:

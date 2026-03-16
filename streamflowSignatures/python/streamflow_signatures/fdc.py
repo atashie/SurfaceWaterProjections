@@ -53,31 +53,27 @@ def analyze_fdc_trends(
     if missing:
         raise ValueError(f"Missing required columns: {missing}")
 
-    df = streamflow_data.copy()
+    df = streamflow_data
 
-    # Get unique years
-    years = df["water_year"].unique()
-
-    # Initialize results DataFrame
-    fdc_by_year = pd.DataFrame({
-        "water_year": years,
-        "slp_all": np.nan,
-        "slp_90th": np.nan,
-        "slp_mid": np.nan,
-    })
+    # Collect results as list of dicts (P13: avoid pre-allocation + boolean .loc)
+    results_list = []
 
     # Calculate FDC slopes for each year
-    for yr in years:
-        year_data = df[df["water_year"] == yr]
+    for yr, year_data in df.groupby("water_year", sort=False):
+
+        row = {"water_year": yr, "slp_all": np.nan, "slp_90th": np.nan, "slp_mid": np.nan}
 
         # Check minimum data requirement
         if len(year_data) < min_days:
+            results_list.append(row)
             continue
 
-        # Remove NA values from Q
+        # Remove NA and negative values from Q
         q_values = year_data["Q"].dropna().values
+        q_values = q_values[q_values >= 0]
 
         if len(q_values) < min_days:
+            results_list.append(row)
             continue
 
         # Sort flows in descending order
@@ -94,7 +90,7 @@ def analyze_fdc_trends(
         if n >= 10:
             try:
                 result = scipy_stats.linregress(exceedance, log_flow)
-                fdc_by_year.loc[fdc_by_year["water_year"] == yr, "slp_all"] = result.slope
+                row["slp_all"] = result.slope
             except Exception:
                 pass
 
@@ -106,7 +102,7 @@ def analyze_fdc_trends(
                         exceedance[low_flow_mask],
                         log_flow[low_flow_mask]
                     )
-                    fdc_by_year.loc[fdc_by_year["water_year"] == yr, "slp_90th"] = result.slope
+                    row["slp_90th"] = result.slope
                 except Exception:
                     pass
 
@@ -118,9 +114,13 @@ def analyze_fdc_trends(
                         exceedance[mid_flow_mask],
                         log_flow[mid_flow_mask]
                     )
-                    fdc_by_year.loc[fdc_by_year["water_year"] == yr, "slp_mid"] = result.slope
+                    row["slp_mid"] = result.slope
                 except Exception:
                     pass
+
+        results_list.append(row)
+
+    fdc_by_year = pd.DataFrame(results_list)
 
     # Generate statistics
     result = generate_stats(

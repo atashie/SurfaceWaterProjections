@@ -22,23 +22,44 @@ Float64
     Flashiness index (0 = constant flow, higher = more variable)
 """
 function calculate_flashiness(Q::AbstractVector{<:Real})
-    # Remove NaN values but keep track of indices for adjacency
     valid_mask = .!isnan.(Q)
-    if sum(valid_mask) < 2
+    n_valid = sum(valid_mask)
+    if n_valid < 2
         return NaN
     end
 
-    # Get valid values
-    Q_valid = Q[valid_mask]
-    total_Q = sum(Q_valid)
+    # Interpolate NaN values (matching R's approx() and Python's np.interp)
+    # to preserve temporal adjacency — removing NaNs and compacting
+    # creates artificial jumps between non-adjacent days
+    Q_interp = Float64.(Q)  # Already creates a new array; no copy needed
+    if n_valid < length(Q)
+        valid_indices = findall(valid_mask)
+        valid_values = Q_interp[valid_indices]
+        for i in 1:length(Q_interp)
+            if isnan(Q_interp[i])
+                # Find surrounding valid indices for linear interpolation
+                left = findlast(j -> j < i, valid_indices)
+                right = findfirst(j -> j > i, valid_indices)
+                if left === nothing && right !== nothing
+                    Q_interp[i] = valid_values[right]  # extrapolate from nearest
+                elseif right === nothing && left !== nothing
+                    Q_interp[i] = valid_values[left]    # extrapolate from nearest
+                elseif left !== nothing && right !== nothing
+                    # Linear interpolation
+                    li, ri = valid_indices[left], valid_indices[right]
+                    frac = (i - li) / (ri - li)
+                    Q_interp[i] = valid_values[left] + frac * (valid_values[right] - valid_values[left])
+                end
+            end
+        end
+    end
 
+    total_Q = sum(Q_interp)
     if total_Q <= 0
         return NaN
     end
 
-    # Sum of absolute day-to-day changes
-    sum_changes = sum(abs.(diff(Q_valid)))
-
+    sum_changes = sum(abs.(diff(Q_interp)))
     return sum_changes / total_Q
 end
 
@@ -95,6 +116,12 @@ function analyze_flashiness_trends(df::DataFrame; min_days::Int=250)
         # Check minimum non-NA data requirement
         n_valid = sum(.!isnan.(year_Q_sorted))
         if n_valid < min_days
+            continue
+        end
+
+        # Skip if too many missing values (>20%), matching R/Python
+        na_frac = 1.0 - n_valid / length(year_Q_sorted)
+        if na_frac > 0.2
             continue
         end
 

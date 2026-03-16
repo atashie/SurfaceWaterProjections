@@ -63,7 +63,8 @@ streamflowSignatures/
 │       ├── visualize_qa_qc.R    # QA/QC visualization plots
 │       ├── test_climate_functions.R # Climate function tests
 │       ├── test_climate_signatures.R
-│       └── generate_golden_outputs.R
+│       ├── generate_golden_outputs.R
+│       └── verify_no_regression.R  # Golden output regression check
 │
 ├── python/                      # Python package (production-ready)
 │   ├── README.md
@@ -80,10 +81,13 @@ streamflowSignatures/
 ├── config/                      # Cross-language configuration
 │   └── signatures_config.json
 │
-├── golden-outputs/              # R reference outputs for validation
+├── golden-outputs/              # R reference outputs for validation (Feb 2026, pre-Round 6)
 │   ├── README.md
 │   ├── streamflow_signatures_full_10feb2026.csv
 │   └── combined_watershed_metadata_09feb2026.csv
+│   # Note: Golden outputs pre-date Round 6 code quality changes.
+│   # Round 6 produced identical correlations, so these remain valid.
+│   # Refresh after next methodology change.
 │
 ├── docs/                        # Extended documentation
 │   ├── DEVELOPMENT.md           # This file
@@ -91,6 +95,7 @@ streamflowSignatures/
 │   ├── SIGNATURE_GUIDELINES.md  # Collaborative guidelines (auto-synced)
 │   ├── WORKFLOW_REVIEW.md       # Workflow review
 │   ├── CROSS_LANGUAGE_STATUS.md # Cross-language alignment detail
+│   ├── CODE_REVIEW.md          # Cross-language code review findings
 │   ├── benchmarks/              # Benchmark runners and results
 │   │   ├── run_python_benchmark.py
 │   │   ├── run_julia_benchmark.jl
@@ -253,20 +258,35 @@ testthat::test_dir("R/tests/")
 
 Python and Julia implementations are validated against R using Spearman rank correlations across 5,707 common gages and 551 signature columns.
 
-### Current Status (March 2026, Post-Round 4)
+### Current Status (March 2026, Post-Round 6)
 
 | Metric | Julia | Python | R |
 |--------|-------|--------|---|
-| Total Time | 11.6 min | 129 min | ~1-2 hours |
-| Processing Rate | 10.6/s | 0.95/s | ~1/s |
+| Total Time | 9.8 min | 133 min* | ~5h 13m* |
+| Processing Rate | 12.6/s | 0.92/s* | ~0.3/s* |
 
-| Pair | Mean rho | Median rho | Cols < 0.99 |
-|------|----------|------------|-------------|
-| R vs Python | 0.9987 | 1.0000 | 7 |
-| R vs Julia | 0.9987 | 1.0000 | 5 |
-| Python vs Julia | 0.9998 | 1.0000 | 3 |
+*R and Python ran concurrently (March 15, 2026) — timings are inflated by I/O contention. Previous solo runs: Python 69 min, R ~1-2 hours. Julia ran before contention and is comparable to previous 9.6 min.
 
-543 of 551 columns (98.5%) have rho >= 0.99 across all 3 pairs. Both Python and Julia are production-ready.
+| Pair | Mean rho | Median rho | Min rho | Cols < 0.99 |
+|------|----------|------------|---------|-------------|
+| R vs Python | 0.9988 | 1.0000 | 0.8498 | 4 |
+| R vs Julia | 0.9988 | 1.0000 | 0.8355 | 4 |
+| Python vs Julia | 0.9999 | 1.0000 | 0.9976 | 0 |
+
+505 perfect (>=0.999), 42 good (0.99-0.999), 4 poor (<0.99). 547 of 551 columns (99.3%) have rho >= 0.99 across all 3 pairs. All 3 languages are production-ready. BFI_Eckhardt fully aligned (R16 forward-fill confirmed).
+
+#### Alignment Progress
+
+| Pair | Round 0 (Cols < 0.99) | Round 2 | Round 3 | Round 4 | Round 5 | Round 6 | Improvement |
+|------|----------------------|---------|---------|---------|---------|---------|-------------|
+| R vs Python | 323 | 21 | 7 | 6 | **4** | **4** | 98.8% reduction |
+| R vs Julia | 321 | 49 | 5 | 4 | **4** | **4** | 98.8% reduction |
+| Python vs Julia | 73 | 30 | 3 | 3 | **0** | **0** | 100% reduction |
+
+#### Known Remaining Divergences (4 columns)
+
+- 4 recession pointcloud p-values: Irreducible OLS library differences (R's `lm()` QR rank-checking vs Python/Julia SVD)
+- Python and Julia agree perfectly on all 4 (Py-Jl rho >= 0.999)
 
 ### Running Benchmarks
 

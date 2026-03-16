@@ -54,7 +54,14 @@ function analyze_Q_PPT_relationships(df::DataFrame)
     end
 
     years = unique(df.water_year)
-    annual_data = DataFrame()
+    annual_data = DataFrame(
+        water_year = years,
+        annual_runoff_ratio = fill(NaN, length(years)),
+        winter_runoff_ratio = fill(NaN, length(years)),
+        spring_runoff_ratio = fill(NaN, length(years)),
+        summer_runoff_ratio = fill(NaN, length(years)),
+        fall_runoff_ratio = fill(NaN, length(years))
+    )
 
     for yr in years
         year_mask = coalesce.(df.water_year .== yr, false)
@@ -67,8 +74,10 @@ function analyze_Q_PPT_relationships(df::DataFrame)
         Q_clean = coalesce_q(year_df.Q)
         PPT_clean = coalesce_q(year_df.PPT)
 
+        yr_idx = findfirst(annual_data.water_year .== yr)
+        yr_idx === nothing && continue
+
         # No min_days check — include ALL years with any valid data (matching R/Python)
-        row = Dict{String, Any}("water_year" => yr)
 
         # Annual ratio - sum only days where BOTH Q and PPT are valid
         # Matches R's aggregate(cbind(Q, PPT), na.action=na.omit)
@@ -77,9 +86,7 @@ function analyze_Q_PPT_relationships(df::DataFrame)
         total_P = sum(valid_mask) > 0 ? sum(PPT_clean[valid_mask]) : 0.0
 
         if total_P >= CFG_RUNOFF_MIN_ANNUAL_PPT
-            row["annual_runoff_ratio"] = total_Q / total_P
-        else
-            row["annual_runoff_ratio"] = NaN
+            annual_data[yr_idx, :annual_runoff_ratio] = total_Q / total_P
         end
 
         # Seasonal ratios
@@ -94,13 +101,9 @@ function analyze_Q_PPT_relationships(df::DataFrame)
             P_season = sum(s_valid) > 0 ? sum(season_PPT[s_valid]) : 0.0
 
             if P_season >= CFG_RUNOFF_MIN_SEASONAL_PPT
-                row["$(season)_runoff_ratio"] = Q_season / P_season
-            else
-                row["$(season)_runoff_ratio"] = NaN
+                annual_data[yr_idx, Symbol("$(season)_runoff_ratio")] = Q_season / P_season
             end
         end
-
-        push!(annual_data, row; cols=:union)
     end
 
     # No early-return gate — let generate_stats() handle min_rows internally

@@ -249,12 +249,11 @@ def add_water_year_columns(df: pd.DataFrame, date_col: str = "date") -> pd.DataF
     df["water_year"] = df[date_col].dt.year
     df.loc[df["month"] >= 10, "water_year"] += 1
 
-    # Calculate day of water year
+    # Calculate day of water year (vectorized)
     # Water year starts Oct 1, so subtract Oct 1 of (water_year - 1)
-    def calc_dowy(row):
-        wy_start = pd.Timestamp(year=row["water_year"] - 1, month=10, day=1)
-        return (row[date_col] - wy_start).days + 1
-
-    df["dowy"] = df.apply(calc_dowy, axis=1)
+    wy_start = pd.to_datetime(
+        (df["water_year"] - 1).astype(str) + "-10-01"
+    )
+    df["dowy"] = (df[date_col] - wy_start).dt.days + 1
 
     return df

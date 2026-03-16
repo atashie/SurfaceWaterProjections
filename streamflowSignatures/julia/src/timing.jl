@@ -54,7 +54,22 @@ function analyze_flow_timing_trends(df::DataFrame; min_days::Int=300)
     end
 
     years = unique(df.water_year)
-    annual_data = DataFrame()
+    annual_data = DataFrame(
+        water_year = years,
+        D5_day = fill(NaN, length(years)),
+        D10_day = fill(NaN, length(years)),
+        D20_day = fill(NaN, length(years)),
+        D30_day = fill(NaN, length(years)),
+        D40_day = fill(NaN, length(years)),
+        D50_day = fill(NaN, length(years)),
+        D60_day = fill(NaN, length(years)),
+        D70_day = fill(NaN, length(years)),
+        D80_day = fill(NaN, length(years)),
+        D90_day = fill(NaN, length(years)),
+        D95_day = fill(NaN, length(years)),
+        D25_to_D75 = fill(NaN, length(years)),
+        Dmax = fill(NaN, length(years))
+    )
 
     for yr in years
         year_mask = coalesce.(df.water_year .== yr, false)
@@ -66,6 +81,9 @@ function analyze_flow_timing_trends(df::DataFrame; min_days::Int=300)
         if nrow(year_df) < min_days
             continue
         end
+
+        yr_idx = findfirst(annual_data.water_year .== yr)
+        yr_idx === nothing && continue
 
         # Sort by day of water year (handle Missing dowy)
         dowy_clean = [coalesce(d, 999) for d in year_df.dowy]
@@ -87,16 +105,12 @@ function analyze_flow_timing_trends(df::DataFrame; min_days::Int=300)
         # Normalize to percentage
         cum_pct = cum_Q ./ total_Q .* 100
 
-        row = Dict{String, Any}("water_year" => yr)
-
         # Find D-day for each percentile
         for p in d_percentiles
             # Find first day where cumulative flow >= p%
             idx = findfirst(cum_pct .>= p)
             if idx !== nothing
-                row["D$(p)_day"] = dowy_sorted[idx]
-            else
-                row["D$(p)_day"] = NaN
+                annual_data[yr_idx, Symbol("D$(p)_day")] = dowy_sorted[idx]
             end
         end
 
@@ -105,16 +119,12 @@ function analyze_flow_timing_trends(df::DataFrame; min_days::Int=300)
         idx_25 = findfirst(cum_pct .>= 25)
         idx_75 = findfirst(cum_pct .>= 75)
         if idx_25 !== nothing && idx_75 !== nothing
-            row["D25_to_D75"] = dowy_sorted[idx_75] - dowy_sorted[idx_25]
-        else
-            row["D25_to_D75"] = NaN
+            annual_data[yr_idx, :D25_to_D75] = dowy_sorted[idx_75] - dowy_sorted[idx_25]
         end
 
         # Day of maximum flow
         max_idx = argmax(Q_values)
-        row["Dmax"] = dowy_sorted[max_idx]
-
-        push!(annual_data, row; cols=:union)
+        annual_data[yr_idx, :Dmax] = dowy_sorted[max_idx]
     end
 
     if nrow(annual_data) < 3

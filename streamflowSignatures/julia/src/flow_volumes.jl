@@ -69,9 +69,32 @@ function calculate_flow_vols_by_year(df::DataFrame; min_days::Int=250)
     # Convert Q to Float64, handling missing values
     Q_clean = coalesce_q(df.Q)
 
-    # Group by water year
+    # Group by water year — pre-allocate DataFrame
     years = unique(df.water_year)
-    annual_data = DataFrame()
+    annual_data = DataFrame(
+        water_year = years,
+        Qann = fill(NaN, length(years)),
+        Qwin = fill(NaN, length(years)),
+        Qspr = fill(NaN, length(years)),
+        Qsum = fill(NaN, length(years)),
+        Qfal = fill(NaN, length(years)),
+        Q1 = fill(NaN, length(years)),
+        Q5 = fill(NaN, length(years)),
+        Q10 = fill(NaN, length(years)),
+        Q20 = fill(NaN, length(years)),
+        Q25 = fill(NaN, length(years)),
+        Q30 = fill(NaN, length(years)),
+        Q40 = fill(NaN, length(years)),
+        Q50 = fill(NaN, length(years)),
+        Q60 = fill(NaN, length(years)),
+        Q70 = fill(NaN, length(years)),
+        Q75 = fill(NaN, length(years)),
+        Q80 = fill(NaN, length(years)),
+        Q90 = fill(NaN, length(years)),
+        Q95 = fill(NaN, length(years)),
+        Q99 = fill(NaN, length(years)),
+        Q95_Q10 = fill(NaN, length(years))
+    )
 
     for yr in years
         year_mask = coalesce.(df.water_year .== yr, false)
@@ -87,13 +110,14 @@ function calculate_flow_vols_by_year(df::DataFrame; min_days::Int=250)
             continue
         end
 
-        row = Dict{String, Any}("water_year" => yr)
+        yr_idx = findfirst(annual_data.water_year .== yr)
+        yr_idx === nothing && continue
 
         # Get valid (non-NaN) Q values for this year
         Q_valid = filter(!isnan, year_Q)
 
         # Annual total (sum of daily mm/day values = mm)
-        row["Qann"] = sum(Q_valid)
+        annual_data[yr_idx, :Qann] = sum(Q_valid)
 
         # Seasonal totals
         for (season, season_months) in seasons
@@ -101,21 +125,17 @@ function calculate_flow_vols_by_year(df::DataFrame; min_days::Int=250)
             season_Q = year_Q[season_mask]
             season_valid = filter(!isnan, season_Q)
             if length(season_valid) > 0
-                row["Q$season"] = sum(season_valid)
-            else
-                row["Q$season"] = NaN
+                annual_data[yr_idx, Symbol("Q$season")] = sum(season_valid)
             end
         end
 
         # Percentiles (based on daily values)
         for p in percentiles
-            row["Q$p"] = quantile(Q_valid, p / 100)
+            annual_data[yr_idx, Symbol("Q$p")] = quantile(Q_valid, p / 100)
         end
 
         # Q95-Q10 difference
-        row["Q95_Q10"] = row["Q95"] - row["Q10"]
-
-        push!(annual_data, row; cols=:union)
+        annual_data[yr_idx, :Q95_Q10] = annual_data[yr_idx, :Q95] - annual_data[yr_idx, :Q10]
     end
 
     if nrow(annual_data) < 3
