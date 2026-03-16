@@ -236,6 +236,16 @@ def add_water_year_columns(df: pd.DataFrame, date_col: str = "date") -> pd.DataF
             - month: int, calendar month (1-12)
             - dowy: int, day of water year (1-366)
     """
+    # Auto-detect date column if specified name not found
+    if date_col not in df.columns:
+        variants = {c for c in df.columns if c.lower() == date_col.lower()}
+        if len(variants) == 1:
+            date_col = variants.pop()
+        else:
+            raise KeyError(
+                f"Date column '{date_col}' not found. Available columns: {list(df.columns)}"
+            )
+
     df = df.copy()
 
     # Ensure date column is datetime

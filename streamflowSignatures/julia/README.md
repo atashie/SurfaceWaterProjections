@@ -23,11 +23,11 @@ using DataFrames
 # Load your streamflow data
 df = read_parquet("path/to/streamflow.parquet")
 
-# Add water year columns if not present
-df = add_water_year_columns(df; date_col="date")
+# Add water year columns if not present (auto-detects "Date" or "date" column)
+df = add_water_year_columns(df)
 
 # Calculate signatures for a single gage
-gage_data = df[df.gage_id .== "01234567", :]
+gage_data = df[df.gage_id .== "01011000", :]
 
 # Calculate flow volume signatures (22 metrics x 8 statistics)
 flow_vols = calculate_flow_vols_by_year(gage_data)

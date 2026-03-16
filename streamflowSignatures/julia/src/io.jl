@@ -8,6 +8,7 @@ using Arrow
 using CSV
 using DataFrames
 using Dates
+using Parquet2
 
 # Required columns for streamflow data
 const REQUIRED_COLS = ["gage_id", "date", "Q"]
@@ -23,7 +24,7 @@ function read_parquet(path::String)
     if !isfile(path)
         error("File not found: $path")
     end
-    return DataFrame(Arrow.Table(path))
+    return DataFrame(Parquet2.Dataset(path))
 end
 
 
@@ -100,8 +101,14 @@ DataFrame
 function add_water_year_columns(df::DataFrame; date_col::String="date")
     result = copy(df)
 
+    # Auto-detect date column if specified name not found
     if !(date_col in names(result))
-        error("Date column '$date_col' not found")
+        variants = filter(c -> lowercase(c) == lowercase(date_col), names(result))
+        if length(variants) == 1
+            date_col = variants[1]
+        else
+            error("Date column '$date_col' not found. Available columns: $(names(result))")
+        end
     end
 
     dates = result[!, date_col]

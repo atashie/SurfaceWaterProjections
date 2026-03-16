@@ -10,7 +10,7 @@ A framework for extracting hydrological signatures from daily streamflow data, w
 
 **Secondary:**
 3. **Visualization** — Interactive Shiny dashboard for exploring signatures, trends, and cross-signature relationships across thousands of gages.
-4. **Cross-Language Implementations** — Python and Julia ports produce near-identical results to the R canonical implementation (98.5% of columns have Spearman rho >= 0.99). Goal: publishable packages/libraries for community use.
+4. **Cross-Language Implementations** — Python and Julia ports produce near-identical results to the R canonical implementation (99.3% of columns have Spearman rho >= 0.99). Goal: publishable packages/libraries for community use.
 
 ## Features
 
@@ -24,8 +24,8 @@ A framework for extracting hydrological signatures from daily streamflow data, w
 
 ### Prerequisites
 
+**R** (canonical):
 ```r
-# Install required packages
 install.packages(c(
   "data.table", "arrow", "lubridate",
   "dataRetrieval", "tidyhydat",
@@ -36,7 +36,20 @@ install.packages(c(
 install.packages(c("shiny", "leaflet", "plotly", "aws.s3"))
 ```
 
-### Extract Signatures from Parquet
+**Python** (3.9+):
+```bash
+cd python/
+pip install -e .
+# Or: pip install numpy pandas pyarrow scipy
+```
+
+**Julia** (1.9+):
+```julia
+cd("julia/")
+using Pkg; Pkg.activate("."); Pkg.instantiate()
+```
+
+### R: Extract Signatures from Parquet
 
 ```r
 # Source config and helper functions
@@ -54,7 +67,68 @@ summary_output <- process_signatures_from_parquet(
 )
 ```
 
-### Process Caravan Data
+**Note:** Examples use `"path/to/streamflow.parquet"` as a placeholder. Your parquet needs columns `gage_id`, `Date` (or `date`), and `Q` (mm/day). To list available gages: `df["gage_id"].unique()` (Python) or `unique(df.gage_id)` (Julia). See `docs/DEVELOPMENT.md` → "Parquet Data Files" for data locations.
+
+### Python: Extract Signatures
+
+```python
+import pandas as pd
+from streamflow_signatures import (
+    add_water_year_columns,
+    calculate_flow_vols_by_year,
+    analyze_flashiness_trends,
+    analyze_flow_timing_trends,
+    analyze_fdc_trends,
+    analyze_baseflow_indices,
+    analyze_recession_parameters,
+    calculate_pulse_metrics,
+    # Climate-dependent (require PPT column):
+    # analyze_Q_PPT_relationships, calculate_streamflow_elasticity,
+    # calculate_qp_seasonality, calculate_average_storage,
+)
+
+df = pd.read_parquet("path/to/streamflow.parquet")
+df = add_water_year_columns(df)  # auto-detects "Date" or "date" column
+gage_data = df[df["gage_id"] == "01011000"]
+
+# Calculate signatures (each returns a dict of metric: value)
+all_signatures = {
+    **calculate_flow_vols_by_year(gage_data),
+    **analyze_flashiness_trends(gage_data),
+    **analyze_flow_timing_trends(gage_data),
+    **analyze_fdc_trends(gage_data),
+    **analyze_baseflow_indices(gage_data),
+    **analyze_recession_parameters(gage_data),
+    **calculate_pulse_metrics(gage_data),
+}
+```
+
+See [`python/README.md`](python/README.md) for full API details, input format, and climate-dependent signatures.
+
+### Julia: Extract Signatures
+
+```julia
+using StreamflowSignatures, DataFrames
+
+df = read_parquet("path/to/streamflow.parquet")
+df = add_water_year_columns(df)  # auto-detects "Date" or "date" column
+gage_data = df[df.gage_id .== "01011000", :]
+
+# Calculate signatures (each returns a Dict{String, Float64})
+all_signatures = merge(
+    calculate_flow_vols_by_year(gage_data),
+    analyze_flashiness_trends(gage_data),
+    analyze_flow_timing_trends(gage_data),
+    analyze_fdc_trends(gage_data),
+    analyze_baseflow_indices(gage_data),
+    analyze_recession_parameters(gage_data),
+    calculate_pulse_metrics(gage_data),
+)
+```
+
+See [`julia/README.md`](julia/README.md) for full API details, input format, and climate-dependent signatures.
+
+### R: Process Caravan Data
 
 ```r
 source("config.R")
@@ -90,6 +164,20 @@ process_caravan_to_annual(
 Each signature includes 8 statistics: `_senn_slp` (Theil-Sen trend), `_linear_slp` (linear trend), `_spearman_rho` (correlation), `_spearman_pval` (significance), `_mk_rho` (Mann-Kendall tau), `_mk_pval` (Mann-Kendall significance), `_mean`, `_median`.
 
 **Note:** Climate-dependent signatures require Daymet climate data to be integrated.
+
+## Cross-Language Alignment
+
+R is the canonical implementation. Python and Julia are validated ports producing near-identical results:
+
+| Metric | R | Python | Julia |
+|--------|---|--------|-------|
+| Approx. processing time (7,369 gages) | ~1-2 hrs | ~70 min | ~10 min |
+| Columns with rho >= 0.99 vs R | -- | 547/551 (99.3%) | 547/551 (99.3%) |
+| Python-Julia agreement | -- | -- | 551/551 (100%) |
+
+All three languages share configuration via `config/signatures_config.json`. The 4 remaining columns below 0.99 are recession pointcloud p-values caused by irreducible OLS library differences.
+
+See [`docs/CROSS_LANGUAGE_STATUS.md`](docs/CROSS_LANGUAGE_STATUS.md) for full alignment history and methodology.
 
 ## Output Format
 
@@ -141,7 +229,7 @@ streamflowSignatures/
 ├── run_caravan_processing.R       # Caravan processing
 ├── python/                        # Python implementation
 ├── julia/                         # Julia implementation
-├── config/                        # Cross-language config
+├── config/signatures_config.json  # Shared cross-language config (thresholds, parameters)
 ├── golden-outputs/                # R reference outputs for validation
 ├── docs/                          # Extended documentation & benchmarks
 ├── streamflowAndClimateVisualizationApp/  # Shiny dashboard
