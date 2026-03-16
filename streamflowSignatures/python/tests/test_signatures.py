@@ -108,7 +108,7 @@ class TestStats:
         x = np.arange(20)
         y = 2 * x + 1 + np.random.normal(0, 0.5, 20)
 
-        slope, intercept = theil_sen_slope(x, y)
+        slope = theil_sen_slope(x, y)
 
         assert slope > 1.5, f"Expected slope ~2, got {slope}"
         assert slope < 2.5, f"Expected slope ~2, got {slope}"
@@ -119,7 +119,7 @@ class TestStats:
         x = np.arange(20)
         y = 5.0 + np.random.normal(0, 0.1, 20)
 
-        slope, intercept = theil_sen_slope(x, y)
+        slope = theil_sen_slope(x, y)
 
         assert abs(slope) < 0.1, f"Expected slope ~0, got {slope}"
 

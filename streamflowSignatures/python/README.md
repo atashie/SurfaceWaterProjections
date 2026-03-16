@@ -8,6 +8,10 @@ Python implementation of hydrological signature extraction from daily streamflow
 # From the python/ directory
 pip install -e .
 
+# If pip is not on your PATH:
+python -m pip install -e .
+# On Windows, you may need: py -m pip install -e .
+
 # Or install dependencies directly
 pip install numpy pandas pyarrow scipy
 ```
@@ -18,47 +22,76 @@ pip install numpy pandas pyarrow scipy
 from streamflow_signatures import (
     read_parquet, add_water_year_columns,
     filter_qualifying_years, calculate_all_signatures,
+    write_signatures,
 )
 
-# Load data (auto-normalizes columns: Date->date, site_id->gage_id, prcp->PPT)
-df = read_parquet("path/to/streamflow.parquet")
+# Load data for specific gages
+df = read_parquet("path/to/streamflow.parquet", gage_ids=["01011000", "01030500"])
 df = add_water_year_columns(df)
 
 # Optional: merge climate data for climate-dependent signatures
-climate = read_parquet("path/to/daymet.parquet")
+climate = read_parquet("path/to/daymet.parquet", gage_ids=["01011000", "01030500"])
 climate = add_water_year_columns(climate)
 df = df.merge(climate[["gage_id", "date", "PPT"]], on=["gage_id", "date"], how="left")
 
 # Process a single gage
 gage_data = df[df["gage_id"] == "01011000"]
 
-# Filter to qualifying water years (3-stage filter matching R)
+# Filter to qualifying water years (3-stage filter matching R):
+#   1. Min 30 days with Q > 0.0001 mm/day
+#   2. Min 95% non-NA days per water year
+#   3. Min 20 qualifying water years total
+# Returns: (list of qualifying water year ints, bool whether gage qualifies)
 qual_years, qualifies = filter_qualifying_years(gage_data)
 if qualifies:
     gage_data = gage_data[gage_data["water_year"].isin(qual_years)]
     results = calculate_all_signatures(gage_data, has_climate="PPT" in gage_data.columns)
-    # results is a dict: {"Qann_mean": 450.2, "Qann_senn_slp": -0.3, ...}
+    # results is a dict with ~551 keys (with climate) or ~478 keys (without climate)
+    # e.g. {"Qann_mean": 573.7, "Qann_senn_slp": -0.3, ...}
+
+# Save results to CSV
+write_signatures({"01011000": results}, "output.csv")
 ```
+
+> **Note**: The `gage_ids` parameter in `read_parquet()` filters after loading. For very large parquet files, loading may take significant memory (~5 GB for the full 111M-row production file).
 
 ## Data Setup
 
-Production data paths (edit in scripts or set environment variables):
+Production data paths (edit at the top of scripts):
 
 | File | Default Path |
 |------|-------------|
 | Streamflow | `D:\processedOuts_feb2026\combined_streamflow_data_09feb2026.parquet` |
 | Climate (Daymet) | `D:\processedOuts_feb2026\daymet_1980_2023.parquet` |
-| Metadata | `D:\processedOuts_feb2026\combined_watershed_metadata_09feb2026.parquet` |
+| Metadata | `D:\processedOuts_feb2026\combined_watershed_metadata_09feb2026.csv` |
+
+These paths are specific to the development machine. Adjust for your data location.
 
 ## Smoke Test
 
 ```bash
-# Edit paths in tests/smoke_test.py if needed, then:
 cd python
 python tests/smoke_test.py
+# On Windows: py tests/smoke_test.py
 ```
 
 Runs 10 hardcoded gages through the full pipeline with validation checks.
+Expected runtime: ~60-120 seconds. You should see `SMOKE TEST PASSED` if everything works.
+
+If your data files are in a different location, edit `STREAMFLOW_PATH` and
+`CLIMATE_PATH` at the top of `tests/smoke_test.py`.
+
+> **Note**: You may see `FutureWarning` messages from pandas about `DataFrameGroupBy.apply` — these are harmless and will be addressed in a future update.
+
+## Running Tests
+
+```bash
+cd python
+pip install -e ".[dev]"  # or: pip install pytest
+pytest tests/test_signatures.py -v
+```
+
+The `test_against_golden.py` tests require sample data files in `test-data/` (not included in the repo).
 
 ## Input Data Format
 
@@ -125,9 +158,9 @@ Each signature metric produces 8 statistics:
   - concavity (curvature of recession)
   - log_a_seasonality_* (sinusoidal seasonality of recession)
 
-- **Pulse Metrics** (`calculate_pulse_metrics`): 10 metrics
-  - n_high_pulses_year, n_low_pulses_year (pulse counts)
-  - dur_high_pulses_year, dur_low_pulses_year (pulse durations)
+- **Pulse Metrics** (`calculate_pulse_metrics`): 14 metrics
+  - n_high_pulses_year, n_high_pulses_all, n_low_pulses_year, n_low_pulses_all (pulse counts)
+  - dur_high_pulses_year, dur_high_pulses_all, dur_low_pulses_year, dur_low_pulses_all (pulse durations)
   - TQmean (percentage of days above mean)
   - Flow_Reversals_annual, _winter, _spring, _summer, _fall
 

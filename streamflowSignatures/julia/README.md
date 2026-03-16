@@ -9,6 +9,9 @@ Julia implementation of hydrological signature extraction from daily streamflow 
 using Pkg
 Pkg.activate(".")
 Pkg.instantiate()
+
+# If you see a warning about manifest resolution, run:
+Pkg.resolve()
 ```
 
 ## Quick Start
@@ -19,6 +22,11 @@ using DataFrames
 
 # Load data (auto-normalizes columns: Date->date, site_id->gage_id, prcp->PPT)
 df = read_parquet("path/to/streamflow.parquet")
+
+# Note: if your gage_id column loads as integers, convert to strings:
+# df.gage_id = string.(df.gage_id)
+# (The production parquet already stores gage_id as String)
+
 df = add_water_year_columns(df)
 
 # Optional: merge climate data for climate-dependent signatures
@@ -29,19 +37,24 @@ df = leftjoin(df, climate[:, [:gage_id, :date, :PPT]], on=[:gage_id, :date])
 # Process a single gage
 gage_data = df[df.gage_id .== "01011000", :]
 
-# Filter to qualifying water years (3-stage filter matching R)
+# Filter to qualifying water years (3-stage filter matching R):
+#   1. Min 30 days with Q > 0.0001 mm/day
+#   2. Min 95% non-NA days per water year
+#   3. Min 20 qualifying water years total
+# Returns: (Vector{Int} of qualifying year numbers, Bool whether gage qualifies)
 qual_years, qualifies = filter_qualifying_years(gage_data)
 if qualifies
     qual_set = Set(qual_years)
     gage_data = gage_data[in.(gage_data.water_year, Ref(qual_set)), :]
     results = calculate_all_signatures(gage_data, "PPT" in names(gage_data))
-    # results is a Dict: "Qann_mean" => 450.2, "Qann_senn_slp" => -0.3, ...
+    # results is a Dict with ~551 keys (with climate) or ~478 keys (without climate)
+    # e.g. "Qann_mean" => 573.7, "Qann_senn_slp" => -0.3, ...
 end
 ```
 
 ## Data Setup
 
-Production data paths (edit in scripts):
+Production data paths (edit at the top of scripts). Paths shown are Windows; use forward slashes on Linux/macOS.
 
 | File | Default Path |
 |------|-------------|
@@ -49,15 +62,21 @@ Production data paths (edit in scripts):
 | Climate (Daymet) | `D:\processedOuts_feb2026\daymet_1980_2023.parquet` |
 | Metadata | `D:\processedOuts_feb2026\combined_watershed_metadata_09feb2026.csv` |
 
+These paths are specific to the development machine. Adjust for your data location.
+
 ## Smoke Test
 
 ```bash
-# Edit paths in test/smoke_test.jl if needed, then:
 cd julia
 julia --project=. test/smoke_test.jl
 ```
 
 Runs 10 hardcoded gages through the full pipeline with validation checks.
+Expected runtime: ~60-120 seconds (includes JIT compilation and parquet I/O on first run).
+You should see `STATUS: SMOKE TEST PASSED` if everything works.
+
+If your data files are in a different location, edit `STREAMFLOW_PATH` and
+`CLIMATE_PATH` at the top of `test/smoke_test.jl`.
 
 ## Input Data Format
 
@@ -124,9 +143,9 @@ Each signature metric produces 8 statistics:
   - concavity (curvature of recession)
   - log_a_seasonality_* (sinusoidal seasonality of recession)
 
-- **Pulse Metrics** (`calculate_pulse_metrics`): 10 metrics
-  - n_high_pulses_year, n_low_pulses_year (pulse counts)
-  - dur_high_pulses_year, dur_low_pulses_year (pulse durations)
+- **Pulse Metrics** (`calculate_pulse_metrics`): 14 metrics
+  - n_high_pulses_year, n_high_pulses_all, n_low_pulses_year, n_low_pulses_all (pulse counts)
+  - dur_high_pulses_year, dur_high_pulses_all, dur_low_pulses_year, dur_low_pulses_all (pulse durations)
   - TQmean (percentage of days above mean)
   - Flow_Reversals_annual, _winter, _spring, _summer, _fall
 
@@ -158,6 +177,7 @@ baseflow = analyze_baseflow_indices(gage_data)       # returns Dict
 ## Running Tests
 
 ```julia
+# From the julia/ directory
 using Pkg
 Pkg.activate(".")
 Pkg.test()
