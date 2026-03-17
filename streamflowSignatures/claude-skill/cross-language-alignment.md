@@ -71,9 +71,10 @@ Document irreducible divergences with root cause analysis. Declare threshold met
 
 ## Comparison Methodology
 
-- **Primary metric**: Spearman rank correlation per column across all shared items. Rank-based is robust to scale differences.
-- **Three axes**: (1) Summary rho per column, (2) NA pattern mismatches (extra NAs in one impl), (3) Per-item deep-dive on worst columns
-- **Three-way comparison**: When 3+ implementations exist, compare all pairs. The outlier is immediately visible (e.g., R-Py=1.000, R-Jl=0.57 → Julia is wrong).
+- **Primary metric**: R² of the identity line (y = x) per column across all shared items. Measures whether implementations produce identical values, not just correlated values. Formula: R² = 1 - SS_res/SS_tot, where SS_res = Σ(y - x)², SS_tot = Σ(y - ȳ)². R²=1.0 means identical; R²<0 means worse than predicting the mean. Can be negative.
+- **Secondary metric**: Spearman rank correlation (rho) — reported alongside R² as a diagnostic. Useful for confirming monotonic agreement even when absolute values differ.
+- **Three axes**: (1) Identity R² per column, (2) NA pattern mismatches (extra NAs in one impl), (3) Per-item deep-dive on worst columns
+- **Three-way comparison**: When 3+ implementations exist, compare all pairs. The outlier is immediately visible (e.g., R-Py R²=1.000, R-Jl R²=0.57 → Julia is wrong).
 - **Track categories**: Group columns by signature type. If all recession columns diverge, the root cause is in recession code, not stats.
 
 ## Common Mistakes
@@ -89,7 +90,7 @@ Document irreducible divergences with root cause analysis. Declare threshold met
 
 | Thought | Reality |
 |---------|---------|
-| "Close enough at rho=0.98" | Is it close enough, or is there a clean bug hiding? Check the pattern table first. |
+| "Close enough at R²=0.98" | Is it close enough, or is there a clean bug hiding? Check the pattern table first. |
 | "The canonical implementation is wrong here" | Maybe, but match it first, then propose a fix to canonical separately. Never diverge intentionally during alignment. |
 | "This needs a special case for edge gages" | Special cases mask root causes. If 15 gages diverge, there's a systematic reason. |
 | "I'll fix these 3 things together since they're related" | Fix ONE, benchmark, then decide. Related fixes can interact in unexpected ways. |
