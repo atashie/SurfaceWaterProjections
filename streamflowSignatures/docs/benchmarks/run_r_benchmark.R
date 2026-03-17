@@ -5,8 +5,8 @@
 # This script runs the full R signature extraction workflow and:
 # 1. Uses the standard config.R configuration
 # 2. Renames Q95.Q10 columns to Q95_Q10 (underscore convention)
-# 3. Outputs to benchmarks/r_signatures.csv
-# 4. Saves timing info to benchmarks/r_timing.json
+# 3. Outputs to docs/benchmarks/r_signatures.csv
+# 4. Saves timing info to docs/benchmarks/r_timing.json
 # ==============================================================================
 
 cat("======================================================================\n")
@@ -34,7 +34,7 @@ if (length(file_arg) > 0) {
   # Fallback: assume we're in the benchmarks directory
   script_dir <- getwd()
 }
-project_root <- normalizePath(file.path(script_dir, ".."))
+project_root <- normalizePath(file.path(script_dir, "../.."))
 setwd(project_root)
 cat("Working directory:", getwd(), "\n\n")
 
@@ -55,7 +55,7 @@ phase_start <- Sys.time()
 parquet_path <- "D:/processedOuts_feb2026/combined_streamflow_data_09feb2026.parquet"
 metadata_path <- "D:/processedOuts_feb2026/combined_watershed_metadata_09feb2026.csv"
 daymet_path <- "D:/processedOuts_feb2026/daymet_1980_2023.parquet"
-output_path <- "benchmarks/r_signatures.csv"
+output_path <- "docs/benchmarks/r_signatures.csv"
 
 # Verify files exist
 if (!file.exists(parquet_path)) {
@@ -129,7 +129,7 @@ timing$n_metadata_columns <- ncol(summary_output) - timing$n_signature_columns -
 timing$n_qaqc_flags <- sum(grepl("^flagged_", new_names))
 
 # Save timing JSON
-timing_path <- "benchmarks/r_timing.json"
+timing_path <- "docs/benchmarks/r_timing.json"
 jsonlite::write_json(timing, timing_path, auto_unbox = TRUE, pretty = TRUE)
 cat("  Timing saved to", timing_path, "\n")
 

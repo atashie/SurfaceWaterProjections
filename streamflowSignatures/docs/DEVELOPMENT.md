@@ -256,24 +256,24 @@ testthat::test_dir("R/tests/")
 
 ## Cross-Language Benchmarks
 
-Python and Julia implementations are validated against R using Spearman rank correlations across 5,707 common gages and 551 signature columns.
+Python and Julia implementations are validated against R using the R² of the identity line (y = x) across 5,707 common gages and 551 signature columns. This measures whether values are identical (not just correlated). Spearman rank correlation is reported as a secondary diagnostic.
 
 ### Current Status (March 2026, Post-Round 6)
 
 | Metric | Julia | Python | R |
 |--------|-------|--------|---|
-| Total Time | 9.8 min | 133 min* | ~5h 13m* |
-| Processing Rate | 12.6/s | 0.92/s* | ~0.3/s* |
+| Total Time | 9.2 min | 78.9 min | 874 min* |
+| Processing Rate | 13.4/s | 1.56/s | 0.11/s* |
 
-*R and Python ran concurrently (March 15, 2026) — timings are inflated by I/O contention. Previous solo runs: Python 69 min, R ~1-2 hours. Julia ran before contention and is comparable to previous 9.6 min.
+*March 16-17, 2026 re-run. R ran concurrently with Python/Julia — timing inflated by I/O contention. Previous solo R runs: ~1-2 hours.
 
-| Pair | Mean rho | Median rho | Min rho | Cols < 0.99 |
-|------|----------|------------|---------|-------------|
-| R vs Python | 0.9988 | 1.0000 | 0.8498 | 4 |
-| R vs Julia | 0.9988 | 1.0000 | 0.8355 | 4 |
-| Python vs Julia | 0.9999 | 1.0000 | 0.9976 | 0 |
+| Pair | Mean R² | Median R² | Min R² | Cols < 0.99 |
+|------|---------|-----------|--------|-------------|
+| R vs Python | 0.9968 | 1.0000 | 0.6745 | 17 |
+| R vs Julia | 0.9965 | 1.0000 | 0.6745 | 19 |
+| Python vs Julia | 0.9997 | 1.0000 | 0.9771 | 3 |
 
-505 perfect (>=0.999), 42 good (0.99-0.999), 4 poor (<0.99). 547 of 551 columns (99.3%) have rho >= 0.99 across all 3 pairs. All 3 languages are production-ready. BFI_Eckhardt fully aligned (R16 forward-fill confirmed).
+475 perfect (R²>=0.999), 56 good (0.99-0.999), 20 poor (<0.99). 531 of 551 columns (96.4%) have R² >= 0.99 across all 3 pairs. All 3 languages are production-ready. The 20 poor columns are trend statistics (slopes, p-values) sensitive to small numerical differences — the underlying signature means/medians are near-identical.
 
 #### Alignment Progress
 
@@ -291,15 +291,20 @@ Python and Julia implementations are validated against R using Spearman rank cor
 ### Running Benchmarks
 
 ```bash
-# Python benchmark
-cd docs/benchmarks
-python run_python_benchmark.py
+# All scripts use __file__/@__DIR__ for paths, so they work from any directory.
+# Run from project root for consistency:
 
-# Julia benchmark
-julia run_julia_benchmark.jl
+# R benchmark (~1-5 hours)
+Rscript docs/benchmarks/run_r_benchmark.R
+
+# Python benchmark (~70-130 min)
+python docs/benchmarks/run_python_benchmark.py
+
+# Julia benchmark (~10 min)
+julia docs/benchmarks/run_julia_benchmark.jl
 
 # Three-way comparison (R vs Python vs Julia)
-python compare_three_way.py
+python docs/benchmarks/compare_three_way.py
 ```
 
 ### Benchmark Files

@@ -2,7 +2,9 @@
 Three-Way Cross-Language Comparison: R (canonical) vs Python vs Julia
 
 Loads all three benchmark CSVs, identifies common gages and columns,
-computes Spearman correlations, flags divergent metrics and gages.
+computes R² of the identity line (y=x) to verify implementations produce
+identical values (not just correlated values). Also reports Spearman rho
+as a secondary diagnostic.
 """
 
 import json
@@ -65,14 +67,40 @@ def normalize_col(col):
     col = col.replace("FDC_mid", "FDCmid")
     return col
 
-def spearman_corr(x, y):
-    """Spearman correlation on paired non-NA values. Returns (rho, pval, n)."""
+def r2_identity(x, y):
+    """R² of the identity line y = x on paired non-NA values.
+
+    Measures how close two implementations' values are to identical:
+      R² = 1 - SS_res / SS_tot
+      SS_res = sum((y - x)²)    — deviation from the 1:1 line
+      SS_tot = sum((y - mean(y))²)  — total variance in y
+
+    R² = 1.0 means x == y exactly. R² < 1 means values differ.
+    R² can be negative if the identity line is worse than the mean.
+
+    Returns (r2, n).
+    """
     mask = np.isfinite(x) & np.isfinite(y)
     n = mask.sum()
     if n < 5:
-        return np.nan, np.nan, n
-    rho, pval = stats.spearmanr(x[mask], y[mask])
-    return rho, pval, n
+        return np.nan, n
+    x_valid = x[mask]
+    y_valid = y[mask]
+    ss_res = np.sum((y_valid - x_valid) ** 2)
+    ss_tot = np.sum((y_valid - np.mean(y_valid)) ** 2)
+    if ss_tot == 0:
+        return (1.0 if ss_res == 0 else np.nan), n
+    return 1.0 - ss_res / ss_tot, n
+
+
+def spearman_corr(x, y):
+    """Spearman correlation on paired non-NA values. Returns (rho, n)."""
+    mask = np.isfinite(x) & np.isfinite(y)
+    n = mask.sum()
+    if n < 5:
+        return np.nan, n
+    rho, _ = stats.spearmanr(x[mask], y[mask])
+    return rho, n
 
 def count_na_mismatch(x, y):
     """Count how many values are NA in one but not the other."""
@@ -212,48 +240,58 @@ def generate_three_way_report(res_df, r_df, py_df, jl_df,
                 f.write(f"| {phase} | {py_p:.0f}s | {jl_p:.0f}s |\n")
             f.write("\n")
 
-        # ── Overall Spearman summary ──
-        f.write("## Overall Spearman Correlation Summary\n\n")
-        f.write("| Pair | Mean rho | Median rho | Min rho | Cols < 0.99 | Cols < 0.95 | Cols < 0.90 |\n")
-        f.write("|------|----------|------------|---------|-------------|-------------|-------------|\n")
-        valid = res_df.dropna(subset=["rp_rho", "rj_rho", "pj_rho"])
-        for pair, label in [("rp_rho", "R vs Python"), ("rj_rho", "R vs Julia"), ("pj_rho", "Python vs Julia")]:
+        # ── Overall Identity R² summary ──
+        f.write("## Overall Identity R² Summary\n\n")
+        f.write("R² of the identity line (y = x): measures whether implementations produce identical values, not just correlated values.\n\n")
+        f.write("| Pair | Mean R² | Median R² | Min R² | Cols < 0.99 | Cols < 0.95 | Cols < 0.90 |\n")
+        f.write("|------|---------|-----------|--------|-------------|-------------|-------------|\n")
+        valid = res_df.dropna(subset=["rp_r2", "rj_r2", "pj_r2"])
+        for pair, label in [("rp_r2", "R vs Python"), ("rj_r2", "R vs Julia"), ("pj_r2", "Python vs Julia")]:
             vals = valid[pair]
             f.write(f"| {label} | {vals.mean():.6f} | {vals.median():.6f} | {vals.min():.4f} | "
                     f"{(vals < 0.99).sum()} | {(vals < 0.95).sum()} | {(vals < 0.90).sum()} |\n")
         f.write("\n")
 
+        # ── Secondary: Spearman summary ──
+        f.write("### Spearman Rank Correlation (secondary diagnostic)\n\n")
+        f.write("| Pair | Mean rho | Min rho | Cols < 0.99 |\n")
+        f.write("|------|----------|---------|-------------|\n")
+        for pair, label in [("rp_rho", "R vs Python"), ("rj_rho", "R vs Julia"), ("pj_rho", "Python vs Julia")]:
+            vals = valid[pair]
+            f.write(f"| {label} | {vals.mean():.6f} | {vals.min():.4f} | {(vals < 0.99).sum()} |\n")
+        f.write("\n")
+
         # ── Agreement by category ──
         f.write("## Agreement by Signature Category\n\n")
-        f.write("| Category | Total Cols | Perfect (>=0.999) | Good (>=0.99) | Poor (<0.99) | Min rho |\n")
+        f.write("| Category | Total Cols | Perfect (>=0.999) | Good (>=0.99) | Poor (<0.99) | Min R² |\n")
         f.write("|----------|-----------|-------------------|---------------|-------------|--------|\n")
         categories = sorted(res_df["category"].unique())
         for cat in categories:
             cat_df = res_df[res_df["category"] == cat]
             n_total = len(cat_df)
-            n_perfect = (cat_df["min_rho"] >= 0.999).sum()
-            n_good = ((cat_df["min_rho"] >= 0.99) & (cat_df["min_rho"] < 0.999)).sum()
-            n_poor = (cat_df["min_rho"] < 0.99).sum()
-            min_rho = cat_df["min_rho"].min()
-            min_str = f"{min_rho:.4f}" if np.isfinite(min_rho) else "N/A"
+            n_perfect = (cat_df["min_r2"] >= 0.999).sum()
+            n_good = ((cat_df["min_r2"] >= 0.99) & (cat_df["min_r2"] < 0.999)).sum()
+            n_poor = (cat_df["min_r2"] < 0.99).sum()
+            min_r2 = cat_df["min_r2"].min()
+            min_str = f"{min_r2:.4f}" if np.isfinite(min_r2) else "N/A"
             f.write(f"| {cat} | {n_total} | {n_perfect} | {n_good} | {n_poor} | {min_str} |\n")
         f.write("\n")
 
-        # ── Columns with min rho < 0.99 ──
-        poor = res_df[res_df["min_rho"] < 0.99].sort_values("min_rho")
-        f.write(f"## Columns with min Spearman < 0.99 ({len(poor)} columns)\n\n")
+        # ── Columns with min R² < 0.99 ──
+        poor = res_df[res_df["min_r2"] < 0.99].sort_values("min_r2")
+        f.write(f"## Columns with min Identity R² < 0.99 ({len(poor)} columns)\n\n")
         if len(poor) > 0:
-            f.write("| Column | Category | R-Py | R-Jl | Py-Jl | R NA | Py NA | Jl NA |\n")
-            f.write("|--------|----------|------|------|-------|------|-------|-------|\n")
+            f.write("| Column | Category | R-Py R² | R-Jl R² | Py-Jl R² | R NA | Py NA | Jl NA |\n")
+            f.write("|--------|----------|---------|---------|----------|------|-------|-------|\n")
             for _, row in poor.iterrows():
-                rp = f"{row['rp_rho']:.4f}" if np.isfinite(row['rp_rho']) else "N/A"
-                rj = f"{row['rj_rho']:.4f}" if np.isfinite(row['rj_rho']) else "N/A"
-                pj = f"{row['pj_rho']:.4f}" if np.isfinite(row['pj_rho']) else "N/A"
+                rp = f"{row['rp_r2']:.4f}" if np.isfinite(row['rp_r2']) else "N/A"
+                rj = f"{row['rj_r2']:.4f}" if np.isfinite(row['rj_r2']) else "N/A"
+                pj = f"{row['pj_r2']:.4f}" if np.isfinite(row['pj_r2']) else "N/A"
                 cat = row.get("category", "")
                 f.write(f"| `{row['column']}` | {cat} | {rp} | {rj} | {pj} | "
                         f"{row['r_na_count']} | {row['py_na_count']} | {row['jl_na_count']} |\n")
         else:
-            f.write("All columns have rho >= 0.99 across all pairs.\n")
+            f.write("All columns have R² >= 0.99 across all pairs.\n")
         f.write("\n")
 
         # ── NA mismatch analysis ──
@@ -323,12 +361,16 @@ def generate_three_way_report(res_df, r_df, py_df, jl_df,
                 py_vals = pd.to_numeric(py_df[py_col], errors="coerce")
                 jl_vals = pd.to_numeric(jl_df[jl_col], errors="coerce")
 
-                rp = f"{row['rp_rho']:.4f}" if np.isfinite(row['rp_rho']) else "N/A"
-                rj = f"{row['rj_rho']:.4f}" if np.isfinite(row['rj_rho']) else "N/A"
-                pj = f"{row['pj_rho']:.4f}" if np.isfinite(row['pj_rho']) else "N/A"
+                rp_r2 = f"{row['rp_r2']:.4f}" if np.isfinite(row['rp_r2']) else "N/A"
+                rj_r2 = f"{row['rj_r2']:.4f}" if np.isfinite(row['rj_r2']) else "N/A"
+                pj_r2 = f"{row['pj_r2']:.4f}" if np.isfinite(row['pj_r2']) else "N/A"
+                rp_rho = f"{row['rp_rho']:.4f}" if np.isfinite(row['rp_rho']) else "N/A"
+                rj_rho = f"{row['rj_rho']:.4f}" if np.isfinite(row['rj_rho']) else "N/A"
+                pj_rho = f"{row['pj_rho']:.4f}" if np.isfinite(row['pj_rho']) else "N/A"
 
                 f.write(f"### `{col}`\n\n")
-                f.write(f"**Spearman**: R-Py={rp}, R-Jl={rj}, Py-Jl={pj}\n\n")
+                f.write(f"**Identity R²**: R-Py={rp_r2}, R-Jl={rj_r2}, Py-Jl={pj_r2}\n")
+                f.write(f"**Spearman rho**: R-Py={rp_rho}, R-Jl={rj_rho}, Py-Jl={pj_rho}\n\n")
                 f.write("| Stat | R | Python | Julia |\n")
                 f.write("|------|---|--------|-------|\n")
                 f.write(f"| Min | {r_vals.min():.4f} | {py_vals.min():.4f} | {jl_vals.min():.4f} |\n")
@@ -338,15 +380,15 @@ def generate_three_way_report(res_df, r_df, py_df, jl_df,
                 f.write("\n")
 
         # ── Agreement summary ──
-        perfect = res_df[res_df["min_rho"] >= 0.999]
-        good = res_df[(res_df["min_rho"] >= 0.99) & (res_df["min_rho"] < 0.999)]
+        perfect = res_df[res_df["min_r2"] >= 0.999]
+        good = res_df[(res_df["min_r2"] >= 0.99) & (res_df["min_r2"] < 0.999)]
         f.write("## Summary\n\n")
         f.write(f"| Agreement Level | Count | % |\n")
         f.write(f"|-----------------|-------|---|\n")
         total = len(res_df)
-        f.write(f"| Perfect (rho >= 0.999) | {len(perfect)} | {100*len(perfect)/total:.1f}% |\n")
-        f.write(f"| Good (0.99 <= rho < 0.999) | {len(good)} | {100*len(good)/total:.1f}% |\n")
-        f.write(f"| Poor (rho < 0.99) | {len(poor)} | {100*len(poor)/total:.1f}% |\n")
+        f.write(f"| Perfect (R² >= 0.999) | {len(perfect)} | {100*len(perfect)/total:.1f}% |\n")
+        f.write(f"| Good (0.99 <= R² < 0.999) | {len(good)} | {100*len(good)/total:.1f}% |\n")
+        f.write(f"| Poor (R² < 0.99) | {len(poor)} | {100*len(poor)/total:.1f}% |\n")
         f.write(f"| **Total compared** | **{total}** | **100%** |\n")
         f.write("\n---\n")
         f.write("*Generated by `docs/benchmarks/compare_three_way.py`*\n")
@@ -432,9 +474,9 @@ def main():
         if len(jl_only_cols) > 20:
             print(f"    ... and {len(jl_only_cols) - 20} more")
 
-    # ── Three-way Spearman comparison on common columns ──
+    # ── Three-way identity R² comparison on common columns ──
     print(f"\n{'=' * 80}")
-    print("SPEARMAN CORRELATION COMPARISON (common columns, common gages)")
+    print("IDENTITY R² COMPARISON (common columns, common gages)")
     print(f"{'=' * 80}")
 
     results = []
@@ -447,9 +489,15 @@ def main():
         py_vals = pd.to_numeric(py_df[py_col], errors="coerce").values
         jl_vals = pd.to_numeric(jl_df[jl_col], errors="coerce").values
 
-        rp_rho, rp_pval, rp_n = spearman_corr(r_vals, py_vals)
-        rj_rho, rj_pval, rj_n = spearman_corr(r_vals, jl_vals)
-        pj_rho, pj_pval, pj_n = spearman_corr(py_vals, jl_vals)
+        # Primary metric: R² of identity line (y = x)
+        rp_r2, rp_n = r2_identity(r_vals, py_vals)
+        rj_r2, rj_n = r2_identity(r_vals, jl_vals)
+        pj_r2, pj_n = r2_identity(py_vals, jl_vals)
+
+        # Secondary diagnostic: Spearman rank correlation
+        rp_rho, _ = spearman_corr(r_vals, py_vals)
+        rj_rho, _ = spearman_corr(r_vals, jl_vals)
+        pj_rho, _ = spearman_corr(py_vals, jl_vals)
 
         r_na = int((~np.isfinite(r_vals)).sum())
         py_na = int((~np.isfinite(py_vals)).sum())
@@ -459,11 +507,18 @@ def main():
         na_mismatch_rj = count_na_mismatch(r_vals, jl_vals)
         na_mismatch_pj = count_na_mismatch(py_vals, jl_vals)
 
+        def _safe_min(*vals):
+            finite = [v for v in vals if np.isfinite(v)]
+            return min(finite) if finite else np.nan
+
         results.append({
             "column": norm_col,
             "r_col": r_col,
             "py_col": py_col,
             "jl_col": jl_col,
+            "rp_r2": rp_r2,
+            "rj_r2": rj_r2,
+            "pj_r2": pj_r2,
             "rp_rho": rp_rho,
             "rj_rho": rj_rho,
             "pj_rho": pj_rho,
@@ -476,11 +531,8 @@ def main():
             "na_mismatch_rp": na_mismatch_rp,
             "na_mismatch_rj": na_mismatch_rj,
             "na_mismatch_pj": na_mismatch_pj,
-            "min_rho": min(
-                rp_rho if np.isfinite(rp_rho) else -999,
-                rj_rho if np.isfinite(rj_rho) else -999,
-                pj_rho if np.isfinite(pj_rho) else -999,
-            ),
+            "min_r2": _safe_min(rp_r2, rj_r2, pj_r2),
+            "min_rho": _safe_min(rp_rho, rj_rho, pj_rho),
         })
 
     res_df = pd.DataFrame(results)
@@ -490,34 +542,40 @@ def main():
     print(f"\nFull results saved to benchmarks/three_way_comparison.csv")
 
     # ── Summary statistics ──
-    valid = res_df.dropna(subset=["rp_rho", "rj_rho", "pj_rho"])
-    print(f"\n  Columns with valid correlations across all 3 pairs: {len(valid)}")
+    valid = res_df.dropna(subset=["rp_r2", "rj_r2", "pj_r2"])
+    print(f"\n  Columns with valid R² across all 3 pairs: {len(valid)}")
 
-    for pair, label in [("rp_rho", "R vs Python"), ("rj_rho", "R vs Julia"), ("pj_rho", "Python vs Julia")]:
-        vals = valid[pair]
+    for pair_r2, pair_rho, label in [
+        ("rp_r2", "rp_rho", "R vs Python"),
+        ("rj_r2", "rj_rho", "R vs Julia"),
+        ("pj_r2", "pj_rho", "Python vs Julia"),
+    ]:
+        r2_vals = valid[pair_r2]
+        rho_vals = valid[pair_rho]
         print(f"\n  {label}:")
-        print(f"    Mean rho:   {vals.mean():.6f}")
-        print(f"    Median rho: {vals.median():.6f}")
-        print(f"    Min rho:    {vals.min():.6f}")
-        print(f"    Cols < 0.99:  {(vals < 0.99).sum()}")
-        print(f"    Cols < 0.95:  {(vals < 0.95).sum()}")
-        print(f"    Cols < 0.90:  {(vals < 0.90).sum()}")
+        print(f"    Mean R²:    {r2_vals.mean():.6f}")
+        print(f"    Median R²:  {r2_vals.median():.6f}")
+        print(f"    Min R²:     {r2_vals.min():.6f}")
+        print(f"    Cols R²<0.99: {(r2_vals < 0.99).sum()}")
+        print(f"    Cols R²<0.95: {(r2_vals < 0.95).sum()}")
+        print(f"    Cols R²<0.90: {(r2_vals < 0.90).sum()}")
+        print(f"    (Spearman)  Mean={rho_vals.mean():.6f}  Min={rho_vals.min():.6f}")
 
     # ── Columns with poor agreement (< 0.99 in any pair) ──
     threshold = 0.99
-    poor = res_df[res_df["min_rho"] < threshold].sort_values("min_rho")
+    poor = res_df[res_df["min_r2"] < threshold].sort_values("min_r2")
 
     print(f"\n{'=' * 80}")
-    print(f"COLUMNS WITH MIN SPEARMAN < {threshold} IN ANY PAIR ({len(poor)} columns)")
+    print(f"COLUMNS WITH MIN IDENTITY R² < {threshold} IN ANY PAIR ({len(poor)} columns)")
     print(f"{'=' * 80}")
 
     if len(poor) > 0:
         print(f"\n{'Column':<45} {'R-Py':>8} {'R-Jl':>8} {'Py-Jl':>8} {'R_NA':>6} {'Py_NA':>6} {'Jl_NA':>6}")
         print("-" * 97)
         for _, row in poor.iterrows():
-            rp = f"{row['rp_rho']:.4f}" if np.isfinite(row['rp_rho']) else "  N/A "
-            rj = f"{row['rj_rho']:.4f}" if np.isfinite(row['rj_rho']) else "  N/A "
-            pj = f"{row['pj_rho']:.4f}" if np.isfinite(row['pj_rho']) else "  N/A "
+            rp = f"{row['rp_r2']:.4f}" if np.isfinite(row['rp_r2']) else "  N/A "
+            rj = f"{row['rj_r2']:.4f}" if np.isfinite(row['rj_r2']) else "  N/A "
+            pj = f"{row['pj_r2']:.4f}" if np.isfinite(row['pj_r2']) else "  N/A "
             print(f"{row['column']:<45} {rp:>8} {rj:>8} {pj:>8} {row['r_na_count']:>6} {row['py_na_count']:>6} {row['jl_na_count']:>6}")
 
     # ── Categorize problems by signature group ──
@@ -536,22 +594,22 @@ def main():
         rows = poor_by_group[cat]
         print(f"\n  {cat} ({len(rows)} problematic columns):")
         for row in rows[:5]:
-            rp = f"{row['rp_rho']:.4f}" if np.isfinite(row['rp_rho']) else "N/A"
-            rj = f"{row['rj_rho']:.4f}" if np.isfinite(row['rj_rho']) else "N/A"
-            pj = f"{row['pj_rho']:.4f}" if np.isfinite(row['pj_rho']) else "N/A"
+            rp = f"{row['rp_r2']:.4f}" if np.isfinite(row['rp_r2']) else "N/A"
+            rj = f"{row['rj_r2']:.4f}" if np.isfinite(row['rj_r2']) else "N/A"
+            pj = f"{row['pj_r2']:.4f}" if np.isfinite(row['pj_r2']) else "N/A"
             print(f"    {row['column']:<40} R-Py={rp}  R-Jl={rj}  Py-Jl={pj}")
         if len(rows) > 5:
             print(f"    ... and {len(rows) - 5} more")
 
     # ── Columns with perfect or near-perfect agreement ──
-    perfect = res_df[res_df["min_rho"] >= 0.999]
-    good = res_df[(res_df["min_rho"] >= threshold) & (res_df["min_rho"] < 0.999)]
+    perfect = res_df[res_df["min_r2"] >= 0.999]
+    good = res_df[(res_df["min_r2"] >= threshold) & (res_df["min_r2"] < 0.999)]
     print(f"\n{'=' * 80}")
-    print("AGREEMENT SUMMARY")
+    print("AGREEMENT SUMMARY (Identity R²)")
     print(f"{'=' * 80}")
-    print(f"  Perfect (rho >= 0.999 all pairs): {len(perfect)} columns")
-    print(f"  Good (0.99 <= rho < 0.999):       {len(good)} columns")
-    print(f"  Poor (rho < 0.99 any pair):        {len(poor)} columns")
+    print(f"  Perfect (R² >= 0.999 all pairs): {len(perfect)} columns")
+    print(f"  Good (0.99 <= R² < 0.999):       {len(good)} columns")
+    print(f"  Poor (R² < 0.99 any pair):        {len(poor)} columns")
     print(f"  Total compared:                    {len(res_df)} columns")
 
     # ── NA pattern analysis ──
@@ -589,9 +647,9 @@ def main():
                 col_b = norm_b[nc]
                 va = pd.to_numeric(df_a[col_a], errors="coerce").values
                 vb = pd.to_numeric(df_b[col_b], errors="coerce").values
-                rho, _, n = spearman_corr(va, vb)
-                rho_str = f"{rho:.4f}" if np.isfinite(rho) else "N/A"
-                print(f"    {nc:<45} {name_a}-{name_b} rho={rho_str} (n={n})")
+                r2, n = r2_identity(va, vb)
+                r2_str = f"{r2:.4f}" if np.isfinite(r2) else "N/A"
+                print(f"    {nc:<45} {name_a}-{name_b} R²={r2_str} (n={n})")
             if len(pair_cols) > 15:
                 print(f"    ... and {len(pair_cols) - 15} more")
 
@@ -611,7 +669,12 @@ def main():
         py_vals = pd.to_numeric(py_df[py_col], errors="coerce")
         jl_vals = pd.to_numeric(jl_df[jl_col], errors="coerce")
 
+        rp_r2_str = f"{row['rp_r2']:.4f}" if np.isfinite(row['rp_r2']) else "N/A"
+        rj_r2_str = f"{row['rj_r2']:.4f}" if np.isfinite(row['rj_r2']) else "N/A"
+        pj_r2_str = f"{row['pj_r2']:.4f}" if np.isfinite(row['pj_r2']) else "N/A"
+
         print(f"\n  {col}:")
+        print(f"    Identity R²: R-Py={rp_r2_str}, R-Jl={rj_r2_str}, Py-Jl={pj_r2_str}")
         print(f"    R range:  [{r_vals.min():.4f}, {r_vals.max():.4f}], median={r_vals.median():.4f}, NAs={r_vals.isna().sum()}")
         print(f"    Py range: [{py_vals.min():.4f}, {py_vals.max():.4f}], median={py_vals.median():.4f}, NAs={py_vals.isna().sum()}")
         print(f"    Jl range: [{jl_vals.min():.4f}, {jl_vals.max():.4f}], median={jl_vals.median():.4f}, NAs={jl_vals.isna().sum()}")

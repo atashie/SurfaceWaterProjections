@@ -45,22 +45,26 @@ For summary results and how-to-run commands, see the [Cross-Language Benchmarks 
 
 | Metric | Julia | Python | R |
 |--------|-------|--------|---|
-| Total Time | 9.8 min | 133 min* | ~5h 13m* |
+| Total Time | 9.2 min | 78.9 min | 874 min* |
 | Gages Processed | 7,369 | 7,369 | 5,707 |
-| Total Columns | 571 | 571 | 572 |
+| Total Columns | 571 | 583 | 572 |
 | Common Signature Columns | 551 | 551 | 551 |
-| Processing Rate | 12.6/s | 0.92/s* | ~0.3/s* |
+| Processing Rate | 13.4/s | 1.56/s | 0.11/s* |
 | Common Gages (all 3) | 5,707 | 5,707 | 5,707 |
 
-*R and Python ran concurrently (March 15, 2026) — timings are inflated by I/O contention. Previous solo runs: Python 69 min, R ~1-2 hours. Julia ran before contention and is comparable to previous 9.6 min.
+*March 16-17, 2026 re-run. R ran concurrently with Python/Julia — timing inflated by I/O contention. Previous solo R runs: ~1-2 hours. Golden output regression: 551/551 perfect match against Feb 2026 reference.
 
-## Three-Way Spearman Correlation Summary
+## Three-Way Identity R² Summary
 
-| Pair | Mean rho | Median rho | Min rho | Cols < 0.99 |
-|------|----------|------------|---------|-------------|
-| R vs Python | 0.9988 | 1.0000 | 0.8498 | 4 |
-| R vs Julia | 0.9988 | 1.0000 | 0.8355 | 4 |
-| Python vs Julia | 0.9999 | 1.0000 | 0.9976 | 0 |
+R² of the identity line (y = x): measures whether implementations produce identical values, not just correlated values.
+
+| Pair | Mean R² | Median R² | Min R² | Cols < 0.99 |
+|------|---------|-----------|--------|-------------|
+| R vs Python | 0.9968 | 1.0000 | 0.6745 | 17 |
+| R vs Julia | 0.9965 | 1.0000 | 0.6745 | 19 |
+| Python vs Julia | 0.9997 | 1.0000 | 0.9771 | 3 |
+
+475 perfect (R²>=0.999), 56 good (0.99-0.999), 20 poor (<0.99). The 20 poor columns are trend statistics (slopes, p-values) sensitive to small numerical differences. Spearman rank correlation is reported as a secondary diagnostic in the comparison CSV.
 
 ## Alignment Progress
 

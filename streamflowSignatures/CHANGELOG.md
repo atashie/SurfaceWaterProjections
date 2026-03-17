@@ -10,6 +10,34 @@ All notable changes to the Streamflow Signatures project.
 - Add ERA5/PRISM data fetching for USGS/HYDAT gages
 - Implement synchrony metrics (cross-correlation, lag analysis)
 
+### Benchmark Script Fixes and Re-Run (March 2026)
+
+**R Benchmark Script Path Bugs (HIGH — script failed to run)**:
+- **Issue**: `run_r_benchmark.R` could not find `config.R` because project root resolution went up only 1 level (`..`) instead of 2 (`../..`) from `docs/benchmarks/`. Output paths (`benchmarks/r_signatures.csv`) were also wrong relative to the corrected working directory. A typo `end_timng` instead of `end_time` caused the script to error after saving results.
+- **Fix**: Changed `file.path(script_dir, "..")` to `file.path(script_dir, "../..")`. Updated output paths to `docs/benchmarks/r_signatures.csv` and `docs/benchmarks/r_timing.json`. Fixed `end_timng` typo.
+- **Location**: `docs/benchmarks/run_r_benchmark.R`
+
+**DEVELOPMENT.md Benchmark Instructions (MEDIUM)**:
+- **Issue**: Instructions said `cd docs/benchmarks` then bare filenames, with no R benchmark command at all.
+- **Fix**: Updated to run all scripts from project root with full relative paths (e.g., `Rscript docs/benchmarks/run_r_benchmark.R`).
+- **Location**: `docs/DEVELOPMENT.md`
+
+**Cross-Language Comparison Metric Change (March 2026)**:
+- **Issue**: Spearman rank correlation only checks if values are monotonically related, not whether they are identical. Two implementations could have perfect Spearman rho but produce systematically different values (e.g., offset or scaled).
+- **Fix**: Replaced Spearman with R² of the identity line (y = x) as the primary comparison metric. R² = 1 - SS_res/SS_tot where SS_res = sum((y - x)²). This measures actual value agreement: R² = 1.0 means identical, R² < 1.0 means values differ. Spearman retained as secondary diagnostic.
+- **Impact**: More divergences detected — 20 poor columns (was 4 with Spearman). All newly flagged columns are trend statistics (slopes, p-values) where small numerical differences in underlying calculations amplify through trend fitting. Signature means/medians remain near-identical across all 3 languages.
+- **Location**: `docs/benchmarks/compare_three_way.py`
+
+**Benchmark Re-Run Results (March 16-17, 2026)**:
+- Re-ran all three benchmarks after recent commits (`05ff4be` through `2311433`)
+- Julia: 9.2 min (7,369 gages, 551 sig cols)
+- Python: 78.9 min (7,369 gages, 551 sig cols)
+- R: 874 min (5,707 gages, 551 sig cols) — ran concurrently with Python/Julia, timing inflated
+- Three-way comparison (Identity R²): **475 perfect, 56 good, 20 poor**
+- Three-way comparison (Spearman rho): 505 perfect, 42 good, 4 poor — identical to previous baseline
+- Golden output regression: **551/551 perfect match** against Feb 2026 golden outputs
+- No regressions from recent code changes
+
 ### Code Quality Improvements Round 2 (March 2026)
 
 **R16: Eckhardt BFI Forward-Fill (HIGH — confirmed: all 3 languages now identical)**:
