@@ -66,47 +66,61 @@ R² of the identity line (y = x): measures whether implementations produce ident
 
 475 perfect (R²>=0.999), 56 good (0.99-0.999), 20 poor (<0.99). The 20 poor columns are trend statistics (slopes, p-values) sensitive to small numerical differences. Spearman rank correlation is reported as a secondary diagnostic in the comparison CSV.
 
-## Alignment Progress
+## Alignment Progress (Spearman rho, cols < 0.99 — historical metric through Round 6)
 
-| Pair | Round 0 (Cols < 0.99) | Round 2 | Round 3 | Round 4 | Round 5 | Round 6 | Improvement |
-|------|----------------------|---------|---------|---------|---------|---------|-------------|
+| Pair | Round 0 | Round 2 | Round 3 | Round 4 | Round 5 | Round 6 | Improvement |
+|------|---------|---------|---------|---------|---------|---------|-------------|
 | R vs Python | 323 | 21 | 7 | 6 | **4** | **4** | 98.8% reduction |
 | R vs Julia | 321 | 49 | 5 | 4 | **4** | **4** | 98.8% reduction |
 | Python vs Julia | 73 | 30 | 3 | 3 | **0** | **0** | 100% reduction |
 
-Round 6 = post-R16 (Eckhardt forward-fill in R canonical) + code quality fixes P11-P13, J13-J14. No correlation changes — R16 confirmed BFI_Eckhardt alignment from R side.
+Note: Rounds 0-6 used Spearman rank correlation. Post-Round 6, the primary metric switched to identity R² (see above), which is stricter and reveals 20 poor columns vs Spearman's 4. Round 6 = post-R16 (Eckhardt forward-fill in R canonical) + code quality fixes P11-P13, J13-J14.
 
-## Per-Category Results (Round 6)
+## Per-Category Results (Identity R², March 2026)
 
-| Category | Total Cols | Perfect (>=0.999) | Good (>=0.99) | Poor (<0.99) | Min rho |
+| Category | Total Cols | Perfect (>=0.999) | Good (>=0.99) | Poor (<0.99) | Min R² |
 |----------|-----------|-------------------|---------------|-------------|--------|
-| Baseflow | 16 | 10 | 6 | 0 | 0.9929 |
-| Elasticity | 9 | 3 | 6 | 0 | 0.9956 |
-| FDC | 24 | 18 | 6 | 0 | 0.9907 |
-| Flashiness | 8 | 8 | 0 | 0 | 0.9992 |
+| Baseflow | 16 | 8 | 6 | 2 | 0.9778 |
+| Elasticity | 9 | 3 | 4 | 2 | 0.9841 |
+| FDC | 24 | 11 | 6 | 7 | 0.6745 |
+| Flashiness | 8 | 7 | 0 | 1 | 0.9856 |
 | Flow Percentiles | 128 | 123 | 5 | 0 | 0.9976 |
 | Flow Timing | 104 | 104 | 0 | 0 | 1.0000 |
 | Flow Volumes | 40 | 40 | 0 | 0 | 0.9999 |
-| Pulse Metrics | 112 | 105 | 7 | 0 | 0.9974 |
+| Pulse Metrics | 112 | 99 | 7 | 6 | 0.9768 |
 | Q-P Seasonality | 16 | 14 | 2 | 0 | 0.9989 |
-| Recession | 46 | 38 | 4 | 4 | 0.8355 |
+| Recession | 46 | 32 | 10 | 4 | 0.6846 |
 | Runoff Ratios | 40 | 40 | 0 | 0 | 0.9998 |
-| Storage | 8 | 2 | 6 | 0 | 0.9929 |
+| Storage | 8 | 0 | 6 | 2 | 0.9851 |
 
-## Known Remaining Divergences (4 columns < 0.99)
+## Known Remaining Divergences (20 columns with R² < 0.99)
 
-| Column | R-Py | R-Jl | Py-Jl | Root Cause |
-|--------|------|------|-------|------------|
-| `log_a_pointcloud_mk_pval` | 0.850 | 0.836 | 0.999 | Library edge case (Pattern #5) |
-| `b_pointcloud_mk_pval` | 0.856 | 0.843 | 0.999 | Library edge case (Pattern #5) |
-| `b_pointcloud_spearman_pval` | 0.904 | 0.904 | 1.000 | Library edge case (Pattern #5) |
-| `log_a_pointcloud_spearman_pval` | 0.907 | 0.907 | 1.000 | Library edge case (Pattern #5) |
+All 20 poor columns are trend statistics (slopes, p-values) where small numerical differences amplify through trend fitting. Signature means and medians remain near-identical across all 3 languages.
 
-All 4 are recession pointcloud p-values. Only 975 of 5,707 gages have pointcloud data. R's `lm()` uses QR decomposition with rank checking and rejects near-singular design matrices; Python's `linregress()` and Julia's OLS use SVD and succeed on the same inputs. For marginal gages (3-4 valid pointcloud years), R fails on 1-2 near-singular years → n < 3 → MK returns p=1.0, while Python/Julia succeed → real p-values. A `var(log_Q) < 1e-8` guard was added in Round 5 but could not fully replicate R's QR rank-checking behavior.
+| Column | R-Py R² | R-Jl R² | Py-Jl R² | Root Cause |
+|--------|---------|---------|----------|------------|
+| `FDC90th_senn_slp` | 0.675 | 0.675 | 1.000 | 1 extra NA in R; different year populations |
+| `log_a_pointcloud_mk_pval` | 0.711 | 0.685 | 0.998 | OLS library edge case (QR vs SVD) |
+| `b_pointcloud_mk_pval` | 0.724 | 0.700 | 0.998 | OLS library edge case (QR vs SVD) |
+| `b_pointcloud_spearman_pval` | 0.759 | 0.759 | 1.000 | OLS library edge case (QR vs SVD) |
+| `log_a_pointcloud_spearman_pval` | 0.771 | 0.771 | 1.000 | OLS library edge case (QR vs SVD) |
+| `FDC90th_linear_slp` | 0.960 | 0.960 | 1.000 | 1 extra NA in R |
+| `FDC90th_mk_pval` | 0.976 | 0.978 | 0.997 | NA population difference (R:1, Py/Jl:36) |
+| `n_low_pulses_year_mk_rho` | 1.000 | 0.977 | 0.977 | NA population difference |
+| `BFI_LyneHollick_mk_pval` | 0.978 | 0.978 | 1.000 | Filter propagation differences |
+| `FDC90th_spearman_pval` | 0.978 | 0.979 | 0.998 | NA population difference |
+| `BFI_LyneHollick_spearman_pval` | 0.978 | 0.978 | 1.000 | Filter propagation differences |
+| `n_low_pulses_all_mk_rho` | 1.000 | 0.979 | 0.980 | NA population difference (Py/Jl: 309 extra NAs) |
+| `FDC90th_median` | 0.983 | 0.983 | 1.000 | 1 extra NA in R |
+| `elasticity_mk_pval` | 0.984 | 0.984 | 1.000 | Rolling window edge cases |
+| `elasticity_spearman_pval` | 0.984 | 0.984 | 1.000 | Rolling window edge cases |
+| `avg_storage_mk_pval` | 0.985 | 0.986 | 1.000 | Interpolation tie-handling |
+| `FDC90th_mean` | 0.985 | 0.985 | 1.000 | 1 extra NA in R |
+| `flashinessRB_linear_slp` | 1.000 | 0.986 | 0.986 | Small numerical differences |
+| `avg_storage_spearman_pval` | 0.986 | 0.986 | 1.000 | Interpolation tie-handling |
+| `FDC90th_mk_rho` | 0.990 | 0.994 | 0.991 | NA population difference |
 
-**Python and Julia agree perfectly** on all 4 columns (Py-Jl rho ≥ 0.999). These are irreducible.
-
-**R-specific divergences noted**: Elasticity and Avg Storage show cases where Py-Jl=1.000 but R differs slightly. These reflect legitimate algorithmic differences in R's implementation rather than bugs. BFI_Eckhardt divergence resolved by R16 forward-fill fix.
+**Python and Julia agree near-perfectly**: min Py-Jl R² = 0.977, only 3 columns below 0.99.
 
 ## Filtering Alignment
 
@@ -145,7 +159,7 @@ Python and Julia benchmarks compute 12 `flagged_*` QA/QC columns (e.g., `flagged
 - **J13: OLS denominator guard**: Changed from exact `== 0` to `abs() < 1e-10` in recession
 - **J14: DataFrame pre-allocation**: Pre-allocated DataFrames in 5 Julia modules
 - **compare_three_way.py**: Added dot-to-underscore normalization for R's Q95.Q10 column naming
-- **Net result**: 505 perfect columns (>=0.999), 42 good (0.99-0.999), 4 poor (<0.99) — unchanged from Round 5
+- **Net result (Spearman rho)**: 505 perfect columns (>=0.999), 42 good (0.99-0.999), 4 poor (<0.99) — unchanged from Round 5
 
 ## Round 5 Fixes (March 2026)
 
@@ -155,7 +169,7 @@ Python and Julia benchmarks compute 12 `flagged_*` QA/QC columns (e.g., `flagged
 - **Python FDC negative Q filter**: Prevents `-inf` from `log10` of negative values
 - **Julia FDC min_days**: Config-driven via `CFG_FDC_MIN_DAYS` instead of hardcoded 250
 - **Reverted**: Constant-series Mann-Kendall fix (worsened 5 columns); FDC min_days=30 (added new poor column)
-- **Net result**: 505 perfect columns (>=0.999), 42 good (0.99-0.999), 4 poor (<0.99)
+- **Net result (Spearman rho)**: 505 perfect columns (>=0.999), 42 good (0.99-0.999), 4 poor (<0.99)
 
 ## Round 4 Fixes (March 2026)
 

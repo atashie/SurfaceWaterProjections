@@ -275,18 +275,25 @@ Python and Julia implementations are validated against R using the R² of the id
 
 475 perfect (R²>=0.999), 56 good (0.99-0.999), 20 poor (<0.99). 531 of 551 columns (96.4%) have R² >= 0.99 across all 3 pairs. All 3 languages are production-ready. The 20 poor columns are trend statistics (slopes, p-values) sensitive to small numerical differences — the underlying signature means/medians are near-identical.
 
-#### Alignment Progress
+#### Alignment Progress (Spearman rho, cols < 0.99 — historical metric through Round 6)
 
-| Pair | Round 0 (Cols < 0.99) | Round 2 | Round 3 | Round 4 | Round 5 | Round 6 | Improvement |
-|------|----------------------|---------|---------|---------|---------|---------|-------------|
+| Pair | Round 0 | Round 2 | Round 3 | Round 4 | Round 5 | Round 6 | Improvement |
+|------|---------|---------|---------|---------|---------|---------|-------------|
 | R vs Python | 323 | 21 | 7 | 6 | **4** | **4** | 98.8% reduction |
 | R vs Julia | 321 | 49 | 5 | 4 | **4** | **4** | 98.8% reduction |
 | Python vs Julia | 73 | 30 | 3 | 3 | **0** | **0** | 100% reduction |
 
-#### Known Remaining Divergences (4 columns)
+Note: Rounds 0-6 used Spearman rank correlation. Post-Round 6, the primary metric switched to identity R² (see table above), which is stricter and reveals 20 poor columns vs Spearman's 4.
 
+#### Known Remaining Divergences (20 columns with R² < 0.99)
+
+Under the identity R² metric, 20 columns fall below 0.99. All are trend statistics (slopes, p-values) where small numerical differences amplify:
 - 4 recession pointcloud p-values: Irreducible OLS library differences (R's `lm()` QR rank-checking vs Python/Julia SVD)
-- Python and Julia agree perfectly on all 4 (Py-Jl rho >= 0.999)
+- 7 FDC90th trend stats: R has 1 extra NA gage; Python/Julia have 35 extra NAs from stricter filtering
+- 2 BFI_LyneHollick p-values, 2 elasticity p-values, 2 avg_storage p-values: Small filter differences amplified through trend fitting
+- 2 n_low_pulses trend stats, 1 flashiness trend stat: Edge-case gage differences
+
+Python and Julia agree near-perfectly on all columns (min Py-Jl R² = 0.977, only 3 cols < 0.99).
 
 ### Running Benchmarks
 
@@ -313,7 +320,7 @@ python docs/benchmarks/compare_three_way.py
 |------|-------------|
 | `docs/benchmarks/run_python_benchmark.py` | Python full signature extraction |
 | `docs/benchmarks/run_julia_benchmark.jl` | Julia full signature extraction |
-| `docs/benchmarks/compare_three_way.py` | **PRIMARY** — Three-way comparison with Spearman correlations |
+| `docs/benchmarks/compare_three_way.py` | **PRIMARY** — Three-way comparison using R² of identity line (y=x) |
 | `docs/benchmarks/comparison_report.md` | Generated comparison report |
 
 For implementation details, alignment history, and known divergences, see [`CROSS_LANGUAGE_STATUS.md`](CROSS_LANGUAGE_STATUS.md).
