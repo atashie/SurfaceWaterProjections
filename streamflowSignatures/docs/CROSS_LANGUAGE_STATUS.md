@@ -6,6 +6,8 @@ For summary results and how-to-run commands, see the [Cross-Language Benchmarks 
 
 ## Implementation Status
 
+**rpkg** (`rpkg/`): Production-ready R package. Proper installable package mirroring Julia/Python structure. Uses shared `config/signatures_config.json` for all parameters. Incorporates code review fixes that improve cross-language alignment relative to canonical R. Key design decisions documented below.
+
 **Julia**: Production-ready. Major fixes applied across 6 alignment rounds:
 - BFI_LyneHollick: Fixed NaN propagation in sum() to match R's na.rm=TRUE
 - BFI valid_q_mask: Removed `Q > 0` filter (zeros are valid data)
@@ -65,6 +67,59 @@ R² of the identity line (y = x): measures whether implementations produce ident
 | Python vs Julia | 0.9997 | 1.0000 | 0.9771 | 3 |
 
 475 perfect (R²>=0.999), 56 good (0.99-0.999), 20 poor (<0.99). The 20 poor columns are trend statistics (slopes, p-values) sensitive to small numerical differences. Spearman rank correlation is reported as a secondary diagnostic in the comparison CSV.
+
+## rpkg Benchmark Results (March 2026)
+
+The `rpkg/` package is a proper installable R package mirroring Julia/Python structure. It uses `config/signatures_config.json` for all parameters and incorporates code review fixes that improve cross-language alignment relative to canonical R.
+
+### rpkg Performance
+
+| Metric | rpkg | Julia | Python | R (canonical) |
+|--------|------|-------|--------|---------------|
+| Total Time | 114 min | 9.2 min | 78.9 min | 874 min* |
+| Gages Processed | 7,369 | 7,369 | 7,369 | 5,707 |
+| Total Columns | 572 | 571 | 583 | 572 |
+| Processing Rate | 1.08/s | 13.4/s | 1.56/s | 0.11/s* |
+
+### rpkg Identity R² Summary
+
+| Pair | Perfect (>=0.999) | Good (0.99-0.999) | Poor (<0.99) |
+|------|-------------------|-------------------|-------------|
+| rpkg vs Python | **527** | 18 | 6 |
+| rpkg vs Julia | **515** | 28 | 8 |
+| rpkg vs R (canonical) | **490** | 51 | 10 |
+
+rpkg aligns more closely with Python/Julia than canonical R does (527 vs 475 perfect with Python), because rpkg uses config-driven parameters consistently and incorporates the same fixes applied to Python/Julia during alignment rounds.
+
+### rpkg vs Canonical R: Known Divergences (10 columns with R² < 0.99)
+
+All 10 poor columns between rpkg and canonical R are explained by 4 intentional design decisions. These are not bugs — they represent cases where rpkg deliberately matches Python/Julia behavior instead of canonical R.
+
+| Column | rpkg-R R² | rpkg-Py R² | Root Cause |
+|--------|-----------|------------|------------|
+| `FDC90th_senn_slp` | ~0.68 | ~1.00 | Decision 1: FDC min_days |
+| `FDC90th_linear_slp` | ~0.96 | ~1.00 | Decision 1: FDC min_days |
+| `FDC90th_mk_pval` | ~0.98 | ~1.00 | Decision 1: FDC min_days |
+| `FDC90th_spearman_pval` | ~0.98 | ~1.00 | Decision 1: FDC min_days |
+| `BFI_LyneHollick_mk_pval` | ~0.98 | ~1.00 | Decision 2: paired masking |
+| `BFI_LyneHollick_spearman_pval` | ~0.98 | ~1.00 | Decision 2: paired masking |
+| `elasticity_mk_pval` | ~0.98 | ~1.00 | Decision 3: NA Q handling |
+| `elasticity_spearman_pval` | ~0.98 | ~1.00 | Decision 3: NA Q handling |
+| `avg_storage_mk_pval` | ~0.99 | ~1.00 | Decision 3: NA Q handling |
+| `avg_storage_spearman_pval` | ~0.99 | ~1.00 | Decision 3: NA Q handling |
+
+### rpkg Intentional Design Decisions
+
+These decisions improve cross-language consistency. Users migrating from canonical R should be aware:
+
+**Decision 1: FDC `min_days` = 250 (config) vs 30 (canonical R hardcoded)**
+rpkg uses `fdc.min_days = 250` from `config/signatures_config.json`, matching Python/Julia. Canonical R hardcodes `30`. This rejects water years with 30-249 valid days from FDC90th computation, eliminating noisy slopes from data-sparse years. Affects 4 FDC90th trend columns. To match canonical R: set `fdc.min_days = 30` in the config JSON.
+
+**Decision 2: BFI_LyneHollick paired masking vs independent sums**
+rpkg computes BFI using paired masking: only positions where both Q and baseflow are non-NA contribute to the ratio. Canonical R sums numerator and denominator independently with `na.rm=TRUE`, which includes Q at positions where the Lyne-Hollick filter propagated NA to the baseflow. Affects 2 BFI_LyneHollick trend p-values. The paired masking approach matches Python/Julia and avoids a subtle denominator mismatch.
+
+**Decision 3: Elasticity and Avg Storage NA Q row handling**
+Canonical R's `process_signatures_from_parquet()` removes all NA-Q rows before merging climate data. rpkg passes the full dataset to signature functions, which handle NAs internally. This means PPT on NA-Q days is included in elasticity's `P_annual` (slightly higher), and storage's water balance includes days where Q is replaced with 0. Affects 4 elasticity/avg_storage trend p-values. To match canonical R: pre-filter your data with `df <- df[!is.na(df$Q), ]`.
 
 ## Alignment Progress (Spearman rho, cols < 0.99 — historical metric through Round 6)
 

@@ -1,0 +1,95 @@
+{
+  "filtering": {
+    "min_num_years": 20,
+    "min_frac_good_data": 0.95,
+    "min_q_value": 0.0001,
+    "min_days_above_threshold": 30,
+    "min_nona_days_annual": 250
+  },
+  "water_year": {
+    "start_month": 10
+  },
+  "baseflow": {
+    "eckhardt_bfimax": 0.8,
+    "eckhardt_alpha": 0.98,
+    "lyne_hollick_alpha": 0.925,
+    "lyne_hollick_passes": 2,
+    "min_days": 250,
+    "max_missing_frac": 0.2
+  },
+  "recession": {
+    "min_length": 5,
+    "min_events": 25
+  },
+  "pulses": {
+    "high_percentile": 0.90,
+    "low_percentile": 0.10,
+    "flow_reversal_threshold": 0.02,
+    "min_days": 250
+  },
+  "timing": {
+    "min_days": 300,
+    "d_percentiles": [5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95]
+  },
+  "elasticity": {
+    "window_years": 11,
+    "min_years": 15,
+    "min_data_completeness": 0.9,
+    "min_annual_ppt": 10
+  },
+  "qp_seasonality": {
+    "slope_window_days": 30,
+    "min_years": 10,
+    "min_days_per_year": 300,
+    "max_na_frac": 0.1
+  },
+  "runoff_ratios": {
+    "min_annual_ppt": 10,
+    "min_seasonal_ppt": 1
+  },
+  "flow_volumes": {
+    "min_days": 250,
+    "percentiles": [1, 5, 10, 20, 25, 30, 40, 50, 60, 70, 75, 80, 90, 95, 99]
+  },
+  "fdc": {
+    "min_days": 250
+  },
+  "flashiness": {
+    "min_days": 250,
+    "max_missing_frac": 0.2
+  },
+  "storage": {
+    "min_years": 10,
+    "min_days_per_year": 300,
+    "max_na_frac": 0.1
+  },
+  "qa_qc": {
+    "qann_range": [0, 2000],
+    "bfi_range": [0, 1],
+    "flashiness_range": [0, 2],
+    "tqmean_range": [0, 100],
+    "d50_range": [1, 366],
+    "elasticity_range": [0.1, 5],
+    "runoff_ratio_range": [0.01, 1.5],
+    "seasonal_sum_tolerance": 0.2,
+    "max_na_fraction": 0.3
+  },
+  "metadata": {
+    "include_human_interference": true,
+    "gages_ii_dir": "D:/gagesMetadata",
+    "hydat_path": null,
+    "interference_columns": [
+      "NDAMS_2009",
+      "MAJ_DDENS_2009",
+      "STOR_NID_2009",
+      "IMPNLCD06",
+      "DEVNLCD06",
+      "FRESHW_WITHDRAWAL",
+      "HYDRO_DISTURB_INDX",
+      "CLASS",
+      "RHBN",
+      "REGULATED",
+      "human_interference_class"
+    ]
+  }
+}

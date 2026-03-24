@@ -10,6 +10,42 @@ All notable changes to the Streamflow Signatures project.
 - Add ERA5/PRISM data fetching for USGS/HYDAT gages
 - Implement synchrony metrics (cross-correlation, lag analysis)
 
+### rpkg: Proper R Package Implementation (March 2026)
+
+**New R package** (`rpkg/`) rewriting the monolithic `R/helperFunctions.R` as a proper installable R package (`streamflowsignatures`). Mirrors the Julia/Python package structure with 18 source files, shared `config/signatures_config.json`, and full test suite.
+
+**Package structure**: DESCRIPTION, NAMESPACE (roxygen2), 16 R source files, 6 test files, 27 man pages. R CMD check: 0 errors, 0 warnings.
+
+**Benchmark Results (March 2026)**:
+- 7,369 gages processed, 551 signature columns, 0 errors, 114 min (1.08 gages/s)
+- rpkg vs canonical R: 490/551 perfect (>=0.999), 51 good, 10 poor
+- rpkg vs Python: 527/551 perfect, 18 good, 6 poor
+- rpkg vs Julia: 515/551 perfect, 28 good, 8 poor
+
+rpkg aligns more closely with Python/Julia than canonical R does (527 perfect vs Python, compared to 475 for canonical R), because rpkg uses config-driven parameters and code review fixes that match the Python/Julia implementations.
+
+**Code review fixes applied during rpkg development**:
+- `filter_qualifying_years()`: Stage 2 counts non-NA Q values (not total rows), matching Python/Julia
+- `fdc.R`: Uses config `fdc_min_days=250` instead of hardcoded 30; adds negative Q filtering before `log10()`
+- `flashiness.R`: Uses config `flashiness_min_days=250` instead of hardcoded 30
+- `flow_volumes.R`: Renamed `Q95-Q10` to `Q95_Q10` matching Python/Julia naming
+- `baseflow.R`: Paired masking for BFI computation; BFI clamped to [0,1]
+- `runoff_ratios.R`: Paired dropna before aggregation (rows where either Q or PPT is NA excluded)
+- `elasticity.R`: Removed fallback path; returns NA when insufficient for rolling window (matching Julia)
+- `qa_qc.R`: Added 5 missing QA/QC flags (elasticity, runoff ratio, seasonal sum, percentile ordering)
+
+**Known divergences from canonical R** (10 poor columns, all intentional — see docs/CROSS_LANGUAGE_STATUS.md):
+- 4 FDC90th columns: `min_days=250` (config) vs `30` (canonical R hardcoded)
+- 2 BFI_LyneHollick p-values: Paired masking vs independent `na.rm=TRUE` sums
+- 2 elasticity p-values, 2 avg_storage p-values: Canonical R pre-removes NA Q rows before climate merge; rpkg does not
+
+**New benchmark files**:
+- `docs/benchmarks/run_rpkg_benchmark.R` — rpkg full signature extraction
+- `docs/benchmarks/compare_rpkg.py` — rpkg vs R/Python/Julia comparison
+- `docs/benchmarks/rpkg_signatures.csv` — rpkg benchmark output
+- `docs/benchmarks/rpkg_comparison.csv` — Detailed per-column R² results
+- `rpkg/tests/smoke_test_real_data.R` — Real-data smoke test (10 gages)
+
 ### Benchmark Script Fixes and Re-Run (March 2026)
 
 **R Benchmark Script Path Bugs (HIGH — script failed to run)**:

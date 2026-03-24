@@ -66,6 +66,13 @@ streamflowSignatures/
 │       ├── generate_golden_outputs.R
 │       └── verify_no_regression.R  # Golden output regression check
 │
+├── rpkg/                        # R package (production-ready, mirrors Julia/Python structure)
+│   ├── DESCRIPTION
+│   ├── NAMESPACE
+│   ├── README.md
+│   ├── R/                       # 17 modules
+│   └── tests/                   # testthat tests + real-data smoke test
+│
 ├── python/                      # Python package (production-ready)
 │   ├── README.md
 │   ├── pyproject.toml
@@ -260,12 +267,15 @@ Python and Julia implementations are validated against R using the R² of the id
 
 ### Current Status (March 2026, Post-Round 6)
 
-| Metric | Julia | Python | R |
-|--------|-------|--------|---|
-| Total Time | 9.2 min | 78.9 min | 874 min* |
-| Processing Rate | 13.4/s | 1.56/s | 0.11/s* |
+| Metric | rpkg | Julia | Python | R (canonical) |
+|--------|------|-------|--------|---------------|
+| Total Time | 114 min | 9.2 min | 78.9 min | 874 min* |
+| Gages Processed | 7,369 | 7,369 | 7,369 | 5,707 |
+| Processing Rate | 1.08/s | 13.4/s | 1.56/s | 0.11/s* |
 
-*March 16-17, 2026 re-run. R ran concurrently with Python/Julia — timing inflated by I/O contention. Previous solo R runs: ~1-2 hours.
+*March 16-17, 2026 re-run. R canonical ran concurrently with Python/Julia — timing inflated by I/O contention. Previous solo R runs: ~1-2 hours.
+
+#### Three-Way (R canonical vs Python vs Julia)
 
 | Pair | Mean R² | Median R² | Min R² | Cols < 0.99 |
 |------|---------|-----------|--------|-------------|
@@ -274,6 +284,16 @@ Python and Julia implementations are validated against R using the R² of the id
 | Python vs Julia | 0.9997 | 1.0000 | 0.9771 | 3 |
 
 475 perfect (R²>=0.999), 56 good (0.99-0.999), 20 poor (<0.99). 531 of 551 columns (96.4%) have R² >= 0.99 across all 3 pairs. All 3 languages are production-ready. The 20 poor columns are trend statistics (slopes, p-values) sensitive to small numerical differences — the underlying signature means/medians are near-identical.
+
+#### rpkg vs Other Implementations
+
+| Pair | Perfect (>=0.999) | Good (0.99-0.999) | Poor (<0.99) |
+|------|-------------------|-------------------|-------------|
+| rpkg vs Python | **527** | 18 | 6 |
+| rpkg vs Julia | **515** | 28 | 8 |
+| rpkg vs R (canonical) | **490** | 51 | 10 |
+
+rpkg aligns more closely with Python/Julia than canonical R does (527 vs 475 perfect columns with Python), because rpkg uses config-driven parameters consistently. The 10 poor columns vs canonical R are all explained by 4 intentional design decisions documented in [rpkg/README.md](../rpkg/README.md#intentional-differences-from-canonical-r) and [CROSS_LANGUAGE_STATUS.md](CROSS_LANGUAGE_STATUS.md#rpkg-intentional-design-decisions).
 
 #### Alignment Progress (Spearman rho, cols < 0.99 — historical metric through Round 6)
 
@@ -301,8 +321,11 @@ Python and Julia agree near-perfectly on all columns (min Py-Jl R² = 0.977, onl
 # All scripts use __file__/@__DIR__ for paths, so they work from any directory.
 # Run from project root for consistency:
 
-# R benchmark (~1-5 hours)
+# R canonical benchmark (~1-5 hours)
 Rscript docs/benchmarks/run_r_benchmark.R
+
+# rpkg benchmark (~2 hours)
+Rscript docs/benchmarks/run_rpkg_benchmark.R
 
 # Python benchmark (~70-130 min)
 python docs/benchmarks/run_python_benchmark.py
@@ -310,17 +333,23 @@ python docs/benchmarks/run_python_benchmark.py
 # Julia benchmark (~10 min)
 julia docs/benchmarks/run_julia_benchmark.jl
 
-# Three-way comparison (R vs Python vs Julia)
+# Three-way comparison (R canonical vs Python vs Julia)
 python docs/benchmarks/compare_three_way.py
+
+# rpkg comparison (rpkg vs R canonical, Python, Julia)
+python docs/benchmarks/compare_rpkg.py
 ```
 
 ### Benchmark Files
 
 | File | Description |
 |------|-------------|
+| `docs/benchmarks/run_r_benchmark.R` | R canonical full signature extraction |
+| `docs/benchmarks/run_rpkg_benchmark.R` | rpkg package full signature extraction |
 | `docs/benchmarks/run_python_benchmark.py` | Python full signature extraction |
 | `docs/benchmarks/run_julia_benchmark.jl` | Julia full signature extraction |
 | `docs/benchmarks/compare_three_way.py` | **PRIMARY** — Three-way comparison using R² of identity line (y=x) |
+| `docs/benchmarks/compare_rpkg.py` | rpkg vs all other implementations |
 | `docs/benchmarks/comparison_report.md` | Generated comparison report |
 
 For implementation details, alignment history, and known divergences, see [`CROSS_LANGUAGE_STATUS.md`](CROSS_LANGUAGE_STATUS.md).
