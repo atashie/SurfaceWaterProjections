@@ -12,7 +12,6 @@ from .stats import generate_stats
 from .config import (
     ELASTICITY_WINDOW_YEARS,
     ELASTICITY_MIN_YEARS,
-    ELASTICITY_MIN_DATA_COMPLETENESS,
     ELASTICITY_MIN_ANNUAL_PPT,
 )
 
@@ -21,8 +20,9 @@ def calculate_streamflow_elasticity(
     streamflow_data: pd.DataFrame,
     rolling_window: int = ELASTICITY_WINDOW_YEARS,
     min_years: int = ELASTICITY_MIN_YEARS,
-    min_completeness: float = ELASTICITY_MIN_DATA_COMPLETENESS,
     min_annual_ppt: float = ELASTICITY_MIN_ANNUAL_PPT,
+    trend_completeness: Optional[float] = None,
+    decade_completeness: Optional[float] = None,
 ) -> Dict[str, float]:
     """
     Calculate streamflow elasticity trends.
@@ -41,8 +41,6 @@ def calculate_streamflow_elasticity(
         Size of rolling window for trend calculation (years)
     min_years : int, default 15
         Minimum number of valid years required
-    min_completeness : float, default 0.9
-        Minimum fraction of valid days per year
     min_annual_ppt : float, default 10
         Minimum annual precipitation (mm) for valid year
 
@@ -71,30 +69,12 @@ def calculate_streamflow_elasticity(
 
     df = streamflow_data
 
-    # Aggregate to annual totals with data quality check
+    # Aggregate to annual totals
     annual = df.groupby("water_year").agg({
         "Q": lambda x: x.sum(),
         "PPT": lambda x: x.sum(),
     }).reset_index()
     annual.columns = ["water_year", "Q_annual", "P_annual"]
-
-    # Count valid days per year
-    valid_counts = df.groupby("water_year").apply(
-        lambda x: ((~x["Q"].isna()) & (~x["PPT"].isna())).sum()
-    ).reset_index()
-    valid_counts.columns = ["water_year", "n_valid_days"]
-    annual = annual.merge(valid_counts, on="water_year")
-
-    # Calculate expected days per water year (accounting for leap years)
-    def expected_days(wy):
-        # Water year ends in year wy, so check if wy is a leap year
-        is_leap = (wy % 4 == 0 and wy % 100 != 0) or (wy % 400 == 0)
-        return 366 if is_leap else 365
-
-    annual["expected_days"] = annual["water_year"].apply(expected_days)
-
-    # Filter: remove years with >10% missing data
-    annual = annual[annual["n_valid_days"] >= min_completeness * annual["expected_days"]]
 
     # Remove years with zero or very low precipitation
     annual = annual[annual["P_annual"] > min_annual_ppt]
@@ -168,7 +148,9 @@ def calculate_streamflow_elasticity(
         trend_stats = generate_stats(
             rolling_df,
             value_cols=["elasticity_rolling"],
-            year_col="water_year"
+            year_col="water_year",
+            trend_completeness=trend_completeness,
+            decade_completeness=decade_completeness,
         )
 
         result = {
@@ -188,7 +170,9 @@ def calculate_streamflow_elasticity(
         trend_stats = generate_stats(
             annual_valid,
             value_cols=["elasticity"],
-            year_col="water_year"
+            year_col="water_year",
+            trend_completeness=trend_completeness,
+            decade_completeness=decade_completeness,
         )
 
         result = {

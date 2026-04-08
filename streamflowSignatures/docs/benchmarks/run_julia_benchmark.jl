@@ -82,8 +82,9 @@ function main()
         timing["phases"]["load_climate"] = 0.0
     end
 
-    # Phase 3: Per-year quality filtering (matching R's three-stage filter)
-    println("\nPhase 3: Per-year quality filtering...")
+    # Phase 3: Per-year quality filtering
+    use_legacy = CFG_USE_LEGACY_FILTERING
+    println("\nPhase 3: Per-year quality filtering (legacy=$use_legacy)...")
     t0 = time()
 
     # Pre-group data for O(1) lookups
@@ -96,15 +97,43 @@ function main()
         grouped_climate = groupby(climate, :gage_id)
     end
 
-    # Per-gage, per-year filtering — build list of (original_gage_id, qualifying_years) tuples
-    qualifying_entries = Vector{Tuple{Any, Vector{Int}}}()  # (original gage_id value, qualifying years)
+    # Per-gage filtering — build list of (original_gage_id, qualifying_years) tuples
+    qualifying_entries = Vector{Tuple{Any, Vector{Int}}}()
     total_gages = length(grouped_streamflow)
 
-    for (key, gage_data_view) in pairs(grouped_streamflow)
-        gage_df = DataFrame(gage_data_view)
-        qual_years, qualifies = filter_qualifying_years(gage_df)
-        if qualifies
-            push!(qualifying_entries, (key.gage_id, qual_years))
+    # Cache preprocessing results for non-legacy path
+    preprocess_cache = Dict{Any, NamedTuple}()
+
+    if use_legacy
+        for (key, gage_data_view) in pairs(grouped_streamflow)
+            gage_df = DataFrame(gage_data_view)
+            qual_years, qualifies = filter_qualifying_years(gage_df)
+            if qualifies
+                push!(qualifying_entries, (key.gage_id, qual_years))
+            end
+        end
+    else
+        for (i_g, (key, gage_data_view)) in enumerate(pairs(grouped_streamflow))
+            if i_g % 500 == 0
+                println("  Preprocessing gage $i_g/$total_gages...")
+            end
+            gage_df = DataFrame(gage_data_view)
+
+            # Merge climate data BEFORE preprocessing so PPT is available
+            if has_climate && grouped_climate !== nothing
+                try
+                    gage_climate = DataFrame(grouped_climate[(key.gage_id,)])[:, [:gage_id, :date, :PPT]]
+                    gage_df = leftjoin(gage_df, gage_climate, on=[:gage_id, :date])
+                catch
+                    # Climate data not available for this gage
+                end
+            end
+
+            result = preprocess_daily_data(gage_df)
+            if length(result.valid_years) >= CFG_MIN_NUM_YEARS
+                push!(qualifying_entries, (key.gage_id, result.valid_years))
+                preprocess_cache[key.gage_id] = result
+            end
         end
     end
 
@@ -131,30 +160,49 @@ function main()
 
         gage_id_str = string(orig_gage_id)
 
-        # O(1) lookup from pre-grouped data using original key
-        gage_data = DataFrame(grouped_streamflow[(orig_gage_id,)])
-
-        # Filter to qualifying water years only (matching R's per-year filter)
-        if !isempty(qual_years)
-            qual_set = Set(qual_years)
-            gage_data = gage_data[in.(gage_data.water_year, Ref(qual_set)), :]
-        end
-
-        # Merge climate data if available — O(1) lookup
-        if has_climate && grouped_climate !== nothing
-            try
-                gage_climate = DataFrame(grouped_climate[(orig_gage_id,)])[:, [:gage_id, :date, :PPT]]
-                gage_data = leftjoin(gage_data, gage_climate, on=[:gage_id, :date])
-            catch
-                # Climate data not available for this gage
+        if use_legacy
+            # Legacy path: raw data + per-year filter
+            gage_data = DataFrame(grouped_streamflow[(orig_gage_id,)])
+            if !isempty(qual_years)
+                qual_set = Set(qual_years)
+                gage_data = gage_data[in.(gage_data.water_year, Ref(qual_set)), :]
             end
+
+            # Merge climate data if available
+            if has_climate && grouped_climate !== nothing
+                try
+                    gage_climate = DataFrame(grouped_climate[(orig_gage_id,)])[:, [:gage_id, :date, :PPT]]
+                    gage_data = leftjoin(gage_data, gage_climate, on=[:gage_id, :date])
+                catch
+                end
+            end
+
+            signatures = calculate_all_signatures(gage_data, has_climate; gage_id=gage_id_str)
+        else
+            # New path: use preprocessed data with seasonal flags + trend completeness
+            pp = preprocess_cache[orig_gage_id]
+            gage_data = pp.data
+            gage_has_climate = has_climate && length(pp.valid_climate_years) > 0
+
+            # Filter to valid_climate_years for climate signatures (Bug fix:
+            # prevent Q-valid/PPT-invalid years from leaking into climate functions)
+            climate_data = nothing
+            if gage_has_climate
+                climate_yr_set = Set(pp.valid_climate_years)
+                climate_data = gage_data[in.(gage_data.water_year, Ref(climate_yr_set)), :]
+            end
+
+            signatures = calculate_all_signatures(
+                gage_data, gage_has_climate;
+                gage_id=gage_id_str,
+                seasonal_flags=pp.seasonal_flags,
+                trend_completeness=CFG_NA_TREND_MIN_FRACTION,
+                decade_completeness=CFG_NA_DECADE_MIN_FRACTION,
+                climate_data=climate_data
+            )
         end
 
-        # Calculate signatures
-        signatures = calculate_all_signatures(gage_data, has_climate; gage_id=gage_id_str)
         signatures["gage_id"] = gage_id_str
-
-        # Add computed metadata columns (matching R output)
         signatures["start_water_year"] = isempty(qual_years) ? NaN : Float64(minimum(qual_years))
         signatures["end_water_year"] = isempty(qual_years) ? NaN : Float64(maximum(qual_years))
         signatures["num_water_years"] = length(qual_years)

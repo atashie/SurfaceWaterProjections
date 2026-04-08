@@ -5,21 +5,17 @@
 #' statistics per metric (22 metrics x 8 stats = 176 columns).
 #'
 #' @param streamflow_data A data.frame with columns: water_year, Q, month, dowy.
+#' @param seasonal_flags Optional data.table from \code{preprocess_daily_data()}
+#'   with columns water_year plus \code{<season>_complete} logicals. When
+#'   supplied, seasonal totals for incomplete seasons are set to NA.
 #' @return Named list of statistics.
 #' @export
-calculate_flow_vols_by_year <- function(streamflow_data) {
+calculate_flow_vols_by_year <- function(streamflow_data, seasonal_flags = NULL,
+                                       trend_completeness = NULL,
+                                       decade_completeness = NULL) {
   required_cols <- c("water_year", "Q", "month", "dowy")
   missing <- setdiff(required_cols, colnames(streamflow_data))
   if (length(missing) > 0) stop(paste("Missing required columns:", paste(missing, collapse = ", ")))
-
-  min_days <- pkg_env$flow_volumes_min_days
-
-  # Filter water years with insufficient data
-  years <- unique(streamflow_data$water_year)
-  valid_years <- vapply(years, function(yr) {
-    sum(!is.na(streamflow_data$Q[streamflow_data$water_year == yr])) >= min_days
-  }, logical(1))
-  streamflow_data <- streamflow_data[streamflow_data$water_year %in% years[valid_years], ]
 
   if (nrow(streamflow_data) == 0) return(list())
 
@@ -43,6 +39,29 @@ calculate_flow_vols_by_year <- function(streamflow_data) {
     all_metrics <- merge(all_metrics, seas, by = "water_year", all.x = TRUE)
   }
 
+  # Apply seasonal_flags: set incomplete seasons to NA
+  if (!is.null(seasonal_flags)) {
+    sf <- data.table::as.data.table(seasonal_flags)
+    season_col_map <- list(
+      Qwin = "winter_complete",
+      Qspr = "spring_complete",
+      Qsum = "summer_complete",
+      Qfal = "fall_complete"
+    )
+    for (metric_col in names(season_col_map)) {
+      flag_col <- season_col_map[[metric_col]]
+      if (metric_col %in% names(all_metrics) && flag_col %in% names(sf)) {
+        for (i in seq_len(nrow(all_metrics))) {
+          wy <- all_metrics$water_year[i]
+          flag_row <- sf[sf$water_year == wy, ]
+          if (nrow(flag_row) == 1 && !isTRUE(flag_row[[flag_col]])) {
+            all_metrics[[metric_col]][i] <- NA_real_
+          }
+        }
+      }
+    }
+  }
+
   # Percentiles
   pcts <- pkg_env$flow_volumes_percentiles
   for (p in pcts) {
@@ -62,5 +81,7 @@ calculate_flow_vols_by_year <- function(streamflow_data) {
   }
 
   metric_columns <- setdiff(names(all_metrics), "water_year")
-  generate_stats(all_metrics, value_cols = metric_columns, year_col = "water_year")
+  generate_stats(all_metrics, value_cols = metric_columns, year_col = "water_year",
+                 trend_completeness = trend_completeness,
+                 decade_completeness = decade_completeness)
 }

@@ -3,7 +3,9 @@
 #' @param streamflow_data A data.frame with columns: water_year, Q, dowy.
 #' @return Named list of 8 statistics for flashinessRB.
 #' @export
-analyze_flashiness_trends <- function(streamflow_data) {
+analyze_flashiness_trends <- function(streamflow_data,
+                                     trend_completeness = NULL,
+                                     decade_completeness = NULL) {
   required_cols <- c("water_year", "Q")
   missing <- setdiff(required_cols, colnames(streamflow_data))
   if (length(missing) > 0) stop(paste("Missing required columns:", paste(missing, collapse = ", ")))
@@ -15,8 +17,6 @@ analyze_flashiness_trends <- function(streamflow_data) {
   for (yr in years) {
     year_data <- streamflow_data[streamflow_data$water_year == yr, ]
 
-    if (sum(!is.na(year_data$Q)) < pkg_env$flashiness_min_days) next
-
     if ("dowy" %in% colnames(year_data)) {
       year_data <- year_data[order(year_data$dowy), ]
     }
@@ -24,7 +24,6 @@ analyze_flashiness_trends <- function(streamflow_data) {
     q_values <- year_data$Q
 
     if (any(is.na(q_values))) {
-      if (sum(is.na(q_values)) / length(q_values) > 0.2) next
       q_values <- approx(seq_along(q_values), q_values, seq_along(q_values), rule = 2)$y
     }
 
@@ -36,7 +35,9 @@ analyze_flashiness_trends <- function(streamflow_data) {
   }
 
   result <- generate_stats(flashiness_by_year, value_cols = "RB_index",
-                           year_col = "water_year")
+                           year_col = "water_year",
+                           trend_completeness = trend_completeness,
+                           decade_completeness = decade_completeness)
   names(result) <- gsub("RB_index", "flashinessRB", names(result))
   result
 }

@@ -8,10 +8,18 @@
 #'   If NULL, uses all numeric columns except year_col.
 #' @param year_col Name of the year column (default "water_year").
 #' @param min_rows Minimum non-NA rows required for trend statistics.
+#' @param trend_completeness Numeric in (0,1] or NULL. If non-NULL, trend
+#'   statistics are set to NA when the fraction of non-NA values falls below
+#'   this threshold. Mean and median are still computed.
+#' @param decade_completeness Numeric in (0,1] or NULL. If non-NULL (and
+#'   \code{trend_completeness} is also non-NULL), the first and last decades
+#'   of the series must each have at least this fraction of non-NA values,
+#'   otherwise trend statistics are set to NA.
 #' @return Named list of statistics (metric_stat = value).
 #' @export
 generate_stats <- function(data, value_cols = NULL, year_col = "water_year",
-                           min_rows = 3) {
+                           min_rows = 3, trend_completeness = NULL,
+                           decade_completeness = NULL) {
   if (!is.data.frame(data)) stop("Input 'data' must be a data.frame or data.table")
   if (!year_col %in% colnames(data)) stop(paste("Year column", year_col, "not found"))
 
@@ -38,6 +46,43 @@ generate_stats <- function(data, value_cols = NULL, year_col = "water_year",
 
     if (length(w_values) < min_rows) {
       results <- c(results, empty_stats(col))
+      next
+    }
+
+    # Trend completeness check: uses metric's own non-NA year range for decades
+    skip_trends <- FALSE
+    if (!is.null(trend_completeness)) {
+      all_values <- data[[col]]
+      all_years  <- data[[year_col]]
+      valid_mask <- !is.na(all_values)
+      valid_yrs  <- all_years[valid_mask]
+      if (length(valid_yrs) > 0) {
+        metric_min <- min(valid_yrs)
+        metric_max <- max(valid_yrs)
+        metric_span <- metric_max - metric_min + 1
+        if (metric_span > 0 && (length(valid_yrs) / metric_span) < trend_completeness) skip_trends <- TRUE
+        if (!skip_trends && !is.null(decade_completeness) && metric_span >= 10) {
+          first_yrs <- valid_yrs[valid_yrs >= metric_min & valid_yrs <= (metric_min + 9)]
+          first_exp <- min(10, metric_span)
+          if (first_exp > 0 && (length(first_yrs) / first_exp) < decade_completeness) skip_trends <- TRUE
+          if (!skip_trends) {
+            last_start <- metric_max - 9
+            last_yrs <- valid_yrs[valid_yrs >= last_start & valid_yrs <= metric_max]
+            last_exp <- min(10, metric_max - max(last_start, metric_min) + 1)
+            if (last_exp > 0 && (length(last_yrs) / last_exp) < decade_completeness) skip_trends <- TRUE
+          }
+        }
+      }
+    }
+    if (skip_trends) {
+      results[[paste0(col, "_senn_slp")]]      <- NA_real_
+      results[[paste0(col, "_linear_slp")]]    <- NA_real_
+      results[[paste0(col, "_spearman_rho")]]  <- NA_real_
+      results[[paste0(col, "_spearman_pval")]] <- NA_real_
+      results[[paste0(col, "_mk_rho")]]        <- NA_real_
+      results[[paste0(col, "_mk_pval")]]       <- NA_real_
+      results[[paste0(col, "_mean")]]          <- mean(w_values, na.rm = TRUE)
+      results[[paste0(col, "_median")]]        <- median(w_values, na.rm = TRUE)
       next
     }
 

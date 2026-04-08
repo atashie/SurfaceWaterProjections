@@ -43,8 +43,15 @@ Other `helperFunctions*.R` files in `archive/` are deprecated.
 3. **Flow Units**: mm/day (converted from cfs/m3s)
 4. **Minimum Data Requirements**:
    - 20+ water years per gage
-   - 95% non-NA days per water year
+   - Year qualification via `preprocess_daily_data()`: rejects years with >30 NAs, >3-day gaps, negative Q
    - 30+ days above minimum flow threshold
+   - No per-signature min_days thresholds — preprocessor is single source of truth
+5. **NA Handling** (April 2026): `preprocess_daily_data()` runs ONCE per gage BEFORE signatures.
+   - Interpolates internal gaps <= 3 days; rejects years with >30 raw NAs, >3-day gaps, negative Q
+   - Config: `config/signatures_config.json` → `na_handling` section
+   - `use_legacy_filtering: false` — new preprocessing is the default
+   - Do NOT use fillna(0) in signature functions — the preprocessor handles NAs centrally
+   - Do NOT add per-year min_days or max_na_frac checks in signature functions
 
 ## Signature Statistics Rule
 
@@ -88,7 +95,7 @@ Other `helperFunctions*.R` files in `archive/` are deprecated.
 
 - **@docs/DEVELOPMENT.md** - Architecture, file structure, common tasks, workflows
 - **@docs/SIGNATURES.md** - Detailed signature documentation (10 categories)
-- **@CHANGELOG.md** - Bug fixes, known issues, roadmap
+- **@CHANGELOG.md** - Current work, roadmap (historical: `docs/CHANGELOG_ARCHIVE.md`)
 - **@docs/SIGNATURE_GUIDELINES.md** - Collaborative guidelines from hydrology colleagues (auto-synced)
 
 ## Session-Start Workflow: Guidelines Sync

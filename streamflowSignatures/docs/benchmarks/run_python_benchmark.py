@@ -21,6 +21,7 @@ from streamflow_signatures import (
     read_parquet,
     add_water_year_columns,
     filter_qualifying_years,
+    preprocess_daily_data,
     calculate_all_signatures,
 )
 from streamflow_signatures.qa_qc import compute_qa_flags
@@ -30,6 +31,9 @@ from streamflow_signatures.config import (
     MIN_FRAC_GOOD_DATA,
     MIN_Q_VALUE,
     MIN_DAYS_ABOVE_THRESHOLD,
+    USE_LEGACY_FILTERING,
+    NA_TREND_MIN_FRACTION,
+    NA_DECADE_MIN_FRACTION,
     GAGES_II_DIR,
 )
 
@@ -116,8 +120,9 @@ def main():
         print(f"  Climate file not found, skipping climate signatures")
         timing["phases"]["load_climate"] = 0
 
-    # Phase 3: Per-year quality filtering (matching R's three-stage filter)
-    print("\nPhase 3: Per-year quality filtering...")
+    # Phase 3: Per-year quality filtering
+    use_legacy = USE_LEGACY_FILTERING
+    print(f"\nPhase 3: Per-year quality filtering (legacy={use_legacy})...")
     t0 = time.perf_counter()
 
     # Group by gage for per-gage, per-year filtering
@@ -126,12 +131,26 @@ def main():
     gage_qualifying_years = {}  # gage_id -> list of qualifying water years
     total_gages = 0
 
-    for gage_id, gage_data in grouped:
-        total_gages += 1
-        qual_years, qualifies = filter_qualifying_years(gage_data)
-        if qualifies:
-            qualifying_gages.append(gage_id)
-            gage_qualifying_years[gage_id] = qual_years
+    # Cache preprocessing results for non-legacy path
+    preprocess_cache = {}
+
+    if use_legacy:
+        for gage_id, gage_data in grouped:
+            total_gages += 1
+            qual_years, qualifies = filter_qualifying_years(gage_data)
+            if qualifies:
+                qualifying_gages.append(gage_id)
+                gage_qualifying_years[gage_id] = qual_years
+    else:
+        for gage_id, gage_data in grouped:
+            total_gages += 1
+            if total_gages % 500 == 0:
+                print(f"  Preprocessing gage {total_gages}...")
+            result = preprocess_daily_data(gage_data)
+            if len(result["valid_years"]) >= MIN_NUM_YEARS:
+                qualifying_gages.append(gage_id)
+                gage_qualifying_years[gage_id] = result["valid_years"]
+                preprocess_cache[gage_id] = result
 
     print(f"  Total gages: {total_gages}")
     print(f"  Qualifying gages: {len(qualifying_gages)}")
@@ -160,13 +179,33 @@ def main():
             eta = (n_gages - i - 1) / rate if rate > 0 else 0
             print(f"  [{i+1}/{n_gages}] Processing... ({rate:.1f} gages/s, ETA: {eta/60:.1f} min)")
 
-        # Filter to qualifying water years only (matching R's per-year filter)
         qual_years = gage_qualifying_years.get(gage_id, [])
-        if qual_years:
-            gage_data = gage_data[gage_data["water_year"].isin(qual_years)]
 
-        # Calculate signatures
-        signatures = calculate_all_signatures(gage_data, has_climate)
+        if use_legacy:
+            # Legacy path: raw data + per-year filter
+            if qual_years:
+                gage_data = gage_data[gage_data["water_year"].isin(qual_years)]
+            signatures = calculate_all_signatures(gage_data, has_climate)
+        else:
+            # New path: use preprocessed data with seasonal flags + trend completeness
+            pp = preprocess_cache[gage_id]
+            pp_data = pp["data"]
+            gage_has_climate = has_climate and len(pp.get("valid_climate_years", [])) > 0
+
+            # Filter to valid_climate_years for climate signatures
+            climate_data = None
+            if gage_has_climate:
+                climate_yr_set = set(pp["valid_climate_years"])
+                climate_data = pp_data[pp_data["water_year"].isin(climate_yr_set)]
+
+            signatures = calculate_all_signatures(
+                pp_data, gage_has_climate,
+                seasonal_flags=pp.get("seasonal_flags"),
+                trend_completeness=NA_TREND_MIN_FRACTION,
+                decade_completeness=NA_DECADE_MIN_FRACTION,
+                climate_data=climate_data,
+            )
+
         signatures["gage_id"] = gage_id
 
         # Add computed metadata columns (matching R output)

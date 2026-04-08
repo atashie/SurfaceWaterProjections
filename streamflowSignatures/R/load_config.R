@@ -76,8 +76,6 @@ CFG_ECKHARDT_BFIMAX <- CFG$baseflow$eckhardt_bfimax
 CFG_ECKHARDT_ALPHA <- CFG$baseflow$eckhardt_alpha
 CFG_LYNE_HOLLICK_ALPHA <- CFG$baseflow$lyne_hollick_alpha
 CFG_LYNE_HOLLICK_PASSES <- CFG$baseflow$lyne_hollick_passes
-CFG_BASEFLOW_MIN_DAYS <- CFG$baseflow$min_days
-CFG_BASEFLOW_MAX_MISSING_FRAC <- CFG$baseflow$max_missing_frac
 
 # Recession Parameters
 CFG_RECESSION_MIN_LENGTH <- CFG$recession$min_length
@@ -87,43 +85,28 @@ CFG_RECESSION_MIN_EVENTS <- CFG$recession$min_events
 CFG_HIGH_PULSE_PERCENTILE <- CFG$pulses$high_percentile
 CFG_LOW_PULSE_PERCENTILE <- CFG$pulses$low_percentile
 CFG_FLOW_REVERSAL_THRESHOLD <- CFG$pulses$flow_reversal_threshold
-CFG_PULSES_MIN_DAYS <- CFG$pulses$min_days
 
 # Timing Parameters
-CFG_TIMING_MIN_DAYS <- CFG$timing$min_days
 CFG_D_PERCENTILES <- CFG$timing$d_percentiles
 
 # Elasticity Parameters
 CFG_ELASTICITY_WINDOW_YEARS <- CFG$elasticity$window_years
 CFG_ELASTICITY_MIN_YEARS <- CFG$elasticity$min_years
-CFG_ELASTICITY_MIN_DATA_COMPLETENESS <- CFG$elasticity$min_data_completeness
 CFG_ELASTICITY_MIN_ANNUAL_PPT <- CFG$elasticity$min_annual_ppt
 
 # Q-P Seasonality Parameters
 CFG_QP_SLOPE_WINDOW_DAYS <- CFG$qp_seasonality$slope_window_days
 CFG_QP_MIN_YEARS <- CFG$qp_seasonality$min_years
-CFG_QP_MIN_DAYS_PER_YEAR <- CFG$qp_seasonality$min_days_per_year
-CFG_QP_MAX_NA_FRAC <- CFG$qp_seasonality$max_na_frac
 
 # Runoff Ratio Parameters
 CFG_RUNOFF_MIN_ANNUAL_PPT <- CFG$runoff_ratios$min_annual_ppt
 CFG_RUNOFF_MIN_SEASONAL_PPT <- CFG$runoff_ratios$min_seasonal_ppt
 
 # Flow Volumes Parameters
-CFG_FLOW_VOLUMES_MIN_DAYS <- CFG$flow_volumes$min_days
 CFG_FLOW_PERCENTILES <- CFG$flow_volumes$percentiles
-
-# FDC Parameters
-CFG_FDC_MIN_DAYS <- CFG$fdc$min_days
-
-# Flashiness Parameters
-CFG_FLASHINESS_MIN_DAYS <- CFG$flashiness$min_days
-CFG_FLASHINESS_MAX_MISSING_FRAC <- CFG$flashiness$max_missing_frac
 
 # Storage Parameters
 CFG_STORAGE_MIN_YEARS <- CFG$storage$min_years
-CFG_STORAGE_MIN_DAYS_PER_YEAR <- CFG$storage$min_days_per_year
-CFG_STORAGE_MAX_NA_FRAC <- CFG$storage$max_na_frac
 
 # QA/QC Parameters
 CFG_QAQC_QANN_RANGE <- CFG$qa_qc$qann_range

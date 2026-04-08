@@ -5,7 +5,7 @@ Cumulative flow timing metrics (D-day metrics) and peak timing.
 """
 
 """
-    analyze_flow_timing_trends(df::DataFrame; min_days=300) -> Dict
+    analyze_flow_timing_trends(df::DataFrame) -> Dict
 
 Calculate flow timing signatures with trend statistics.
 
@@ -20,15 +20,14 @@ Parameters
 ----------
 df : DataFrame
     Daily streamflow data with columns: water_year, Q, dowy
-min_days : Int
-    Minimum days per year for valid calculation
+    (preprocessor guarantees all years are valid)
 
 Returns
 -------
 Dict{String, Float64}
     Dictionary of signature statistics (13 metrics × 8 stats = 104 values)
 """
-function analyze_flow_timing_trends(df::DataFrame; min_days::Int=300)
+function analyze_flow_timing_trends(df::DataFrame; trend_completeness::Union{Nothing, Float64}=nothing, decade_completeness::Union{Nothing, Float64}=nothing)
     result = Dict{String, Float64}()
 
     # D-day percentiles from config
@@ -78,10 +77,6 @@ function analyze_flow_timing_trends(df::DataFrame; min_days::Int=300)
         end
         year_df = df[year_mask, :]
 
-        if nrow(year_df) < min_days
-            continue
-        end
-
         yr_idx = findfirst(annual_data.water_year .== yr)
         yr_idx === nothing && continue
 
@@ -90,9 +85,13 @@ function analyze_flow_timing_trends(df::DataFrame; min_days::Int=300)
         perm = sortperm(dowy_clean)
         dowy_sorted = dowy_clean[perm]
 
-        # Handle NaN/Missing in Q - replace with 0 for cumsum
+        # Handle NaN/Missing in Q - skip year if any NaNs remain
+        # (preprocess_daily_data guarantees zero NAs for valid years)
         Q_values = coalesce_q(year_df.Q)[perm]
-        Q_values[isnan.(Q_values)] .= 0.0
+        n_na = count(isnan, Q_values)
+        if n_na > 0
+            continue
+        end
 
         # Cumulative flow
         cum_Q = cumsum(Q_values)
@@ -136,7 +135,7 @@ function analyze_flow_timing_trends(df::DataFrame; min_days::Int=300)
 
     # Generate statistics for all metrics
     value_cols = filter(x -> x != "water_year", names(annual_data))
-    result = generate_stats(annual_data; value_cols=value_cols)
+    result = generate_stats(annual_data; value_cols=value_cols, trend_completeness=trend_completeness, decade_completeness=decade_completeness)
 
     return result
 end

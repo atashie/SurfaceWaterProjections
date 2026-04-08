@@ -42,7 +42,7 @@ Each signature produces **8 statistics** via `generate_stats()`:
 - Q percentiles: mm/day (daily flow at each percentile)
 
 ### Data Quality
-Years with fewer than 250 non-NA days are excluded.
+Year qualification is handled centrally by `preprocess_daily_data()` before any signature functions run.
 
 ---
 
@@ -300,13 +300,21 @@ The recession analysis (`analyze_recession_parameters`) requires a **minimum of 
 
 **Impact**: Gages with sparse recession events (e.g., intermittent streams, heavily regulated rivers) will have all recession metrics set to NA.
 
-### Flow Timing NA Handling
+### Centralized NA Handling (April 2026)
 
-The flow timing function (`analyze_flow_timing_trends`) replaces missing daily flow values with **zero before computing cumulative sums**. This is a conservative approach:
-- Prevents a single NA from corrupting the entire year's D-day calculations
-- May slightly delay calculated timing metrics (D50, D90, etc.) in years with data gaps
+Missing data is now handled centrally by `preprocess_daily_data()`, called once per gage before any signature computation. This replaces the previous per-signature ad-hoc handling:
 
-**Alternative approaches**: Interpolation would provide smoother estimates but could introduce bias in gages with systematic data gaps.
+1. **Daily grid normalization**: One row per calendar day per water year, sorted, duplicates removed
+2. **Interpolation**: Internal gaps of <=3 consecutive days are linearly interpolated. Leading/trailing (boundary) NAs are NOT interpolated.
+3. **Year rejection**: Years with >30 raw NAs, >3-day gaps, negative Q values, or residual boundary NAs are excluded
+4. **Seasonal completeness**: Computed from raw (pre-interpolation) observation counts. Seasons below 80% completeness are flagged; affected seasonal metrics are set to NA
+5. **Climate NA policy**: PPT/SWE/temp have their own NA limits, tracked separately. A year can be valid for Q-only signatures but invalid for Q-PPT signatures.
+6. **Constant-SD flag**: Detects months with a single unique non-zero Q value (sensor flatline). This is a QA flag, not a rejection criterion.
+7. **Trend completeness**: `generate_stats()` optionally requires >=80% non-NA annual metrics and >=80% in first/last decade before computing trend statistics. Short series (<10 years) skip the decade check.
+
+**Configuration**: `config/signatures_config.json` → `na_handling` section. `use_legacy_filtering: true` preserves the old 95%-non-NA-days rule.
+
+**Previous behavior** (preserved when `use_legacy_filtering: true`): The flow timing function replaced missing daily flow values with zero before computing cumulative sums. This was a conservative approach that prevented NA propagation through cumsum. The new preprocessing eliminates this need by ensuring valid years have no NAs.
 
 ### Seasonality Model Periodicity
 

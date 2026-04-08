@@ -5,18 +5,18 @@ Calculates catchment storage using simplified water balance.
 Requires precipitation (PPT) data.
 """
 
-from typing import Dict
+from typing import Dict, Optional
 import numpy as np
 import pandas as pd
 from .stats import generate_stats
-from .config import STORAGE_MIN_YEARS, STORAGE_MIN_DAYS_PER_YEAR, STORAGE_MAX_NA_FRAC
+from .config import STORAGE_MIN_YEARS
 
 
 def calculate_average_storage(
     streamflow_data: pd.DataFrame,
     min_years: int = STORAGE_MIN_YEARS,
-    min_days_per_year: int = STORAGE_MIN_DAYS_PER_YEAR,
-    max_na_frac: float = STORAGE_MAX_NA_FRAC,
+    trend_completeness: Optional[float] = None,
+    decade_completeness: Optional[float] = None,
 ) -> Dict[str, float]:
     """
     Calculate average catchment storage trends.
@@ -34,10 +34,6 @@ def calculate_average_storage(
             - dowy: int, day of water year
     min_years : int, default 10
         Minimum number of valid years required
-    min_days_per_year : int, default 300
-        Minimum days required per water year
-    max_na_frac : float, default 0.1
-        Maximum fraction of NA values allowed per year
 
     Returns
     -------
@@ -74,18 +70,9 @@ def calculate_average_storage(
     for yr, year_data in df.groupby("water_year", sort=False):
         year_data = year_data.copy()  # needed because we mutate below (fillna)
 
-        if len(year_data) < min_days_per_year:
+        # Skip years with any remaining NAs (data should be pre-interpolated)
+        if year_data["Q"].isna().any() or year_data["PPT"].isna().any():
             continue
-
-        # Check for too many NA values
-        na_frac_Q = year_data["Q"].isna().sum() / len(year_data)
-        na_frac_PPT = year_data["PPT"].isna().sum() / len(year_data)
-        if na_frac_Q > max_na_frac or na_frac_PPT > max_na_frac:
-            continue
-
-        # Replace remaining NA with 0 for cumsum
-        year_data["Q"] = year_data["Q"].fillna(0)
-        year_data["PPT"] = year_data["PPT"].fillna(0)
 
         # Sort by day of water year
         year_data = year_data.sort_values("dowy")
@@ -150,7 +137,9 @@ def calculate_average_storage(
     stats = generate_stats(
         annual_df,
         value_cols=["avg_storage"],
-        year_col="water_year"
+        year_col="water_year",
+        trend_completeness=trend_completeness,
+        decade_completeness=decade_completeness,
     )
 
     return {

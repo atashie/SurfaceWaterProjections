@@ -6,7 +6,9 @@
 #' @param streamflow_data A data.frame with columns: water_year, Q, dowy.
 #' @return Named list of 8 statistics per timing metric (13 metrics).
 #' @export
-analyze_flow_timing_trends <- function(streamflow_data) {
+analyze_flow_timing_trends <- function(streamflow_data,
+                                      trend_completeness = NULL,
+                                      decade_completeness = NULL) {
   required_cols <- c("water_year", "Q", "dowy")
   missing <- setdiff(required_cols, colnames(streamflow_data))
   if (length(missing) > 0) stop(paste("Missing required columns:", paste(missing, collapse = ", ")))
@@ -19,20 +21,16 @@ analyze_flow_timing_trends <- function(streamflow_data) {
   timing_by_year$D25_to_D75 <- NA_real_
   timing_by_year$Dmax <- NA_real_
 
-  min_days <- pkg_env$timing_min_days
-
   for (yr in years) {
     year_data <- streamflow_data[streamflow_data$water_year == yr, ]
-    if (nrow(year_data) < min_days) next
 
     year_data <- year_data[order(year_data$dowy), ]
 
     total_flow <- sum(year_data$Q, na.rm = TRUE)
     if (total_flow <= 0 || is.na(total_flow)) next
 
-    q_for_cumsum <- year_data$Q
-    q_for_cumsum[is.na(q_for_cumsum)] <- 0
-    cum_pct <- (cumsum(q_for_cumsum) / total_flow) * 100
+    if (any(is.na(year_data$Q))) next
+    cum_pct <- (cumsum(year_data$Q) / total_flow) * 100
 
     idx <- which(timing_by_year$water_year == yr)
 
@@ -58,5 +56,7 @@ analyze_flow_timing_trends <- function(streamflow_data) {
   }
 
   metric_columns <- c(paste0("D", percentiles, "_day"), "D25_to_D75", "Dmax")
-  generate_stats(timing_by_year, value_cols = metric_columns, year_col = "water_year")
+  generate_stats(timing_by_year, value_cols = metric_columns, year_col = "water_year",
+                 trend_completeness = trend_completeness,
+                 decade_completeness = decade_completeness)
 }

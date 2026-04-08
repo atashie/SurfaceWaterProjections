@@ -86,7 +86,9 @@ lyne_hollick_filter <- function(Q, alpha = pkg_env$lyne_hollick_alpha,
 #' @param streamflow_data A data.frame with columns: water_year, Q, dowy.
 #' @return Named list of 8 statistics per BFI metric (2 x 8 = 16 values).
 #' @export
-analyze_baseflow_indices <- function(streamflow_data) {
+analyze_baseflow_indices <- function(streamflow_data,
+                                    trend_completeness = NULL,
+                                    decade_completeness = NULL) {
   required_cols <- c("water_year", "Q", "dowy")
   missing <- setdiff(required_cols, colnames(streamflow_data))
   if (length(missing) > 0) stop(paste("Missing required columns:", paste(missing, collapse = ", ")))
@@ -95,17 +97,11 @@ analyze_baseflow_indices <- function(streamflow_data) {
   bfi_by_year <- data.frame(water_year = years, BFI_Eckhardt = NA_real_,
                             BFI_LyneHollick = NA_real_)
 
-  min_days <- pkg_env$baseflow_min_days
-  max_missing <- pkg_env$baseflow_max_missing_frac
-
   for (yr in years) {
     year_data <- streamflow_data[streamflow_data$water_year == yr, ]
-    if (nrow(year_data) < min_days) next
 
     year_data <- year_data[order(year_data$dowy), ]
     Q <- year_data$Q
-
-    if (sum(is.na(Q)) / length(Q) > max_missing) next
 
     bf_eck  <- eckhardt_filter(Q)
     bf_lyne <- lyne_hollick_filter(Q)
@@ -130,5 +126,7 @@ analyze_baseflow_indices <- function(streamflow_data) {
   }
 
   generate_stats(bfi_by_year, value_cols = c("BFI_Eckhardt", "BFI_LyneHollick"),
-                 year_col = "water_year")
+                 year_col = "water_year",
+                 trend_completeness = trend_completeness,
+                 decade_completeness = decade_completeness)
 }

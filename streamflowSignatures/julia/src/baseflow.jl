@@ -6,7 +6,7 @@ Digital filter methods for baseflow separation and BFI calculation.
 
 # Configuration loaded from config.jl:
 # CFG_ECKHARDT_BFIMAX, CFG_ECKHARDT_ALPHA, CFG_LYNE_HOLLICK_ALPHA,
-# CFG_LYNE_HOLLICK_PASSES, CFG_BASEFLOW_MIN_DAYS, CFG_BASEFLOW_MAX_MISSING_FRAC
+# CFG_LYNE_HOLLICK_PASSES
 
 """
     eckhardt_filter(Q::Vector; BFImax=0.8, a=0.98) -> Vector
@@ -138,7 +138,7 @@ end
 
 
 """
-    analyze_baseflow_indices(df::DataFrame; min_days=250, max_na_frac=0.2) -> Dict
+    analyze_baseflow_indices(df::DataFrame) -> Dict
 
 Calculate baseflow index signatures with trend statistics.
 
@@ -152,10 +152,7 @@ Parameters
 ----------
 df : DataFrame
     Daily streamflow data with columns: water_year, Q, dowy
-min_days : Int
-    Minimum days per year for valid calculation
-max_na_frac : Float64
-    Maximum NA fraction allowed per year
+    (preprocessor guarantees all years are valid)
 
 Returns
 -------
@@ -164,8 +161,8 @@ Dict{String, Float64}
 """
 function analyze_baseflow_indices(
     df::DataFrame;
-    min_days::Int=CFG_BASEFLOW_MIN_DAYS,
-    max_na_frac::Float64=CFG_BASEFLOW_MAX_MISSING_FRAC
+    trend_completeness::Union{Nothing, Float64}=nothing,
+    decade_completeness::Union{Nothing, Float64}=nothing
 )
     result = Dict{String, Float64}()
     metrics = ["BFI_Eckhardt", "BFI_LyneHollick"]
@@ -201,16 +198,6 @@ function analyze_baseflow_indices(
         dowy_clean = [coalesce(d, 999) for d in df.dowy[year_mask]]
         year_Q = Q_clean[year_mask]
 
-        if length(year_Q) < min_days
-            continue
-        end
-
-        # Check NA fraction
-        na_frac = sum(isnan.(year_Q)) / length(year_Q)
-        if na_frac > max_na_frac
-            continue
-        end
-
         # Sort by day of water year
         sort_idx = sortperm(dowy_clean)
         Q = year_Q[sort_idx]
@@ -227,9 +214,6 @@ function analyze_baseflow_indices(
 
         # For total Q: only need Q to be valid (matching R/Python — zeros allowed)
         valid_q_mask = .!isnan.(Q)
-        if sum(valid_q_mask) < min_days
-            continue
-        end
 
         total_Q = sum(Q[valid_q_mask])
         if total_Q <= 0
@@ -254,7 +238,7 @@ function analyze_baseflow_indices(
 
     # No early-return gate here — let generate_stats() handle min_rows internally
     # (matching R/Python, which pass whatever data exists to generate_stats)
-    result = generate_stats(annual_data; value_cols=metrics)
+    result = generate_stats(annual_data; value_cols=metrics, trend_completeness=trend_completeness, decade_completeness=decade_completeness)
 
     return result
 end

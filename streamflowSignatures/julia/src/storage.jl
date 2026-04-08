@@ -33,8 +33,8 @@ in watersheds with significant ET losses.
 function calculate_average_storage(
     df::DataFrame;
     min_years::Int=10,
-    min_days_per_year::Int=300,
-    max_na_frac::Float64=0.1
+    trend_completeness::Union{Nothing, Float64}=nothing,
+    decade_completeness::Union{Nothing, Float64}=nothing
 )
     result = Dict{String, Float64}()
 
@@ -63,26 +63,16 @@ function calculate_average_storage(
         end
         year_df = copy(df[year_mask, :])
 
-        if nrow(year_df) < min_days_per_year
-            continue
-        end
-
         # Convert to clean vectors
         Q_clean = coalesce_q(year_df.Q)
         P_clean = coalesce_q(year_df.PPT)
 
-        # Check NA fraction
-        na_frac_Q = sum(isnan.(Q_clean)) / length(Q_clean)
-        na_frac_P = sum(isnan.(P_clean)) / length(P_clean)
-        if na_frac_Q > max_na_frac || na_frac_P > max_na_frac
-            continue
-        end
-
-        # Replace NaN with 0 for cumsum
+        # Skip year if any NaNs remain (preprocessor guarantees valid years have no NAs)
         Q_vals = copy(Q_clean)
         P_vals = copy(P_clean)
-        Q_vals[isnan.(Q_vals)] .= 0.0
-        P_vals[isnan.(P_vals)] .= 0.0
+        if any(isnan, Q_vals) || any(isnan, P_vals)
+            continue
+        end
 
         # Sort by day of water year (handle Missing dowy)
         dowy_clean = [coalesce(d, 999) for d in year_df.dowy]
@@ -164,5 +154,5 @@ function calculate_average_storage(
         avg_storage = annual_storage
     )
 
-    return generate_stats(annual_df; value_cols=["avg_storage"])
+    return generate_stats(annual_df; value_cols=["avg_storage"], trend_completeness=trend_completeness, decade_completeness=decade_completeness)
 end

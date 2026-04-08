@@ -65,7 +65,7 @@ end
 
 
 """
-    analyze_flashiness_trends(df::DataFrame; min_days=250) -> Dict
+    analyze_flashiness_trends(df::DataFrame) -> Dict
 
 Calculate flashiness trends over time.
 
@@ -75,15 +75,14 @@ Parameters
 ----------
 df : DataFrame
     Daily streamflow data with columns: water_year, Q, dowy
-min_days : Int
-    Minimum non-NA days per year for valid calculation
+    (preprocessor guarantees all years are valid)
 
 Returns
 -------
 Dict{String, Float64}
     Dictionary with flashinessRB statistics (8 values)
 """
-function analyze_flashiness_trends(df::DataFrame; min_days::Int=250)
+function analyze_flashiness_trends(df::DataFrame; trend_completeness::Union{Nothing, Float64}=nothing, decade_completeness::Union{Nothing, Float64}=nothing)
     # Column validation
     valid, missing_cols = validate_columns(df, ["Q", "water_year", "dowy"])
     if !valid
@@ -113,18 +112,6 @@ function analyze_flashiness_trends(df::DataFrame; min_days::Int=250)
         sort_idx = sortperm(dowy_clean)
         year_Q_sorted = year_Q[sort_idx]
 
-        # Check minimum non-NA data requirement
-        n_valid = sum(.!isnan.(year_Q_sorted))
-        if n_valid < min_days
-            continue
-        end
-
-        # Skip if too many missing values (>20%), matching R/Python
-        na_frac = 1.0 - n_valid / length(year_Q_sorted)
-        if na_frac > 0.2
-            continue
-        end
-
         # Calculate flashiness
         flashiness = calculate_flashiness(year_Q_sorted)
 
@@ -137,5 +124,5 @@ function analyze_flashiness_trends(df::DataFrame; min_days::Int=250)
         return empty_stats("flashinessRB")
     end
 
-    return generate_stats(annual_data; value_cols=["flashinessRB"])
+    return generate_stats(annual_data; value_cols=["flashinessRB"], trend_completeness=trend_completeness, decade_completeness=decade_completeness)
 end

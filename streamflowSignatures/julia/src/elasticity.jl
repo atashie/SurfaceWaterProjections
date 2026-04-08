@@ -6,7 +6,7 @@ Sensitivity of streamflow to precipitation changes.
 
 # Configuration loaded from config.jl:
 # CFG_ELASTICITY_WINDOW_YEARS, CFG_ELASTICITY_MIN_YEARS,
-# CFG_ELASTICITY_MIN_DATA_COMPLETENESS, CFG_ELASTICITY_MIN_ANNUAL_PPT
+# CFG_ELASTICITY_MIN_ANNUAL_PPT
 
 
 """
@@ -41,8 +41,9 @@ function calculate_streamflow_elasticity(
     df::DataFrame;
     min_years::Int=CFG_ELASTICITY_MIN_YEARS,
     window::Int=CFG_ELASTICITY_WINDOW_YEARS,
-    min_completeness::Real=CFG_ELASTICITY_MIN_DATA_COMPLETENESS,
-    min_annual_ppt::Real=CFG_ELASTICITY_MIN_ANNUAL_PPT
+    min_annual_ppt::Real=CFG_ELASTICITY_MIN_ANNUAL_PPT,
+    trend_completeness::Union{Nothing, Float64}=nothing,
+    decade_completeness::Union{Nothing, Float64}=nothing
 )
     result = Dict{String, Float64}()
 
@@ -59,29 +60,12 @@ function calculate_streamflow_elasticity(
         return result
     end
 
-    # Aggregate to annual totals
+    # Aggregate to annual totals (preprocessor guarantees all years are valid)
     annual_data = combine(
         groupby(df, :water_year),
         :Q => (x -> sum(skipmissing(x); init=0.0)) => :Q_annual,
-        :PPT => (x -> sum(skipmissing(x); init=0.0)) => :P_annual,
-        [:Q, :PPT] => ((q, p) -> count(i -> !ismissing(q[i]) && !isnan(q[i]) && !ismissing(p[i]) && !isnan(p[i]), 1:length(q))) => :n_valid_days
+        :PPT => (x -> sum(skipmissing(x); init=0.0)) => :P_annual
     )
-
-    # Calculate expected days per water year (accounting for leap years, like R/Python)
-    function expected_days(wy::Real)
-        # Convert to Int (water_year might be Float64 in DataFrame)
-        wy_int = Int(wy)
-        # Water year ends in year wy, so check if wy is a leap year
-        is_leap = (wy_int % 4 == 0 && wy_int % 100 != 0) || (wy_int % 400 == 0)
-        return is_leap ? 366 : 365
-    end
-
-    # Filter years with sufficient data (>= min_completeness of expected days)
-    valid_years = [
-        coalesce(annual_data.n_valid_days[i] >= min_completeness * expected_days(annual_data.water_year[i]), false)
-        for i in 1:nrow(annual_data)
-    ]
-    annual_data = annual_data[valid_years, :]
 
     if nrow(annual_data) < min_years
         result["elasticity_static"] = NaN
@@ -186,7 +170,7 @@ function calculate_streamflow_elasticity(
             water_year = rolling_years,
             elasticity = rolling_elasticity
         )
-        merge!(result, generate_stats(rolling_df; value_cols=["elasticity"]))
+        merge!(result, generate_stats(rolling_df; value_cols=["elasticity"], trend_completeness=trend_completeness, decade_completeness=decade_completeness))
     else
         merge!(result, empty_stats("elasticity"))
     end

@@ -8,7 +8,9 @@
 #' @export
 #' @importFrom data.table as.data.table setorder data.table
 calculate_streamflow_elasticity <- function(streamflow_data,
-                                            rolling_window = NULL) {
+                                            rolling_window = NULL,
+                                            trend_completeness = NULL,
+                                            decade_completeness = NULL) {
   if (is.null(rolling_window)) rolling_window <- pkg_env$elasticity_window_years
 
   required_cols <- c("water_year", "Q", "PPT")
@@ -18,19 +20,12 @@ calculate_streamflow_elasticity <- function(streamflow_data,
   dt <- data.table::as.data.table(streamflow_data)
 
   annual <- dt[, .(Q_annual = sum(Q, na.rm = TRUE),
-                   P_annual = sum(PPT, na.rm = TRUE),
-                   n_valid  = sum(!is.na(Q) & !is.na(PPT))),
+                   P_annual = sum(PPT, na.rm = TRUE)),
                by = water_year]
 
-  annual[, expected_days := ifelse(
-    ((water_year %% 4 == 0) & (water_year %% 100 != 0)) | (water_year %% 400 == 0),
-    366L, 365L)]
-
-  min_completeness <- pkg_env$elasticity_min_data_completeness
   min_ppt          <- pkg_env$elasticity_min_annual_ppt
   min_years        <- pkg_env$elasticity_min_years
 
-  annual <- annual[n_valid >= min_completeness * expected_days]
   annual <- annual[P_annual > min_ppt]
 
   na_result <- list(
@@ -74,7 +69,9 @@ calculate_streamflow_elasticity <- function(streamflow_data,
 
   roll_dt <- data.table::data.table(water_year = roll_years,
                                     elasticity_rolling = roll_vals)
-  ts <- generate_stats(roll_dt, value_cols = "elasticity_rolling", year_col = "water_year")
+  ts <- generate_stats(roll_dt, value_cols = "elasticity_rolling", year_col = "water_year",
+                       trend_completeness = trend_completeness,
+                       decade_completeness = decade_completeness)
 
   list(
     elasticity_static       = elasticity_static,

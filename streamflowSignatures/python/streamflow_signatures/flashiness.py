@@ -5,17 +5,16 @@ Calculates the Richards-Baker flashiness index, which measures
 how quickly streamflow rises and falls.
 """
 
-from typing import Dict
+from typing import Dict, Optional
 import numpy as np
 import pandas as pd
 from .stats import generate_stats
-from .config import FLASHINESS_MIN_DAYS, FLASHINESS_MAX_MISSING_FRAC
 
 
 def analyze_flashiness_trends(
     streamflow_data: pd.DataFrame,
-    min_days: int = FLASHINESS_MIN_DAYS,
-    max_missing_frac: float = FLASHINESS_MAX_MISSING_FRAC,
+    trend_completeness: Optional[float] = None,
+    decade_completeness: Optional[float] = None,
 ) -> Dict[str, float]:
     """
     Calculate Richards-Baker flashiness index trends.
@@ -31,10 +30,6 @@ def analyze_flashiness_trends(
             - water_year: int, water year
             - Q: float, daily discharge in mm/day
             - dowy: int, day of water year (optional, for sorting)
-    min_days : int, default 30
-        Minimum number of non-NA days required per water year
-    max_missing_frac : float, default 0.2
-        Maximum fraction of missing values allowed (beyond this, year is skipped)
 
     Returns
     -------
@@ -65,24 +60,12 @@ def analyze_flashiness_trends(
     # Calculate R-B index for each year
     for yr, year_data in df.groupby("water_year", sort=False):
 
-        # Check minimum data requirement
-        non_na_count = year_data["Q"].notna().sum()
-        if non_na_count < min_days:
-            results_list.append({"water_year": yr, "RB_index": np.nan})
-            continue
-
         # Sort by day of water year if available
         if "dowy" in year_data.columns:
             year_data = year_data.sort_values("dowy")
 
         # Get Q values
         q_values = year_data["Q"].values.copy()
-
-        # Check missing value fraction
-        na_frac = np.isnan(q_values).sum() / len(q_values)
-        if na_frac > max_missing_frac:
-            results_list.append({"water_year": yr, "RB_index": np.nan})
-            continue
 
         # Interpolate missing values if some are present
         if np.any(np.isnan(q_values)):
@@ -119,7 +102,9 @@ def analyze_flashiness_trends(
     result = generate_stats(
         flashiness_by_year,
         value_cols=["RB_index"],
-        year_col="water_year"
+        year_col="water_year",
+        trend_completeness=trend_completeness,
+        decade_completeness=decade_completeness,
     )
 
     # Rename columns to match expected output

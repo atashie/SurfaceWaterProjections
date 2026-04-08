@@ -5,7 +5,7 @@ Annual and seasonal flow volumes plus percentile-based metrics.
 """
 
 """
-    calculate_flow_vols_by_year(df::DataFrame; min_days=250) -> Dict
+    calculate_flow_vols_by_year(df::DataFrame) -> Dict
 
 Calculate flow volume signatures with trend statistics.
 
@@ -21,15 +21,14 @@ Parameters
 ----------
 df : DataFrame
     Daily streamflow data with columns: water_year, month, Q
-min_days : Int
-    Minimum days per year for valid calculation
+    (preprocessor guarantees all years are valid)
 
 Returns
 -------
 Dict{String, Float64}
     Dictionary of signature statistics (22 metrics × 8 stats = 176 values)
 """
-function calculate_flow_vols_by_year(df::DataFrame; min_days::Int=250)
+function calculate_flow_vols_by_year(df::DataFrame; seasonal_flags::Union{Nothing, DataFrame}=nothing, trend_completeness::Union{Nothing, Float64}=nothing, decade_completeness::Union{Nothing, Float64}=nothing)
     result = Dict{String, Float64}()
 
     # Define metrics for empty results
@@ -104,12 +103,6 @@ function calculate_flow_vols_by_year(df::DataFrame; min_days::Int=250)
         year_Q = Q_clean[year_mask]
         year_month = Int[coalesce(m, 0) for m in df.month[year_mask]]
 
-        # Check minimum data requirement - count non-NaN values
-        n_valid = sum(.!isnan.(year_Q))
-        if n_valid < min_days
-            continue
-        end
-
         yr_idx = findfirst(annual_data.water_year .== yr)
         yr_idx === nothing && continue
 
@@ -138,6 +131,23 @@ function calculate_flow_vols_by_year(df::DataFrame; min_days::Int=250)
         annual_data[yr_idx, :Q95_Q10] = annual_data[yr_idx, :Q95] - annual_data[yr_idx, :Q10]
     end
 
+    # Apply seasonal_flags: set incomplete seasons to NaN
+    if seasonal_flags !== nothing && nrow(seasonal_flags) > 0
+        season_col_map = Dict("Qwin" => :win_complete, "Qspr" => :spr_complete,
+                              "Qsum" => :sum_complete, "Qfal" => :fal_complete)
+        for (qcol, flag_col) in season_col_map
+            if Symbol(qcol) in propertynames(annual_data) && flag_col in propertynames(seasonal_flags)
+                for i in 1:nrow(annual_data)
+                    wy = annual_data[i, :water_year]
+                    flag_row = findfirst(seasonal_flags.water_year .== wy)
+                    if flag_row !== nothing && !seasonal_flags[flag_row, flag_col]
+                        annual_data[i, Symbol(qcol)] = NaN
+                    end
+                end
+            end
+        end
+    end
+
     if nrow(annual_data) < 3
         metrics = ["Qann", "Qwin", "Qspr", "Qsum", "Qfal",
                    "Q1", "Q5", "Q10", "Q20", "Q25", "Q30", "Q40",
@@ -151,7 +161,7 @@ function calculate_flow_vols_by_year(df::DataFrame; min_days::Int=250)
 
     # Generate statistics for all metrics
     value_cols = filter(x -> x != "water_year", names(annual_data))
-    result = generate_stats(annual_data; value_cols=value_cols)
+    result = generate_stats(annual_data; value_cols=value_cols, trend_completeness=trend_completeness, decade_completeness=decade_completeness)
 
     return result
 end

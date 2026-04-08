@@ -4,9 +4,14 @@
 #' then applies generate_stats().
 #'
 #' @param streamflow_data A data.frame with columns: water_year, Q, PPT, month.
+#' @param seasonal_flags Optional data.table from \code{preprocess_daily_data()}
+#'   with per-year seasonal completeness flags. When supplied, seasonal runoff
+#'   ratios for incomplete seasons are set to NA.
 #' @return Named list of 8 statistics per ratio (5 ratios = 40 values).
 #' @export
-analyze_Q_PPT_relationships <- function(streamflow_data) {
+analyze_Q_PPT_relationships <- function(streamflow_data, seasonal_flags = NULL,
+                                       trend_completeness = NULL,
+                                       decade_completeness = NULL) {
   required_cols <- c("water_year", "Q", "PPT", "month")
   missing <- setdiff(required_cols, colnames(streamflow_data))
   if (length(missing) > 0) stop(paste("Missing required columns:", paste(missing, collapse = ", ")))
@@ -42,6 +47,31 @@ analyze_Q_PPT_relationships <- function(streamflow_data) {
     }
   }
 
+  # Apply seasonal_flags: set incomplete seasons to NA
+  if (!is.null(seasonal_flags)) {
+    sf <- data.table::as.data.table(seasonal_flags)
+    season_col_map <- list(
+      winter_runoff_ratio = "winter_complete",
+      spring_runoff_ratio = "spring_complete",
+      summer_runoff_ratio = "summer_complete",
+      fall_runoff_ratio   = "fall_complete"
+    )
+    for (metric_col in names(season_col_map)) {
+      flag_col <- season_col_map[[metric_col]]
+      if (metric_col %in% names(all_ratios) && flag_col %in% names(sf)) {
+        for (i in seq_len(nrow(all_ratios))) {
+          wy <- all_ratios$water_year[i]
+          flag_row <- sf[sf$water_year == wy, ]
+          if (nrow(flag_row) == 1 && !isTRUE(flag_row[[flag_col]])) {
+            all_ratios[[metric_col]][i] <- NA_real_
+          }
+        }
+      }
+    }
+  }
+
   metric_cols <- setdiff(names(all_ratios), "water_year")
-  generate_stats(all_ratios, value_cols = metric_cols, year_col = "water_year")
+  generate_stats(all_ratios, value_cols = metric_cols, year_col = "water_year",
+                 trend_completeness = trend_completeness,
+                 decade_completeness = decade_completeness)
 }

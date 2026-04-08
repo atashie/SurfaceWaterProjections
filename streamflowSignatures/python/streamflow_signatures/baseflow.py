@@ -6,7 +6,7 @@ Calculates baseflow indices using recursive digital filters:
 - Lyne-Hollick filter (BFI_LyneHollick)
 """
 
-from typing import Dict
+from typing import Dict, Optional
 import numpy as np
 import pandas as pd
 from .stats import generate_stats
@@ -15,8 +15,6 @@ from .config import (
     ECKHARDT_ALPHA,
     LYNE_HOLLICK_ALPHA,
     LYNE_HOLLICK_PASSES,
-    BASEFLOW_MIN_DAYS,
-    BASEFLOW_MAX_MISSING_FRAC,
 )
 
 
@@ -137,8 +135,8 @@ def lyne_hollick_filter(Q: np.ndarray, alpha: float = LYNE_HOLLICK_ALPHA, passes
 
 def analyze_baseflow_indices(
     streamflow_data: pd.DataFrame,
-    min_days: int = BASEFLOW_MIN_DAYS,
-    max_missing_frac: float = BASEFLOW_MAX_MISSING_FRAC,
+    trend_completeness: Optional[float] = None,
+    decade_completeness: Optional[float] = None,
 ) -> Dict[str, float]:
     """
     Calculate baseflow index trends using recursive digital filters.
@@ -150,10 +148,6 @@ def analyze_baseflow_indices(
             - water_year: int, water year
             - Q: float, daily discharge in mm/day
             - dowy: int, day of water year (for sorting)
-    min_days : int, default 250
-        Minimum number of days required per water year
-    max_missing_frac : float, default 0.2
-        Maximum fraction of missing values allowed
 
     Returns
     -------
@@ -189,20 +183,11 @@ def analyze_baseflow_indices(
     for yr, year_data in df.groupby("water_year", sort=False):
         year_data = year_data.copy()  # needed because we mutate below (sort_values)
 
-        # Skip years with insufficient data
-        if len(year_data) < min_days:
-            continue
-
         # Sort by day of water year
         year_data = year_data.sort_values("dowy")
 
         # Get streamflow values
         Q = year_data["Q"].values.astype(float)
-
-        # Skip if too many missing values
-        na_frac = np.isnan(Q).sum() / len(Q)
-        if na_frac > max_missing_frac:
-            continue
 
         # Apply Eckhardt filter
         baseflow_eckhardt = eckhardt_filter(Q)
@@ -232,5 +217,7 @@ def analyze_baseflow_indices(
     return generate_stats(
         bfi_by_year,
         value_cols=["BFI_Eckhardt", "BFI_LyneHollick"],
-        year_col="water_year"
+        year_col="water_year",
+        trend_completeness=trend_completeness,
+        decade_completeness=decade_completeness,
     )

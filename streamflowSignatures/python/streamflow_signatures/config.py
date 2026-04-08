@@ -47,8 +47,6 @@ ECKHARDT_BFIMAX: float = _config["baseflow"]["eckhardt_bfimax"]
 ECKHARDT_ALPHA: float = _config["baseflow"]["eckhardt_alpha"]
 LYNE_HOLLICK_ALPHA: float = _config["baseflow"]["lyne_hollick_alpha"]
 LYNE_HOLLICK_PASSES: int = _config["baseflow"]["lyne_hollick_passes"]
-BASEFLOW_MIN_DAYS: int = _config["baseflow"]["min_days"]
-BASEFLOW_MAX_MISSING_FRAC: float = _config["baseflow"]["max_missing_frac"]
 
 # =============================================================================
 # Recession Parameters
@@ -62,12 +60,10 @@ RECESSION_MIN_EVENTS: int = _config["recession"]["min_events"]
 HIGH_PULSE_PERCENTILE: float = _config["pulses"]["high_percentile"]
 LOW_PULSE_PERCENTILE: float = _config["pulses"]["low_percentile"]
 FLOW_REVERSAL_THRESHOLD: float = _config["pulses"]["flow_reversal_threshold"]
-PULSES_MIN_DAYS: int = _config["pulses"]["min_days"]
 
 # =============================================================================
 # Timing Parameters
 # =============================================================================
-TIMING_MIN_DAYS: int = _config["timing"]["min_days"]
 D_PERCENTILES: List[int] = _config["timing"]["d_percentiles"]
 
 # =============================================================================
@@ -75,7 +71,6 @@ D_PERCENTILES: List[int] = _config["timing"]["d_percentiles"]
 # =============================================================================
 ELASTICITY_WINDOW_YEARS: int = _config["elasticity"]["window_years"]
 ELASTICITY_MIN_YEARS: int = _config["elasticity"]["min_years"]
-ELASTICITY_MIN_DATA_COMPLETENESS: float = _config["elasticity"]["min_data_completeness"]
 ELASTICITY_MIN_ANNUAL_PPT: float = _config["elasticity"]["min_annual_ppt"]
 
 # =============================================================================
@@ -83,8 +78,6 @@ ELASTICITY_MIN_ANNUAL_PPT: float = _config["elasticity"]["min_annual_ppt"]
 # =============================================================================
 QP_SLOPE_WINDOW_DAYS: int = _config["qp_seasonality"]["slope_window_days"]
 QP_MIN_YEARS: int = _config["qp_seasonality"]["min_years"]
-QP_MIN_DAYS_PER_YEAR: int = _config["qp_seasonality"]["min_days_per_year"]
-QP_MAX_NA_FRAC: float = _config["qp_seasonality"]["max_na_frac"]
 
 # =============================================================================
 # Runoff Ratio Parameters
@@ -95,26 +88,12 @@ RUNOFF_MIN_SEASONAL_PPT: float = _config["runoff_ratios"]["min_seasonal_ppt"]
 # =============================================================================
 # Flow Volumes Parameters
 # =============================================================================
-FLOW_VOLUMES_MIN_DAYS: int = _config["flow_volumes"]["min_days"]
 FLOW_PERCENTILES: List[int] = _config["flow_volumes"]["percentiles"]
-
-# =============================================================================
-# FDC Parameters
-# =============================================================================
-FDC_MIN_DAYS: int = _config["fdc"]["min_days"]
-
-# =============================================================================
-# Flashiness Parameters
-# =============================================================================
-FLASHINESS_MIN_DAYS: int = _config["flashiness"]["min_days"]
-FLASHINESS_MAX_MISSING_FRAC: float = _config["flashiness"]["max_missing_frac"]
 
 # =============================================================================
 # Storage Parameters
 # =============================================================================
 STORAGE_MIN_YEARS: int = _config["storage"]["min_years"]
-STORAGE_MIN_DAYS_PER_YEAR: int = _config["storage"]["min_days_per_year"]
-STORAGE_MAX_NA_FRAC: float = _config["storage"]["max_na_frac"]
 
 # =============================================================================
 # QA/QC Parameters
@@ -137,6 +116,41 @@ INCLUDE_HUMAN_INTERFERENCE: bool = _config["metadata"]["include_human_interferen
 GAGES_II_DIR: str = _config["metadata"]["gages_ii_dir"]
 HYDAT_PATH = _config["metadata"]["hydat_path"]
 INTERFERENCE_COLUMNS: List[str] = _config["metadata"]["interference_columns"]
+
+# ==============================================================================
+# NA HANDLING
+# ==============================================================================
+_na_handling = _config.get("na_handling", {})
+_na_interp = _na_handling.get("interpolation", {})
+_na_reject = _na_handling.get("year_rejection", {})
+_na_const_sd = _na_handling.get("constant_sd_flag", {})
+_na_trend = _na_handling.get("trend_completeness", {})
+_na_seasonal = _na_handling.get("seasonal_completeness", {})
+_na_climate = _na_handling.get("climate_na_policy", {})
+
+NA_MAX_GAP_DAYS = int(_na_interp.get("max_gap_days", 3))
+NA_INTERPOLATION_METHOD = _na_interp.get("method", "linear")
+NA_INTERNAL_ONLY = _na_interp.get("internal_only", True)
+NA_MAX_RAW_NA_PER_YEAR = int(_na_reject.get("max_raw_na_per_year", 30))
+NA_REJECT_NEGATIVE_FLOW = _na_reject.get("reject_negative_flow", True)
+NA_REJECT_RESIDUAL_NA = _na_reject.get("reject_residual_na", True)
+NA_CONSTANT_SD_ENABLED = _na_const_sd.get("enabled", True)
+NA_CONSTANT_SD_MIN_DAYS = int(_na_const_sd.get("min_nonzero_days_per_month", 15))
+NA_CONSTANT_SD_MAX_UNIQUE = int(_na_const_sd.get("max_unique_values", 1))
+NA_TREND_MIN_FRACTION = float(_na_trend.get("min_fraction", 0.80))
+NA_DECADE_MIN_FRACTION = float(_na_trend.get("decade_min_fraction", 0.80))
+NA_SEASONAL_MIN_FRACTION = float(_na_seasonal.get("min_fraction", 0.80))
+NA_SEASONAL_USE_RAW = _na_seasonal.get("use_raw_observations", True)
+NA_SEASONAL_DEFINITIONS = _na_seasonal.get("season_definitions", {
+    "winter": [12, 1, 2], "spring": [3, 4, 5],
+    "summer": [6, 7, 8], "fall": [9, 10, 11]
+})
+NA_MAX_RAW_NA_PPT = int(_na_climate.get("max_raw_na_per_year_ppt", 30))
+NA_MAX_GAP_PPT = int(_na_climate.get("max_interpolation_gap_ppt", 3))
+NA_REJECT_NEGATIVE_PPT = _na_climate.get("reject_negative_ppt", True)
+
+# Legacy filtering flag
+USE_LEGACY_FILTERING = _config.get("filtering", {}).get("use_legacy_filtering", True)
 
 
 def get_config() -> Dict[str, Any]:

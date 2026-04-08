@@ -29,7 +29,7 @@ Returns
 Dict{String, Float64}
     Dictionary of signature statistics (5 metrics × 8 stats = 40 values)
 """
-function analyze_Q_PPT_relationships(df::DataFrame)
+function analyze_Q_PPT_relationships(df::DataFrame; trend_completeness::Union{Nothing, Float64}=nothing, decade_completeness::Union{Nothing, Float64}=nothing)
     result = Dict{String, Float64}()
 
     metrics = [
@@ -108,7 +108,7 @@ function analyze_Q_PPT_relationships(df::DataFrame)
 
     # No early-return gate — let generate_stats() handle min_rows internally
     # (matching R/Python, which pass whatever data exists to generate_stats)
-    result = generate_stats(annual_data; value_cols=metrics)
+    result = generate_stats(annual_data; value_cols=metrics, trend_completeness=trend_completeness, decade_completeness=decade_completeness)
 
     return result
 end

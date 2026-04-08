@@ -7,7 +7,7 @@ Analyzes streamflow recession behavior using:
 - Sinusoidal seasonality of recession parameters
 """
 
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 from scipy import stats as scipy_stats
@@ -236,6 +236,8 @@ def fit_sinusoidal_model(
 def analyze_recession_parameters(
     streamflow_data: pd.DataFrame,
     min_events: int = RECESSION_MIN_EVENTS,
+    trend_completeness: Optional[float] = None,
+    decade_completeness: Optional[float] = None,
 ) -> Dict[str, float]:
     """
     Calculate recession parameter trends.
@@ -439,7 +441,9 @@ def analyze_recession_parameters(
     result = generate_stats(
         annual_metrics,
         value_cols=signatures_with_stats,
-        year_col="water_year"
+        year_col="water_year",
+        trend_completeness=trend_completeness,
+        decade_completeness=decade_completeness,
     )
 
     # Add seasonality signatures (single values, not trends)

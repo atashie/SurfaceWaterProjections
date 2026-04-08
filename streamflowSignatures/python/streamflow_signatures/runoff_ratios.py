@@ -5,7 +5,7 @@ Calculates annual and seasonal runoff ratios (Q/P).
 Requires precipitation (PPT) data.
 """
 
-from typing import Dict
+from typing import Dict, Optional
 import numpy as np
 import pandas as pd
 from .stats import generate_stats
@@ -16,6 +16,8 @@ def analyze_Q_PPT_relationships(
     streamflow_data: pd.DataFrame,
     min_annual_ppt: float = RUNOFF_MIN_ANNUAL_PPT,
     min_seasonal_ppt: float = RUNOFF_MIN_SEASONAL_PPT,
+    trend_completeness: Optional[float] = None,
+    decade_completeness: Optional[float] = None,
 ) -> Dict[str, float]:
     """
     Calculate runoff ratio (Q/P) trends.
@@ -118,5 +120,7 @@ def analyze_Q_PPT_relationships(
     return generate_stats(
         all_ratios,
         value_cols=metric_cols,
-        year_col="water_year"
+        year_col="water_year",
+        trend_completeness=trend_completeness,
+        decade_completeness=decade_completeness,
     )

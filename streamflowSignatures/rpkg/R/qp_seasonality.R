@@ -8,7 +8,9 @@
 #' @return Named list of 8 statistics per metric (2 x 8 = 16 values).
 #' @export
 #' @importFrom data.table as.data.table copy setorder data.table rbindlist
-calculate_qp_seasonality <- function(streamflow_data, slope_window_days = NULL) {
+calculate_qp_seasonality <- function(streamflow_data, slope_window_days = NULL,
+                                    trend_completeness = NULL,
+                                    decade_completeness = NULL) {
   if (is.null(slope_window_days)) slope_window_days <- pkg_env$qp_slope_window_days
 
   required_cols <- c("water_year", "Q", "PPT", "month", "dowy")
@@ -24,14 +26,8 @@ calculate_qp_seasonality <- function(streamflow_data, slope_window_days = NULL) 
 
   annual_list <- lapply(years, function(yr) {
     yd <- data.table::copy(dt[water_year == yr])
-    if (nrow(yd) < pkg_env$qp_min_days_per_year) return(NULL)
 
-    na_frac_Q   <- sum(is.na(yd$Q)) / nrow(yd)
-    na_frac_PPT <- sum(is.na(yd$PPT)) / nrow(yd)
-    if (na_frac_Q > pkg_env$qp_max_na_frac || na_frac_PPT > pkg_env$qp_max_na_frac) return(NULL)
-
-    yd[is.na(Q), Q := 0]
-    yd[is.na(PPT), PPT := 0]
+    if (any(is.na(yd$Q)) || any(is.na(yd$PPT))) return(NULL)
     data.table::setorder(yd, dowy)
 
     yd[, cum_Q := cumsum(Q)]
@@ -80,10 +76,14 @@ calculate_qp_seasonality <- function(streamflow_data, slope_window_days = NULL) 
   annual_metrics <- data.table::rbindlist(annual_list)
   if (is.null(annual_metrics) || nrow(annual_metrics) < 5) return(na_result)
 
-  sd_stats <- generate_stats(annual_metrics, value_cols = "qp_slope_sd", year_col = "water_year")
+  sd_stats <- generate_stats(annual_metrics, value_cols = "qp_slope_sd", year_col = "water_year",
+                             trend_completeness = trend_completeness,
+                             decade_completeness = decade_completeness)
   bi_df    <- annual_metrics[!is.na(qp_bimodality)]
   bi_stats <- if (nrow(bi_df) >= 3) {
-    generate_stats(bi_df, value_cols = "qp_bimodality", year_col = "water_year")
+    generate_stats(bi_df, value_cols = "qp_bimodality", year_col = "water_year",
+                   trend_completeness = trend_completeness,
+                   decade_completeness = decade_completeness)
   } else {
     empty_stats("qp_bimodality")
   }

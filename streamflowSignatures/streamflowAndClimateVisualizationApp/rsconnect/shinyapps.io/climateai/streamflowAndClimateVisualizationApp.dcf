@@ -5,7 +5,7 @@ account: climateai
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 16586134
-bundleId: 11599977
+bundleId: 11733173
 url: https://climateai.shinyapps.io/streamflowAndClimateVisualizationApp/
 version: 1
 asMultiple: FALSE

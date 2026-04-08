@@ -6,7 +6,9 @@
 #' @param streamflow_data A data.frame with columns: water_year, Q.
 #' @return Named list of 8 statistics per FDC metric (3 metrics = 24 values).
 #' @export
-analyze_fdc_trends <- function(streamflow_data) {
+analyze_fdc_trends <- function(streamflow_data,
+                               trend_completeness = NULL,
+                               decade_completeness = NULL) {
   required_cols <- c("water_year", "Q")
   missing <- setdiff(required_cols, colnames(streamflow_data))
   if (length(missing) > 0) stop(paste("Missing required columns:", paste(missing, collapse = ", ")))
@@ -22,15 +24,11 @@ analyze_fdc_trends <- function(streamflow_data) {
   fdc_by_year <- data.frame(water_year = years, slp_all = NA_real_,
                             slp_90th = NA_real_, slp_mid = NA_real_)
 
-  fdc_min_days <- pkg_env$fdc_min_days
-
   for (yr in years) {
     year_data <- streamflow_data[streamflow_data$water_year == yr, ]
-    if (nrow(year_data) < fdc_min_days) next
 
     Q_values <- year_data$Q[!is.na(year_data$Q)]
     Q_values <- Q_values[Q_values >= 0]
-    if (length(Q_values) < fdc_min_days) next
 
     sorted_flows <- sort(Q_values, decreasing = TRUE)
     n <- length(sorted_flows)
@@ -64,7 +62,9 @@ analyze_fdc_trends <- function(streamflow_data) {
   }
 
   result <- generate_stats(fdc_by_year, value_cols = c("slp_all", "slp_90th", "slp_mid"),
-                           year_col = "water_year")
+                           year_col = "water_year",
+                           trend_completeness = trend_completeness,
+                           decade_completeness = decade_completeness)
   names(result) <- gsub("slp_all", "FDCall", names(result))
   names(result) <- gsub("slp_90th", "FDC90th", names(result))
   names(result) <- gsub("slp_mid", "FDCmid", names(result))

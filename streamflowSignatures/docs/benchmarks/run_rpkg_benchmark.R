@@ -80,8 +80,10 @@ cat("    ", nrow(metadata), "gages in metadata\n")
 timing$phases$load_data <- as.numeric(difftime(Sys.time(), phase_start, units = "secs"))
 cat("  Data loaded in", round(timing$phases$load_data, 1), "s\n")
 
-# Phase 3: Add water year columns (per-gage to avoid 111M row operation)
-cat("\nPhase 3: Per-gage filtering and signature extraction...\n")
+# Phase 3: Per-gage filtering and signature extraction
+use_legacy <- pkg_env$use_legacy_filtering
+cat(sprintf("\nPhase 3: Per-gage filtering and signature extraction (legacy=%s)...\n",
+            as.character(use_legacy)))
 phase_start <- Sys.time()
 
 all_gages <- unique(streamflow$gage_id)
@@ -103,6 +105,9 @@ processed <- 0
 skipped <- 0
 errored <- 0
 
+# Cache preprocessing results for non-legacy path
+preprocess_cache <- list()
+
 # Progress tracking
 report_interval <- 500
 
@@ -115,16 +120,7 @@ for (i in seq_along(all_gages)) {
     gage_data <- streamflow[rows, ]
     gage_data <- add_water_year_columns(gage_data)
 
-    # Filter qualifying years
-    filt <- filter_qualifying_years(gage_data)
-    if (!filt$qualifies) {
-      skipped <- skipped + 1
-      next
-    }
-
-    gage_filtered <- gage_data[gage_data$water_year %in% filt$qualifying_years, ]
-
-    # Merge climate data if available
+    # Merge climate data if available (needed before preprocessing)
     has_climate <- FALSE
     if (gage %in% names(daymet_idx)) {
       daymet_rows <- daymet_idx[[gage]]
@@ -135,19 +131,60 @@ for (i in seq_along(all_gages)) {
       if (length(ppt_col) > 0) {
         climate_merge <- gage_climate[, c("date", ppt_col[1]), with = FALSE]
         if (ppt_col[1] != "PPT") setnames(climate_merge, ppt_col[1], "PPT")
-        gage_filtered <- merge(gage_filtered, climate_merge, by = "date", all.x = TRUE)
+        gage_data <- merge(gage_data, climate_merge, by = "date", all.x = TRUE)
         has_climate <- TRUE
       }
     }
 
-    # Calculate all signatures
-    sigs <- calculate_all_signatures(gage_filtered, has_climate = has_climate)
+    if (use_legacy) {
+      # Legacy path: filter qualifying years
+      filt <- filter_qualifying_years(gage_data)
+      if (!filt$qualifies) {
+        skipped <- skipped + 1
+        next
+      }
 
-    # Add metadata
-    sigs$gage_id <- gage
-    sigs$start_water_year <- min(filt$qualifying_years)
-    sigs$end_water_year <- max(filt$qualifying_years)
-    sigs$num_water_years <- length(filt$qualifying_years)
+      gage_filtered <- gage_data[gage_data$water_year %in% filt$qualifying_years, ]
+
+      # Calculate all signatures
+      sigs <- calculate_all_signatures(gage_filtered, has_climate = has_climate)
+
+      # Add metadata
+      sigs$gage_id <- gage
+      sigs$start_water_year <- min(filt$qualifying_years)
+      sigs$end_water_year <- max(filt$qualifying_years)
+      sigs$num_water_years <- length(filt$qualifying_years)
+    } else {
+      # New path: preprocess and use trend completeness
+      pp <- preprocess_daily_data(gage_data)
+      if (length(pp$valid_years) < pkg_env$min_num_years) {
+        skipped <- skipped + 1
+        next
+      }
+
+      pp_data <- pp$data
+      gage_has_climate <- has_climate && length(pp$valid_climate_years) > 0
+
+      # Filter to valid_climate_years for climate signatures
+      climate_data_subset <- NULL
+      if (gage_has_climate) {
+        climate_data_subset <- pp_data[pp_data$water_year %in% pp$valid_climate_years, ]
+      }
+
+      sigs <- calculate_all_signatures(
+        pp_data, has_climate = gage_has_climate,
+        seasonal_flags = pp$seasonal_flags,
+        trend_completeness = pkg_env$na_trend_min_fraction,
+        decade_completeness = pkg_env$na_decade_min_fraction,
+        climate_data = climate_data_subset
+      )
+
+      # Add metadata
+      sigs$gage_id <- gage
+      sigs$start_water_year <- min(pp$valid_years)
+      sigs$end_water_year <- max(pp$valid_years)
+      sigs$num_water_years <- length(pp$valid_years)
+    }
 
     # Match metadata row
     gage_stripped <- sub("^0+", "", gage)

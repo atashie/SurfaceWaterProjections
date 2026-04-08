@@ -42,9 +42,10 @@ data_out/
 # Large files in archive
 archive/*.csv
 
-# Benchmark outputs (large CSVs)
+# Benchmark outputs (large CSVs and generated HTML)
 docs/benchmarks/*.csv
 docs/benchmarks/*.json
+docs/benchmarks/*.html
 docs/benchmarks/diagnostics/
 
 # Python artifacts

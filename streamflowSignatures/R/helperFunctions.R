@@ -20,9 +20,9 @@ require(ncdf4)
 
 # Helper to wrap metric calculations with error handling
 # Returns the function result on success, NULL on error (with logging)
-safe_calculate <- function(fn, data, gage_id, label, ctx, log_level = "warn") {
+safe_calculate <- function(fn, data, gage_id, label, ctx, log_level = "warn", ...) {
   tryCatch({
-    fn(data)
+    fn(data, ...)
   }, error = function(e) {
     if (log_level == "warn") {
       log_warn(label, "failed for gage", gage_id, ":", e$message, context = ctx)
@@ -779,6 +779,332 @@ find_upstream_hydrobasins <- function(current_gage, basinAt_NorAm_polys, HB_dt, 
 
 
 ################################################################
+# NA HANDLING / PRE-PROCESSING
+# Centralized daily data pre-processing applied once per gage BEFORE any
+# signature functions. Implements the Guidelines Document NA handling rules:
+#   - Daily grid normalization (one row per day, sorted, unique)
+#   - <=3 day internal gap interpolation (no extrapolation)
+#   - Year rejection (too many NAs, large gaps, negative Q)
+#   - Constant-SD QA flag (sensor malfunction detection)
+#   - Seasonal completeness flags (from RAW observations)
+#   - Separate climate (PPT) NA policy
+################################################################
+
+#' Pre-process daily streamflow (and optional climate) data for one gage
+#'
+#' @param gage_flow A data.table with at least columns: Date, Q, water_year, month, dowy.
+#'        Optional climate columns: PPT.
+#' @param config A list with na_handling sub-list (from signatures_config.json).
+#'        If NULL, reads from config/signatures_config.json.
+#' @return A list with components:
+#'   \item{data}{Cleaned data.table (daily grid normalized, interpolated, rejected years removed)}
+#'   \item{valid_years}{Integer vector of qualifying water years for Q-only signatures}
+#'   \item{valid_climate_years}{Integer vector of years passing both Q and PPT checks}
+#'   \item{rejected_years}{data.table(water_year, reason) of rejected years}
+#'   \item{seasonal_flags}{data.table(water_year, winter_complete, spring_complete, summer_complete, fall_complete) — based on RAW observations}
+#'   \item{diagnostics}{data.table(water_year, raw_na_count, raw_max_na_run, interpolated_count, residual_na_count, negative_flag, constant_sd_months)}
+preprocess_daily_data <- function(gage_flow, config = NULL) {
+  ctx <- "preprocess_daily_data"
+
+  # Load config if not provided
+  if (is.null(config)) {
+    config_path <- file.path(dirname(getwd()), "config", "signatures_config.json")
+    if (!file.exists(config_path)) {
+      config_path <- file.path("config", "signatures_config.json")
+    }
+    if (file.exists(config_path)) {
+      full_config <- jsonlite::fromJSON(config_path, simplifyVector = TRUE)
+      config <- full_config$na_handling
+    }
+  }
+
+  # Defaults matching the JSON config
+  max_gap_days <- if (!is.null(config$interpolation$max_gap_days)) config$interpolation$max_gap_days else 3L
+  max_raw_na <- if (!is.null(config$year_rejection$max_raw_na_per_year)) config$year_rejection$max_raw_na_per_year else 30L
+  reject_negative <- if (!is.null(config$year_rejection$reject_negative_flow)) config$year_rejection$reject_negative_flow else TRUE
+  reject_residual <- if (!is.null(config$year_rejection$reject_residual_na)) config$year_rejection$reject_residual_na else TRUE
+  constant_sd_enabled <- if (!is.null(config$constant_sd_flag$enabled)) config$constant_sd_flag$enabled else TRUE
+  constant_sd_min_days <- if (!is.null(config$constant_sd_flag$min_nonzero_days_per_month)) config$constant_sd_flag$min_nonzero_days_per_month else 15L
+  constant_sd_max_unique <- if (!is.null(config$constant_sd_flag$max_unique_values)) config$constant_sd_flag$max_unique_values else 1L
+  seasonal_min_frac <- if (!is.null(config$seasonal_completeness$min_fraction)) config$seasonal_completeness$min_fraction else 0.80
+  season_defs <- if (!is.null(config$seasonal_completeness$season_definitions)) {
+    config$seasonal_completeness$season_definitions
+  } else {
+    list(winter = c(12L, 1L, 2L), spring = c(3L, 4L, 5L),
+         summer = c(6L, 7L, 8L), fall = c(9L, 10L, 11L))
+  }
+
+  # Climate NA policy
+  has_ppt <- "PPT" %in% names(gage_flow)
+  max_raw_na_ppt <- if (!is.null(config$climate_na_policy$max_raw_na_per_year_ppt)) config$climate_na_policy$max_raw_na_per_year_ppt else 30L
+  max_gap_ppt <- if (!is.null(config$climate_na_policy$max_interpolation_gap_ppt)) config$climate_na_policy$max_interpolation_gap_ppt else 3L
+  reject_negative_ppt <- if (!is.null(config$climate_na_policy$reject_negative_ppt)) config$climate_na_policy$reject_negative_ppt else TRUE
+
+  gage_flow <- copy(as.data.table(gage_flow))
+  if (!"Date" %in% names(gage_flow)) stop("gage_flow must have a 'Date' column")
+
+  # Ensure Date is Date class
+  if (!inherits(gage_flow$Date, "Date")) {
+    gage_flow[, Date := as.Date(Date)]
+  }
+
+  water_years <- sort(unique(gage_flow$water_year))
+
+  # Initialize result containers
+  rejected_list <- list()
+  diag_list <- list()
+  seasonal_list <- list()
+  valid_years <- integer(0)
+  valid_climate_years <- integer(0)
+
+  for (wy in water_years) {
+    # ===== Step 2a: Normalize to complete daily grid =====
+    wy_start <- as.Date(paste0(wy - 1L, "-10-01"))
+    wy_end <- as.Date(paste0(wy, "-09-30"))
+    full_dates <- seq.Date(wy_start, wy_end, by = "day")
+
+    wy_data <- gage_flow[water_year == wy]
+    # Remove duplicate dates (keep first)
+    wy_data <- wy_data[!duplicated(Date)]
+    # Sort by date
+    setorder(wy_data, Date)
+
+    # Create complete daily grid and merge
+    grid <- data.table(Date = full_dates)
+    wy_data <- merge(grid, wy_data, by = "Date", all.x = TRUE)
+    # Fill temporal columns for new rows
+    wy_data[, water_year := wy]
+    wy_data[, month := as.integer(format(Date, "%m"))]
+    wy_data[, dowy := as.integer(Date - wy_start + 1L)]
+
+    # ===== Step 2b: Compute raw diagnostics (BEFORE interpolation) =====
+    q_vals <- wy_data$Q
+    raw_na_count <- sum(is.na(q_vals))
+
+    # Longest consecutive NA run
+    raw_max_na_run <- 0L
+    if (raw_na_count > 0) {
+      rle_na <- rle(is.na(q_vals))
+      na_runs <- rle_na$lengths[rle_na$values]
+      if (length(na_runs) > 0) raw_max_na_run <- max(na_runs)
+    }
+
+    # Seasonal completeness from RAW observations
+    season_flags <- list()
+    for (sname in names(season_defs)) {
+      s_months <- season_defs[[sname]]
+      s_rows <- wy_data[month %in% s_months]
+      n_total <- nrow(s_rows)
+      n_valid <- if (n_total > 0) sum(!is.na(s_rows$Q)) else 0L
+      frac <- if (n_total > 0) n_valid / n_total else 0
+      season_flags[[paste0(sname, "_complete")]] <- frac >= seasonal_min_frac
+      season_flags[[paste0(sname, "_frac")]] <- frac
+    }
+    season_flags$water_year <- wy
+
+    # Negative Q check
+    negative_flag <- any(q_vals < 0, na.rm = TRUE)
+
+    # Constant-SD flag (sensor flatline detection)
+    constant_sd_months <- 0L
+    if (constant_sd_enabled) {
+      for (m in unique(wy_data$month)) {
+        m_vals <- wy_data[month == m & !is.na(Q) & Q > 0, Q]
+        if (length(m_vals) >= constant_sd_min_days) {
+          if (length(unique(m_vals)) <= constant_sd_max_unique) {
+            constant_sd_months <- constant_sd_months + 1L
+          }
+        }
+      }
+    }
+
+    # ===== Step 2c: Year rejection (pre-interpolation) =====
+    reject_reason <- NULL
+    if (raw_na_count > max_raw_na) {
+      reject_reason <- paste0("too many raw NAs (", raw_na_count, " > ", max_raw_na, ")")
+    } else if (raw_max_na_run > max_gap_days) {
+      reject_reason <- paste0("gap too large to interpolate (", raw_max_na_run, " > ", max_gap_days, " consecutive NAs)")
+    } else if (reject_negative && negative_flag) {
+      reject_reason <- "negative Q values"
+    }
+
+    if (!is.null(reject_reason)) {
+      rejected_list[[length(rejected_list) + 1L]] <- data.table(
+        water_year = wy, reason = reject_reason
+      )
+      diag_list[[length(diag_list) + 1L]] <- data.table(
+        water_year = wy, raw_na_count = raw_na_count,
+        raw_max_na_run = raw_max_na_run, interpolated_count = 0L,
+        residual_na_count = raw_na_count, negative_flag = negative_flag,
+        constant_sd_months = constant_sd_months
+      )
+      seasonal_list[[length(seasonal_list) + 1L]] <- as.data.table(season_flags)
+      # Remove this year's data from gage_flow
+      next
+    }
+
+    # ===== Step 2d: Interpolate internal gaps (only for years passing 2c) =====
+    interpolated_count <- 0L
+    if (raw_na_count > 0) {
+      n <- nrow(wy_data)
+      na_mask <- is.na(wy_data$Q)
+
+      # Find consecutive NA runs
+      rle_result <- rle(na_mask)
+      run_ends <- cumsum(rle_result$lengths)
+      run_starts <- c(1L, run_ends[-length(run_ends)] + 1L)
+
+      for (ri in seq_along(rle_result$lengths)) {
+        if (!rle_result$values[ri]) next  # skip non-NA runs
+        gap_len <- rle_result$lengths[ri]
+        if (gap_len > max_gap_days) next  # can't interpolate (shouldn't happen after 2c, but defensive)
+
+        s <- run_starts[ri]
+        e <- run_ends[ri]
+
+        # Internal only: must have non-NA on BOTH sides
+        left_ok <- (s > 1L) && !is.na(wy_data$Q[s - 1L])
+        right_ok <- (e < n) && !is.na(wy_data$Q[e + 1L])
+
+        if (left_ok && right_ok) {
+          # Linear interpolation using R approx (rule=1, no extrapolation)
+          left_val <- wy_data$Q[s - 1L]
+          right_val <- wy_data$Q[e + 1L]
+          interp_vals <- approx(
+            x = c(s - 1L, e + 1L),
+            y = c(left_val, right_val),
+            xout = s:e,
+            rule = 1  # no extrapolation
+          )$y
+          wy_data$Q[s:e] <- interp_vals
+          interpolated_count <- interpolated_count + gap_len
+        }
+        # Leading/trailing NAs (boundary): NOT interpolated
+      }
+    }
+
+    # ===== Step 2e: Post-interpolation residual check =====
+    residual_na_count <- sum(is.na(wy_data$Q))
+    if (reject_residual && residual_na_count > 0) {
+      rejected_list[[length(rejected_list) + 1L]] <- data.table(
+        water_year = wy, reason = paste0("residual boundary NAs (", residual_na_count, " remaining after interpolation)")
+      )
+      diag_list[[length(diag_list) + 1L]] <- data.table(
+        water_year = wy, raw_na_count = raw_na_count,
+        raw_max_na_run = raw_max_na_run,
+        interpolated_count = interpolated_count,
+        residual_na_count = residual_na_count,
+        negative_flag = negative_flag,
+        constant_sd_months = constant_sd_months
+      )
+      seasonal_list[[length(seasonal_list) + 1L]] <- as.data.table(season_flags)
+      next
+    }
+
+    # ===== Step 2f: Apply same logic to PPT (if climate columns present) =====
+    ppt_valid <- TRUE
+    if (has_ppt) {
+      ppt_vals <- wy_data$PPT
+      ppt_raw_na <- sum(is.na(ppt_vals))
+
+      if (ppt_raw_na > max_raw_na_ppt) {
+        ppt_valid <- FALSE
+      } else if (ppt_raw_na > 0) {
+        # Check max consecutive NA run for PPT
+        rle_ppt <- rle(is.na(ppt_vals))
+        ppt_max_run <- max(rle_ppt$lengths[rle_ppt$values], 0L)
+        if (ppt_max_run > max_gap_ppt) {
+          ppt_valid <- FALSE
+        } else {
+          # Interpolate internal PPT gaps
+          rle_result_ppt <- rle(is.na(wy_data$PPT))
+          run_ends_ppt <- cumsum(rle_result_ppt$lengths)
+          run_starts_ppt <- c(1L, run_ends_ppt[-length(run_ends_ppt)] + 1L)
+          n_ppt <- nrow(wy_data)
+
+          for (ri in seq_along(rle_result_ppt$lengths)) {
+            if (!rle_result_ppt$values[ri]) next
+            gap_len <- rle_result_ppt$lengths[ri]
+            if (gap_len > max_gap_ppt) next
+
+            s <- run_starts_ppt[ri]
+            e <- run_ends_ppt[ri]
+            left_ok <- (s > 1L) && !is.na(wy_data$PPT[s - 1L])
+            right_ok <- (e < n_ppt) && !is.na(wy_data$PPT[e + 1L])
+
+            if (left_ok && right_ok) {
+              interp_vals <- approx(
+                x = c(s - 1L, e + 1L),
+                y = c(wy_data$PPT[s - 1L], wy_data$PPT[e + 1L]),
+                xout = s:e, rule = 1
+              )$y
+              wy_data$PPT[s:e] <- interp_vals
+            }
+          }
+
+          # Check residual PPT NAs
+          if (sum(is.na(wy_data$PPT)) > 0) ppt_valid <- FALSE
+        }
+      }
+
+      # Check negative PPT
+      if (ppt_valid && reject_negative_ppt && any(wy_data$PPT < 0, na.rm = TRUE)) {
+        ppt_valid <- FALSE
+      }
+    }
+
+    # ===== Step 2g: Build return objects for this year =====
+    valid_years <- c(valid_years, wy)
+    if (has_ppt && ppt_valid) {
+      valid_climate_years <- c(valid_climate_years, wy)
+    }
+
+    diag_list[[length(diag_list) + 1L]] <- data.table(
+      water_year = wy, raw_na_count = raw_na_count,
+      raw_max_na_run = raw_max_na_run,
+      interpolated_count = interpolated_count,
+      residual_na_count = residual_na_count,
+      negative_flag = negative_flag,
+      constant_sd_months = constant_sd_months
+    )
+    seasonal_list[[length(seasonal_list) + 1L]] <- as.data.table(season_flags)
+
+    # Update gage_flow with interpolated data for this year
+    # Replace the rows for this water year with the cleaned data
+    gage_flow <- gage_flow[water_year != wy]
+    gage_flow <- rbind(gage_flow, wy_data, fill = TRUE)
+  }
+
+  # Sort the final data by Date
+  setorder(gage_flow, Date)
+
+  # Filter to valid years only
+  cleaned_data <- gage_flow[water_year %in% valid_years]
+
+  # Assemble return objects
+  rejected_years <- if (length(rejected_list) > 0) rbindlist(rejected_list) else data.table(water_year = integer(0), reason = character(0))
+  diagnostics <- if (length(diag_list) > 0) rbindlist(diag_list) else data.table(
+    water_year = integer(0), raw_na_count = integer(0), raw_max_na_run = integer(0),
+    interpolated_count = integer(0), residual_na_count = integer(0),
+    negative_flag = logical(0), constant_sd_months = integer(0)
+  )
+  seasonal_flags <- if (length(seasonal_list) > 0) rbindlist(seasonal_list, fill = TRUE) else data.table(
+    water_year = integer(0), winter_complete = logical(0), spring_complete = logical(0),
+    summer_complete = logical(0), fall_complete = logical(0)
+  )
+
+  list(
+    data = cleaned_data,
+    valid_years = valid_years,
+    valid_climate_years = valid_climate_years,
+    rejected_years = rejected_years,
+    seasonal_flags = seasonal_flags,
+    diagnostics = diagnostics
+  )
+}
+
+
+################################################################
 # statistical processing functions
 
   # helper function that receives a time series and outputs summary metrics (trends, averages, etc.)
@@ -791,7 +1117,8 @@ find_upstream_hydrobasins <- function(current_gage, basinAt_NorAm_polys, HB_dt, 
   #   _mk_pval      = Mann-Kendall p-value for trend significance
   #   _mean         = Arithmetic mean across water years
   #   _median       = Median across water years
-generate_stats <- function(data, value_cols = NULL, year_col = "year", min_rows = 3) {
+generate_stats <- function(data, value_cols = NULL, year_col = "year", min_rows = 3,
+                           trend_completeness = NULL, decade_completeness = NULL) {
   # Check if required packages are available
   if (!requireNamespace("zyp", quietly = TRUE)) {
     stop("Package 'zyp' is needed for this function. Please install it with install.packages('zyp')")
@@ -846,6 +1173,62 @@ generate_stats <- function(data, value_cols = NULL, year_col = "year", min_rows 
       results[[paste0(col, "_mk_pval")]] <- NA
       results[[paste0(col, "_mean")]] <- NA
       results[[paste0(col, "_median")]] <- NA
+      next
+    }
+
+    # Trend completeness check: if enabled, verify sufficient non-NA coverage
+    # before computing trend statistics. Mean and median always computed.
+    # Uses the metric's own non-NA year range for decade boundaries, so
+    # climate signatures use climate years and recession uses recession years.
+    skip_trends <- FALSE
+    if (!is.null(trend_completeness)) {
+      all_years <- data[[year_col]]
+      all_values <- data[[col]]
+      valid_mask <- !is.na(all_values)
+      valid_years <- all_years[valid_mask]
+
+      if (length(valid_years) > 0) {
+        metric_min_yr <- min(valid_years)
+        metric_max_yr <- max(valid_years)
+        metric_span <- metric_max_yr - metric_min_yr + 1
+
+        # Overall completeness: non-NA values / span of metric's year range
+        if (metric_span > 0 && (length(valid_years) / metric_span) < trend_completeness) {
+          skip_trends <- TRUE
+        }
+
+        # First/last decade completeness (only if span >= 10 years)
+        if (!skip_trends && !is.null(decade_completeness) && metric_span >= 10) {
+          # First decade: metric_min_yr to metric_min_yr + 9
+          first_decade_yrs <- valid_years[valid_years >= metric_min_yr & valid_years <= (metric_min_yr + 9)]
+          first_expected <- min(10, metric_span)
+          if (first_expected > 0 && (length(first_decade_yrs) / first_expected) < decade_completeness) {
+            skip_trends <- TRUE
+          }
+
+          # Last decade: metric_max_yr - 9 to metric_max_yr
+          if (!skip_trends) {
+            last_start <- metric_max_yr - 9
+            last_decade_yrs <- valid_years[valid_years >= last_start & valid_years <= metric_max_yr]
+            last_expected <- min(10, metric_max_yr - max(last_start, metric_min_yr) + 1)
+            if (last_expected > 0 && (length(last_decade_yrs) / last_expected) < decade_completeness) {
+              skip_trends <- TRUE
+            }
+          }
+        }
+      }
+    }
+
+    if (skip_trends) {
+      # Insufficient completeness for trends; still compute mean/median
+      results[[paste0(col, "_senn_slp")]] <- NA
+      results[[paste0(col, "_linear_slp")]] <- NA
+      results[[paste0(col, "_spearman_rho")]] <- NA
+      results[[paste0(col, "_spearman_pval")]] <- NA
+      results[[paste0(col, "_mk_rho")]] <- NA
+      results[[paste0(col, "_mk_pval")]] <- NA
+      results[[paste0(col, "_mean")]] <- mean(working_data$value, na.rm = TRUE)
+      results[[paste0(col, "_median")]] <- median(working_data$value, na.rm = TRUE)
       next
     }
 
@@ -914,7 +1297,8 @@ generate_stats <- function(data, value_cols = NULL, year_col = "year", min_rows 
 # start streamflow signature analysis
 
 
-calculate_flow_vols_by_year = function(streamflow_data){
+calculate_flow_vols_by_year = function(streamflow_data, seasonal_flags = NULL,
+                                       trend_completeness = NULL, decade_completeness = NULL){
   # Ensure required columns exist
   required_cols <- c("water_year", "Q", "month", "dowy")
   if (!all(required_cols %in% colnames(streamflow_data))) {
@@ -922,22 +1306,9 @@ calculate_flow_vols_by_year = function(streamflow_data){
     stop(paste("Missing required columns:", paste(missing, collapse=", ")))
   }
 
-  # Filter out water years with insufficient data (< MIN_NONA_DAYS_ANNUAL non-NA days)
-  years <- unique(streamflow_data$water_year)
-  valid_years <- c()
-  for (yr in years) {
-    yr_data <- streamflow_data[streamflow_data$water_year == yr, ]
-    if (sum(!is.na(yr_data$Q)) >= MIN_NONA_DAYS_ANNUAL) {
-      valid_years <- c(valid_years, yr)
-    }
-  }
-  streamflow_data <- streamflow_data[streamflow_data$water_year %in% valid_years, ]
-
   # Calculate annual total flow (mm) by summing daily Q (mm/day).
   # na.rm=TRUE sums available days rather than discarding years with minor gaps.
-  # Safe here because the 250-day filter above guarantees substantial valid data per year.
-  # Trade-off: if a year has a few missing days, the total is slightly underestimated
-  # rather than lost entirely — standard practice for hydrological time series.
+  # The preprocessor guarantees all years in the DataFrame are valid.
   annual_totals <- aggregate(Q ~ water_year, data=streamflow_data, FUN=sum, na.rm=TRUE)
 
   # Check if we have any valid annual data
@@ -945,7 +1316,9 @@ calculate_flow_vols_by_year = function(streamflow_data){
     # Return empty result with correct structure
     return(generate_stats(data.frame(water_year = numeric()),
                           value_cols = character(),
-                          year_col = "water_year"))
+                          year_col = "water_year",
+                          trend_completeness = trend_completeness,
+                          decade_completeness = decade_completeness))
   }
 
   names(annual_totals)[2] <- "Qann"
@@ -957,9 +1330,9 @@ calculate_flow_vols_by_year = function(streamflow_data){
   fall <- streamflow_data[streamflow_data$month %in% c(9, 10, 11), ]
 
   # Seasonal sums also use na.rm=TRUE. Edge case: a season could have all NAs
-  # while the year passes the 250-day filter (e.g., all winter days missing).
-  # In that rare case sum returns 0 rather than NA — acceptable given the annual
-  # completeness guarantee and standard hydrological practice.
+  # (e.g., all winter days missing). In that rare case sum returns 0 rather than
+  # NA — acceptable given the preprocessor completeness guarantee and standard
+  # hydrological practice.
   winter_totals <- aggregate(Q ~ water_year, data=winter, FUN=sum, na.rm=TRUE)
   spring_totals <- aggregate(Q ~ water_year, data=spring, FUN=sum, na.rm=TRUE)
   summer_totals <- aggregate(Q ~ water_year, data=summer, FUN=sum, na.rm=TRUE)
@@ -970,6 +1343,38 @@ calculate_flow_vols_by_year = function(streamflow_data){
   if (nrow(spring_totals) > 0) names(spring_totals)[2] <- "Qspr"
   if (nrow(summer_totals) > 0) names(summer_totals)[2] <- "Qsum"
   if (nrow(fall_totals) > 0) names(fall_totals)[2] <- "Qfal"
+
+  # Apply seasonal completeness flags: set incomplete seasons to NA
+  if (!is.null(seasonal_flags) && nrow(seasonal_flags) > 0) {
+    season_map <- list(
+      Qwin = "winter_complete",
+      Qspr = "spring_complete",
+      Qsum = "summer_complete",
+      Qfal = "fall_complete"
+    )
+    season_dfs <- list(Qwin = winter_totals, Qspr = spring_totals,
+                       Qsum = summer_totals, Qfal = fall_totals)
+    for (sname in names(season_map)) {
+      flag_col <- season_map[[sname]]
+      if (flag_col %in% names(seasonal_flags)) {
+        sdf <- season_dfs[[sname]]
+        if (nrow(sdf) > 0) {
+          for (ri in seq_len(nrow(sdf))) {
+            wy <- sdf$water_year[ri]
+            flag_row <- seasonal_flags[seasonal_flags$water_year == wy, ]
+            if (nrow(flag_row) > 0 && !is.na(flag_row[[flag_col]]) && !flag_row[[flag_col]]) {
+              sdf[[sname]][ri] <- NA
+            }
+          }
+          season_dfs[[sname]] <- sdf
+        }
+      }
+    }
+    winter_totals <- season_dfs$Qwin
+    spring_totals <- season_dfs$Qspr
+    summer_totals <- season_dfs$Qsum
+    fall_totals <- season_dfs$Qfal
+  }
 
   # After seasonal aggregations, check if any are empty
   if (nrow(winter_totals) == 0) winter_totals <- data.frame(water_year=numeric(), Qwin=numeric())
@@ -1070,14 +1475,17 @@ calculate_flow_vols_by_year = function(streamflow_data){
   metric_columns <- setdiff(names(all_metrics), "water_year")
   
   # Use generate_stats to calculate all statistics at once
-  result <- generate_stats(all_metrics, value_cols = metric_columns, year_col = "water_year")
-  
+  result <- generate_stats(all_metrics, value_cols = metric_columns, year_col = "water_year",
+                           trend_completeness = trend_completeness,
+                           decade_completeness = decade_completeness)
+
   return(result)
 }
 
 
 
-analyze_fdc_trends_from_streamflow <- function(streamflow_data) {
+analyze_fdc_trends_from_streamflow <- function(streamflow_data,
+                                               trend_completeness = NULL, decade_completeness = NULL) {
   # Check if required columns exist
   required_cols <- c("water_year", "Q")
   if (!all(required_cols %in% colnames(streamflow_data))) {
@@ -1112,16 +1520,11 @@ analyze_fdc_trends_from_streamflow <- function(streamflow_data) {
   # For each year, calculate FDC slopes
   for (yr in years) {
     year_data <- streamflow_data[streamflow_data$water_year == yr, ]
-    
-    # Need sufficient data points for the year
-    if (nrow(year_data) < 30) {
-      next
-    }
-    
+
     # Remove NA values from Q
     Q_values <- year_data$Q[!is.na(year_data$Q)]
-    
-    if (length(Q_values) < 30) {
+
+    if (length(Q_values) < 10) {
       next
     }
     
@@ -1170,7 +1573,9 @@ analyze_fdc_trends_from_streamflow <- function(streamflow_data) {
   }
   
   # Use generate_stats for all three FDC metrics
-  stats_result <- generate_stats(FDC_byYear, value_cols = c("slp_all", "slp_90th", "slp_mid"), year_col = "water_year")
+  stats_result <- generate_stats(FDC_byYear, value_cols = c("slp_all", "slp_90th", "slp_mid"), year_col = "water_year",
+                                 trend_completeness = trend_completeness,
+                                 decade_completeness = decade_completeness)
   
   # Rename columns to match expected output
   names(stats_result) <- gsub("slp_all", "FDCall", names(stats_result))
@@ -1189,7 +1594,8 @@ analyze_fdc_trends_from_streamflow <- function(streamflow_data) {
 
 
 
-analyze_flashiness_trends <- function(streamflow_data) {
+analyze_flashiness_trends <- function(streamflow_data,
+                                      trend_completeness = NULL, decade_completeness = NULL) {
   # Check if required columns exist
   required_cols <- c("water_year", "Q")
   if (!all(required_cols %in% colnames(streamflow_data))) {
@@ -1210,12 +1616,6 @@ analyze_flashiness_trends <- function(streamflow_data) {
   # For each year, calculate the RB flashiness index
   for (yr in years) {
     year_data <- streamflow_data[streamflow_data$water_year == yr, ]
-    
-    
-    # Need sufficient non-NA data points for the year
-    if (sum(!is.na(year_data$Q)) < 30) {
-      next
-    }
 
     # Sort by day to ensure chronological order
     if ("dowy" %in% colnames(year_data)) {
@@ -1224,14 +1624,9 @@ analyze_flashiness_trends <- function(streamflow_data) {
 
     # Calculate RB index: sum of absolute day-to-day changes divided by total flow
     q_values <- year_data$Q
-    
-    # Check for missing values
+
+    # Interpolate any residual missing values
     if (sum(is.na(q_values)) > 0) {
-      # Skip if too many missing values (more than 20%)
-      if (sum(is.na(q_values)) / length(q_values) > 0.2) {
-        next
-      }
-      # Otherwise, interpolate missing values
       q_values <- approx(1:length(q_values), q_values, 1:length(q_values), rule=2)$y
     }
     
@@ -1250,7 +1645,9 @@ analyze_flashiness_trends <- function(streamflow_data) {
   }
   
   # Use generate_stats to calculate all statistics
-  result <- generate_stats(flashiness_byYear, value_cols = "RB_index", year_col = "water_year")
+  result <- generate_stats(flashiness_byYear, value_cols = "RB_index", year_col = "water_year",
+                           trend_completeness = trend_completeness,
+                           decade_completeness = decade_completeness)
   
   # Rename columns to match expected output
   names(result) <- gsub("RB_index", "flashinessRB", names(result))
@@ -1264,7 +1661,8 @@ analyze_flashiness_trends <- function(streamflow_data) {
 
 
 
-analyze_flow_timing_trends <- function(streamflow_data) {
+analyze_flow_timing_trends <- function(streamflow_data,
+                                       trend_completeness = NULL, decade_completeness = NULL) {
   # Check if required columns exist
   required_cols <- c("water_year", "Q", "dowy")
   if (!all(required_cols %in% colnames(streamflow_data))) {
@@ -1289,13 +1687,7 @@ analyze_flow_timing_trends <- function(streamflow_data) {
   # For each year, find the day when cumulative flow reaches each percentile threshold
   for (yr in years) {
     year_data <- streamflow_data[streamflow_data$water_year == yr, ]
-    
-    
-    # Skip years with insufficient data
-    if (nrow(year_data) < 300) {
-      next
-    }
-    
+
     # Sort by day of year to ensure chronological order
     year_data <- year_data[order(year_data$dowy), ]
     
@@ -1307,10 +1699,12 @@ analyze_flow_timing_trends <- function(streamflow_data) {
       next
     }
     
-    # Replace NAs with 0 before cumsum (conservative: treats missing as zero flow)
-    # R's cumsum() propagates NAs, which would corrupt all subsequent values
+    # After preprocessing, valid years should have no NAs in Q.
+    # If any NAs remain, skip this year.
     q_for_cumsum <- year_data$Q
-    q_for_cumsum[is.na(q_for_cumsum)] <- 0
+    if (any(is.na(q_for_cumsum))) {
+      next
+    }
     year_data$cum_flow <- cumsum(q_for_cumsum)
 
     # Calculate cumulative flow as percentage of total
@@ -1350,7 +1744,9 @@ analyze_flow_timing_trends <- function(streamflow_data) {
   metric_columns <- c(paste0("D", percentiles, "_day"), "D25_to_D75", "Dmax")
   
   # Use generate_stats to calculate all statistics at once
-  result <- generate_stats(timing_by_year, value_cols = metric_columns, year_col = "water_year")
+  result <- generate_stats(timing_by_year, value_cols = metric_columns, year_col = "water_year",
+                           trend_completeness = trend_completeness,
+                           decade_completeness = decade_completeness)
   
   # Add timing_by_year as an attribute to the result
   attr(result, "timing_by_year") <- timing_by_year
@@ -1361,7 +1757,8 @@ analyze_flow_timing_trends <- function(streamflow_data) {
 
 
 
-calculate_pulse_metrics <- function(streamflow_data) {
+calculate_pulse_metrics <- function(streamflow_data,
+                                    trend_completeness = NULL, decade_completeness = NULL) {
   # Check if required columns exist
   required_cols <- c("water_year", "Q", "dowy", "month")
   if (!all(required_cols %in% colnames(streamflow_data))) {
@@ -1472,11 +1869,6 @@ calculate_pulse_metrics <- function(streamflow_data) {
   for (yr in years) {
     year_data <- streamflow_data[streamflow_data$water_year == yr, ]
 
-    # Skip years with insufficient valid data (minimum days from config.R)
-    if (sum(!is.na(year_data$Q)) < MIN_NONA_DAYS_ANNUAL) {
-      next
-    }
-
     # Sort by day of year to ensure chronological order
     year_data <- year_data[order(year_data$dowy), ]
 
@@ -1539,9 +1931,11 @@ calculate_pulse_metrics <- function(streamflow_data) {
   metric_columns <- setdiff(names(pulse_metrics), "water_year")
   
   # Use generate_stats to calculate all statistics at once
-  result <- generate_stats(pulse_metrics, value_cols = metric_columns, year_col = "water_year")
-  
-  
+  result <- generate_stats(pulse_metrics, value_cols = metric_columns, year_col = "water_year",
+                           trend_completeness = trend_completeness,
+                           decade_completeness = decade_completeness)
+
+
   # Add pulse_metrics as an attribute to the result
   attr(result, "pulse_metrics") <- pulse_metrics
   
@@ -1552,7 +1946,8 @@ calculate_pulse_metrics <- function(streamflow_data) {
 
 
 
-analyze_Q_PPT_relationships <- function(streamflow_data) {
+analyze_Q_PPT_relationships <- function(streamflow_data, seasonal_flags = NULL,
+                                        trend_completeness = NULL, decade_completeness = NULL) {
   # Check if required columns exist
   required_cols <- c("water_year", "Q", "PPT", "month")
   if (!all(required_cols %in% colnames(streamflow_data))) {
@@ -1613,21 +2008,44 @@ analyze_Q_PPT_relationships <- function(streamflow_data) {
                       by = "water_year", all.x = TRUE)
   
   # Then merge seasonal ratios
-  all_ratios <- merge(all_ratios, winter_totals[, c("water_year", "winter_runoff_ratio")], 
+  all_ratios <- merge(all_ratios, winter_totals[, c("water_year", "winter_runoff_ratio")],
                       by = "water_year", all.x = TRUE)
-  all_ratios <- merge(all_ratios, spring_totals[, c("water_year", "spring_runoff_ratio")], 
+  all_ratios <- merge(all_ratios, spring_totals[, c("water_year", "spring_runoff_ratio")],
                       by = "water_year", all.x = TRUE)
-  all_ratios <- merge(all_ratios, summer_totals[, c("water_year", "summer_runoff_ratio")], 
+  all_ratios <- merge(all_ratios, summer_totals[, c("water_year", "summer_runoff_ratio")],
                       by = "water_year", all.x = TRUE)
-  all_ratios <- merge(all_ratios, fall_totals[, c("water_year", "fall_runoff_ratio")], 
+  all_ratios <- merge(all_ratios, fall_totals[, c("water_year", "fall_runoff_ratio")],
                       by = "water_year", all.x = TRUE)
-  
-  
+
+  # Apply seasonal completeness flags: set incomplete seasons to NA
+  if (!is.null(seasonal_flags) && nrow(seasonal_flags) > 0) {
+    ratio_season_map <- list(
+      winter_runoff_ratio = "winter_complete",
+      spring_runoff_ratio = "spring_complete",
+      summer_runoff_ratio = "summer_complete",
+      fall_runoff_ratio = "fall_complete"
+    )
+    for (rcol in names(ratio_season_map)) {
+      flag_col <- ratio_season_map[[rcol]]
+      if (rcol %in% names(all_ratios) && flag_col %in% names(seasonal_flags)) {
+        for (ri in seq_len(nrow(all_ratios))) {
+          wy <- all_ratios$water_year[ri]
+          flag_row <- seasonal_flags[seasonal_flags$water_year == wy, ]
+          if (nrow(flag_row) > 0 && !is.na(flag_row[[flag_col]]) && !flag_row[[flag_col]]) {
+            all_ratios[[rcol]][ri] <- NA
+          }
+        }
+      }
+    }
+  }
+
   # Define which columns to calculate statistics for (all except year)
   metric_columns <- setdiff(names(all_ratios), "water_year")
   
   # Use generate_stats to calculate all statistics at once
-  result <- generate_stats(all_ratios, value_cols = metric_columns, year_col = "water_year")
+  result <- generate_stats(all_ratios, value_cols = metric_columns, year_col = "water_year",
+                           trend_completeness = trend_completeness,
+                           decade_completeness = decade_completeness)
   
   # Add the annual data as an attribute for reference
   attr(result, "runoff_ratios_by_year") <- list(
@@ -1645,7 +2063,8 @@ analyze_Q_PPT_relationships <- function(streamflow_data) {
 
 
 
-analyze_baseflow_indices <- function(streamflow_data) {
+analyze_baseflow_indices <- function(streamflow_data,
+                                     trend_completeness = NULL, decade_completeness = NULL) {
   # Check if required columns exist (dowy is used for sorting, not doy)
   required_cols <- c("water_year", "Q", "dowy")
   if (!all(required_cols %in% colnames(streamflow_data))) {
@@ -1746,23 +2165,13 @@ analyze_baseflow_indices <- function(streamflow_data) {
   # Process each year
   for (yr in years) {
     year_data <- streamflow_data[streamflow_data$water_year == yr, ]
-    
-    # Skip years with insufficient data
-    if (nrow(year_data) < 250) {
-      next
-    }
-    
+
     # Sort by day of year to ensure chronological order
     year_data <- year_data[order(year_data$dowy), ]
-    
+
     # Get streamflow values
     Q <- year_data$Q
-    
-    # Skip if too many missing values
-    if (sum(is.na(Q)) / length(Q) > 0.2) {
-      next
-    }
-    
+
     # Apply Eckhardt filter
     baseflow_eckhardt <- eckhardt_filter(Q)
     
@@ -1789,9 +2198,11 @@ analyze_baseflow_indices <- function(streamflow_data) {
   metric_columns <- setdiff(names(bfi_by_year), "water_year")
   
   # Use generate_stats to calculate all statistics at once
-  result <- generate_stats(bfi_by_year, value_cols = metric_columns, year_col = "water_year")
-  
-  
+  result <- generate_stats(bfi_by_year, value_cols = metric_columns, year_col = "water_year",
+                           trend_completeness = trend_completeness,
+                           decade_completeness = decade_completeness)
+
+
   # Add bfi_by_year as an attribute to the result
   attr(result, "bfi_by_year") <- bfi_by_year
   
@@ -1800,7 +2211,8 @@ analyze_baseflow_indices <- function(streamflow_data) {
 
 
 
-analyze_recession_parameters <- function(streamflow_data) {
+analyze_recession_parameters <- function(streamflow_data,
+                                         trend_completeness = NULL, decade_completeness = NULL) {
   # Check if required columns exist
   required_cols <- c("water_year", "Q", "dowy")
   if (!all(required_cols %in% colnames(streamflow_data))) {
@@ -2158,9 +2570,11 @@ analyze_recession_parameters <- function(streamflow_data) {
   }
   
   # Use generate_stats to calculate statistics for signatures with trends
-  stats_result <- generate_stats(annual_metrics, 
-                                 value_cols = signatures_with_stats, 
-                                 year_col = "water_year")
+  stats_result <- generate_stats(annual_metrics,
+                                 value_cols = signatures_with_stats,
+                                 year_col = "water_year",
+                                 trend_completeness = trend_completeness,
+                                 decade_completeness = decade_completeness)
   
   
   # Initialize the final result with stats_result
@@ -2977,7 +3391,8 @@ integrate_daymet_with_streamflow <- function(streamflow_data,
 #' @param rolling_window Number of years for rolling window (NULL for static only)
 #' @return List with elasticity statistics
 calculate_streamflow_elasticity <- function(streamflow_data,
-                                             rolling_window = ELASTICITY_WINDOW_YEARS) {
+                                             rolling_window = ELASTICITY_WINDOW_YEARS,
+                                             trend_completeness = NULL, decade_completeness = NULL) {
 
   ctx <- "calculate_streamflow_elasticity"
 
@@ -2985,21 +3400,11 @@ calculate_streamflow_elasticity <- function(streamflow_data,
   required_cols <- c("water_year", "Q", "PPT")
   validate_columns(streamflow_data, required_cols, "streamflow_data", context = ctx)
 
-  # Aggregate to annual totals with data quality check
+  # Aggregate to annual totals (preprocessor guarantees valid years)
   annual <- streamflow_data[, .(
     Q_annual = sum(Q, na.rm = TRUE),
-    P_annual = sum(PPT, na.rm = TRUE),
-    n_valid_days = sum(!is.na(Q) & !is.na(PPT))
+    P_annual = sum(PPT, na.rm = TRUE)
   ), by = water_year]
-
-  # Calculate expected days per water year (accounting for leap years)
-  annual[, expected_days := ifelse(
-    ((water_year %% 4 == 0) & (water_year %% 100 != 0)) | (water_year %% 400 == 0),
-    366, 365
-  )]
-
-  # Filter: remove years with >10% missing data (threshold from config.R)
-  annual <- annual[n_valid_days >= ELASTICITY_MIN_DATA_COMPLETENESS * expected_days]
 
   # Remove years with zero or very low precipitation (threshold from config.R)
   annual <- annual[P_annual > ELASTICITY_MIN_ANNUAL_PPT]
@@ -3065,7 +3470,9 @@ calculate_streamflow_elasticity <- function(streamflow_data,
     # Calculate trend statistics on rolling elasticity
     trend_stats <- generate_stats(rolling_elasticity,
                                    value_cols = "elasticity_rolling",
-                                   year_col = "water_year")
+                                   year_col = "water_year",
+                                   trend_completeness = trend_completeness,
+                                   decade_completeness = decade_completeness)
 
     result <- list(
       elasticity_static = elasticity_static,
@@ -3082,7 +3489,9 @@ calculate_streamflow_elasticity <- function(streamflow_data,
     # No rolling window - use annual values for stats
     trend_stats <- generate_stats(annual[!is.na(elasticity)],
                                    value_cols = "elasticity",
-                                   year_col = "water_year")
+                                   year_col = "water_year",
+                                   trend_completeness = trend_completeness,
+                                   decade_completeness = decade_completeness)
 
     result <- list(
       elasticity_static = elasticity_static,
@@ -3112,7 +3521,8 @@ calculate_streamflow_elasticity <- function(streamflow_data,
 #' @param slope_window_days Window size for rolling slope calculation
 #' @return List with seasonality statistics
 calculate_qp_seasonality <- function(streamflow_data,
-                                      slope_window_days = QP_SLOPE_WINDOW_DAYS) {
+                                      slope_window_days = QP_SLOPE_WINDOW_DAYS,
+                                      trend_completeness = NULL, decade_completeness = NULL) {
 
 
   ctx <- "calculate_qp_seasonality"
@@ -3141,16 +3551,13 @@ calculate_qp_seasonality <- function(streamflow_data,
   annual_metrics <- rbindlist(lapply(years, function(yr) {
     year_data <- copy(streamflow_data[water_year == yr])
 
-    if (nrow(year_data) < 300) return(NULL)
-
-    # Check for too many NA values in Q or PPT
-    na_frac_Q <- sum(is.na(year_data$Q)) / nrow(year_data)
-    na_frac_PPT <- sum(is.na(year_data$PPT)) / nrow(year_data)
-    if (na_frac_Q > 0.1 || na_frac_PPT > 0.1) return(NULL)
-
-    # Replace remaining NA with 0 for cumsum (small gaps only)
-    year_data[is.na(Q), Q := 0]
-    year_data[is.na(PPT), PPT := 0]
+    # After preprocessing, valid years should have no NAs.
+    # Skip year if any Q or PPT NAs remain (defensive).
+    if (any(is.na(year_data$Q)) || any(is.na(year_data$PPT))) {
+      log_debug("Skipping WY", yr, "for Q-P seasonality: residual NAs in Q or PPT",
+                context = "calculate_qp_seasonality")
+      return(NULL)
+    }
 
     # Sort by day of water year
     setorder(year_data, dowy)
@@ -3237,9 +3644,13 @@ calculate_qp_seasonality <- function(streamflow_data,
 
   # Calculate trend statistics
   sd_stats <- generate_stats(annual_metrics, value_cols = "qp_slope_sd",
-                              year_col = "water_year")
+                              year_col = "water_year",
+                              trend_completeness = trend_completeness,
+                              decade_completeness = decade_completeness)
   bi_stats <- generate_stats(annual_metrics[!is.na(qp_bimodality)],
-                              value_cols = "qp_bimodality", year_col = "water_year")
+                              value_cols = "qp_bimodality", year_col = "water_year",
+                              trend_completeness = trend_completeness,
+                              decade_completeness = decade_completeness)
 
   result <- list(
     qp_slope_sd_senn_slp = sd_stats$qp_slope_sd_senn_slp,
@@ -3271,7 +3682,8 @@ calculate_qp_seasonality <- function(streamflow_data,
 #'
 #' @param streamflow_data data.table with water_year, Q, prcp, dowy columns
 #' @return List with storage statistics
-calculate_average_storage <- function(streamflow_data) {
+calculate_average_storage <- function(streamflow_data,
+                                      trend_completeness = NULL, decade_completeness = NULL) {
 
   ctx <- "calculate_average_storage"
 
@@ -3299,16 +3711,13 @@ calculate_average_storage <- function(streamflow_data) {
   annual_storage <- rbindlist(lapply(years, function(yr) {
     year_data <- copy(streamflow_data[water_year == yr])
 
-    if (nrow(year_data) < 300) return(NULL)
-
-    # Check for too many NA values in Q or PPT
-    na_frac_Q <- sum(is.na(year_data$Q)) / nrow(year_data)
-    na_frac_PPT <- sum(is.na(year_data$PPT)) / nrow(year_data)
-    if (na_frac_Q > 0.1 || na_frac_PPT > 0.1) return(NULL)
-
-    # Replace remaining NA with 0 for cumsum (small gaps only)
-    year_data[is.na(Q), Q := 0]
-    year_data[is.na(PPT), PPT := 0]
+    # After preprocessing, valid years should have no NAs.
+    # Skip year if any Q or PPT NAs remain (defensive).
+    if (any(is.na(year_data$Q)) || any(is.na(year_data$PPT))) {
+      log_debug("Skipping WY", yr, "for storage: residual NAs in Q or PPT",
+                context = "calculate_average_storage")
+      return(NULL)
+    }
 
     # Sort by day of water year
     setorder(year_data, dowy)
@@ -3358,7 +3767,9 @@ calculate_average_storage <- function(streamflow_data) {
   # Calculate trend statistics
   storage_stats <- generate_stats(annual_storage[!is.na(avg_storage)],
                                    value_cols = "avg_storage",
-                                   year_col = "water_year")
+                                   year_col = "water_year",
+                                   trend_completeness = trend_completeness,
+                                   decade_completeness = decade_completeness)
 
   result <- list(
     avg_storage_senn_slp = storage_stats$avg_storage_senn_slp,
@@ -4022,7 +4433,9 @@ process_signatures_from_parquet <- function(
     min_frac_good_data = 0.95,
     daymet_parquet_path = NULL,  # Path to Daymet parquet for climate signatures
     start_water_year = NULL,     # Earliest water year to include (e.g., 1993)
-    end_water_year = NULL        # Latest water year to include (e.g., 2022)
+    end_water_year = NULL,       # Latest water year to include (e.g., 2022)
+    trend_completeness = NULL,
+    decade_completeness = NULL
 ) {
 
   ctx <- "process_signatures_from_parquet"
@@ -4358,10 +4771,8 @@ process_signatures_from_parquet <- function(
         next
       }
 
-      # Remove NA values in Q
-      gage_flow <- gage_flow[!is.na(Q)]
-
-      if (nrow(gage_flow) == 0) {
+      # Check for any valid Q data (don't remove NAs yet — preprocessor needs them)
+      if (sum(!is.na(gage_flow$Q)) == 0) {
         log_debug("No valid Q data for gage", current_gage_id, context = ctx)
         next
       }
@@ -4441,44 +4852,102 @@ process_signatures_from_parquet <- function(
         next
       }
 
-      # Filter 2: Check each water year for minimum days above threshold
-      # Filter 2b: Check each water year for minimum fraction of non-NA data
+      # ============= NEW PREPROCESSING vs LEGACY FILTERING =============
+      # Read use_legacy_filtering from config JSON (default TRUE for backward compat)
+      use_legacy <- TRUE
+      na_handling_config <- NULL
+      preprocess_result <- NULL
+      seasonal_flags <- NULL
+      tryCatch({
+        config_json_path <- file.path(dirname(output_file), "..", "config", "signatures_config.json")
+        if (!file.exists(config_json_path)) {
+          config_json_path <- "config/signatures_config.json"
+        }
+        if (file.exists(config_json_path)) {
+          full_json <- jsonlite::fromJSON(config_json_path, simplifyVector = TRUE)
+          if (!is.null(full_json$filtering$use_legacy_filtering)) {
+            use_legacy <- full_json$filtering$use_legacy_filtering
+          }
+          na_handling_config <- full_json$na_handling
+        }
+      }, error = function(e) {
+        log_debug("Could not read config JSON for legacy flag:", e$message, context = ctx)
+      })
 
-      water_years_to_use <- NULL
-      
-      for (this_wy in unique(gage_flow$water_year)) {
-        test_wy <- gage_flow[water_year == this_wy]
-        
-        # Filter 2: Check days with Q > threshold
-        nonzero_rows <- sum(test_wy$Q > min_Q_value_and_days[1], na.rm = TRUE)
-        if (nonzero_rows < min_Q_value_and_days[2]) {
-          log_debug("WY", this_wy, "rejected: only", nonzero_rows,
-                    "days > threshold (need", min_Q_value_and_days[2], ")",
-                    context = paste0(ctx, ":", current_gage_id))
-          next
+      if (!use_legacy) {
+        # ===== NEW: Centralized pre-processing =====
+        preprocess_result <- tryCatch({
+          preprocess_daily_data(gage_flow, config = na_handling_config)
+        }, error = function(e) {
+          log_warn("Preprocessing failed for gage", current_gage_id, ":", e$message,
+                   "- falling back to legacy filtering", context = ctx)
+          NULL
+        })
+
+        if (!is.null(preprocess_result)) {
+          water_years_to_use <- preprocess_result$valid_years
+          valid_climate_years <- preprocess_result$valid_climate_years
+          seasonal_flags <- preprocess_result$seasonal_flags
+          streamflow_data_filtered <- preprocess_result$data
+
+          # Still apply min_Q_value_and_days filter (days above threshold)
+          water_years_to_use_final <- c()
+          for (this_wy in water_years_to_use) {
+            test_wy <- streamflow_data_filtered[water_year == this_wy]
+            nonzero_rows <- sum(test_wy$Q > min_Q_value_and_days[1], na.rm = TRUE)
+            if (nonzero_rows >= min_Q_value_and_days[2]) {
+              water_years_to_use_final <- c(water_years_to_use_final, this_wy)
+            }
+          }
+          water_years_to_use <- water_years_to_use_final
+          streamflow_data_filtered <- streamflow_data_filtered[water_year %in% water_years_to_use]
+
+          # Update climate flag: only true if we have valid climate years
+          if (gage_has_climate) {
+            valid_climate_years <- intersect(valid_climate_years, water_years_to_use)
+          }
+        } else {
+          use_legacy <- TRUE  # fallback
+        }
+      }
+
+      if (use_legacy) {
+        # ===== LEGACY: Per-water-year filtering (original logic) =====
+        # Remove NA values in Q for legacy filtering (legacy expects no NAs in data)
+        gage_flow <- gage_flow[!is.na(Q)]
+
+        water_years_to_use <- NULL
+
+        for (this_wy in unique(gage_flow$water_year)) {
+          test_wy <- gage_flow[water_year == this_wy]
+
+          # Filter 2: Check days with Q > threshold
+          nonzero_rows <- sum(test_wy$Q > min_Q_value_and_days[1], na.rm = TRUE)
+          if (nonzero_rows < min_Q_value_and_days[2]) {
+            log_debug("WY", this_wy, "rejected: only", nonzero_rows,
+                      "days > threshold (need", min_Q_value_and_days[2], ")",
+                      context = paste0(ctx, ":", current_gage_id))
+            next
+          }
+
+          # Filter 2b: Check fraction of good (non-NA) data
+          is_leap <- ((this_wy %% 4 == 0) & (this_wy %% 100 != 0)) | (this_wy %% 400 == 0)
+          expected_days <- ifelse(is_leap, 366, 365)
+          min_required_days <- floor(expected_days * min_frac_good_data)
+          n_good_days <- nrow(test_wy)
+
+          if (n_good_days < min_required_days) {
+            log_debug("WY", this_wy, "rejected: only", n_good_days,
+                      "valid days (need", min_required_days, "for",
+                      sprintf("%.1f%%", min_frac_good_data * 100), "coverage)",
+                      context = paste0(ctx, ":", current_gage_id))
+            next
+          }
+
+          water_years_to_use <- c(water_years_to_use, this_wy)
         }
 
-        # Filter 2b: Check fraction of good (non-NA) data
-        # Determine expected days in water year (account for leap years)
-        # Water year runs Oct 1 to Sep 30
-        # If this_wy is 2020, it runs from Oct 1, 2019 to Sep 30, 2020
-        # Leap year affects the calendar year that ends the water year
-        is_leap <- ((this_wy %% 4 == 0) & (this_wy %% 100 != 0)) | (this_wy %% 400 == 0)
-        expected_days <- ifelse(is_leap, 366, 365)
-        min_required_days <- floor(expected_days * min_frac_good_data)
-
-        n_good_days <- nrow(test_wy)  # Already filtered for non-NA Q above
-
-        if (n_good_days < min_required_days) {
-          log_debug("WY", this_wy, "rejected: only", n_good_days,
-                    "valid days (need", min_required_days, "for",
-                    sprintf("%.1f%%", min_frac_good_data * 100), "coverage)",
-                    context = paste0(ctx, ":", current_gage_id))
-          next
-        }
-
-        # This water year passes both filters
-        water_years_to_use <- c(water_years_to_use, this_wy)
+        streamflow_data_filtered <- gage_flow[water_year %in% water_years_to_use]
       }
 
       # Filter 3: Check minimum number of qualifying water years
@@ -4487,10 +4956,7 @@ process_signatures_from_parquet <- function(
                   "(", length(water_years_to_use), "water years)", context = ctx)
         next
       }
-      
-      # Filter to qualifying water years
-      streamflow_data_filtered <- gage_flow[water_year %in% water_years_to_use]
-      
+
       # Initialize metric results
       metrics_list <- list()
 
@@ -4501,15 +4967,25 @@ process_signatures_from_parquet <- function(
         list(name = "flashiness", fn = analyze_flashiness_trends,              label = "Flashiness"),
         list(name = "flow_timing",fn = analyze_flow_timing_trends,             label = "Flow timing"),
         list(name = "pulses",     fn = calculate_pulse_metrics,                label = "Pulse metrics"),
-        list(name = "baseflow",   fn = analyze_baseflow_indices,               label = "Baseflow indices"),
-        list(name = "recession",  fn = analyze_recession_parameters,           label = "Recession parameters")
+        list(name = "baseflow",   fn = analyze_baseflow_indices,               label = "Baseflow indices")
       )
 
       for (spec in non_climate_specs) {
-        result <- safe_calculate(spec$fn, streamflow_data_filtered, current_gage_id, spec$label, ctx, "warn")
+        result <- safe_calculate(spec$fn, streamflow_data_filtered, current_gage_id, spec$label, ctx, "warn",
+                                  trend_completeness = trend_completeness, decade_completeness = decade_completeness)
         if (!is.null(result)) {
           metrics_list[[spec$name]] <- result
           metric_success[[spec$name]] <- metric_success[[spec$name]] + 1L
+        }
+      }
+
+      # Recession is event-based (inherently sparse) — trend completeness should not apply
+      {
+        result <- safe_calculate(analyze_recession_parameters, streamflow_data_filtered, current_gage_id,
+                                  "Recession parameters", ctx, "warn")
+        if (!is.null(result)) {
+          metrics_list[["recession"]] <- result
+          metric_success[["recession"]] <- metric_success[["recession"]] + 1L
         }
       }
 
@@ -4517,16 +4993,26 @@ process_signatures_from_parquet <- function(
       if (gage_has_climate) {
         climate_specs <- list(
           list(name = "qtoppt",        fn = analyze_Q_PPT_relationships,   label = "Q-PPT analysis"),
-          list(name = "elasticity",    fn = calculate_streamflow_elasticity,label = "Elasticity calc"),
           list(name = "qp_seasonality",fn = calculate_qp_seasonality,      label = "Q-P seasonality calc"),
           list(name = "avg_storage",   fn = calculate_average_storage,     label = "Storage calc")
         )
 
         for (spec in climate_specs) {
-          result <- safe_calculate(spec$fn, streamflow_data_filtered, current_gage_id, spec$label, ctx, "debug")
+          result <- safe_calculate(spec$fn, streamflow_data_filtered, current_gage_id, spec$label, ctx, "debug",
+                                    trend_completeness = trend_completeness, decade_completeness = decade_completeness)
           if (!is.null(result)) {
             metrics_list[[spec$name]] <- result
             metric_success[[spec$name]] <- metric_success[[spec$name]] + 1L
+          }
+        }
+
+        # Elasticity uses rolling windows — trend completeness should not apply
+        {
+          result <- safe_calculate(calculate_streamflow_elasticity, streamflow_data_filtered, current_gage_id,
+                                    "Elasticity calc", ctx, "debug")
+          if (!is.null(result)) {
+            metrics_list[["elasticity"]] <- result
+            metric_success[["elasticity"]] <- metric_success[["elasticity"]] + 1L
           }
         }
       }

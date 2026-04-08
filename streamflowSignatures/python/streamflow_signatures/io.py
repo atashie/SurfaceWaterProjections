@@ -10,7 +10,15 @@ from pathlib import Path
 import pandas as pd
 import pyarrow.parquet as pq
 
-from .config import MIN_NUM_YEARS, MIN_FRAC_GOOD_DATA, MIN_Q_VALUE, MIN_DAYS_ABOVE_THRESHOLD
+import numpy as np
+
+from .config import (
+    MIN_NUM_YEARS, MIN_FRAC_GOOD_DATA, MIN_Q_VALUE, MIN_DAYS_ABOVE_THRESHOLD,
+    NA_MAX_GAP_DAYS, NA_MAX_RAW_NA_PER_YEAR, NA_REJECT_NEGATIVE_FLOW,
+    NA_REJECT_RESIDUAL_NA, NA_CONSTANT_SD_ENABLED, NA_CONSTANT_SD_MIN_DAYS,
+    NA_CONSTANT_SD_MAX_UNIQUE, NA_SEASONAL_MIN_FRACTION, NA_SEASONAL_DEFINITIONS,
+    NA_MAX_RAW_NA_PPT, NA_MAX_GAP_PPT, NA_REJECT_NEGATIVE_PPT,
+)
 
 
 # Schema constants matching R config.R
@@ -346,3 +354,250 @@ def filter_qualifying_years(
         qualifying_years.append(wy)
 
     return qualifying_years, len(qualifying_years) >= min_num_years
+
+
+def preprocess_daily_data(
+    gage_flow: pd.DataFrame,
+    config: Optional[Dict] = None,
+) -> Dict:
+    """
+    Preprocess daily streamflow data with standardized NA handling.
+
+    For each water year, this function:
+      1. Normalizes to a complete daily grid (Oct 1 - Sep 30), filling missing
+         dates with NaN.
+      2. Computes raw diagnostics: NA count, max consecutive NA run, seasonal
+         completeness (from raw data), negative-flow flag, constant-SD flag.
+      3. Rejects years that exceed raw-NA limits, have gaps longer than
+         max_gap_days, or contain negative Q values.
+      4. Interpolates internal gaps <= max_gap_days using linear interpolation
+         (internal-only, i.e. leading/trailing NAs are not filled).
+      5. After interpolation, checks for residual NAs and optionally rejects
+         years that still contain them.
+      6. Applies the same interpolation logic to PPT if present.
+
+    Parameters
+    ----------
+    gage_flow : pd.DataFrame
+        Daily data with required columns: date, Q, water_year, month, dowy.
+        Optional column: PPT (precipitation).
+    config : dict, optional
+        Override configuration parameters. Keys (all optional):
+            - max_gap_days: int (default from NA_MAX_GAP_DAYS)
+            - max_raw_na_per_year: int (default from NA_MAX_RAW_NA_PER_YEAR)
+            - reject_negative_flow: bool (default from NA_REJECT_NEGATIVE_FLOW)
+            - reject_residual_na: bool (default from NA_REJECT_RESIDUAL_NA)
+            - constant_sd_enabled: bool (default from NA_CONSTANT_SD_ENABLED)
+            - constant_sd_min_days: int (default from NA_CONSTANT_SD_MIN_DAYS)
+            - constant_sd_max_unique: int (default from NA_CONSTANT_SD_MAX_UNIQUE)
+            - seasonal_min_fraction: float (default from NA_SEASONAL_MIN_FRACTION)
+            - seasonal_definitions: dict (default from NA_SEASONAL_DEFINITIONS)
+            - max_raw_na_ppt: int (default from NA_MAX_RAW_NA_PPT)
+            - max_gap_ppt: int (default from NA_MAX_GAP_PPT)
+            - reject_negative_ppt: bool (default from NA_REJECT_NEGATIVE_PPT)
+
+    Returns
+    -------
+    dict
+        Keys:
+            - data: pd.DataFrame with cleaned/interpolated daily data
+            - valid_years: list of int, water years that passed all Q checks
+            - valid_climate_years: list of int, water years that also passed PPT checks
+            - rejected_years: list of dict, each with keys (water_year, reason)
+            - seasonal_flags: list of dict, each with keys
+              (water_year, winter_complete, spring_complete, summer_complete,
+              fall_complete)
+            - diagnostics: list of dict, each with keys
+              (water_year, raw_na_count, max_na_run, negative_flag,
+              constant_sd_flag, post_interp_na_count)
+    """
+    if config is None:
+        config = {}
+
+    max_gap_days = config.get("max_gap_days", NA_MAX_GAP_DAYS)
+    max_raw_na = config.get("max_raw_na_per_year", NA_MAX_RAW_NA_PER_YEAR)
+    reject_negative = config.get("reject_negative_flow", NA_REJECT_NEGATIVE_FLOW)
+    reject_residual = config.get("reject_residual_na", NA_REJECT_RESIDUAL_NA)
+    const_sd_enabled = config.get("constant_sd_enabled", NA_CONSTANT_SD_ENABLED)
+    const_sd_min_days = config.get("constant_sd_min_days", NA_CONSTANT_SD_MIN_DAYS)
+    const_sd_max_unique = config.get("constant_sd_max_unique", NA_CONSTANT_SD_MAX_UNIQUE)
+    seasonal_min_frac = config.get("seasonal_min_fraction", NA_SEASONAL_MIN_FRACTION)
+    seasonal_defs = config.get("seasonal_definitions", NA_SEASONAL_DEFINITIONS)
+    max_raw_na_ppt = config.get("max_raw_na_ppt", NA_MAX_RAW_NA_PPT)
+    max_gap_ppt = config.get("max_gap_ppt", NA_MAX_GAP_PPT)
+    reject_neg_ppt = config.get("reject_negative_ppt", NA_REJECT_NEGATIVE_PPT)
+
+    has_ppt = "PPT" in gage_flow.columns
+
+    valid_years: List[int] = []
+    valid_climate_years: List[int] = []
+    rejected_years: List[Dict] = []
+    seasonal_flags: List[Dict] = []
+    diagnostics: List[Dict] = []
+    cleaned_frames: List[pd.DataFrame] = []
+
+    water_years = sorted(gage_flow["water_year"].unique())
+
+    for wy in water_years:
+        # --- (a) Normalize to complete daily grid ---
+        # Water year wy spans Oct 1 (wy-1) to Sep 30 (wy)
+        wy_start = pd.Timestamp(year=wy - 1, month=10, day=1)
+        wy_end = pd.Timestamp(year=wy, month=9, day=30)
+        full_dates = pd.date_range(start=wy_start, end=wy_end, freq="D")
+
+        yr_data = gage_flow[gage_flow["water_year"] == wy].copy()
+
+        # Ensure date is datetime for merge
+        if "date" in yr_data.columns and not pd.api.types.is_datetime64_any_dtype(yr_data["date"]):
+            yr_data["date"] = pd.to_datetime(yr_data["date"])
+
+        # Build complete grid and merge
+        grid = pd.DataFrame({"date": full_dates})
+        grid["water_year"] = wy
+        grid["month"] = grid["date"].dt.month
+        grid["dowy"] = (grid["date"] - wy_start).dt.days + 1
+
+        yr_data = grid.merge(yr_data.drop(columns=["water_year", "month", "dowy"], errors="ignore"),
+                             on="date", how="left")
+
+        n_days = len(yr_data)
+
+        # --- (b) Raw diagnostics ---
+        q_raw = yr_data["Q"].values.copy()
+        raw_na_count = int(np.sum(np.isnan(q_raw.astype(float))))
+
+        # Max consecutive NA run
+        max_na_run = _max_consecutive_na(yr_data["Q"])
+
+        # Seasonal completeness (from raw observations)
+        season_flags_yr = {"water_year": wy}
+        for season_name, season_months in seasonal_defs.items():
+            season_mask = yr_data["month"].isin(season_months)
+            season_q = yr_data.loc[season_mask, "Q"]
+            n_season = len(season_q)
+            n_valid = int(season_q.notna().sum())
+            frac = n_valid / n_season if n_season > 0 else 0.0
+            season_flags_yr[f"{season_name}_complete"] = frac >= seasonal_min_frac
+        seasonal_flags.append(season_flags_yr)
+
+        # Negative flow flag
+        q_finite = q_raw[~np.isnan(q_raw.astype(float))]
+        negative_flag = bool(np.any(q_finite < 0)) if len(q_finite) > 0 else False
+
+        # Constant-SD flag: check if any month has suspiciously constant values
+        constant_sd_flag = False
+        if const_sd_enabled:
+            for m in range(1, 13):
+                m_mask = yr_data["month"] == m
+                m_q = yr_data.loc[m_mask, "Q"].dropna()
+                if len(m_q) >= const_sd_min_days:
+                    n_unique = m_q.nunique()
+                    if n_unique <= const_sd_max_unique:
+                        constant_sd_flag = True
+                        break
+
+        diag = {
+            "water_year": wy,
+            "raw_na_count": raw_na_count,
+            "max_na_run": max_na_run,
+            "negative_flag": negative_flag,
+            "constant_sd_flag": constant_sd_flag,
+            "post_interp_na_count": raw_na_count,  # updated after interp
+        }
+
+        # --- (c) Reject years ---
+        rejected = False
+
+        if raw_na_count > max_raw_na:
+            rejected_years.append({"water_year": wy, "reason": f"raw_na_count={raw_na_count} > {max_raw_na}"})
+            rejected = True
+
+        if not rejected and max_na_run > max_gap_days:
+            rejected_years.append({"water_year": wy, "reason": f"max_na_run={max_na_run} > {max_gap_days}"})
+            rejected = True
+
+        if not rejected and reject_negative and negative_flag:
+            rejected_years.append({"water_year": wy, "reason": "negative_flow"})
+            rejected = True
+
+        if rejected:
+            diagnostics.append(diag)
+            continue
+
+        # --- (d) Interpolate internal gaps <= max_gap_days ---
+        yr_data["Q"] = yr_data["Q"].interpolate(
+            method="linear", limit=max_gap_days, limit_area="inside"
+        )
+
+        # --- (e) Post-interpolation residual NA check ---
+        post_na_count = int(yr_data["Q"].isna().sum())
+        diag["post_interp_na_count"] = post_na_count
+
+        if reject_residual and post_na_count > 0:
+            rejected_years.append({"water_year": wy, "reason": f"residual_na={post_na_count}"})
+            diagnostics.append(diag)
+            continue
+
+        diagnostics.append(diag)
+        valid_years.append(wy)
+
+        # --- (f) PPT handling ---
+        ppt_valid = False
+        if has_ppt:
+            ppt_raw = yr_data["PPT"].values.copy()
+            ppt_raw_na = int(np.sum(np.isnan(ppt_raw.astype(float))))
+            ppt_max_run = _max_consecutive_na(yr_data["PPT"])
+            ppt_finite = ppt_raw[~np.isnan(ppt_raw.astype(float))]
+            ppt_negative = bool(np.any(ppt_finite < 0)) if len(ppt_finite) > 0 else False
+
+            ppt_reject = False
+            if ppt_raw_na > max_raw_na_ppt:
+                ppt_reject = True
+            if ppt_max_run > max_gap_ppt:
+                ppt_reject = True
+            if reject_neg_ppt and ppt_negative:
+                ppt_reject = True
+
+            if not ppt_reject:
+                yr_data["PPT"] = yr_data["PPT"].interpolate(
+                    method="linear", limit=max_gap_ppt, limit_area="inside"
+                )
+                ppt_post_na = int(yr_data["PPT"].isna().sum())
+                if reject_residual and ppt_post_na > 0:
+                    ppt_reject = True
+
+            if not ppt_reject:
+                ppt_valid = True
+
+        if ppt_valid:
+            valid_climate_years.append(wy)
+
+        cleaned_frames.append(yr_data)
+
+    # --- (g) Assemble output ---
+    if len(cleaned_frames) > 0:
+        cleaned_data = pd.concat(cleaned_frames, ignore_index=True)
+    else:
+        cleaned_data = pd.DataFrame(columns=gage_flow.columns)
+
+    return {
+        "data": cleaned_data,
+        "valid_years": valid_years,
+        "valid_climate_years": valid_climate_years,
+        "rejected_years": rejected_years,
+        "seasonal_flags": seasonal_flags,
+        "diagnostics": diagnostics,
+    }
+
+
+def _max_consecutive_na(series: pd.Series) -> int:
+    """Compute the length of the longest consecutive NaN run in a Series."""
+    is_na = series.isna().astype(int)
+    if is_na.sum() == 0:
+        return 0
+    # Group consecutive NAs: when value is not-NA, cumsum increments,
+    # so NAs between non-NAs share the same group label.
+    groups = (~series.isna()).astype(int).cumsum()
+    # Within each group, cumsum the is_na flag to get run lengths
+    run_lengths = is_na.groupby(groups).cumsum()
+    return int(run_lengths.max())

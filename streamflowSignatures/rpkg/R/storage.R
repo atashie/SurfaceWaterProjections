@@ -7,7 +7,9 @@
 #' @return Named list of 8 statistics for avg_storage.
 #' @export
 #' @importFrom data.table as.data.table copy setorder rbindlist
-calculate_average_storage <- function(streamflow_data) {
+calculate_average_storage <- function(streamflow_data,
+                                     trend_completeness = NULL,
+                                     decade_completeness = NULL) {
   required_cols <- c("water_year", "Q", "PPT", "dowy")
   missing <- setdiff(required_cols, colnames(streamflow_data))
   if (length(missing) > 0) stop(paste("Missing required columns:", paste(missing, collapse = ", ")))
@@ -20,14 +22,8 @@ calculate_average_storage <- function(streamflow_data) {
 
   annual_list <- lapply(years, function(yr) {
     yd <- data.table::copy(dt[water_year == yr])
-    if (nrow(yd) < pkg_env$storage_min_days_per_year) return(NULL)
 
-    na_frac_Q   <- sum(is.na(yd$Q)) / nrow(yd)
-    na_frac_PPT <- sum(is.na(yd$PPT)) / nrow(yd)
-    if (na_frac_Q > pkg_env$storage_max_na_frac || na_frac_PPT > pkg_env$storage_max_na_frac) return(NULL)
-
-    yd[is.na(Q), Q := 0]
-    yd[is.na(PPT), PPT := 0]
+    if (any(is.na(yd$Q)) || any(is.na(yd$PPT))) return(NULL)
     data.table::setorder(yd, dowy)
 
     yd[, dS := PPT - Q]
@@ -50,5 +46,7 @@ calculate_average_storage <- function(streamflow_data) {
   storage_df <- annual_storage[!is.na(avg_storage)]
   if (nrow(storage_df) < 3) return(na_result)
 
-  generate_stats(storage_df, value_cols = "avg_storage", year_col = "water_year")
+  generate_stats(storage_df, value_cols = "avg_storage", year_col = "water_year",
+                 trend_completeness = trend_completeness,
+                 decade_completeness = decade_completeness)
 }

@@ -50,41 +50,66 @@ Sys.setenv(ARROW_USE_THREADS = "false")
 
 # Pre-open Arrow datasets for reuse (avoids reconnection on every gage change)
 message("Pre-opening Arrow datasets from S3...")
-streamflow_dataset <- arrow::open_dataset(
-  paste0("s3://", S3_BUCKET_NAME, "/streamflow/combined_streamflow_data_09feb2026.parquet")
-)
-daymet_dataset <- arrow::open_dataset(
-  paste0("s3://", S3_BUCKET_NAME, "/streamflow/daymet_1980_2023.parquet")
-)
+streamflow_dataset <- tryCatch({
+  arrow::open_dataset(
+    paste0("s3://", S3_BUCKET_NAME, "/streamflow/combined_streamflow_data_09feb2026.parquet")
+  )
+}, error = function(e) {
+  message(paste("WARNING: Failed to pre-open streamflow dataset:", e$message))
+  NULL
+})
+daymet_dataset <- tryCatch({
+  arrow::open_dataset(
+    paste0("s3://", S3_BUCKET_NAME, "/streamflow/daymet_1980_2023.parquet")
+  )
+}, error = function(e) {
+  message(paste("WARNING: Failed to pre-open daymet dataset:", e$message))
+  NULL
+})
 message("Arrow datasets ready for reuse")
 
 # Read and filter metadata
 message("Loading metadata from S3...")
-metadata_raw <- read_csv_from_s3_direct(
-  bucket = s3_bucket_name,
-  object_key = "streamflow/combined_watershed_metadata_09feb2026.csv"
-)
+metadata_raw <- tryCatch({
+  read_csv_from_s3_direct(
+    bucket = s3_bucket_name,
+    object_key = "streamflow/combined_watershed_metadata_09feb2026.csv"
+  )
+}, error = function(e) {
+  stop(paste("FATAL: Cannot load metadata — app is non-functional:", e$message))
+})
 goodGages <- subset(metadata_raw, processing_status == "success")
 message(paste("Loaded", nrow(goodGages), "gages with successful processing"))
 
 # Load watershed boundaries
 message("Loading watershed boundaries...")
-watersheds <- st_read("unified_watershedBoundaries_simplified.gpkg", quiet = TRUE)
-watersheds <- st_transform(watersheds, 4326)
-# Vectorized extraction: sub() returns NA for NA input, so this is safe
-watersheds$first_basin_id <- sub(";.*", "", watersheds$basin_ids)
-message(paste("Loaded", nrow(watersheds), "watershed boundaries"))
+watersheds <- tryCatch({
+  ws <- st_read("unified_watershedBoundaries_simplified.gpkg", quiet = TRUE)
+  ws <- st_transform(ws, 4326)
+  ws$first_basin_id <- sub(";.*", "", ws$basin_ids)
+  message(paste("Loaded", nrow(ws), "watershed boundaries"))
+  ws
+}, error = function(e) {
+  message(paste("WARNING: Failed to load watershed boundaries:", e$message))
+  NULL
+})
 
 # Check matching
-n_matched <- sum(goodGages$Downstream_HB_ID %in% watersheds$first_basin_id)
-message(paste("Matched", n_matched, "out of", nrow(goodGages), "gages to watershed boundaries"))
+if (!is.null(watersheds)) {
+  n_matched <- sum(goodGages$Downstream_HB_ID %in% watersheds$first_basin_id)
+  message(paste("Matched", n_matched, "out of", nrow(goodGages), "gages to watershed boundaries"))
+}
 
 # Load streamflow signature summary data (FEB2026)
 message("Loading streamflow signature summary data from S3...")
-signature_data <- read_csv_from_s3_direct(
-  bucket = s3_bucket_name,
-  object_key = "streamflow/streamflow_signatures_full_10feb2026.csv"
-)
+signature_data <- tryCatch({
+  read_csv_from_s3_direct(
+    bucket = s3_bucket_name,
+    object_key = "streamflow/streamflow_signatures_full_10feb2026.csv"
+  )
+}, error = function(e) {
+  stop(paste("FATAL: Cannot load signature data — app is non-functional:", e$message))
+})
 message(paste("Loaded signature data for", nrow(signature_data), "gages"))
 
 # Pre-filter signature data for maps (removes rows with missing coordinates)
@@ -94,8 +119,12 @@ signature_data_for_maps <- signature_data[!is.na(latitude) & !is.na(longitude) &
 message(paste("Filtered to", nrow(signature_data_for_maps), "gages with valid coordinates for maps"))
 
 # Pre-index watershed lookup for faster access (handles NA values)
-watersheds_with_id <- watersheds[!is.na(watersheds$first_basin_id), ]
-watershed_lookup <- split(watersheds_with_id, watersheds_with_id$first_basin_id)
+if (!is.null(watersheds)) {
+  watersheds_with_id <- watersheds[!is.na(watersheds$first_basin_id), ]
+  watershed_lookup <- split(watersheds_with_id, watersheds_with_id$first_basin_id)
+} else {
+  watershed_lookup <- list()
+}
 message(paste("Created watershed lookup with", length(watershed_lookup), "basins"))
 
 # Extract metric names from columns ending in "_mean"
@@ -214,6 +243,15 @@ ui <- fluidPage(
       )
     )
   ),
+
+  # Download buttons
+  fluidRow(
+    column(6, downloadButton("download_timeseries", "Download Timeseries CSV",
+                             class = "btn-sm btn-info")),
+    column(6, downloadButton("download_signatures", "Download Signatures CSV",
+                             class = "btn-sm btn-info"))
+  ),
+  br(),
 
   # Main map
   fluidRow(
@@ -486,11 +524,14 @@ server <- function(input, output, session) {
       domain = goodGages$num_years
     )
 
-    # Vectorized hover text: avoids apply() data.frame-to-matrix copy
-    # Preserves ALL columns for popup content (identical output)
-    col_names <- names(goodGages)
+    # Hover text limited to key columns for performance (~8 vs ~40 columns)
+    hover_cols <- intersect(
+      c("gage_id", "station_nm", "latitude", "longitude",
+        "num_years", "num_water_years", "country", "human_interference_class"),
+      names(goodGages)
+    )
     hover_text <- do.call(paste, c(
-      lapply(col_names, function(cn) {
+      lapply(hover_cols, function(cn) {
         paste0("<b>", cn, ":</b> ", goodGages[[cn]], "<br>")
       }),
       list(sep = "")
@@ -628,13 +669,9 @@ server <- function(input, output, session) {
   })
 
   # Daymet climate data with caching (prevents refetch when toggling weather layers)
+  # Always loads when gage changes so data is cached for instant weather toggle + download
   daymet_data <- reactive({
     req(input$gage_selector)
-
-    # Only load if weather layers are selected
-    if (length(input$weather_layers) == 0) {
-      return(data.table())
-    }
 
     # Return cached data if same gage
     cache <- cached_daymet()
@@ -659,6 +696,73 @@ server <- function(input, output, session) {
       return(data.table())  # Return empty data.table to prevent downstream errors
     })
   })
+
+  # === DOWNLOAD HANDLERS ===
+
+  # Download Timeseries CSV: Q + weather columns merged by Date
+
+  output$download_timeseries <- downloadHandler(
+    filename = function() {
+      paste0(input$gage_selector, "_timeseries_downloaded_", Sys.Date(), ".csv")
+    },
+    content = function(file) {
+      q_data <- streamflow_data()
+      if (nrow(q_data) == 0 || !("Q" %in% names(q_data))) {
+        write.csv(data.frame(message = "No streamflow data available for this gage"),
+                  file, row.names = FALSE)
+        return()
+      }
+
+      # Start with gage_id + Date + Q
+      out <- data.table(
+        gage_id = input$gage_selector,
+        Date = q_data$Date,
+        Q = q_data$Q
+      )
+
+      # Merge daymet if available
+      daymet <- daymet_data()
+      weather_cols <- c("prcp", "tmin", "tmax", "swe", "vp", "srad")
+      if (nrow(daymet) > 0 && "Date" %in% names(daymet)) {
+        keep_cols <- intersect(weather_cols, names(daymet))
+        if (length(keep_cols) > 0) {
+          daymet_subset <- daymet[, c("Date", keep_cols), with = FALSE]
+          out <- merge(out, daymet_subset, by = "Date", all.x = TRUE)
+        }
+      }
+
+      write.csv(out, file, row.names = FALSE)
+    }
+  )
+
+  # Download Signatures CSV: full row from signature_data for selected gage
+  output$download_signatures <- downloadHandler(
+    filename = function() {
+      paste0(input$gage_selector, "_signatures_downloaded_", Sys.Date(), ".csv")
+    },
+    content = function(file) {
+      gage <- input$gage_selector
+
+      # Try exact match, then leading-zero fallback
+      row <- signature_data[signature_data$gage_id == gage, ]
+      if (nrow(row) == 0) {
+        # Try matching without leading zeros (suppressWarnings for non-numeric Canadian IDs)
+        numeric_gage <- suppressWarnings(as.numeric(gage))
+        if (!is.na(numeric_gage)) {
+          numeric_ids <- suppressWarnings(as.numeric(signature_data$gage_id))
+          row <- signature_data[which(numeric_ids == numeric_gage), ]
+        }
+      }
+
+      if (nrow(row) == 0) {
+        write.csv(data.frame(message = paste("No signature data found for gage", gage)),
+                  file, row.names = FALSE)
+        return()
+      }
+
+      write.csv(row, file, row.names = FALSE)
+    }
+  )
 
   # === HYDROGRAPH WITH WEATHER OVERLAYS ===
   output$streamflow_plot <- renderPlotly({

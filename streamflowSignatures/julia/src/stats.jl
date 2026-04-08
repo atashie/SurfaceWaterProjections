@@ -233,7 +233,9 @@ function generate_stats(
     df::DataFrame;
     value_cols::Union{Nothing, Vector{String}, Vector{Symbol}} = nothing,
     year_col::Union{String, Symbol} = "water_year",
-    min_rows::Int = 3
+    min_rows::Int = 3,
+    trend_completeness::Union{Nothing, Float64} = nothing,
+    decade_completeness::Union{Nothing, Float64} = nothing
 )
     result = Dict{String, Float64}()
 
@@ -281,24 +283,88 @@ function generate_stats(
             continue
         end
 
-        # Theil-Sen slope (use pre-filtered years)
-        slope, _ = theil_sen_slope(valid_years, valid_values)
-        result["$(col)_senn_slp"] = slope
+        # --- Per-column trend completeness check (opt-in) ---
+        # Only active when caller explicitly passes trend_completeness.
+        # Uses the metric's own non-NA year range for decade boundaries,
+        # so climate signatures use climate years and recession uses recession years.
+        compute_trends = true
+        if trend_completeness !== nothing
+            tc_frac = trend_completeness
+            metric_yr_min = Int(minimum(valid_years))
+            metric_yr_max = Int(maximum(valid_years))
+            metric_span = metric_yr_max - metric_yr_min + 1
+            metric_count = length(valid_years)
 
-        # Linear slope (use pre-filtered years)
-        result["$(col)_linear_slp"] = linear_slope(valid_years, valid_values)
+            # Overall completeness: non-NA values / span of metric's year range
+            if metric_span > 0 && (metric_count / metric_span) < tc_frac
+                compute_trends = false
+            end
 
-        # Spearman correlation (use pre-filtered years)
-        rho, pval = spearman_correlation(valid_years, valid_values)
-        result["$(col)_spearman_rho"] = rho
-        result["$(col)_spearman_pval"] = pval
+            # First/last decade check (only if span >= 10 years)
+            if compute_trends && decade_completeness !== nothing && metric_span >= 10
+                dc_frac = decade_completeness
+                metric_yr_ints = Int.(valid_years)
 
-        # Mann-Kendall test (uses only values, already pre-filtered)
-        tau, mk_pval = mann_kendall_test(valid_values)
-        result["$(col)_mk_rho"] = tau
-        result["$(col)_mk_pval"] = mk_pval
+                # First decade: metric_yr_min to metric_yr_min + 9
+                first_expected = min(10, metric_span)
+                first_actual = count(y -> metric_yr_min <= y <= metric_yr_min + 9, metric_yr_ints)
+                if first_expected > 0 && (first_actual / first_expected) < dc_frac
+                    compute_trends = false
+                end
 
-        # Mean and median
+                # Last decade: metric_yr_max - 9 to metric_yr_max
+                if compute_trends
+                    last_start = metric_yr_max - 9
+                    last_expected = min(10, metric_yr_max - max(last_start, metric_yr_min) + 1)
+                    last_actual = count(y -> last_start <= y <= metric_yr_max, metric_yr_ints)
+                    if last_expected > 0 && (last_actual / last_expected) < dc_frac
+                        compute_trends = false
+                    end
+                end
+            end
+
+            if !compute_trends
+                # Insufficient coverage: set 6 trend stats to NaN, still compute mean/median
+                result["$(col)_senn_slp"] = NaN
+                result["$(col)_linear_slp"] = NaN
+                result["$(col)_spearman_rho"] = NaN
+                result["$(col)_spearman_pval"] = NaN
+                result["$(col)_mk_rho"] = NaN
+                result["$(col)_mk_pval"] = NaN
+                result["$(col)_mean"] = mean(valid_values)
+                result["$(col)_median"] = length(valid_values) > 0 ? median(valid_values) : NaN
+                continue
+            end
+        end
+
+        if compute_trends
+            # Theil-Sen slope (use pre-filtered years)
+            slope, _ = theil_sen_slope(valid_years, valid_values)
+            result["$(col)_senn_slp"] = slope
+
+            # Linear slope (use pre-filtered years)
+            result["$(col)_linear_slp"] = linear_slope(valid_years, valid_values)
+
+            # Spearman correlation (use pre-filtered years)
+            rho, pval = spearman_correlation(valid_years, valid_values)
+            result["$(col)_spearman_rho"] = rho
+            result["$(col)_spearman_pval"] = pval
+
+            # Mann-Kendall test (uses only values, already pre-filtered)
+            tau, mk_pval = mann_kendall_test(valid_values)
+            result["$(col)_mk_rho"] = tau
+            result["$(col)_mk_pval"] = mk_pval
+        else
+            # Insufficient temporal coverage for trend statistics
+            result["$(col)_senn_slp"] = NaN
+            result["$(col)_linear_slp"] = NaN
+            result["$(col)_spearman_rho"] = NaN
+            result["$(col)_spearman_pval"] = NaN
+            result["$(col)_mk_rho"] = NaN
+            result["$(col)_mk_pval"] = NaN
+        end
+
+        # Mean and median are always computed
         result["$(col)_mean"] = mean(valid_values)
         result["$(col)_median"] = median(valid_values)
     end

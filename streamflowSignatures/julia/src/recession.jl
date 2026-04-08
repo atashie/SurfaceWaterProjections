@@ -272,7 +272,7 @@ Returns
 Dict{String, Float64}
     Dictionary of signature statistics
 """
-function analyze_recession_parameters(df::DataFrame; min_events::Int=CFG_RECESSION_MIN_EVENTS)
+function analyze_recession_parameters(df::DataFrame; min_events::Int=CFG_RECESSION_MIN_EVENTS, trend_completeness::Union{Nothing, Float64}=nothing, decade_completeness::Union{Nothing, Float64}=nothing)
     result = Dict{String, Float64}()
 
     # Define all expected output keys
@@ -463,7 +463,7 @@ function analyze_recession_parameters(df::DataFrame; min_events::Int=CFG_RECESSI
     if nrow(annual_data) >= 3
         for m in base_metrics
             if m in names(annual_data)
-                stats = generate_stats(annual_data; value_cols=[m])
+                stats = generate_stats(annual_data; value_cols=[m], trend_completeness=trend_completeness, decade_completeness=decade_completeness)
                 merge!(result, stats)
             else
                 merge!(result, empty_stats(m))

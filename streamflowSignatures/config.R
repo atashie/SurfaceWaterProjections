@@ -191,7 +191,6 @@ EXPECTED_INTERFERENCE_COLS <- c(
 # Streamflow elasticity parameters (Sawicz et al. 2011)
 ELASTICITY_WINDOW_YEARS <- 11      # Rolling window size for elasticity trends
 MIN_YEARS_ELASTICITY <- 15         # Minimum years required for elasticity calculation
-ELASTICITY_MIN_DATA_COMPLETENESS <- 0.9  # Minimum fraction of valid days per year (90%)
 ELASTICITY_MIN_ANNUAL_PPT <- 10    # Minimum annual precipitation in mm
 
 # Q-P seasonality parameters (Wrede et al. 2015)
@@ -200,6 +199,61 @@ QP_MIN_YEARS <- 10                 # Minimum years required for Q-P seasonality 
 
 # Average storage parameters (Peters & Aulenbach 2011)
 # Note: Simplified water balance uses P - Q only (no ET estimation)
+
+# ==============================================================================
+# NA HANDLING CONFIGURATION (from config/signatures_config.json)
+# ==============================================================================
+# These constants are loaded from the shared JSON config to keep all languages
+# in sync. The JSON file is the single source of truth.
+
+NA_HANDLING_CONFIG <- tryCatch({
+  config_path <- file.path("config", "signatures_config.json")
+  if (!file.exists(config_path)) {
+    config_path <- file.path(dirname(sys.frame(1)$ofile %||% "."), "config", "signatures_config.json")
+  }
+  if (file.exists(config_path)) {
+    jsonlite::fromJSON(config_path, simplifyVector = TRUE)$na_handling
+  } else {
+    NULL
+  }
+}, error = function(e) NULL)
+
+# Interpolation
+NA_MAX_GAP_DAYS <- if (!is.null(NA_HANDLING_CONFIG$interpolation$max_gap_days)) NA_HANDLING_CONFIG$interpolation$max_gap_days else 3L
+NA_INTERPOLATION_METHOD <- "linear"
+NA_INTERNAL_ONLY <- TRUE
+
+# Year rejection
+NA_MAX_RAW_NA_PER_YEAR <- if (!is.null(NA_HANDLING_CONFIG$year_rejection$max_raw_na_per_year)) NA_HANDLING_CONFIG$year_rejection$max_raw_na_per_year else 30L
+NA_REJECT_NEGATIVE_FLOW <- if (!is.null(NA_HANDLING_CONFIG$year_rejection$reject_negative_flow)) NA_HANDLING_CONFIG$year_rejection$reject_negative_flow else TRUE
+NA_REJECT_RESIDUAL_NA <- if (!is.null(NA_HANDLING_CONFIG$year_rejection$reject_residual_na)) NA_HANDLING_CONFIG$year_rejection$reject_residual_na else TRUE
+
+# Constant-SD flag (QA only, not rejection)
+NA_CONSTANT_SD_ENABLED <- if (!is.null(NA_HANDLING_CONFIG$constant_sd_flag$enabled)) NA_HANDLING_CONFIG$constant_sd_flag$enabled else TRUE
+NA_CONSTANT_SD_MIN_DAYS <- if (!is.null(NA_HANDLING_CONFIG$constant_sd_flag$min_nonzero_days_per_month)) NA_HANDLING_CONFIG$constant_sd_flag$min_nonzero_days_per_month else 15L
+NA_CONSTANT_SD_MAX_UNIQUE <- if (!is.null(NA_HANDLING_CONFIG$constant_sd_flag$max_unique_values)) NA_HANDLING_CONFIG$constant_sd_flag$max_unique_values else 1L
+
+# Trend completeness
+NA_TREND_MIN_FRACTION <- if (!is.null(NA_HANDLING_CONFIG$trend_completeness$min_fraction)) NA_HANDLING_CONFIG$trend_completeness$min_fraction else 0.80
+NA_DECADE_MIN_FRACTION <- if (!is.null(NA_HANDLING_CONFIG$trend_completeness$decade_min_fraction)) NA_HANDLING_CONFIG$trend_completeness$decade_min_fraction else 0.80
+
+# Seasonal completeness
+NA_SEASONAL_MIN_FRACTION <- if (!is.null(NA_HANDLING_CONFIG$seasonal_completeness$min_fraction)) NA_HANDLING_CONFIG$seasonal_completeness$min_fraction else 0.80
+
+# Climate NA policy
+NA_MAX_RAW_NA_PPT <- if (!is.null(NA_HANDLING_CONFIG$climate_na_policy$max_raw_na_per_year_ppt)) NA_HANDLING_CONFIG$climate_na_policy$max_raw_na_per_year_ppt else 30L
+NA_MAX_GAP_PPT <- if (!is.null(NA_HANDLING_CONFIG$climate_na_policy$max_interpolation_gap_ppt)) NA_HANDLING_CONFIG$climate_na_policy$max_interpolation_gap_ppt else 3L
+NA_REJECT_NEGATIVE_PPT <- if (!is.null(NA_HANDLING_CONFIG$climate_na_policy$reject_negative_ppt)) NA_HANDLING_CONFIG$climate_na_policy$reject_negative_ppt else TRUE
+
+# Legacy filtering flag
+USE_LEGACY_FILTERING <- tryCatch({
+  config_path <- file.path("config", "signatures_config.json")
+  if (!file.exists(config_path)) config_path <- file.path(dirname(sys.frame(1)$ofile %||% "."), "config", "signatures_config.json")
+  if (file.exists(config_path)) {
+    full_config <- jsonlite::fromJSON(config_path, simplifyVector = TRUE)
+    if (!is.null(full_config$filtering$use_legacy_filtering)) full_config$filtering$use_legacy_filtering else TRUE
+  } else TRUE
+}, error = function(e) TRUE)
 
 # ==============================================================================
 # OUTPUT CONFIGURATION

@@ -5,17 +5,17 @@ Calculates slopes of the flow duration curve at different
 exceedance probability ranges.
 """
 
-from typing import Dict
+from typing import Dict, Optional
 import numpy as np
 import pandas as pd
 from scipy import stats as scipy_stats
 from .stats import generate_stats
-from .config import FDC_MIN_DAYS
 
 
 def analyze_fdc_trends(
     streamflow_data: pd.DataFrame,
-    min_days: int = FDC_MIN_DAYS,
+    trend_completeness: Optional[float] = None,
+    decade_completeness: Optional[float] = None,
 ) -> Dict[str, float]:
     """
     Calculate Flow Duration Curve slope trends.
@@ -30,8 +30,6 @@ def analyze_fdc_trends(
         Daily streamflow data with columns:
             - water_year: int, water year
             - Q: float, daily discharge in mm/day
-    min_days : int, default 30
-        Minimum number of non-NA days required per water year
 
     Returns
     -------
@@ -63,18 +61,9 @@ def analyze_fdc_trends(
 
         row = {"water_year": yr, "slp_all": np.nan, "slp_90th": np.nan, "slp_mid": np.nan}
 
-        # Check minimum data requirement
-        if len(year_data) < min_days:
-            results_list.append(row)
-            continue
-
         # Remove NA and negative values from Q
         q_values = year_data["Q"].dropna().values
         q_values = q_values[q_values >= 0]
-
-        if len(q_values) < min_days:
-            results_list.append(row)
-            continue
 
         # Sort flows in descending order
         sorted_flows = np.sort(q_values)[::-1]
@@ -126,7 +115,9 @@ def analyze_fdc_trends(
     result = generate_stats(
         fdc_by_year,
         value_cols=["slp_all", "slp_90th", "slp_mid"],
-        year_col="water_year"
+        year_col="water_year",
+        trend_completeness=trend_completeness,
+        decade_completeness=decade_completeness,
     )
 
     # Rename columns to match expected output

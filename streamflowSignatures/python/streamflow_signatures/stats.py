@@ -156,7 +156,9 @@ def generate_stats(
     data: pd.DataFrame,
     value_cols: Optional[List[str]] = None,
     year_col: str = "water_year",
-    min_rows: int = 3
+    min_rows: int = 3,
+    trend_completeness: Optional[float] = None,
+    decade_completeness: Optional[float] = None,
 ) -> Dict[str, float]:
     """
     Generate 8 standard statistics for each metric column.
@@ -174,6 +176,18 @@ def generate_stats(
         Name of the year column
     min_rows : int, default 3
         Minimum number of non-NA rows required for statistics
+    trend_completeness : float, optional
+        Minimum fraction of non-NaN values (0-1) required across the full
+        record for trend statistics to be computed. If the fraction of
+        valid values is below this threshold, the 6 trend statistics
+        (slopes, correlations, p-values) are set to NaN while mean and
+        median are still computed. If None, no completeness check is applied.
+    decade_completeness : float, optional
+        Minimum fraction of non-NaN values required in both the first and
+        last decade of the record for trend statistics. This prevents
+        trends being driven by data concentrated in one end of the record.
+        Skipped if the year span is < 10 years. If None, no decade check
+        is applied.
 
     Returns
     -------
@@ -235,6 +249,55 @@ def generate_stats(
             results[f"{col}_mk_pval"] = np.nan
             results[f"{col}_mean"] = np.nan
             results[f"{col}_median"] = np.nan
+            continue
+
+        # Trend completeness check: suppress trend stats if data is too sparse.
+        # Uses the metric's own non-NaN year range for decade boundaries, so
+        # climate signatures use climate years and recession uses recession years.
+        suppress_trends = False
+
+        if trend_completeness is not None and len(years) > 0:
+            metric_yr_min = float(years.min())
+            metric_yr_max = float(years.max())
+            metric_span = int(metric_yr_max - metric_yr_min) + 1
+
+            # Overall: non-NaN values / span of metric's year range
+            overall_frac = len(values) / metric_span if metric_span > 0 else 0.0
+            if overall_frac < trend_completeness:
+                suppress_trends = True
+
+        if not suppress_trends and decade_completeness is not None and len(years) > 0:
+            metric_yr_min = float(years.min())
+            metric_yr_max = float(years.max())
+            metric_span = int(metric_yr_max - metric_yr_min) + 1
+
+            if metric_span >= 10:
+                # First decade: metric_yr_min to metric_yr_min + 9
+                first_expected = min(10, metric_span)
+                first_decade_mask = years <= metric_yr_min + 9
+                first_decade_n = int(np.sum(first_decade_mask))
+                if first_expected > 0 and first_decade_n / first_expected < decade_completeness:
+                    suppress_trends = True
+
+                # Last decade: metric_yr_max - 9 to metric_yr_max
+                if not suppress_trends:
+                    last_start = metric_yr_max - 9
+                    last_expected = min(10, int(metric_yr_max - max(last_start, metric_yr_min)) + 1)
+                    last_decade_mask = years >= last_start
+                    last_decade_n = int(np.sum(last_decade_mask))
+                    if last_expected > 0 and last_decade_n / last_expected < decade_completeness:
+                        suppress_trends = True
+
+        if suppress_trends:
+            # Set 6 trend stats to NaN, still compute mean/median
+            results[f"{col}_senn_slp"] = np.nan
+            results[f"{col}_linear_slp"] = np.nan
+            results[f"{col}_spearman_rho"] = np.nan
+            results[f"{col}_spearman_pval"] = np.nan
+            results[f"{col}_mk_rho"] = np.nan
+            results[f"{col}_mk_pval"] = np.nan
+            results[f"{col}_mean"] = np.mean(values)
+            results[f"{col}_median"] = np.median(values)
             continue
 
         # Calculate Theil-Sen slope

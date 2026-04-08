@@ -4,16 +4,18 @@ Flow volume signatures.
 Calculates annual and seasonal flow totals and percentiles.
 """
 
-from typing import Dict
+from typing import Dict, Optional, List
 import numpy as np
 import pandas as pd
 from .stats import generate_stats
-from .config import FLOW_VOLUMES_MIN_DAYS, FLOW_PERCENTILES
+from .config import FLOW_PERCENTILES
 
 
 def calculate_flow_vols_by_year(
     streamflow_data: pd.DataFrame,
-    min_nona_days: int = FLOW_VOLUMES_MIN_DAYS,
+    seasonal_flags: Optional[List[Dict]] = None,
+    trend_completeness: Optional[float] = None,
+    decade_completeness: Optional[float] = None,
 ) -> Dict[str, float]:
     """
     Calculate annual and seasonal flow volumes and percentiles.
@@ -30,8 +32,12 @@ def calculate_flow_vols_by_year(
             - Q: float, daily discharge in mm/day
             - month: int, calendar month (1-12)
             - dowy: int, day of water year (1-366)
-    min_nona_days : int, default 250
-        Minimum number of non-NA days required per water year
+    seasonal_flags : list of dict, optional
+        Per-year seasonal completeness flags from preprocess_daily_data().
+        Each dict has keys: water_year, winter_complete, spring_complete,
+        summer_complete, fall_complete (bool). When provided, seasonal totals
+        (Qwin, Qspr, Qsum, Qfal) are set to NaN for years where the
+        corresponding season is flagged incomplete.
 
     Returns
     -------
@@ -55,7 +61,6 @@ def calculate_flow_vols_by_year(
         - Spring: March, April, May
         - Summer: June, July, August
         - Fall: September, October, November
-    - Water years with fewer than min_nona_days non-NA days are excluded
     - Percentiles are calculated per water year, then statistics are
       computed across years
     """
@@ -66,11 +71,6 @@ def calculate_flow_vols_by_year(
         raise ValueError(f"Missing required columns: {missing}")
 
     df = streamflow_data
-
-    # Filter to water years with sufficient data
-    year_counts = df.groupby("water_year")["Q"].apply(lambda x: x.notna().sum())
-    valid_years = year_counts[year_counts >= min_nona_days].index
-    df = df[df["water_year"].isin(valid_years)]
 
     if len(df) == 0:
         # Return empty stats
@@ -118,6 +118,27 @@ def calculate_flow_vols_by_year(
         if len(seasonal_df) > 0:
             all_metrics = all_metrics.merge(seasonal_df, on="water_year", how="left")
 
+    # Apply seasonal completeness flags: set incomplete seasons to NaN
+    if seasonal_flags is not None:
+        flags_df = pd.DataFrame(seasonal_flags)
+        season_col_map = {
+            "winter_complete": "Qwin",
+            "spring_complete": "Qspr",
+            "summer_complete": "Qsum",
+            "fall_complete": "Qfal",
+        }
+        for flag_col, q_col in season_col_map.items():
+            if flag_col in flags_df.columns and q_col in all_metrics.columns:
+                # Find water years where the season is incomplete
+                incomplete_wys = flags_df.loc[
+                    ~flags_df[flag_col].astype(bool), "water_year"
+                ].values
+                if len(incomplete_wys) > 0:
+                    mask = all_metrics["water_year"].isin(incomplete_wys)
+                    # Need to convert column to float to support NaN
+                    all_metrics[q_col] = all_metrics[q_col].astype(float)
+                    all_metrics.loc[mask, q_col] = np.nan
+
     # Merge percentiles
     for p in percentiles:
         if len(percentile_dfs[p]) > 0:
@@ -135,4 +156,10 @@ def calculate_flow_vols_by_year(
     metric_cols = [c for c in all_metrics.columns if c != "water_year"]
 
     # Generate statistics for all metrics
-    return generate_stats(all_metrics, value_cols=metric_cols, year_col="water_year")
+    return generate_stats(
+        all_metrics,
+        value_cols=metric_cols,
+        year_col="water_year",
+        trend_completeness=trend_completeness,
+        decade_completeness=decade_completeness,
+    )

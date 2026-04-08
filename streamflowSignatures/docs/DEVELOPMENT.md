@@ -25,13 +25,47 @@ Caravan NetCDF ──────────────> Direct Processing ─
 
 ### Design Principles
 
-1. **Plain-English Guardrails** — Domain experts define signature methodology in `SIGNATURE_GUIDELINES.md` (auto-synced from a shared Google Doc). Code implements those definitions. This separates hydrological expertise from implementation.
+1. **Plain-English Guardrails** — Domain experts define signature methodology in `SIGNATURE_GUIDELINES.md` (auto-synced from a shared Google Doc). Code implements those definitions. This separates hydrological expertise from implementation. Note: Notion was evaluated as an alternative hosting platform (March 2026) but rejected — Notion's JS-rendered published pages are unreliable for automated fetching, and Google Docs' static HTML + permanent URLs are better suited to the auto-sync workflow.
 
 2. **R Canonical, Others Follow** — All changes are made in R first, validated, then propagated to Python/Julia. Golden outputs from R serve as the reference for cross-language validation.
 
 3. **Strict Output Schema** — The CSV output format (column names, ordering) is a contract. Downstream tools depend on exact column names. Every signature produces exactly 8 statistics via `generate_stats()`.
 
 4. **Per-Year Quality Filtering** — Each water year is independently evaluated against data completeness thresholds (95% non-NA days, 30+ days above minimum flow). Years that fail are excluded; gages need 20+ qualifying years.
+
+5. **Centralized NA Handling** — Missing data is handled once per gage via `preprocess_daily_data()` before any signatures are computed. This replaces ad-hoc per-signature NA handling (fillna(0), forward-fill, etc.) with a standardized pipeline: daily grid normalization → interpolation (<=3 day internal gaps) → year rejection → residual check. Configuration is in `config/signatures_config.json` under `na_handling`.
+
+### NA Handling Architecture
+
+```
+Raw gage data (may have NAs, gaps, duplicates)
+    │
+    ▼
+preprocess_daily_data()           ◄── Called ONCE per gage, BEFORE all signatures
+    │
+    ├── 1. Daily grid normalization (one row/day, sorted, unique)
+    ├── 2. Raw diagnostics (NA count, max run, seasonal completeness, negative check)
+    ├── 3. Year rejection (>30 raw NAs, >3-day gaps, negative Q)
+    ├── 4. Interpolation (internal gaps <=3 days, linear, no extrapolation)
+    ├── 5. Residual check (boundary NAs → reject year)
+    ├── 6. PPT handling (same rules, tracked separately)
+    │
+    └── Returns: cleaned data, valid_years, valid_climate_years,
+                 seasonal_flags, diagnostics, rejected_years
+    │
+    ▼
+Signature functions receive clean data
+    ├── Flow volumes, timing, baseflow, recession, etc.
+    ├── Climate signatures use valid_climate_years subset
+    └── Seasonal signatures respect seasonal_flags (incomplete → NA)
+```
+
+**Key design decisions:**
+- `config/signatures_config.json` → `na_handling` section is the single source of truth
+- `use_legacy_filtering: true` enables backward-compatible staged migration
+- Constant-SD detection is a QA flag, not a year rejection criterion
+- Seasonal completeness is computed from RAW observations (pre-interpolation)
+- `generate_stats()` has optional `trend_completeness` / `decade_completeness` params
 
 ## File Structure
 
@@ -350,6 +384,7 @@ python docs/benchmarks/compare_rpkg.py
 | `docs/benchmarks/run_julia_benchmark.jl` | Julia full signature extraction |
 | `docs/benchmarks/compare_three_way.py` | **PRIMARY** — Three-way comparison using R² of identity line (y=x) |
 | `docs/benchmarks/compare_rpkg.py` | rpkg vs all other implementations |
+| `docs/benchmarks/build_comparison_dashboard.py` | Generates interactive HTML dashboard (maps + scatterplot) |
 | `docs/benchmarks/comparison_report.md` | Generated comparison report |
 
 For implementation details, alignment history, and known divergences, see [`CROSS_LANGUAGE_STATUS.md`](CROSS_LANGUAGE_STATUS.md).
@@ -398,7 +433,7 @@ The October 2025 parquet was created with buggy code that applied `conversion = 
 - Corrupted parquet: 78,557,297 "mm/day" (785.6 × 99999)
 - Fixed parquet: 785.6 (raw m³/s, flagged as `area_normalized = FALSE`)
 
-See CHANGELOG.md entry for "H5 follow-up" for full details of the fix.
+See docs/CHANGELOG_ARCHIVE.md entry for "H5 follow-up" for full details of the fix.
 
 ## Human Interference Metadata
 

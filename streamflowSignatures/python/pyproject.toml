@@ -22,6 +22,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Hydrology",
 ]
 
@@ -39,8 +40,8 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/your-org/streamflow-signatures"
-Documentation = "https://github.com/your-org/streamflow-signatures#readme"
+Homepage = "https://github.com/arikt/SurfaceWaterProjections"
+Documentation = "https://github.com/arikt/SurfaceWaterProjections#readme"
 
 [tool.setuptools.packages.find]
 where = ["."]

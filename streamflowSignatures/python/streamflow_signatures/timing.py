@@ -5,16 +5,17 @@ Calculates when during the water year cumulative flow reaches
 various percentile thresholds (center of mass timing).
 """
 
-from typing import Dict
+from typing import Dict, Optional
 import numpy as np
 import pandas as pd
 from .stats import generate_stats
-from .config import TIMING_MIN_DAYS, D_PERCENTILES
+from .config import D_PERCENTILES
 
 
 def analyze_flow_timing_trends(
     streamflow_data: pd.DataFrame,
-    min_days: int = TIMING_MIN_DAYS,
+    trend_completeness: Optional[float] = None,
+    decade_completeness: Optional[float] = None,
 ) -> Dict[str, float]:
     """
     Calculate flow timing metrics trends.
@@ -29,8 +30,6 @@ def analyze_flow_timing_trends(
             - water_year: int, water year
             - Q: float, daily discharge in mm/day
             - dowy: int, day of water year (1-366)
-    min_days : int, default 300
-        Minimum number of days required per water year
 
     Returns
     -------
@@ -45,7 +44,7 @@ def analyze_flow_timing_trends(
     -----
     - Day 1 = October 1 (start of water year)
     - Day 365/366 = September 30 (end of water year)
-    - Missing values are treated as zero flow for cumulative calculation
+    - Years with any remaining NAs after coercion are skipped
     """
     # Validate required columns
     required_cols = ["water_year", "Q", "dowy"]
@@ -71,27 +70,25 @@ def analyze_flow_timing_trends(
 
     # Calculate timing metrics for each year
     for yr, year_data in df.groupby("water_year", sort=False):
-        year_data = year_data.copy()  # needed because we mutate below (fillna)
 
         idx = yr_to_idx[yr]
-
-        # Check minimum data requirement
-        if len(year_data) < min_days:
-            continue
 
         # Sort by day of water year
         year_data = year_data.sort_values("dowy")
 
-        # Calculate total annual flow
-        total_flow = year_data["Q"].sum()
-
-        # Skip years with zero or NA total flow
-        if total_flow <= 0 or pd.isna(total_flow):
+        # Skip years with any NAs in Q
+        q_vals = year_data["Q"].values
+        if np.any(np.isnan(q_vals)):
             continue
 
-        # Replace NAs with 0 before cumsum (conservative: treats missing as zero flow)
-        q_for_cumsum = year_data["Q"].fillna(0).values
-        cum_flow = np.cumsum(q_for_cumsum)
+        # Calculate total annual flow
+        total_flow = np.sum(q_vals)
+
+        # Skip years with zero or negative total flow
+        if total_flow <= 0:
+            continue
+
+        cum_flow = np.cumsum(q_vals)
 
         # Calculate cumulative flow as percentage of total
         cum_pct = (cum_flow / total_flow) * 100
@@ -129,5 +126,7 @@ def analyze_flow_timing_trends(
     return generate_stats(
         timing_by_year,
         value_cols=metric_cols,
-        year_col="water_year"
+        year_col="water_year",
+        trend_completeness=trend_completeness,
+        decade_completeness=decade_completeness,
     )

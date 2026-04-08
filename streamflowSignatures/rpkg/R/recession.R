@@ -111,7 +111,9 @@ fit_sinusoidal_model <- function(doy_values, log_a_values) {
 #' @param streamflow_data A data.frame with columns: water_year, Q, dowy.
 #' @return Named list with 5 metrics x 8 stats + 6 seasonality values.
 #' @export
-analyze_recession_parameters <- function(streamflow_data) {
+analyze_recession_parameters <- function(streamflow_data,
+                                        trend_completeness = NULL,
+                                        decade_completeness = NULL) {
   required_cols <- c("water_year", "Q", "dowy")
   missing <- setdiff(required_cols, colnames(streamflow_data))
   if (length(missing) > 0) stop(paste("Missing required columns:", paste(missing, collapse = ", ")))
@@ -243,7 +245,9 @@ analyze_recession_parameters <- function(streamflow_data) {
   if (length(all_recession_events) < min_events) return(make_na_result())
 
   result <- generate_stats(annual_metrics, value_cols = signatures_with_stats,
-                           year_col = "water_year")
+                           year_col = "water_year",
+                           trend_completeness = trend_completeness,
+                           decade_completeness = decade_completeness)
 
   # Seasonality
   for (s in seasonality_sigs) result[[s]] <- NA_real_

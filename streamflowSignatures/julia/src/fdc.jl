@@ -58,7 +58,7 @@ end
 
 
 """
-    analyze_fdc_trends(df::DataFrame; min_days=CFG_FDC_MIN_DAYS) -> Dict
+    analyze_fdc_trends(df::DataFrame) -> Dict
 
 Calculate flow duration curve signature trends.
 
@@ -73,15 +73,14 @@ Parameters
 ----------
 df : DataFrame
     Daily streamflow data with columns: water_year, Q
-min_days : Int
-    Minimum days per year for valid calculation
+    (preprocessor guarantees all years are valid)
 
 Returns
 -------
 Dict{String, Float64}
     Dictionary of signature statistics (3 metrics × 8 stats = 24 values)
 """
-function analyze_fdc_trends(df::DataFrame; min_days::Int=CFG_FDC_MIN_DAYS)
+function analyze_fdc_trends(df::DataFrame; trend_completeness::Union{Nothing, Float64}=nothing, decade_completeness::Union{Nothing, Float64}=nothing)
     result = Dict{String, Float64}()
     metrics = ["FDCall", "FDC90th", "FDCmid"]
 
@@ -127,12 +126,6 @@ function analyze_fdc_trends(df::DataFrame; min_days::Int=CFG_FDC_MIN_DAYS)
         end
         year_Q = Q_clean[year_mask]
 
-        # Check minimum data
-        n_valid = sum(.!isnan.(year_Q))
-        if n_valid < min_days
-            continue
-        end
-
         yr_idx = findfirst(annual_data.water_year .== yr)
         yr_idx === nothing && continue
 
@@ -149,7 +142,7 @@ function analyze_fdc_trends(df::DataFrame; min_days::Int=CFG_FDC_MIN_DAYS)
     end
 
     # Generate statistics for all metrics
-    result = generate_stats(annual_data; value_cols=metrics)
+    result = generate_stats(annual_data; value_cols=metrics, trend_completeness=trend_completeness, decade_completeness=decade_completeness)
 
     return result
 end

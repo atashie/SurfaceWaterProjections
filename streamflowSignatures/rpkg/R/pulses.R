@@ -53,7 +53,9 @@ count_flow_reversals <- function(flow_vector, threshold_pct = NULL) {
 #' @param streamflow_data A data.frame with columns: water_year, Q, dowy, month.
 #' @return Named list of 8 statistics per pulse metric (14 metrics).
 #' @export
-calculate_pulse_metrics <- function(streamflow_data) {
+calculate_pulse_metrics <- function(streamflow_data,
+                                   trend_completeness = NULL,
+                                   decade_completeness = NULL) {
   required_cols <- c("water_year", "Q", "dowy", "month")
   missing <- setdiff(required_cols, colnames(streamflow_data))
   if (length(missing) > 0) stop(paste("Missing required columns:", paste(missing, collapse = ", ")))
@@ -62,7 +64,6 @@ calculate_pulse_metrics <- function(streamflow_data) {
   q10_all <- quantile(streamflow_data$Q, probs = 0.10, na.rm = TRUE)
 
   years <- unique(streamflow_data$water_year)
-  min_days <- pkg_env$pulses_min_days
 
   metric_names <- c("n_high_pulses_year", "n_low_pulses_year",
                     "n_high_pulses_all", "n_low_pulses_all",
@@ -78,8 +79,6 @@ calculate_pulse_metrics <- function(streamflow_data) {
 
   for (yr in years) {
     year_data <- streamflow_data[streamflow_data$water_year == yr, ]
-    if (sum(!is.na(year_data$Q)) < min_days) next
-
     year_data <- year_data[order(year_data$dowy), ]
 
     q90_year <- quantile(year_data$Q, probs = 0.90, na.rm = TRUE)
@@ -122,5 +121,7 @@ calculate_pulse_metrics <- function(streamflow_data) {
     pulse_metrics$Flow_Reversals_fall[idx]   <- seasonal_rev["fall"]
   }
 
-  generate_stats(pulse_metrics, value_cols = metric_names, year_col = "water_year")
+  generate_stats(pulse_metrics, value_cols = metric_names, year_col = "water_year",
+                 trend_completeness = trend_completeness,
+                 decade_completeness = decade_completeness)
 }

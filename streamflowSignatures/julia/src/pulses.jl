@@ -181,7 +181,7 @@ end
 
 
 """
-    calculate_pulse_metrics(df::DataFrame; min_days=250) -> Dict
+    calculate_pulse_metrics(df::DataFrame) -> Dict
 
 Calculate pulse metric signatures with trend statistics.
 
@@ -203,15 +203,14 @@ Parameters
 ----------
 df : DataFrame
     Daily streamflow data with columns: water_year, Q, month, dowy
-min_days : Int
-    Minimum days per year for valid calculation
+    (preprocessor guarantees all years are valid)
 
 Returns
 -------
 Dict{String, Float64}
     Dictionary of signature statistics
 """
-function calculate_pulse_metrics(df::DataFrame; min_days::Int=250)
+function calculate_pulse_metrics(df::DataFrame; trend_completeness::Union{Nothing, Float64}=nothing, decade_completeness::Union{Nothing, Float64}=nothing)
     result = Dict{String, Float64}()
 
     metrics = [
@@ -284,12 +283,6 @@ function calculate_pulse_metrics(df::DataFrame; min_days::Int=250)
         # Convert Q to clean Float64 vector
         Q_year = coalesce_q(year_df.Q)
 
-        # Check minimum data
-        n_valid = sum(.!isnan.(Q_year))
-        if n_valid < min_days
-            continue
-        end
-
         # FIX: Calculate year-specific thresholds (matching R/Python)
         Q_valid = filter(!isnan, Q_year)
         if length(Q_valid) < 30
@@ -343,7 +336,7 @@ function calculate_pulse_metrics(df::DataFrame; min_days::Int=250)
     end
 
     # Generate statistics for all metrics
-    result = generate_stats(annual_data; value_cols=metrics)
+    result = generate_stats(annual_data; value_cols=metrics, trend_completeness=trend_completeness, decade_completeness=decade_completeness)
 
     return result
 end

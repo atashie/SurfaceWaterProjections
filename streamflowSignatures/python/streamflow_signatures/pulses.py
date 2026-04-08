@@ -7,12 +7,11 @@ Calculates high and low flow pulse characteristics:
 - Flow reversals (direction changes)
 """
 
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 from .stats import generate_stats
 from .config import (
-    PULSES_MIN_DAYS,
     HIGH_PULSE_PERCENTILE,
     LOW_PULSE_PERCENTILE,
     FLOW_REVERSAL_THRESHOLD,
@@ -137,7 +136,8 @@ def count_flow_reversals(
 
 def calculate_pulse_metrics(
     streamflow_data: pd.DataFrame,
-    min_nona_days: int = PULSES_MIN_DAYS,
+    trend_completeness: Optional[float] = None,
+    decade_completeness: Optional[float] = None,
 ) -> Dict[str, float]:
     """
     Calculate pulse metrics and flow reversal trends.
@@ -150,8 +150,6 @@ def calculate_pulse_metrics(
             - Q: float, daily discharge in mm/day
             - dowy: int, day of water year
             - month: int, calendar month (1-12)
-    min_nona_days : int, default 250
-        Minimum non-NA days required per water year
 
     Returns
     -------
@@ -207,11 +205,6 @@ def calculate_pulse_metrics(
     # Process each year
     for yr, year_data in df.groupby("water_year", sort=False):
         year_data = year_data.copy()  # needed because we mutate below (sort_values)
-
-        # Skip years with insufficient data
-        non_na_count = year_data["Q"].notna().sum()
-        if non_na_count < min_nona_days:
-            continue
 
         # Sort by day of water year
         year_data = year_data.sort_values("dowy")
@@ -284,5 +277,7 @@ def calculate_pulse_metrics(
     return generate_stats(
         pulse_metrics,
         value_cols=metric_cols,
-        year_col="water_year"
+        year_col="water_year",
+        trend_completeness=trend_completeness,
+        decade_completeness=decade_completeness,
     )
