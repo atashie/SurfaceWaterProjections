@@ -439,6 +439,7 @@ def preprocess_daily_data(
     water_years = sorted(gage_flow["water_year"].unique())
 
     for wy in water_years:
+        wy = int(wy)
         # --- (a) Normalize to complete daily grid ---
         # Water year wy spans Oct 1 (wy-1) to Sep 30 (wy)
         wy_start = pd.Timestamp(year=wy - 1, month=10, day=1)

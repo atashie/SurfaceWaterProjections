@@ -64,9 +64,14 @@ Daily streamflow data with columns:
 
 ### Quality Thresholds
 
+All year qualification is handled centrally by `preprocess_daily_data()` (single source of truth):
 - **Minimum years**: 20+ water years per gage
-- **Completeness**: 95% non-NA days per water year
-- **Flow threshold**: 30+ days above minimum flow
+- **Year rejection**: >30 raw NAs, >3-day gaps, negative Q, boundary NAs
+- **Interpolation**: Internal gaps ≤3 days filled by linear interpolation
+- **Climate years**: Separate `valid_climate_years` set (same rules applied to PPT)
+- **Trend completeness**: ≥80% non-NA annual values and ≥80% in first/last decade for trend stats
+- **Seasonal completeness**: Seasons with <80% raw observations flagged → seasonal metrics set to NA
+- **No per-signature min_days**: Preprocessor is the only year filter (no additional gates in signature functions)
 
 ## Troubleshooting
 

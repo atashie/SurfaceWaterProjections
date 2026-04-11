@@ -109,3 +109,24 @@ Document irreducible divergences with root cause analysis. Declare threshold met
 **Benchmark**: Re-ran full comparison. Flashiness rho improved from outlier to >0.999. No other columns regressed. Fix kept.
 
 **Lesson**: One pattern, one fix, one benchmark. The diagnosis pointed to NaN handling; the fix matched canonical's approach exactly.
+
+### Worked Example 2: Asymmetric Filtering Gate in R Canonical
+
+**Problem**: After re-running R benchmark with new preprocessing, 41 columns had R² < 0.99 (regression from previous 20). Elasticity for gage 08145000: R=0.488, Python=1.398.
+
+**Triage**: Pattern #2 (Asymmetric filtering gate). Climate-dependent columns systematically diverged.
+
+**Investigation**: Wrote diagnostic scripts to trace the exact benchmark code path for one gage:
+1. Daymet ID mapping: correct (ruled out)
+2. Climate merge on Date: identical PPT values (ruled out)
+3. `generate_stats()` parity: stats match on frozen data (ruled out)
+4. Preprocessor output: identical valid_years (ruled out)
+5. **Found**: R's `process_signatures_from_parquet()` had a `min_Q_value_and_days` filter loop (~10 lines) that Python/Julia never had. This removed low-flow years (e.g., WY 1984, 2011, 2018) from both flow and climate signatures.
+
+**Root cause**: The filter was a leftover from pre-`preprocess_daily_data()` code. It intersected `valid_climate_years` with the min_Q-filtered years, removing scientifically valid drought years from elasticity calculations.
+
+**Fix**: Removed the min_Q filter loop and the `valid_climate_years` intersection. Verified: R now produces elasticity_static=1.398 (matching Python exactly).
+
+**Scope**: ~150 gages affected (2.5%), all signature categories.
+
+**Lesson**: When canonical diverges from ports, check the benchmark runner first — the bug may be in how data flows from preprocessor to signatures, not in the signature algorithms themselves. The diagnosis that "the Daymet mapping is wrong" was a red herring; the actual asymmetric gate was 15 lines of year-filtering code that Python/Julia never implemented.

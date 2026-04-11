@@ -1521,8 +1521,8 @@ analyze_fdc_trends_from_streamflow <- function(streamflow_data,
   for (yr in years) {
     year_data <- streamflow_data[streamflow_data$water_year == yr, ]
 
-    # Remove NA values from Q
-    Q_values <- year_data$Q[!is.na(year_data$Q)]
+    # Remove NA and negative values from Q (matching Python/Julia)
+    Q_values <- year_data$Q[!is.na(year_data$Q) & year_data$Q >= 0]
 
     if (length(Q_values) < 10) {
       next
@@ -4874,6 +4874,21 @@ process_signatures_from_parquet <- function(
         log_debug("Could not read config JSON for legacy flag:", e$message, context = ctx)
       })
 
+      # Auto-read trend/decade completeness from config JSON when caller passes NULL
+      # (matches Python/Julia behavior which always pass 0.80)
+      if (!use_legacy && is.null(trend_completeness) && !is.null(na_handling_config)) {
+        tc <- na_handling_config$trend_completeness
+        if (!is.null(tc)) {
+          trend_completeness <- tc$min_fraction
+          decade_completeness <- tc$decade_min_fraction
+          if (i == 1) {
+            log_info("Auto-read trend_completeness=", trend_completeness,
+                     ", decade_completeness=", decade_completeness, " from config JSON",
+                     context = ctx)
+          }
+        }
+      }
+
       if (!use_legacy) {
         # ===== NEW: Centralized pre-processing =====
         preprocess_result <- tryCatch({
@@ -4890,22 +4905,9 @@ process_signatures_from_parquet <- function(
           seasonal_flags <- preprocess_result$seasonal_flags
           streamflow_data_filtered <- preprocess_result$data
 
-          # Still apply min_Q_value_and_days filter (days above threshold)
-          water_years_to_use_final <- c()
-          for (this_wy in water_years_to_use) {
-            test_wy <- streamflow_data_filtered[water_year == this_wy]
-            nonzero_rows <- sum(test_wy$Q > min_Q_value_and_days[1], na.rm = TRUE)
-            if (nonzero_rows >= min_Q_value_and_days[2]) {
-              water_years_to_use_final <- c(water_years_to_use_final, this_wy)
-            }
-          }
-          water_years_to_use <- water_years_to_use_final
+          # preprocess_daily_data() is the single source of truth for year qualification.
+          # No additional min_Q_value_and_days filter — matches Python/Julia behavior.
           streamflow_data_filtered <- streamflow_data_filtered[water_year %in% water_years_to_use]
-
-          # Update climate flag: only true if we have valid climate years
-          if (gage_has_climate) {
-            valid_climate_years <- intersect(valid_climate_years, water_years_to_use)
-          }
         } else {
           use_legacy <- TRUE  # fallback
         }
@@ -4960,9 +4962,20 @@ process_signatures_from_parquet <- function(
       # Initialize metric results
       metrics_list <- list()
 
-      # Non-climate metric specifications: name, function, label
+      # Flow volumes — needs seasonal_flags (matching Python/Julia)
+      {
+        result <- safe_calculate(calculate_flow_vols_by_year, streamflow_data_filtered, current_gage_id,
+                                  "Flow volumes", ctx, "warn",
+                                  seasonal_flags = seasonal_flags,
+                                  trend_completeness = trend_completeness, decade_completeness = decade_completeness)
+        if (!is.null(result)) {
+          metrics_list[["flow_vols"]] <- result
+          metric_success[["flow_vols"]] <- metric_success[["flow_vols"]] + 1L
+        }
+      }
+
+      # Non-climate metrics that don't use seasonal_flags
       non_climate_specs <- list(
-        list(name = "flow_vols",  fn = calculate_flow_vols_by_year,            label = "Flow volumes"),
         list(name = "fdc_trends", fn = analyze_fdc_trends_from_streamflow,     label = "FDC trends"),
         list(name = "flashiness", fn = analyze_flashiness_trends,              label = "Flashiness"),
         list(name = "flow_timing",fn = analyze_flow_timing_trends,             label = "Flow timing"),
@@ -4991,14 +5004,29 @@ process_signatures_from_parquet <- function(
 
       # ============= CLIMATE-DEPENDENT SIGNATURES =============
       if (gage_has_climate) {
+        # Filter to valid_climate_years for climate signatures (matching Python/Julia)
+        climate_data_filtered <- streamflow_data_filtered[water_year %in% valid_climate_years]
+
+        # Q-PPT relationships — needs seasonal_flags (matching Python/Julia)
+        {
+          result <- safe_calculate(analyze_Q_PPT_relationships, climate_data_filtered, current_gage_id,
+                                    "Q-PPT analysis", ctx, "debug",
+                                    seasonal_flags = seasonal_flags,
+                                    trend_completeness = trend_completeness, decade_completeness = decade_completeness)
+          if (!is.null(result)) {
+            metrics_list[["qtoppt"]] <- result
+            metric_success[["qtoppt"]] <- metric_success[["qtoppt"]] + 1L
+          }
+        }
+
+        # Climate metrics that don't use seasonal_flags
         climate_specs <- list(
-          list(name = "qtoppt",        fn = analyze_Q_PPT_relationships,   label = "Q-PPT analysis"),
           list(name = "qp_seasonality",fn = calculate_qp_seasonality,      label = "Q-P seasonality calc"),
           list(name = "avg_storage",   fn = calculate_average_storage,     label = "Storage calc")
         )
 
         for (spec in climate_specs) {
-          result <- safe_calculate(spec$fn, streamflow_data_filtered, current_gage_id, spec$label, ctx, "debug",
+          result <- safe_calculate(spec$fn, climate_data_filtered, current_gage_id, spec$label, ctx, "debug",
                                     trend_completeness = trend_completeness, decade_completeness = decade_completeness)
           if (!is.null(result)) {
             metrics_list[[spec$name]] <- result
@@ -5008,7 +5036,7 @@ process_signatures_from_parquet <- function(
 
         # Elasticity uses rolling windows — trend completeness should not apply
         {
-          result <- safe_calculate(calculate_streamflow_elasticity, streamflow_data_filtered, current_gage_id,
+          result <- safe_calculate(calculate_streamflow_elasticity, climate_data_filtered, current_gage_id,
                                     "Elasticity calc", ctx, "debug")
           if (!is.null(result)) {
             metrics_list[["elasticity"]] <- result

@@ -11,6 +11,33 @@ For historical entries (Dec 2025 – March 2026), see [docs/CHANGELOG_ARCHIVE.md
 - Add ERA5/PRISM data fetching for USGS/HYDAT gages
 - Implement synchrony metrics (cross-correlation, lag analysis)
 
+### R Canonical Alignment Fixes (April 2026)
+
+Three fixes to `R/helperFunctions.R` align R canonical's `process_signatures_from_parquet()` with Python/Julia benchmark behavior. Driven by diagnostic investigation after re-running benchmarks showed regression (41 poor cols vs previous 20).
+
+**Fix 1 (HIGH): Removed leftover min_Q_value_and_days filter from non-legacy path**
+The non-legacy preprocessing path retained a min_Q filter loop (~10 lines at line 4908) that required 30+ days above minimum flow threshold per water year. This filter pre-dated `preprocess_daily_data()` and was never part of Python/Julia benchmarks. It caused two systematic divergences:
+- **Climate year exclusion**: Low-flow years (e.g., 1984, 2011, 2018 for gage 08145000) were removed from `valid_climate_years` via `intersect(valid_climate_years, water_years_to_use)`, changing elasticity from 1.398 → 0.488 for that gage
+- **Flow year exclusion**: R had fewer qualifying years than Python/Julia (e.g., 38 vs 46 for gage 11274500), changing FDCmid and other signatures
+- Affected ~150 gages (2.5%) with measurable differences across all signature categories
+
+**Fix 2 (LOW): Added negative Q filter in FDC calculation**
+`analyze_fdc_trends_from_streamflow()` line 1525: changed `Q[!is.na(Q)]` to `Q[!is.na(Q) & Q >= 0]`, matching Python/Julia. Safety net — preprocessor already rejects years with negative Q, but 81 gages have some negative Q rows.
+
+**Fix 3 (MEDIUM code quality, zero current impact): Pass seasonal_flags to signature functions**
+`calculate_flow_vols_by_year()` and `analyze_Q_PPT_relationships()` now receive `seasonal_flags` from the preprocessor, matching Python/Julia. No current impact (all gages have complete seasons), but ensures correctness if incomplete-season gages appear.
+
+**Diagnostic investigation confirmed non-issues:**
+- `daymet_id_for_gage` mapping: correct (Daymet parquet uses "08145000" directly)
+- Climate merge on Date: produces identical PPT values to Python
+- `generate_stats()` parity: all stats match except p-value library differences (expected)
+- Preprocessor output: identical between benchmark path and direct path
+
+**Cross-language audit (Codex)** found 3 remaining low-impact divergences:
+- Julia hardcodes season month definitions instead of reading from JSON
+- Julia relies on residual-NA rejection for PPT max-gap instead of explicit check
+- Config APIs differ structurally (flat keys vs nested JSON) but numeric values match
+
 ### Julia leftjoin Row-Order Bug Fix (April 2026)
 **HIGH**: `preprocess_daily_data()` in `julia/src/io.jl` produced incorrect `valid_climate_years` because `DataFrames.jl`'s `leftjoin` does not preserve row order. After joining the daily grid with year data, rows were reordered so that missing-PPT dates (e.g., Dec 31 at dowy=92) appeared at boundary positions (position 365 = Sep 30). The interpolation logic uses positional indices, so 1-day internal gaps were misidentified as boundary gaps and could not be interpolated — causing those years to be excluded from `valid_climate_years`.
 

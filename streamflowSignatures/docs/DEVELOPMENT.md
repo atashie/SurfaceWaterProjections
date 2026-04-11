@@ -339,7 +339,7 @@ rpkg aligns more closely with Python/Julia than canonical R does (527 vs 475 per
 
 Note: Rounds 0-6 used Spearman rank correlation. Post-Round 6, the primary metric switched to identity R² (see table above), which is stricter and reveals 20 poor columns vs Spearman's 4.
 
-#### Known Remaining Divergences (20 columns with R² < 0.99)
+#### Known Remaining Divergences (20 columns with R² < 0.99, March 2026)
 
 Under the identity R² metric, 20 columns fall below 0.99. All are trend statistics (slopes, p-values) where small numerical differences amplify:
 - 4 recession pointcloud p-values: Irreducible OLS library differences (R's `lm()` QR rank-checking vs Python/Julia SVD)
@@ -348,6 +348,15 @@ Under the identity R² metric, 20 columns fall below 0.99. All are trend statist
 - 2 n_low_pulses trend stats, 1 flashiness trend stat: Edge-case gage differences
 
 Python and Julia agree near-perfectly on all columns (min Py-Jl R² = 0.977, only 3 cols < 0.99).
+
+#### April 2026 R Canonical Fixes (benchmark pending)
+
+Three fixes to R canonical's `process_signatures_from_parquet()` address the primary sources of R-vs-Python/Julia divergence:
+1. **Removed leftover min_Q filter**: R had an additional year-qualification filter that Python/Julia never had, affecting ~150 gages' year populations
+2. **FDC negative Q filter**: Added `Q >= 0` guard matching Python/Julia
+3. **seasonal_flags passthrough**: Flow volumes and Q-PPT functions now receive seasonal completeness flags
+
+These fixes are expected to significantly reduce the number of poor columns. Updated benchmark results will replace the March 2026 tables above.
 
 ### Running Benchmarks
 

@@ -26,7 +26,12 @@ For summary results and how-to-run commands, see the [Cross-Language Benchmarks 
 - OLS denominator guard: `abs() < 1e-10` instead of exact `== 0` (Round 6)
 - DataFrame pre-allocation in 5 modules replacing `push!` pattern (Round 6)
 
-**R**: Canonical. R16 fix applied: Eckhardt filter now forward-fills baseflow on NaN Q, matching Python/Julia. Previously cascaded NAs, causing numerator/denominator mismatch in BFI calculation. This resolves the last 3 BFI_Eckhardt columns below rho 0.99.
+**R**: Canonical. Key fixes applied:
+- R16: Eckhardt filter now forward-fills baseflow on NaN Q, matching Python/Julia
+- April 2026: Removed leftover `min_Q_value_and_days` filter from non-legacy preprocessing path (Python/Julia never had this). Fixed ~150 gages with different year populations.
+- April 2026: Added negative Q filter in FDC (`Q >= 0`), matching Python/Julia
+- April 2026: `process_signatures_from_parquet()` now passes `seasonal_flags` to `calculate_flow_vols_by_year()` and `analyze_Q_PPT_relationships()`, matching Python/Julia
+- April 2026: Auto-reads `trend_completeness` and `decade_completeness` from config JSON; filters climate signatures to `valid_climate_years` only
 
 **Python**: Production-ready. Major fixes applied across 6 alignment rounds:
 - BFI_LyneHollick: Fixed NaN propagation with paired masking
