@@ -61,17 +61,22 @@ For summary results and how-to-run commands, see the [Cross-Language Benchmarks 
 
 *March 16-17, 2026 re-run. R ran concurrently with Python/Julia — timing inflated by I/O contention. Previous solo R runs: ~1-2 hours. Golden output regression: 551/551 perfect match against Feb 2026 reference.
 
-## Three-Way Identity R² Summary
+## Three-Way Identity R² Summary (April 2026, Post-Alignment Fixes)
 
 R² of the identity line (y = x): measures whether implementations produce identical values, not just correlated values.
 
 | Pair | Mean R² | Median R² | Min R² | Cols < 0.99 |
 |------|---------|-----------|--------|-------------|
-| R vs Python | 0.9968 | 1.0000 | 0.6745 | 17 |
-| R vs Julia | 0.9965 | 1.0000 | 0.6745 | 19 |
-| Python vs Julia | 0.9997 | 1.0000 | 0.9771 | 3 |
+| R vs Python | 0.9980 | 1.0000 | 0.7152 | 6 |
+| R vs Julia | 0.9977 | 1.0000 | 0.6886 | 8 |
+| Python vs Julia | 0.9997 | 1.0000 | 0.9797 | 2 |
 
-475 perfect (R²>=0.999), 56 good (0.99-0.999), 20 poor (<0.99). The 20 poor columns are trend statistics (slopes, p-values) sensitive to small numerical differences. Spearman rank correlation is reported as a secondary diagnostic in the comparison CSV.
+522 perfect (R²>=0.999), 21 good (0.99-0.999), 8 poor (<0.99). 543 of 551 columns (98.5%) have R² >= 0.99 across all 3 pairs. Improvement from March 2026 (475 perfect, 20 poor) driven by removal of leftover min_Q filter in R canonical.
+
+The 8 remaining poor columns are irreducible:
+- 4 recession pointcloud p-values: OLS library differences (R's `lm()` QR rank-checking vs Python/Julia SVD)
+- 2 FDC90th p-values: R has 569 NAs vs Python/Julia 597 (28 extra NAs from stricter filtering)
+- 2 n_low_pulses mk_rho: Julia-specific Mann-Kendall tau divergence (R-Py=1.000)
 
 ## rpkg Benchmark Results (March 2026)
 

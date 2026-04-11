@@ -349,14 +349,22 @@ Under the identity R² metric, 20 columns fall below 0.99. All are trend statist
 
 Python and Julia agree near-perfectly on all columns (min Py-Jl R² = 0.977, only 3 cols < 0.99).
 
-#### April 2026 R Canonical Fixes (benchmark pending)
+#### April 2026 R Canonical Fixes (benchmark complete)
 
 Three fixes to R canonical's `process_signatures_from_parquet()` address the primary sources of R-vs-Python/Julia divergence:
 1. **Removed leftover min_Q filter**: R had an additional year-qualification filter that Python/Julia never had, affecting ~150 gages' year populations
 2. **FDC negative Q filter**: Added `Q >= 0` guard matching Python/Julia
 3. **seasonal_flags passthrough**: Flow volumes and Q-PPT functions now receive seasonal completeness flags
 
-These fixes are expected to significantly reduce the number of poor columns. Updated benchmark results will replace the March 2026 tables above.
+**Updated results (April 2026):**
+
+| Pair | Mean R² | Median R² | Min R² | Cols < 0.99 |
+|------|---------|-----------|--------|-------------|
+| R vs Python | 0.9980 | 1.0000 | 0.7152 | 6 |
+| R vs Julia | 0.9977 | 1.0000 | 0.6886 | 8 |
+| Python vs Julia | 0.9997 | 1.0000 | 0.9797 | 2 |
+
+522 perfect (R²>=0.999), 21 good (0.99-0.999), 8 poor (<0.99). 543 of 551 columns (98.5%) have R² >= 0.99 across all 3 pairs. Remaining 8 poor columns are irreducible: 4 recession OLS library differences, 2 FDC90th NA population differences, 2 n_low_pulses Julia-specific divergences.
 
 ### Running Benchmarks
 
