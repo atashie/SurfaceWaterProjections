@@ -53,22 +53,13 @@ function analyze_flow_timing_trends(df::DataFrame; trend_completeness::Union{Not
     end
 
     years = unique(df.water_year)
-    annual_data = DataFrame(
-        water_year = years,
-        D5_day = fill(NaN, length(years)),
-        D10_day = fill(NaN, length(years)),
-        D20_day = fill(NaN, length(years)),
-        D30_day = fill(NaN, length(years)),
-        D40_day = fill(NaN, length(years)),
-        D50_day = fill(NaN, length(years)),
-        D60_day = fill(NaN, length(years)),
-        D70_day = fill(NaN, length(years)),
-        D80_day = fill(NaN, length(years)),
-        D90_day = fill(NaN, length(years)),
-        D95_day = fill(NaN, length(years)),
-        D25_to_D75 = fill(NaN, length(years)),
-        Dmax = fill(NaN, length(years))
-    )
+    # Build DataFrame dynamically from config percentiles
+    annual_data = DataFrame(water_year = years)
+    for p in d_percentiles
+        annual_data[!, Symbol("D$(p)_day")] = fill(NaN, length(years))
+    end
+    annual_data[!, :D25_to_D75] = fill(NaN, length(years))
+    annual_data[!, :Dmax] = fill(NaN, length(years))
 
     for yr in years
         year_mask = coalesce.(df.water_year .== yr, false)

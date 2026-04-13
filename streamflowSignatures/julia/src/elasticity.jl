@@ -16,7 +16,12 @@ Calculate streamflow elasticity signatures.
 
 Calculates:
 - elasticity_static: Overall catchment elasticity (single value)
-- elasticity: Rolling window elasticity trends (8 statistics)
+- elasticity_rolling: Rolling window (11-year) elasticity trends (8 statistics)
+  Uses departure-from-mean method (Sawicz et al. 2011)
+- elasticity_annual: Year-over-year elasticity trends (8 statistics)
+  Uses consecutive-year differences for year-to-year sensitivity
+- elasticity_years_total: Total years available for this gage (diagnostic scalar)
+- elasticity_years_low_ppt: Years excluded due to low PPT (diagnostic scalar)
 
 Elasticity E = (dQ/dP) / (Q_mean/P_mean)
 - E ~ 1.0: Proportional response
@@ -35,7 +40,8 @@ window : Int
 Returns
 -------
 Dict{String, Float64}
-    Dictionary with elasticity_static and elasticity statistics
+    Dictionary with elasticity_static, elasticity_rolling, elasticity_annual statistics,
+    and diagnostic scalars
 """
 function calculate_streamflow_elasticity(
     df::DataFrame;
@@ -47,16 +53,24 @@ function calculate_streamflow_elasticity(
 )
     result = Dict{String, Float64}()
 
+    # Helper to fill all empty outputs
+    function fill_empty_elasticity!(r)
+        r["elasticity_static"] = NaN
+        merge!(r, empty_stats("elasticity_rolling"))
+        merge!(r, empty_stats("elasticity_annual"))
+        r["elasticity_years_total"] = NaN
+        r["elasticity_years_low_ppt"] = NaN
+        return r
+    end
+
     # Check for PPT column
     if !("PPT" in names(df))
-        result["elasticity_static"] = NaN
-        merge!(result, empty_stats("elasticity"))
+        fill_empty_elasticity!(result)
         return result
     end
 
     if nrow(df) == 0
-        result["elasticity_static"] = NaN
-        merge!(result, empty_stats("elasticity"))
+        fill_empty_elasticity!(result)
         return result
     end
 
@@ -68,8 +82,7 @@ function calculate_streamflow_elasticity(
     )
 
     if nrow(annual_data) < min_years
-        result["elasticity_static"] = NaN
-        merge!(result, empty_stats("elasticity"))
+        fill_empty_elasticity!(result)
         return result
     end
 
@@ -84,9 +97,14 @@ function calculate_streamflow_elasticity(
     Q_valid = Q[valid_mask]
     P_valid = P[valid_mask]
 
+    # Step 6: Elasticity data quality diagnostics (per-gage scalars)
+    result["elasticity_years_total"] = Float64(nrow(annual_data))
+    result["elasticity_years_low_ppt"] = Float64(sum(.!valid_mask))
+
     if length(Q_valid) < min_years
         result["elasticity_static"] = NaN
-        merge!(result, empty_stats("elasticity"))
+        merge!(result, empty_stats("elasticity_rolling"))
+        merge!(result, empty_stats("elasticity_annual"))
         return result
     end
 
@@ -96,7 +114,8 @@ function calculate_streamflow_elasticity(
 
     if P_mean <= 0 || Q_mean <= 0
         result["elasticity_static"] = NaN
-        merge!(result, empty_stats("elasticity"))
+        merge!(result, empty_stats("elasticity_rolling"))
+        merge!(result, empty_stats("elasticity_annual"))
         return result
     end
 
@@ -123,56 +142,78 @@ function calculate_streamflow_elasticity(
         result["elasticity_static"] = elasticity_static
     end
 
-    # Rolling window elasticity using same per-year anomaly method
+    # Rolling window elasticity using same per-year anomaly method (Sawicz et al. 2011)
     n = length(Q_valid)
-    if n < window + 3
-        merge!(result, empty_stats("elasticity"))
-        return result
-    end
-
     years_valid = annual_data.water_year[valid_mask]
-    rolling_elasticity = Float64[]
-    rolling_years = Int[]  # Will convert Float64 years to Int when pushing
 
-    # FIX: Use END of window for year assignment (matching R/Python)
-    # R: water_year = annual$water_year[(rolling_window):n]
-    # Python: rolling_years.append(annual.iloc[end_idx]["water_year"])
-    for end_idx in window:n
-        start_idx = end_idx - window + 1
-        Q_window = Q_valid[start_idx:end_idx]
-        P_window = P_valid[start_idx:end_idx]
+    if n < window + 3
+        merge!(result, empty_stats("elasticity_rolling"))
+    else
+        rolling_elasticity = Float64[]
+        rolling_years = Int[]
 
-        Q_mean_w = mean(Q_window)
-        P_mean_w = mean(P_window)
+        # Use END of window for year assignment (matching R/Python)
+        for end_idx in window:n
+            start_idx = end_idx - window + 1
+            Q_window = Q_valid[start_idx:end_idx]
+            P_window = P_valid[start_idx:end_idx]
 
-        if P_mean_w > 0 && Q_mean_w > 0
-            # Calculate per-year elasticities within window
-            window_elasticities = Float64[]
-            for j in 1:length(Q_window)
-                dQ = Q_window[j] - Q_mean_w
-                dP = P_window[j] - P_mean_w
+            Q_mean_w = mean(Q_window)
+            P_mean_w = mean(P_window)
 
-                if abs(dP) > min_dP
-                    e = (dQ / dP) / (Q_mean_w / P_mean_w)
-                    push!(window_elasticities, e)
+            if P_mean_w > 0 && Q_mean_w > 0
+                window_elasticities = Float64[]
+                for j in 1:length(Q_window)
+                    dQ = Q_window[j] - Q_mean_w
+                    dP = P_window[j] - P_mean_w
+
+                    if abs(dP) > min_dP
+                        e = (dQ / dP) / (Q_mean_w / P_mean_w)
+                        push!(window_elasticities, e)
+                    end
+                end
+
+                if !isempty(window_elasticities)
+                    push!(rolling_elasticity, median(window_elasticities))
+                    push!(rolling_years, Int(years_valid[end_idx]))
                 end
             end
+        end
 
-            if !isempty(window_elasticities)
-                push!(rolling_elasticity, median(window_elasticities))
-                push!(rolling_years, Int(years_valid[end_idx]))  # Use END of window, convert to Int
-            end
+        if length(rolling_elasticity) >= 3
+            rolling_df = DataFrame(
+                water_year = rolling_years,
+                elasticity_rolling = rolling_elasticity
+            )
+            merge!(result, generate_stats(rolling_df; value_cols=["elasticity_rolling"], trend_completeness=trend_completeness, decade_completeness=decade_completeness))
+        else
+            merge!(result, empty_stats("elasticity_rolling"))
         end
     end
 
-    if length(rolling_elasticity) >= 3
-        rolling_df = DataFrame(
-            water_year = rolling_years,
-            elasticity = rolling_elasticity
+    # Year-over-year elasticity (NOT Sawicz — uses consecutive-year differences)
+    # E_t = ((Q_t - Q_{t-1}) / (P_t - P_{t-1})) / (Q_mean / P_mean)
+    # Measures year-to-year sensitivity rather than deviation-from-mean sensitivity
+    yoy_elasticity = Float64[]
+    yoy_years = Int[]
+    for i in 2:length(Q_valid)
+        dQ = Q_valid[i] - Q_valid[i - 1]
+        dP = P_valid[i] - P_valid[i - 1]
+        if abs(dP) > min_dP
+            e = (dQ / dP) / (Q_mean / P_mean)
+            push!(yoy_elasticity, e)
+            push!(yoy_years, Int(years_valid[i]))
+        end
+    end
+
+    if length(yoy_elasticity) >= 3
+        yoy_df = DataFrame(
+            water_year = yoy_years,
+            elasticity_annual = yoy_elasticity
         )
-        merge!(result, generate_stats(rolling_df; value_cols=["elasticity"], trend_completeness=trend_completeness, decade_completeness=decade_completeness))
+        merge!(result, generate_stats(yoy_df; value_cols=["elasticity_annual"], trend_completeness=trend_completeness, decade_completeness=decade_completeness))
     else
-        merge!(result, empty_stats("elasticity"))
+        merge!(result, empty_stats("elasticity_annual"))
     end
 
     return result

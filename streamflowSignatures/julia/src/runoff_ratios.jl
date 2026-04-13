@@ -43,6 +43,7 @@ function analyze_Q_PPT_relationships(df::DataFrame; seasonal_flags::Union{Nothin
         for m in metrics
             merge!(result, empty_stats(m))
         end
+        result["runoff_ratio_high_count"] = NaN
         return result
     end
 
@@ -50,6 +51,7 @@ function analyze_Q_PPT_relationships(df::DataFrame; seasonal_flags::Union{Nothin
         for m in metrics
             merge!(result, empty_stats(m))
         end
+        result["runoff_ratio_high_count"] = NaN
         return result
     end
 
@@ -132,6 +134,10 @@ function analyze_Q_PPT_relationships(df::DataFrame; seasonal_flags::Union{Nothin
     # No early-return gate — let generate_stats() handle min_rows internally
     # (matching R/Python, which pass whatever data exists to generate_stats)
     result = generate_stats(annual_data; value_cols=metrics, trend_completeness=trend_completeness, decade_completeness=decade_completeness)
+
+    # Count years where annual runoff ratio > 2.0 (per-gage scalar diagnostic)
+    n_high_rr = count(x -> !isnan(x) && x > 2.0, annual_data.annual_runoff_ratio)
+    result["runoff_ratio_high_count"] = Float64(n_high_rr)
 
     return result
 end

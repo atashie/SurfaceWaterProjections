@@ -571,6 +571,7 @@ EXPECTED_SIGNATURE_BASES <- c(
   "BFI_Eckhardt", "BFI_LyneHollick",
   # Recession parameters
   "log_a_pointcloud", "log_a_events", "b_pointcloud", "b_events", "concavity",
+  "n_recession_events",
   # Pulse metrics (yearly and overall)
   "n_high_pulses_year", "n_low_pulses_year", "n_high_pulses_all", "n_low_pulses_all",
   "dur_high_pulses_year", "dur_low_pulses_year", "dur_high_pulses_all", "dur_low_pulses_all",
@@ -581,14 +582,14 @@ EXPECTED_SIGNATURE_BASES <- c(
   # Flashiness
   "flashinessRB",
   # Flow timing (day of water year for cumulative flow percentiles)
-  "D5_day", "D10_day", "D20_day", "D30_day", "D40_day", "D50_day",
-  "D60_day", "D70_day", "D80_day", "D90_day", "D95_day",
+  "D1_day", "D5_day", "D10_day", "D20_day", "D30_day", "D40_day", "D50_day",
+  "D60_day", "D70_day", "D80_day", "D90_day", "D95_day", "D99_day",
   "D25_to_D75", "Dmax",
   # Q-PPT runoff ratios (climate-dependent)
   "annual_runoff_ratio", "winter_runoff_ratio", "spring_runoff_ratio",
   "summer_runoff_ratio", "fall_runoff_ratio",
-  # Streamflow elasticity (Sawicz et al. 2011)
-  "elasticity",
+  # Streamflow elasticity (Sawicz et al. 2011 departure-from-mean + year-over-year)
+  "elasticity_rolling", "elasticity_annual",
   # Q-P seasonality (Wrede et al. 2015)
   "qp_slope_sd", "qp_bimodality",
   # Average storage (Peters & Aulenbach 2011)
@@ -606,6 +607,12 @@ EXPECTED_RECESSION_SEASONALITY <- c(
   "log_a_seasonality_amplitude_last_half", "log_a_seasonality_minimum_all",
   "log_a_seasonality_minimum_first_half", "log_a_seasonality_minimum_last_half"
 )
+
+# Runoff ratio high flag (per-gage scalar, not 8-stat pattern)
+EXPECTED_RUNOFF_RATIO_HIGH <- "runoff_ratio_high_count"
+
+# Elasticity diagnostics (per-gage scalars, not 8-stat pattern)
+EXPECTED_ELASTICITY_DIAGNOSTICS <- c("elasticity_years_total", "elasticity_years_low_ppt")
 
 # Validate output CSV schema
 validate_output_schema <- function(output_df, strict = FALSE, context = NULL) {
@@ -627,8 +634,9 @@ validate_output_schema <- function(output_df, strict = FALSE, context = NULL) {
     paste0(base, STAT_SUFFIXES)
   }))
 
-  # Add recession seasonality columns (don't follow standard suffix pattern)
-  expected_sig_cols <- c(expected_sig_cols, EXPECTED_RECESSION_SEASONALITY)
+  # Add non-standard columns (don't follow 8-stat suffix pattern)
+  expected_sig_cols <- c(expected_sig_cols, EXPECTED_RECESSION_SEASONALITY,
+                         EXPECTED_RUNOFF_RATIO_HIGH, EXPECTED_ELASTICITY_DIAGNOSTICS)
 
   present_sig_cols <- intersect(expected_sig_cols, names(output_df))
   missing_sig_cols <- setdiff(expected_sig_cols, names(output_df))

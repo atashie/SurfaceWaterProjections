@@ -37,12 +37,13 @@ end
 
 Identify recession events where both Q and |dQ/dt| are decreasing.
 
-Uses "look-ahead" algorithm matching R/Python implementation:
-At each position i, checks if the NEXT min_length consecutive days ALL meet criteria:
-1. Q[i+j+1] < Q[i+j] (flow strictly decreasing)
-2. |dQ/dt[i+j+1]| < |dQ/dt[i+j]| (rate becoming less negative)
+Uses position-level marking: marks each position where both recession criteria hold,
+then finds contiguous runs of valid positions >= min_length. This captures the full
+extent of each recession event, unlike the previous look-ahead algorithm which could
+truncate events by up to min_length days from their true end.
 
-Returns vector of (start_idx, end_idx) tuples.
+Returns vector of (start_idx, end_idx) INCLUSIVE-INCLUSIVE tuples, where
+Q[start_idx:end_idx] gives all days in the recession event.
 """
 function identify_recession_events(
     Q::AbstractVector{<:Real},
@@ -56,69 +57,47 @@ function identify_recession_events(
         return events
     end
 
-    # Calculate dQ/dt (forward difference) with NA at end
+    # Calculate dQ/dt (forward difference) with NaN at end
     dQdt = vcat(diff(Q), NaN)  # dQdt[i] = Q[i+1] - Q[i]
 
-    in_recession = false
-    start_idx = 1
-
-    # Loop from 1 to n-min_length (matching R/Python)
-    @inbounds for i in 1:(n - min_length)
-        # Check if we have valid data at position i
-        if isnan(Q[i]) || isnan(dQdt[i])
-            if in_recession
-                # End current recession if we hit NA
-                if (i - start_idx) >= min_length
-                    push!(events, (start_idx, i - 1))
-                end
-                in_recession = false
-            end
-            continue
-        end
-
-        # Check for monotonic decrease in both Q and |dQ/dt| for next min_length days
-        if i < n - 1
-            is_recession = true
-
-            # Check next min_length consecutive decreases (requires min_length+1 points)
-            for j in 0:(min_length - 1)
-                idx = i + j
-                if idx + 1 > n || isnan(Q[idx]) || isnan(Q[idx + 1]) ||
-                   isnan(dQdt[idx]) || isnan(dQdt[idx + 1])
-                    is_recession = false
-                    break
-                end
-
-                # Check if Q is decreasing
-                if Q[idx + 1] >= Q[idx]
-                    is_recession = false
-                    break
-                end
-
-                # Check if |dQ/dt| is decreasing (becoming less negative)
-                if abs(dQdt[idx + 1]) >= abs(dQdt[idx])
-                    is_recession = false
-                    break
-                end
-            end
-
-            if is_recession && !in_recession
-                # Start new recession
-                in_recession = true
-                start_idx = i
-            elseif !is_recession && in_recession
-                # End current recession
-                if (i - start_idx) >= min_length
-                    push!(events, (start_idx, i - 1))
-                end
-                in_recession = false
+    # Step 1: Mark each position where both recession criteria hold
+    # Position i is "valid" if Q[i+1] < Q[i] AND |dQdt[i+1]| < |dQdt[i]|
+    is_valid = falses(n)
+    @inbounds for i in 1:(n - 1)
+        if !isnan(Q[i]) && !isnan(Q[i + 1]) && !isnan(dQdt[i]) && !isnan(dQdt[i + 1])
+            if Q[i + 1] < Q[i] && abs(dQdt[i + 1]) < abs(dQdt[i])
+                is_valid[i] = true
             end
         end
     end
 
-    # Check if we ended in a recession
-    if in_recession && (n - start_idx) >= min_length
-        push!(events, (start_idx, n))
+    # Step 2: Find connected runs of valid positions >= min_length
+    # A run of k valid transitions at positions start to start+k-1 covers
+    # days start to start+k (k+1 days). Return INCLUSIVE-INCLUSIVE tuples.
+    run_start = 0
+    @inbounds for i in 1:n
+        if is_valid[i]
+            if run_start == 0
+                run_start = i
+            end
+        else
+            if run_start > 0
+                run_length = i - run_start  # number of valid transitions
+                if run_length >= min_length
+                    # Last valid position is i-1; event spans start through i
+                    # (i = first day after last valid transition, included in Q slice)
+                    push!(events, (run_start, i))
+                end
+                run_start = 0
+            end
+        end
+    end
+    # Handle run ending at data boundary
+    if run_start > 0
+        run_length = n - run_start
+        if run_length >= min_length
+            push!(events, (run_start, n))
+        end
     end
 
     return events
@@ -290,6 +269,7 @@ function analyze_recession_parameters(df::DataFrame; min_events::Int=CFG_RECESSI
         for m in base_metrics
             merge!(result, empty_stats(m))
         end
+        merge!(result, empty_stats("n_recession_events"))
         for m in seasonality_metrics
             result[m] = NaN
         end
@@ -300,6 +280,7 @@ function analyze_recession_parameters(df::DataFrame; min_events::Int=CFG_RECESSI
         for m in base_metrics
             merge!(result, empty_stats(m))
         end
+        merge!(result, empty_stats("n_recession_events"))
         for m in seasonality_metrics
             result[m] = NaN
         end
@@ -322,7 +303,8 @@ function analyze_recession_parameters(df::DataFrame; min_events::Int=CFG_RECESSI
         b_events = fill(NaN, length(years)),
         log_a_pointcloud = fill(NaN, length(years)),
         b_pointcloud = fill(NaN, length(years)),
-        concavity = fill(NaN, length(years))
+        concavity = fill(NaN, length(years)),
+        n_recession_events = fill(NaN, length(years))
     )
 
     for yr in years
@@ -339,6 +321,12 @@ function analyze_recession_parameters(df::DataFrame; min_events::Int=CFG_RECESSI
 
         # Identify recession events
         events = identify_recession_events(Q_clean, dowy_clean)
+
+        # Store event count for this year (INDEPENDENT of min_events gate)
+        yr_idx_count = findfirst(annual_data.water_year .== yr)
+        if yr_idx_count !== nothing
+            annual_data[yr_idx_count, :n_recession_events] = Float64(length(events))
+        end
 
         if isempty(events)
             continue
@@ -444,6 +432,16 @@ function analyze_recession_parameters(df::DataFrame; min_events::Int=CFG_RECESSI
             annual_data[yr_idx, :b_events] = median(year_b)
             annual_data[yr_idx, :concavity] = isempty(year_concavity) ? NaN : mean(year_concavity)
         end
+    end
+
+    # n_recession_events stats computed INDEPENDENTLY of min_events gate
+    # Event counts are meaningful even for gages with few events
+    events_df = annual_data[.!isnan.(annual_data.n_recession_events), [:water_year, :n_recession_events]]
+    if nrow(events_df) >= 3
+        merge!(result, generate_stats(events_df; value_cols=["n_recession_events"],
+            trend_completeness=trend_completeness, decade_completeness=decade_completeness))
+    else
+        merge!(result, empty_stats("n_recession_events"))
     end
 
     # Check minimum events requirement (matching R/Python)
