@@ -109,9 +109,14 @@ function mann_kendall_test(y::AbstractVector{<:Real})
         return (NaN, NaN)
     end
 
-    # Calculate tau
+    # Calculate tau-b (matching R's Kendall::MannKendall and Python's scipy.stats.kendalltau)
+    # For Mann-Kendall, x = time indices (no ties in x), so:
+    #   tau_b = S / sqrt((n_pairs - T_y) * n_pairs)
+    # where T_y = number of tied pairs in y
     n_pairs = n * (n - 1) / 2
-    tau = S / n_pairs
+    T_y = sum(t * (t - 1) / 2 for t in tie_groups; init=0.0)
+    denom = sqrt((n_pairs - T_y) * n_pairs)
+    tau = denom > 0.0 ? S / denom : NaN
 
     # Calculate z-score and p-value
     if S > 0
@@ -124,6 +129,12 @@ function mann_kendall_test(y::AbstractVector{<:Real})
 
     # Two-sided p-value using normal approximation
     pvalue = 2 * (1 - cdf(Normal(), abs(z)))
+
+    # R's Kendall::MannKendall uses exact p-values for n<=10 but fails
+    # for n<=3 (IFAULT=12, returns p=1.0). Match R's behavior.
+    if n <= 3
+        pvalue = 1.0
+    end
 
     return (tau, pvalue)
 end

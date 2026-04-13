@@ -356,15 +356,15 @@ Three fixes to R canonical's `process_signatures_from_parquet()` address the pri
 2. **FDC negative Q filter**: Added `Q >= 0` guard matching Python/Julia
 3. **seasonal_flags passthrough**: Flow volumes and Q-PPT functions now receive seasonal completeness flags
 
-**Updated results (April 2026):**
+**Updated results (April 2026, post R canonical fixes + Julia tau-b fix):**
 
 | Pair | Mean R² | Median R² | Min R² | Cols < 0.99 |
 |------|---------|-----------|--------|-------------|
-| R vs Python | 0.9980 | 1.0000 | 0.7152 | 6 |
-| R vs Julia | 0.9977 | 1.0000 | 0.6886 | 8 |
-| Python vs Julia | 0.9997 | 1.0000 | 0.9797 | 2 |
+| R vs Python | 0.9990 | 1.0000 | 0.7621 | 4 |
+| R vs Julia | 0.9991 | 1.0000 | 0.7621 | 4 |
+| Python vs Julia | 0.9999 | 1.0000 | 0.9979 | 0 |
 
-522 perfect (R²>=0.999), 21 good (0.99-0.999), 8 poor (<0.99). 543 of 551 columns (98.5%) have R² >= 0.99 across all 3 pairs. Remaining 8 poor columns are irreducible: 4 recession OLS library differences, 2 FDC90th NA population differences, 2 n_low_pulses Julia-specific divergences.
+542 perfect (R²>=0.999), 5 good (0.99-0.999), 4 poor (<0.99). 547 of 551 columns (99.3%) have R² >= 0.99 across all 3 pairs. Python-Julia agreement is now perfect (0 columns below 0.99). Remaining 4 poor columns are irreducible: 2 recession Spearman p-values (R's exact permutation test vs Python/Julia's t-approximation for small n), 2 FDC90th p-values (28-gage NA mismatch from floating-point precision in near-zero regression).
 
 ### Running Benchmarks
 

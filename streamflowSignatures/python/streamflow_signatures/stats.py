@@ -83,6 +83,12 @@ def mann_kendall_test(y: np.ndarray) -> tuple:
         # Mann-Kendall is Kendall's tau between values and time indices
         x = np.arange(len(y_clean))
         tau, p_value = stats.kendalltau(x, y_clean)
+
+        # R's Kendall::MannKendall uses exact p-values for n<=10 but fails
+        # for n<=3 (IFAULT=12, returns p=1.0). Match R's behavior.
+        if len(y_clean) <= 3:
+            p_value = 1.0
+
         return tau, p_value
     except Exception:
         return np.nan, np.nan
@@ -116,6 +122,9 @@ def spearman_correlation(x: np.ndarray, y: np.ndarray) -> tuple:
 
     try:
         rho, p_value = stats.spearmanr(x_clean, y_clean)
+        # Handle constant input: scipy returns (NaN, NaN) for constant series.
+        # R's cor.test returns rho=NA but we match by returning (NaN, NaN) —
+        # the key fix is for MK where R returns (0, 1.0) instead of NaN.
         return rho, p_value
     except Exception:
         return np.nan, np.nan

@@ -11,6 +11,32 @@ For historical entries (Dec 2025 – March 2026), see [docs/CHANGELOG_ARCHIVE.md
 - Add ERA5/PRISM data fetching for USGS/HYDAT gages
 - Implement synchrony metrics (cross-correlation, lag analysis)
 
+### Mann-Kendall Tau-b Fix and n≤3 P-value Guard (April 2026)
+
+Two fixes to statistical functions improve cross-language alignment from 8 poor columns to 4.
+
+**Fix 1 (HIGH): Julia Mann-Kendall tau-b tie adjustment**
+Julia's `mann_kendall_test()` in `julia/src/stats.jl` was computing tau-a (S / n_pairs) instead of tau-b (S / sqrt((n_pairs - T_y) * n_pairs)), where T_y is the number of tied pairs in y. R's `Kendall::MannKendall` and Python's `scipy.stats.kendalltau` both compute tau-b. This caused divergence in any column with tied values (pulse metrics, percentiles with zero-flow years).
+
+**Fix 2 (LOW): n≤3 p-value guard in Python and Julia**
+R's `Kendall::MannKendall` fails for n≤3 with IFAULT=12 and returns p=1.0. Python's `scipy.stats.kendalltau` returns correct exact p-values for small n (e.g., p=0.333 for n=3). Added `if n <= 3: p_value = 1.0` in both Python (`python/streamflow_signatures/stats.py`) and Julia (`julia/src/stats.jl`) to match R's behavior.
+
+**Reverted: Constant-input MK fix** — Attempted changing (NaN, NaN) → (0.0, 1.0) for constant series in both Python and Julia. This caused severe regressions (n_low_pulses_all_mk_rho dropped from 0.98 to 0.47, Q1-Q30 mk_rho all regressed) because Julia/Python had constant annual values (all zeros) where R had tiny non-zero values from floating-point precision. Returning tau=0 instead of NaN created worse mismatches than NaN exclusion. Reverted after one benchmark cycle per Iron Rule.
+
+**Investigation confirmed non-issues:**
+- Recession OLS: Already identical across all 3 languages (R²=1.000000 for annual b/log_a values, max diff ≈ 5e-15)
+- FDC90th 28-gage NA mismatch: R's `lm()` produces tiny non-zero slopes (≈1e-15) for near-zero regressions while Python's `linregress()` produces exactly 0.0. Documented as irreducible.
+
+**Updated results (April 2026, post tau-b fix):**
+
+| Pair | Mean R² | Median R² | Min R² | Cols < 0.99 |
+|------|---------|-----------|--------|-------------|
+| R vs Python | 0.9990 | 1.0000 | 0.7621 | 4 |
+| R vs Julia | 0.9991 | 1.0000 | 0.7621 | 4 |
+| Python vs Julia | 0.9999 | 1.0000 | 0.9979 | 0 |
+
+542 perfect (R²>=0.999), 5 good (0.99-0.999), 4 poor (<0.99). 547 of 551 columns (99.3%) have R² >= 0.99. Remaining 4 poor columns are irreducible: 2 recession Spearman p-values (exact vs t-approximation for small n), 2 FDC90th p-values (28-gage NA mismatch from floating-point precision).
+
 ### R Canonical Alignment Fixes (April 2026)
 
 Three fixes to `R/helperFunctions.R` align R canonical's `process_signatures_from_parquet()` with Python/Julia benchmark behavior. Driven by diagnostic investigation after re-running benchmarks showed regression (41 poor cols vs previous 20).

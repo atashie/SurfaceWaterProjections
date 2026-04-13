@@ -1,14 +1,14 @@
 # Three-Way Cross-Language Comparison Report
 
-**Generated**: 2026-04-11 17:33:23
+**Generated**: 2026-04-12 21:58:11
 
 ## Input Files
 
 | File | Timestamp | Gages | Columns |
 |------|-----------|-------|---------|
 | R (`r_signatures.csv`) | 2026-04-11 17:33:03 | 5687 | 572 |
-| Python (`python_signatures.csv`) | 2026-04-10 07:59:28 | 7297 | 583 |
-| Julia (`julia_signatures.csv`) | 2026-04-07 14:57:37 | 7297 | 583 |
+| Python (`python_signatures.csv`) | 2026-04-12 19:58:50 | 7297 | 583 |
+| Julia (`julia_signatures.csv`) | 2026-04-12 15:33:18 | 7297 | 583 |
 
 **Common gages (all 3)**: 5,687
 **Common signature columns**: 551
@@ -17,20 +17,20 @@
 
 | Metric | Python | Julia | Ratio (Py/Jl) |
 |--------|--------|-------|---------------|
-| Total time | 48494s (808.2 min) | 1308s (21.8 min) | 37.1x |
+| Total time | 6874s (114.6 min) | 861s (14.4 min) | 8.0x |
 | Gages processed | 7,297 | 7,297 | - |
-| Processing rate | 0.15/s | 5.58/s | 37.1x faster |
+| Processing rate | 1.06/s | 8.47/s | 8.0x faster |
 | R benchmark | ~1-2 hours (estimated) | - | - |
 
 ### Phase Breakdown
 
 | Phase | Python | Julia |
 |-------|--------|-------|
-| filter_gages | 1550s | 374s |
-| load_climate | 82s | 24s |
-| load_streamflow | 19s | 18s |
-| metadata_qaqc_save | 4s | 24s |
-| process_signatures | 46840s | 868s |
+| filter_gages | 1501s | 297s |
+| load_climate | 77s | 69s |
+| load_streamflow | 20s | 25s |
+| metadata_qaqc_save | 4s | 14s |
+| process_signatures | 5272s | 456s |
 
 ## Overall Identity R² Summary
 
@@ -38,17 +38,17 @@ R² of the identity line (y = x): measures whether implementations produce identi
 
 | Pair | Mean R² | Median R² | Min R² | Cols < 0.99 | Cols < 0.95 | Cols < 0.90 |
 |------|---------|-----------|--------|-------------|-------------|-------------|
-| R vs Python | 0.997992 | 1.000000 | 0.7152 | 6 | 4 | 4 |
-| R vs Julia | 0.997742 | 1.000000 | 0.6886 | 8 | 4 | 4 |
-| Python vs Julia | 0.999715 | 1.000000 | 0.9797 | 2 | 0 | 0 |
+| R vs Python | 0.999005 | 1.000000 | 0.7621 | 4 | 2 | 2 |
+| R vs Julia | 0.999049 | 1.000000 | 0.7621 | 4 | 2 | 2 |
+| Python vs Julia | 0.999937 | 1.000000 | 0.9979 | 0 | 0 | 0 |
 
 ### Spearman Rank Correlation (secondary diagnostic)
 
 | Pair | Mean rho | Min rho | Cols < 0.99 |
 |------|----------|---------|-------------|
-| R vs Python | 0.999077 | 0.8529 | 4 |
-| R vs Julia | 0.999011 | 0.8374 | 4 |
-| Python vs Julia | 0.999948 | 0.9975 | 0 |
+| R vs Python | 0.999606 | 0.9073 | 2 |
+| R vs Julia | 0.999617 | 0.9077 | 2 |
+| Python vs Julia | 0.999984 | 0.9990 | 0 |
 
 ## Agreement by Signature Category
 
@@ -58,26 +58,22 @@ R² of the identity line (y = x): measures whether implementations produce identi
 | Elasticity | 9 | 9 | 0 | 0 | 1.0000 |
 | FDC | 24 | 20 | 2 | 2 | 0.9796 |
 | Flashiness | 8 | 8 | 0 | 0 | 0.9998 |
-| Flow Percentiles | 128 | 120 | 8 | 0 | 0.9916 |
+| Flow Percentiles | 128 | 128 | 0 | 0 | 0.9996 |
 | Flow Timing | 104 | 104 | 0 | 0 | 0.9994 |
-| Flow Volumes | 40 | 40 | 0 | 0 | 0.9996 |
-| Pulse Metrics | 112 | 101 | 9 | 2 | 0.9797 |
+| Flow Volumes | 40 | 40 | 0 | 0 | 0.9997 |
+| Pulse Metrics | 112 | 111 | 1 | 0 | 0.9988 |
 | Q-P Seasonality | 16 | 16 | 0 | 0 | 0.9996 |
-| Recession | 46 | 42 | 0 | 4 | 0.6886 |
-| Runoff Ratios | 40 | 40 | 0 | 0 | 0.9994 |
+| Recession | 46 | 44 | 0 | 2 | 0.7621 |
+| Runoff Ratios | 40 | 40 | 0 | 0 | 0.9996 |
 | Storage | 8 | 6 | 2 | 0 | 0.9977 |
 
-## Columns with min Identity R² < 0.99 (8 columns)
+## Columns with min Identity R² < 0.99 (4 columns)
 
 | Column | Category | R-Py R² | R-Jl R² | Py-Jl R² | R NA | Py NA | Jl NA |
 |--------|----------|---------|---------|----------|------|-------|-------|
-| `log_a_pointcloud_mk_pval` | Recession | 0.7152 | 0.6886 | 0.9983 | 4718 | 4718 | 4718 |
-| `b_pointcloud_mk_pval` | Recession | 0.7246 | 0.6994 | 0.9983 | 4718 | 4718 | 4718 |
 | `b_pointcloud_spearman_pval` | Recession | 0.7621 | 0.7621 | 1.0000 | 4718 | 4718 | 4718 |
 | `log_a_pointcloud_spearman_pval` | Recession | 0.7738 | 0.7738 | 1.0000 | 4718 | 4718 | 4718 |
 | `FDC90th_mk_pval` | FDC | 0.9796 | 0.9816 | 0.9979 | 569 | 597 | 597 |
-| `n_low_pulses_year_mk_rho` | Pulse Metrics | 1.0000 | 0.9797 | 0.9797 | 569 | 595 | 595 |
-| `n_low_pulses_all_mk_rho` | Pulse Metrics | 1.0000 | 0.9802 | 0.9802 | 569 | 844 | 844 |
 | `FDC90th_spearman_pval` | FDC | 0.9812 | 0.9823 | 0.9985 | 569 | 597 | 597 |
 
 ## NA Mismatch Analysis
@@ -101,31 +97,7 @@ Columns with >100 NA mismatches in any pair: **2**
 | Only Python | 0 |
 | Only Julia | 0 |
 
-## Deep Dive: Worst 8 Metrics
-
-### `log_a_pointcloud_mk_pval`
-
-**Identity R²**: R-Py=0.7152, R-Jl=0.6886, Py-Jl=0.9983
-**Spearman rho**: R-Py=0.8529, R-Jl=0.8374, Py-Jl=0.9988
-
-| Stat | R | Python | Julia |
-|------|---|--------|-------|
-| Min | 0.0007 | 0.0005 | 0.0007 |
-| Median | 0.7071 | 0.5484 | 0.5362 |
-| Max | 1.0000 | 1.0000 | 1.0000 |
-| NAs | 4718 | 4718 | 4718 |
-
-### `b_pointcloud_mk_pval`
-
-**Identity R²**: R-Py=0.7246, R-Jl=0.6994, Py-Jl=0.9983
-**Spearman rho**: R-Py=0.8554, R-Jl=0.8434, Py-Jl=0.9992
-
-| Stat | R | Python | Julia |
-|------|---|--------|-------|
-| Min | 0.0008 | 0.0002 | 0.0008 |
-| Median | 0.7105 | 0.6122 | 0.6022 |
-| Max | 1.0000 | 1.0000 | 1.0000 |
-| NAs | 4718 | 4718 | 4718 |
+## Deep Dive: Worst 4 Metrics
 
 ### `b_pointcloud_spearman_pval`
 
@@ -163,30 +135,6 @@ Columns with >100 NA mismatches in any pair: **2**
 | Max | 1.0000 | 1.0000 | 1.0000 |
 | NAs | 569 | 597 | 597 |
 
-### `n_low_pulses_year_mk_rho`
-
-**Identity R²**: R-Py=1.0000, R-Jl=0.9797, Py-Jl=0.9797
-**Spearman rho**: R-Py=1.0000, R-Jl=0.9977, Py-Jl=0.9977
-
-| Stat | R | Python | Julia |
-|------|---|--------|-------|
-| Min | -0.6614 | -0.6614 | -0.6367 |
-| Median | -0.0011 | -0.0021 | -0.0019 |
-| Max | 1.0000 | 0.7183 | 0.5605 |
-| NAs | 569 | 595 | 595 |
-
-### `n_low_pulses_all_mk_rho`
-
-**Identity R²**: R-Py=1.0000, R-Jl=0.9802, Py-Jl=0.9802
-**Spearman rho**: R-Py=1.0000, R-Jl=0.9992, Py-Jl=0.9992
-
-| Stat | R | Python | Julia |
-|------|---|--------|-------|
-| Min | -0.7581 | -0.7581 | -0.6831 |
-| Median | -0.0207 | -0.0343 | -0.0319 |
-| Max | 1.0000 | 0.7391 | 0.6302 |
-| NAs | 569 | 844 | 844 |
-
 ### `FDC90th_spearman_pval`
 
 **Identity R²**: R-Py=0.9812, R-Jl=0.9823, Py-Jl=0.9985
@@ -203,9 +151,9 @@ Columns with >100 NA mismatches in any pair: **2**
 
 | Agreement Level | Count | % |
 |-----------------|-------|---|
-| Perfect (R² >= 0.999) | 522 | 94.7% |
-| Good (0.99 <= R² < 0.999) | 21 | 3.8% |
-| Poor (R² < 0.99) | 8 | 1.5% |
+| Perfect (R² >= 0.999) | 542 | 98.4% |
+| Good (0.99 <= R² < 0.999) | 5 | 0.9% |
+| Poor (R² < 0.99) | 4 | 0.7% |
 | **Total compared** | **551** | **100%** |
 
 ---
