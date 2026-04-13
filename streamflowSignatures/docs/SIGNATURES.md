@@ -81,6 +81,7 @@ Analyzes recession curve behavior using dQ/dt = a*Q^b relationship.
 | **b_pointcloud** | Recession exponent (point cloud method) |
 | **b_events** | Recession exponent (event-based method) |
 | **concavity** | Difference in b between first and second halves of recession |
+| **n_recession_events** | Count of recession events per water year (independent of min_events gate) |
 | **log_a_seasonality_amplitude_all** | Seasonal amplitude in recession rate (all data) |
 | **log_a_seasonality_amplitude_first_half** | Seasonal amplitude (first half of record) |
 | **log_a_seasonality_amplitude_last_half** | Seasonal amplitude (last half of record) |
@@ -91,7 +92,9 @@ Analyzes recession curve behavior using dQ/dt = a*Q^b relationship.
 ### Notes
 - Seasonality metrics are single values (exceptions to 8-statistic rule)
 - Documented in `config.R` as `EXPECTED_RECESSION_SEASONALITY`
-- Requires minimum 25 recession events (`RECESSION_MIN_EVENTS`)
+- Requires minimum 25 recession events (`RECESSION_MIN_EVENTS`) for all metrics except `n_recession_events`
+- `n_recession_events` is computed independently of the min_events gate (useful for gages with few events)
+- Recession events are identified as contiguous windows where both Q and |dQ/dt| are monotonically decreasing, with a minimum length of 5 days
 
 ---
 
@@ -142,6 +145,7 @@ Baker, D.B., et al. (2004). A new flashiness index: characteristics and applicat
 
 | Metric | Description |
 |--------|-------------|
+| **D1_day** | Day of water year when cumulative flow reaches 1% |
 | **D5_day** | Day of water year when cumulative flow reaches 5% |
 | **D10_day** | Day of water year when cumulative flow reaches 10% |
 | **D20_day** | Day of water year when cumulative flow reaches 20% |
@@ -153,13 +157,15 @@ Baker, D.B., et al. (2004). A new flashiness index: characteristics and applicat
 | **D80_day** | Day of water year when cumulative flow reaches 80% |
 | **D90_day** | Day of water year when cumulative flow reaches 90% |
 | **D95_day** | Day of water year when cumulative flow reaches 95% |
+| **D99_day** | Day of water year when cumulative flow reaches 99% |
 | **D25_to_D75** | Duration between 25% and 75% cumulative flow (days) |
 | **Dmax** | Day of maximum flow |
 
 ### Notes
 - Day 1 = October 1 (start of water year)
 - Day 365/366 = September 30 (end of water year)
-- NAs in daily flow are treated as zero for cumulative sum calculations
+- D1 may be near-constant (day 1-2) for flashy streams; D99 may be ~364-365 — trend statistics may be unreliable for constant series
+- Percentiles are config-driven via `config/signatures_config.json` → `timing.d_percentiles`
 
 ---
 
@@ -179,6 +185,12 @@ Baker, D.B., et al. (2004). A new flashiness index: characteristics and applicat
 | **summer_runoff_ratio** | `summer_runoff_ratio` | Summer runoff ratio |
 | **fall_runoff_ratio** | `fall_runoff_ratio` | Fall runoff ratio |
 
+### Diagnostics
+
+| Metric | Description |
+|--------|-------------|
+| **runoff_ratio_high_count** | Count of years where annual runoff ratio > 2.0 (per-gage scalar) |
+
 ### PPT Thresholds
 - Annual: minimum 10mm PPT required (below returns NA)
 - Seasonal: minimum 1mm PPT required (below returns NA)
@@ -196,12 +208,27 @@ Baker, D.B., et al. (2004). A new flashiness index: characteristics and applicat
 | Metric | Description |
 |--------|-------------|
 | **elasticity_static** | Overall catchment elasticity (single value) |
-| **elasticity** | Rolling window (11-year) elasticity trend |
+| **elasticity_rolling** | Rolling window (11-year) elasticity trend (Sawicz departure-from-mean) |
+| **elasticity_annual** | Year-over-year elasticity trend (consecutive-year differences) |
 
-### Formula
+### Formulas
+
+**Departure-from-mean (elasticity_static, elasticity_rolling)**:
 ```
-E = (dQ/dP) / (Q_mean/P_mean)
+E_i = ((Q_i - Q_mean) / (P_i - P_mean)) / (Q_mean / P_mean)
 ```
+
+**Year-over-year (elasticity_annual)**:
+```
+E_t = ((Q_t - Q_{t-1}) / (P_t - P_{t-1})) / (Q_mean / P_mean)
+```
+
+### Diagnostics
+
+| Metric | Description |
+|--------|-------------|
+| **elasticity_years_total** | Total years available for this gage (per-gage scalar) |
+| **elasticity_years_low_ppt** | Years excluded due to annual PPT < 10mm (per-gage scalar) |
 
 ### Interpretation
 - E ~ 1.0: Proportional response to precipitation changes
@@ -210,7 +237,9 @@ E = (dQ/dP) / (Q_mean/P_mean)
 
 ### Notes
 - `elasticity_static` is a single value (exception to 8-statistic rule)
-- Documented in `config.R` as `EXPECTED_ELASTICITY_STATIC`
+- `elasticity_rolling` uses departure-from-mean within 11-year windows (Sawicz et al. 2011)
+- `elasticity_annual` uses consecutive-year differences for year-to-year sensitivity (NOT Sawicz method)
+- Diagnostics are per-gage scalars documented in `config.R` as `EXPECTED_ELASTICITY_DIAGNOSTICS`
 
 ### Reference
 Sawicz, K., et al. (2011). Catchment classification: empirical analysis of hydrologic similarity based on catchment function in the eastern USA.
@@ -279,12 +308,12 @@ Peters, N.E., & Aulenbach, B.T. (2011). Water storage at the Panola Mountain Res
 | Flow Volumes | `calculate_flow_vols_by_year` | No | 22 metrics (5 totals + 16 percentiles + Q95-Q10) |
 | FDC | `analyze_fdc_trends_from_streamflow` | No | 3 metrics (FDCall, FDC90th, FDCmid) |
 | Baseflow | `analyze_baseflow_indices` | No | 2 metrics |
-| Recession | `analyze_recession_parameters` | No | 5 metrics + 6 seasonality |
+| Recession | `analyze_recession_parameters` | No | 6 metrics + 6 seasonality |
 | Pulse Metrics | `calculate_pulse_metrics` | No | 15 metrics |
 | Flashiness | `analyze_flashiness_trends` | No | 1 metric |
-| Flow Timing | `analyze_flow_timing_trends` | No | 13 metrics |
-| Q-PPT Relationships | `analyze_Q_PPT_relationships` | Yes | 5 metrics |
-| Elasticity | `calculate_streamflow_elasticity` | Yes | 1 metric + 1 static |
+| Flow Timing | `analyze_flow_timing_trends` | No | 15 metrics |
+| Q-PPT Relationships | `analyze_Q_PPT_relationships` | Yes | 5 metrics + 1 diagnostic |
+| Elasticity | `calculate_streamflow_elasticity` | Yes | 2 metrics + 1 static + 2 diagnostics |
 | Q-P Seasonality | `calculate_qp_seasonality` | Yes | 2 metrics |
 | Average Storage | `calculate_average_storage` | Yes | 1 metric |
 | Negative Flow Days | `calculate_negative_days` | No | 1 metric (negative_ann) |

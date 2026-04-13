@@ -10,6 +10,33 @@ For historical entries (Dec 2025 – March 2026), see [docs/CHANGELOG_ARCHIVE.md
 - Complete `analyze_Q_PPT_relationships()` for raw data pipeline
 - Add ERA5/PRISM data fetching for USGS/HYDAT gages
 - Implement synchrony metrics (cross-correlation, lag analysis)
+- Recession-informed BFI (Collischonn & Fan 2013) — deferred from Section 3 review
+- Sync R/Python with Julia Section 3 changes (D1/D99, recession fix, n_recession_events, elasticity rename/annual, runoff ratio flag, diagnostics)
+
+### Guidelines Section 3 Alignment — Julia-First (April 2026)
+
+Six changes implementing Guidelines Document Section 3 function review. Julia-first; R/Python sync pending.
+
+**Step 1 (LOW): Add D1 and D99 flow timing percentiles**
+Added `1` and `99` to `d_percentiles` in `config/signatures_config.json`. Julia's `timing.jl` reads config dynamically — also fixed hardcoded DataFrame pre-allocation to use config-driven column creation. 16 new columns (`D1_day_*`, `D99_day_*`). Caveat: D1 may be near-constant for flashy streams; D99 may always be ~364-365.
+
+**Step 2 (MEDIUM): Fix recession event detection algorithm**
+Replaced look-ahead algorithm in `julia/src/recession.jl` `identify_recession_events()` with position-level marking. The old algorithm checked if the NEXT `min_length` days met criteria, which truncated events by up to `min_length` days from their true end. New algorithm marks each position where both criteria hold (Q decreasing AND |dQ/dt| decreasing), then finds contiguous runs >= `min_length`. Preserves inclusive-inclusive `(start, end)` tuple semantics. R/Python still have old algorithm — will diverge on recession metrics until synced.
+
+**Step 3 (LOW): Add n_recession_events signature**
+New `n_recession_events` column in `analyze_recession_parameters()` counting recession events per water year. Computed INDEPENDENTLY of the `min_events=25` gate — event counts are most informative for gages with few events. 8 new columns. Added to `EXPECTED_SIGNATURE_BASES` in `config.R`.
+
+**Step 4 (LOW): Add runoff_ratio_high_count flag**
+New per-gage scalar in `analyze_Q_PPT_relationships()` counting years where annual runoff ratio > 2.0. Registered as schema exception `EXPECTED_RUNOFF_RATIO_HIGH` in `config.R`.
+
+**Step 5 (MEDIUM): Rename elasticity → elasticity_rolling + add elasticity_annual**
+- Renamed rolling-window metric from `elasticity` → `elasticity_rolling` (8 cols renamed). Uses Sawicz et al. (2011) departure-from-mean method.
+- Added `elasticity_annual`: year-over-year consecutive-difference method. Formula: `E_t = ((Q_t - Q_{t-1}) / (P_t - P_{t-1})) / (Q_mean / P_mean)`. 8 new columns. Breaking rename: downstream tools, R, Python need updating.
+
+**Step 6 (LOW): Add elasticity data quality diagnostics**
+New per-gage scalars `elasticity_years_total` and `elasticity_years_low_ppt` in `calculate_streamflow_elasticity()`. Registered as schema exception `EXPECTED_ELASTICITY_DIAGNOSTICS` in `config.R`.
+
+**Net impact**: +32 new stat columns, 8 renamed, 3 scalar diagnostics = 594 total columns (was 551).
 
 ### Guidelines Alignment — Negative Q, Constant-SD, Ice Tracking (April 2026)
 
