@@ -95,18 +95,8 @@ def count_flow_reversals(
     int
         Number of flow reversals
     """
-    # Interpolate NA gaps to avoid false adjacencies
-    if np.any(np.isnan(flow)):
-        non_na_idx = np.where(~np.isnan(flow))[0]
-        if len(non_na_idx) < 3:
-            return 0
-        flow_clean = np.interp(
-            np.arange(len(flow)),
-            non_na_idx,
-            flow[non_na_idx]
-        )
-    else:
-        flow_clean = flow.copy()
+    # Preprocessor guarantees no NAs in valid years
+    flow_clean = flow.copy()
 
     n = len(flow_clean)
     if n < 3:
@@ -281,3 +271,35 @@ def calculate_pulse_metrics(
         trend_completeness=trend_completeness,
         decade_completeness=decade_completeness,
     )
+
+
+def calculate_negative_days(
+    streamflow_data: pd.DataFrame,
+    trend_completeness: Optional[float] = None,
+    decade_completeness: Optional[float] = None,
+) -> Dict[str, float]:
+    """Count days with negative streamflow per water year."""
+    results = {}
+    if "Q" not in streamflow_data.columns or "water_year" not in streamflow_data.columns:
+        # Return NaN for all 8 stats
+        for suffix in [
+            "_senn_slp", "_linear_slp", "_spearman_rho", "_spearman_pval",
+            "_mk_rho", "_mk_pval", "_mean", "_median",
+        ]:
+            results[f"negative_ann{suffix}"] = np.nan
+        return results
+
+    annual = (
+        streamflow_data.groupby("water_year")
+        .apply(lambda g: (g["Q"] < 0).sum())
+        .reset_index(name="negative_ann")
+    )
+
+    results.update(
+        generate_stats(
+            annual, value_cols=["negative_ann"],
+            trend_completeness=trend_completeness,
+            decade_completeness=decade_completeness,
+        )
+    )
+    return results

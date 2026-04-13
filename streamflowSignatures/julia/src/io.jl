@@ -195,10 +195,10 @@ function preprocess_daily_data(
     valid_climate_years = Int[]
     rejected_rows = NamedTuple{(:water_year, :reason), Tuple{Int, String}}[]
     seasonal_rows = NamedTuple{(:water_year, :win_complete, :spr_complete, :sum_complete, :fal_complete), Tuple{Int, Bool, Bool, Bool, Bool}}[]
-    diag_rows = NamedTuple{(:water_year, :na_count, :max_na_run, :interpolated_count, :negative_flag, :constant_sd_flag), Tuple{Int, Int, Int, Int, Bool, Bool}}[]
+    diag_rows = NamedTuple{(:water_year, :na_count, :max_na_run, :interpolated_count, :negative_flag, :constant_sd_flag, :na_cause_ice, :na_cause_other), Tuple{Int, Int, Int, Int, Bool, Bool, Int, Int}}[]
 
-    # Season month mapping
-    season_months = Dict("win" => [12, 1, 2], "spr" => [3, 4, 5], "sum" => [6, 7, 8], "fal" => [9, 10, 11])
+    # Season month mapping (from config)
+    season_months = CFG_NA_SEASON_MONTHS
 
     # Collect all cleaned year DataFrames
     cleaned_dfs = DataFrame[]
@@ -258,14 +258,14 @@ function preprocess_daily_data(
 
         # Seasonal completeness from RAW data
         raw_months = joined.month
-        win_obs = count(i -> raw_months[i] in [12, 1, 2] && !isnan(Q[i]), 1:length(Q))
-        spr_obs = count(i -> raw_months[i] in [3, 4, 5] && !isnan(Q[i]), 1:length(Q))
-        sum_obs = count(i -> raw_months[i] in [6, 7, 8] && !isnan(Q[i]), 1:length(Q))
-        fal_obs = count(i -> raw_months[i] in [9, 10, 11] && !isnan(Q[i]), 1:length(Q))
-        win_expected = count(m -> m in [12, 1, 2], raw_months)
-        spr_expected = count(m -> m in [3, 4, 5], raw_months)
-        sum_expected = count(m -> m in [6, 7, 8], raw_months)
-        fal_expected = count(m -> m in [9, 10, 11], raw_months)
+        win_obs = count(i -> raw_months[i] in season_months["win"] && !isnan(Q[i]), 1:length(Q))
+        spr_obs = count(i -> raw_months[i] in season_months["spr"] && !isnan(Q[i]), 1:length(Q))
+        sum_obs = count(i -> raw_months[i] in season_months["sum"] && !isnan(Q[i]), 1:length(Q))
+        fal_obs = count(i -> raw_months[i] in season_months["fal"] && !isnan(Q[i]), 1:length(Q))
+        win_expected = count(m -> m in season_months["win"], raw_months)
+        spr_expected = count(m -> m in season_months["spr"], raw_months)
+        sum_expected = count(m -> m in season_months["sum"], raw_months)
+        fal_expected = count(m -> m in season_months["fal"], raw_months)
         win_complete = win_expected > 0 && (win_obs / win_expected) >= seasonal_min_fraction
         spr_complete = spr_expected > 0 && (spr_obs / spr_expected) >= seasonal_min_fraction
         sum_complete = sum_expected > 0 && (sum_obs / sum_expected) >= seasonal_min_fraction
@@ -304,6 +304,7 @@ function preprocess_daily_data(
             push!(rejected_rows, (water_year=yr, reason="negative_flow"))
             rejected = true
         end
+        # constant_sd_flag is tracked in diagnostics but no longer causes rejection
 
         interpolated_count = 0
 
@@ -348,8 +349,22 @@ function preprocess_daily_data(
             end
         end
 
+        # NA-cause tracking (ice-affected days from USGS qualifier flags)
+        na_cause_ice = 0
+        na_cause_other = 0
+        if na_count > 0 && "flag" in names(joined)
+            na_mask = isnan.(Q)
+            na_flags = joined.flag[na_mask]
+            for f in na_flags
+                if !ismissing(f) && occursin(r"[Ii]ce", string(f))
+                    na_cause_ice += 1
+                end
+            end
+            na_cause_other = na_count - na_cause_ice
+        end
+
         # Record diagnostics
-        push!(diag_rows, (water_year=yr, na_count=na_count, max_na_run=max_na_run, interpolated_count=interpolated_count, negative_flag=negative_flag, constant_sd_flag=constant_sd_flag))
+        push!(diag_rows, (water_year=yr, na_count=na_count, max_na_run=max_na_run, interpolated_count=interpolated_count, negative_flag=negative_flag, constant_sd_flag=constant_sd_flag, na_cause_ice=na_cause_ice, na_cause_other=na_cause_other))
         push!(seasonal_rows, (water_year=yr, win_complete=win_complete, spr_complete=spr_complete, sum_complete=sum_complete, fal_complete=fal_complete))
 
         if rejected

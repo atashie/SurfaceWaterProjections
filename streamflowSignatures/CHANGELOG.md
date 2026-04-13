@@ -11,6 +11,52 @@ For historical entries (Dec 2025 – March 2026), see [docs/CHANGELOG_ARCHIVE.md
 - Add ERA5/PRISM data fetching for USGS/HYDAT gages
 - Implement synchrony metrics (cross-correlation, lag analysis)
 
+### Guidelines Alignment — Negative Q, Constant-SD, Ice Tracking (April 2026)
+
+Three changes aligning code with user decisions on guidelines interpretation. All 3 codebases (R, Python, Julia) updated.
+
+**Change 1 (MEDIUM): Constant-SD → flag only, never reject**
+Removed constant-SD year rejection from `preprocess_daily_data()` in R, Python, and Julia. The per-month uniqueness check remains as a QA diagnostic in all 3 languages (`constant_sd_months`/`constant_sd_flag` in diagnostics). Years previously rejected for constant SD are now retained. This reverses NA Audit Fix 1 from earlier in April 2026 — user decided even 30+ consecutive identical days should only be flagged, not rejected.
+
+**Change 2 (MEDIUM): Make negative-Q rejection config-driven + add `negative_ann` signature**
+- Negative-Q year rejection is now conditional on `reject_negative_flow` in config (currently `false`). The `reject_negative` variable was previously dead code in all 3 languages — now properly wired into the rejection chain.
+- Hardcoded fallback defaults changed from `true`/`TRUE` to `false`/`FALSE` in all 3 languages (R line 824, Python `config.py` line 135, Julia `config.jl` line 129) so behavior is consistent whether or not the config key is present.
+- Added `calculate_negative_days()` function (R: `helperFunctions.R`, Python: `pulses.py`, Julia: `pulses.jl`): counts days with Q < 0 per water year, processed through `generate_stats()` for 8 statistics (`negative_ann_*`).
+- Registered in signature orchestration (`process_signatures_from_parquet()` in R, `signatures.py`, `signatures.jl`).
+- Added `"negative_ann"` to `EXPECTED_SIGNATURE_BASES` in `config.R`.
+
+**Change 3 (LOW): Per-gage ice-affected day total in output**
+- R: Added `ice_affected_days_total` column to `gage_row` in `process_signatures_from_parquet()`, summing `na_cause_ice` from preprocessor diagnostics.
+- Python/Julia: Added same aggregation in benchmark runners (`run_python_benchmark.py`, `run_julia_benchmark.jl`).
+
+**Change 4 (LOW): Julia season definitions from config**
+Julia's `preprocess_daily_data()` previously hardcoded season month definitions. Now reads from `config/signatures_config.json` via new `CFG_NA_SEASON_MONTHS` constant in `julia/src/config.jl`, matching R and Python behavior.
+
+**Change 5 (LOW): Julia `generate_stats()` short-data NaN fill**
+Julia's `generate_stats()` returned an empty Dict when `nrow(df) < min_rows`, breaking the schema contract (callers expect all 8 stats per column). Now returns NaN for all 8 stats per column, matching R and Python.
+
+### NA Handling Audit Fixes (April 2026)
+
+Six fixes from Codex NA handling audit aligning code with `SIGNATURE_GUIDELINES.md` requirements. All 4 codebases (R, rpkg, Python, Julia) updated where applicable.
+
+**Fix 1 (MEDIUM): Constant-SD year rejection**
+Changed constant-SD from QA flag only to year rejection criterion, matching guidelines requirement that years with constant monthly standard deviations during non-zero flow be excluded. Added rejection logic after negative-flow check in `preprocess_daily_data()` across R, Python, and Julia.
+
+**Fix 2 (LOW): NA-cause ice tracking**
+Added per-year tracking of ice-affected NA days (from USGS qualifier flags) vs other NA causes. New `na_cause_ice` and `na_cause_other` fields in diagnostics output. Implemented in R (`R/helperFunctions.R`), Python (`python/streamflow_signatures/io.py`), and Julia (`julia/src/io.jl`).
+
+**Fix 3 (LOW): seasonal_flags passthrough to runoff ratios**
+Python and Julia `analyze_Q_PPT_relationships()` now accept and apply `seasonal_flags` to NaN-out incomplete-season runoff ratios, matching R canonical. Updated callers in `signatures.py`/`signatures.jl`.
+
+**Fix 5 (LOW): Constant-SD detection filters Q > 0**
+Python's constant-SD monthly check now filters to `Q > 0` before testing uniqueness, matching R/Julia behavior. Prevents zero-flow days from masking truly constant sensor readings.
+
+**Fix 6 (LOW): Remove dead ad-hoc NA interpolation**
+Removed legacy per-signature NA interpolation code from flashiness and pulse functions across Python and Julia. This code was dead — `preprocess_daily_data()` guarantees zero NAs in valid years — but was misleading. R's flashiness interpolation (4 lines) and pulse flow-reversal interpolation also cleaned up.
+
+**Fix 8 (LOW): Guidelines seasonal completeness threshold**
+Updated `docs/SIGNATURE_GUIDELINES.md` line 88 from "≥68%" to "≥80%" to match the actual config value in `config/signatures_config.json`.
+
 ### Mann-Kendall Tau-b Fix and n≤3 P-value Guard (April 2026)
 
 Two fixes to statistical functions improve cross-language alignment from 8 poor columns to 4.

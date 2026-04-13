@@ -137,7 +137,7 @@ def read_parquet(
         if "prcp" in df.columns and "PPT" not in df.columns:
             rename_map["prcp"] = "PPT"
         if rename_map:
-            df = df.rename(columns=rename_map)
+            df.rename(columns=rename_map, inplace=True)
 
         # Ensure date column is datetime
         if "date" in df.columns and not pd.api.types.is_datetime64_any_dtype(df["date"]):
@@ -490,12 +490,22 @@ def preprocess_daily_data(
         if const_sd_enabled:
             for m in range(1, 13):
                 m_mask = yr_data["month"] == m
-                m_q = yr_data.loc[m_mask, "Q"].dropna()
+                m_q = yr_data.loc[m_mask & (yr_data["Q"] > 0), "Q"].dropna()
                 if len(m_q) >= const_sd_min_days:
                     n_unique = m_q.nunique()
                     if n_unique <= const_sd_max_unique:
                         constant_sd_flag = True
                         break
+
+        # NA-cause tracking (ice-affected days from USGS qualifier flags)
+        na_cause_ice = 0
+        na_cause_other = 0
+        if raw_na_count > 0 and "flag" in yr_data.columns:
+            na_rows = yr_data.loc[yr_data["Q"].isna()]
+            if len(na_rows) > 0 and "flag" in na_rows.columns:
+                na_flags = na_rows["flag"].fillna("")
+                na_cause_ice = int(na_flags.str.contains("Ice|ice", case=False, regex=True).sum())
+                na_cause_other = raw_na_count - na_cause_ice
 
         diag = {
             "water_year": wy,
@@ -504,6 +514,8 @@ def preprocess_daily_data(
             "negative_flag": negative_flag,
             "constant_sd_flag": constant_sd_flag,
             "post_interp_na_count": raw_na_count,  # updated after interp
+            "na_cause_ice": na_cause_ice,
+            "na_cause_other": na_cause_other,
         }
 
         # --- (c) Reject years ---

@@ -85,4 +85,4 @@ Minimum data thresholds: 250 days for baseflow/pulses, 300 days for timing metri
 
 ## 9. Implementation Notes
 
-Data filtering requires handling frozen days (USGS flags), missing values, and non-zero flow thresholds. Minimum valid years typically range 10-15 depending on metric complexity. Seasonal aggregations demand ≥68% data availability per period.
+Data filtering requires handling frozen days (USGS flags), missing values, and non-zero flow thresholds. Minimum valid years typically range 10-15 depending on metric complexity. Seasonal aggregations require ≥80% data availability per period (from config).

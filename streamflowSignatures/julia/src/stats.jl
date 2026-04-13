@@ -251,7 +251,19 @@ function generate_stats(
     result = Dict{String, Float64}()
 
     if nrow(df) < min_rows
-        # Return empty dict - caller should handle
+        # Determine columns to fill with NaN
+        if value_cols === nothing
+            cols_to_fill = [name for name in names(df)
+                           if eltype(df[!, name]) <: Real &&
+                              String(name) != String(year_col)]
+        else
+            cols_to_fill = String.(value_cols)
+        end
+        for col in cols_to_fill
+            for suffix in STAT_SUFFIXES
+                result["$(col)$(suffix)"] = NaN
+            end
+        end
         return result
     end
 

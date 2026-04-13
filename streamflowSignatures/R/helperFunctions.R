@@ -821,7 +821,7 @@ preprocess_daily_data <- function(gage_flow, config = NULL) {
   # Defaults matching the JSON config
   max_gap_days <- if (!is.null(config$interpolation$max_gap_days)) config$interpolation$max_gap_days else 3L
   max_raw_na <- if (!is.null(config$year_rejection$max_raw_na_per_year)) config$year_rejection$max_raw_na_per_year else 30L
-  reject_negative <- if (!is.null(config$year_rejection$reject_negative_flow)) config$year_rejection$reject_negative_flow else TRUE
+  reject_negative <- if (!is.null(config$year_rejection$reject_negative_flow)) config$year_rejection$reject_negative_flow else FALSE
   reject_residual <- if (!is.null(config$year_rejection$reject_residual_na)) config$year_rejection$reject_residual_na else TRUE
   constant_sd_enabled <- if (!is.null(config$constant_sd_flag$enabled)) config$constant_sd_flag$enabled else TRUE
   constant_sd_min_days <- if (!is.null(config$constant_sd_flag$min_nonzero_days_per_month)) config$constant_sd_flag$min_nonzero_days_per_month else 15L
@@ -881,6 +881,19 @@ preprocess_daily_data <- function(gage_flow, config = NULL) {
     q_vals <- wy_data$Q
     raw_na_count <- sum(is.na(q_vals))
 
+    # Track USGS/HYDAT qualifier codes for NA days (ice-affected, etc.)
+    na_cause_ice <- 0L
+    na_cause_other <- 0L
+    if ("flag" %in% names(wy_data) && raw_na_count > 0) {
+      na_rows <- wy_data[is.na(Q)]
+      if (nrow(na_rows) > 0 && "flag" %in% names(na_rows)) {
+        na_flags <- na_rows$flag
+        # USGS ice-affected codes: "P Ice", "Ice"
+        na_cause_ice <- sum(grepl("Ice|ice", na_flags, ignore.case = FALSE), na.rm = TRUE)
+        na_cause_other <- raw_na_count - na_cause_ice
+      }
+    }
+
     # Longest consecutive NA run
     raw_max_na_run <- 0L
     if (raw_na_count > 0) {
@@ -936,7 +949,8 @@ preprocess_daily_data <- function(gage_flow, config = NULL) {
         water_year = wy, raw_na_count = raw_na_count,
         raw_max_na_run = raw_max_na_run, interpolated_count = 0L,
         residual_na_count = raw_na_count, negative_flag = negative_flag,
-        constant_sd_months = constant_sd_months
+        constant_sd_months = constant_sd_months,
+        na_cause_ice = na_cause_ice, na_cause_other = na_cause_other
       )
       seasonal_list[[length(seasonal_list) + 1L]] <- as.data.table(season_flags)
       # Remove this year's data from gage_flow
@@ -995,7 +1009,8 @@ preprocess_daily_data <- function(gage_flow, config = NULL) {
         interpolated_count = interpolated_count,
         residual_na_count = residual_na_count,
         negative_flag = negative_flag,
-        constant_sd_months = constant_sd_months
+        constant_sd_months = constant_sd_months,
+        na_cause_ice = na_cause_ice, na_cause_other = na_cause_other
       )
       seasonal_list[[length(seasonal_list) + 1L]] <- as.data.table(season_flags)
       next
@@ -1065,7 +1080,8 @@ preprocess_daily_data <- function(gage_flow, config = NULL) {
       interpolated_count = interpolated_count,
       residual_na_count = residual_na_count,
       negative_flag = negative_flag,
-      constant_sd_months = constant_sd_months
+      constant_sd_months = constant_sd_months,
+      na_cause_ice = na_cause_ice, na_cause_other = na_cause_other
     )
     seasonal_list[[length(seasonal_list) + 1L]] <- as.data.table(season_flags)
 
@@ -1086,7 +1102,8 @@ preprocess_daily_data <- function(gage_flow, config = NULL) {
   diagnostics <- if (length(diag_list) > 0) rbindlist(diag_list) else data.table(
     water_year = integer(0), raw_na_count = integer(0), raw_max_na_run = integer(0),
     interpolated_count = integer(0), residual_na_count = integer(0),
-    negative_flag = logical(0), constant_sd_months = integer(0)
+    negative_flag = logical(0), constant_sd_months = integer(0),
+    na_cause_ice = integer(0), na_cause_other = integer(0)
   )
   seasonal_flags <- if (length(seasonal_list) > 0) rbindlist(seasonal_list, fill = TRUE) else data.table(
     water_year = integer(0), winter_complete = logical(0), spring_complete = logical(0),
@@ -1625,11 +1642,6 @@ analyze_flashiness_trends <- function(streamflow_data,
     # Calculate RB index: sum of absolute day-to-day changes divided by total flow
     q_values <- year_data$Q
 
-    # Interpolate any residual missing values
-    if (sum(is.na(q_values)) > 0) {
-      q_values <- approx(1:length(q_values), q_values, 1:length(q_values), rule=2)$y
-    }
-    
     # Calculate absolute day-to-day changes
     q_diff <- abs(diff(q_values))
 
@@ -1658,7 +1670,17 @@ analyze_flashiness_trends <- function(streamflow_data,
   return(result)
 }
 
-
+#' Calculate annual count of negative-flow days
+#'
+#' @param streamflow_data data.table with columns water_year and Q
+#' @param trend_completeness passed to generate_stats
+#' @param decade_completeness passed to generate_stats
+#' @return Named list of 8 statistics for negative_ann
+calculate_negative_days <- function(streamflow_data, trend_completeness = NULL, decade_completeness = NULL) {
+  annual <- streamflow_data[, .(negative_ann = sum(Q < 0, na.rm = TRUE)), by = water_year]
+  generate_stats(annual, value_cols = "negative_ann", year_col = "water_year",
+                 trend_completeness = trend_completeness, decade_completeness = decade_completeness)
+}
 
 
 analyze_flow_timing_trends <- function(streamflow_data,
@@ -1825,16 +1847,8 @@ calculate_pulse_metrics <- function(streamflow_data,
   
   # Function to count flow reversals
   count_flow_reversals <- function(flow_vector, threshold_pct = 0.02) {
-    # Interpolate small NA gaps instead of removing them,
-    # to avoid creating false adjacencies between non-adjacent days
-    if (any(is.na(flow_vector))) {
-      non_na_idx <- which(!is.na(flow_vector))
-      if (length(non_na_idx) < 3) return(0)
-      flow_clean <- approx(non_na_idx, flow_vector[non_na_idx],
-                            xout = seq_len(length(flow_vector)), rule = 2)$y
-    } else {
-      flow_clean <- flow_vector
-    }
+    # Preprocessor guarantees no NAs in valid years
+    flow_clean <- flow_vector
     n <- length(flow_clean)
     
     if (n < 3) return(0)
@@ -4668,7 +4682,7 @@ process_signatures_from_parquet <- function(
 
   # Per-metric success counters (for R5 coverage tracking)
   all_metric_names <- c("flow_vols", "fdc_trends", "flashiness", "flow_timing",
-                        "pulses", "baseflow", "recession",
+                        "pulses", "baseflow", "negative_days", "recession",
                         "qtoppt", "elasticity", "qp_seasonality", "avg_storage")
   metric_success <- setNames(integer(length(all_metric_names)), all_metric_names)
 
@@ -4889,6 +4903,8 @@ process_signatures_from_parquet <- function(
         }
       }
 
+      diagnostics <- NULL  # Will be set by preprocessor if available
+
       if (!use_legacy) {
         # ===== NEW: Centralized pre-processing =====
         preprocess_result <- tryCatch({
@@ -4903,6 +4919,7 @@ process_signatures_from_parquet <- function(
           water_years_to_use <- preprocess_result$valid_years
           valid_climate_years <- preprocess_result$valid_climate_years
           seasonal_flags <- preprocess_result$seasonal_flags
+          diagnostics <- preprocess_result$diagnostics
           streamflow_data_filtered <- preprocess_result$data
 
           # preprocess_daily_data() is the single source of truth for year qualification.
@@ -4980,7 +4997,8 @@ process_signatures_from_parquet <- function(
         list(name = "flashiness", fn = analyze_flashiness_trends,              label = "Flashiness"),
         list(name = "flow_timing",fn = analyze_flow_timing_trends,             label = "Flow timing"),
         list(name = "pulses",     fn = calculate_pulse_metrics,                label = "Pulse metrics"),
-        list(name = "baseflow",   fn = analyze_baseflow_indices,               label = "Baseflow indices")
+        list(name = "baseflow",   fn = analyze_baseflow_indices,               label = "Baseflow indices"),
+        list(name = "negative_days", fn = calculate_negative_days,             label = "Negative days")
       )
 
       for (spec in non_climate_specs) {
@@ -5071,7 +5089,9 @@ process_signatures_from_parquet <- function(
         CLASS = if ("CLASS" %in% names(gage_meta)) gage_meta$CLASS else NA_character_,
         RHBN = if ("RHBN" %in% names(gage_meta)) gage_meta$RHBN else NA,
         REGULATED = if ("REGULATED" %in% names(gage_meta)) gage_meta$REGULATED else NA,
-        human_interference_class = if ("human_interference_class" %in% names(gage_meta)) gage_meta$human_interference_class else NA_character_
+        human_interference_class = if ("human_interference_class" %in% names(gage_meta)) gage_meta$human_interference_class else NA_character_,
+        ice_affected_days_total = if (!is.null(diagnostics) && "na_cause_ice" %in% names(diagnostics))
+          sum(diagnostics$na_cause_ice, na.rm = TRUE) else NA_integer_
       )
       
       # Add calculated metrics

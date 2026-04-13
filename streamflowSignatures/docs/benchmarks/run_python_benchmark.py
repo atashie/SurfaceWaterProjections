@@ -213,6 +213,11 @@ def main():
         signatures["end_water_year"] = max(qual_years) if qual_years else np.nan
         signatures["num_water_years"] = len(qual_years)
 
+        # Add per-gage ice-affected day total from diagnostics
+        if not use_legacy and gage_id in preprocess_cache:
+            pp_diag = preprocess_cache[gage_id].get("diagnostics", [])
+            signatures["ice_affected_days_total"] = sum(d.get("na_cause_ice", 0) for d in pp_diag)
+
         all_results.append(signatures)
 
     t1 = time.perf_counter()

@@ -43,11 +43,13 @@ Other `helperFunctions*.R` files in `archive/` are deprecated.
 3. **Flow Units**: mm/day (converted from cfs/m3s)
 4. **Minimum Data Requirements**:
    - 20+ water years per gage
-   - Year qualification via `preprocess_daily_data()`: rejects years with >30 NAs, >3-day gaps, negative Q
+   - Year qualification via `preprocess_daily_data()`: rejects years with >30 NAs, >3-day gaps; negative Q rejection conditional on `reject_negative_flow` config (default: false)
    - No per-signature min_days thresholds — preprocessor is single source of truth
    - No additional min_Q_value_and_days filter in non-legacy path (removed April 2026 — was causing R to diverge from Python/Julia by excluding low-flow years)
 5. **NA Handling** (April 2026): `preprocess_daily_data()` runs ONCE per gage BEFORE signatures.
-   - Interpolates internal gaps <= 3 days; rejects years with >30 raw NAs, >3-day gaps, negative Q
+   - Interpolates internal gaps <= 3 days; rejects years with >30 raw NAs, >3-day gaps
+   - Negative Q rejection is config-driven (`reject_negative_flow: false` by default); `negative_ann` signature counts Q<0 days instead
+   - Constant-SD is a QA flag only (never causes year rejection)
    - Config: `config/signatures_config.json` → `na_handling` section
    - `use_legacy_filtering: false` — new preprocessing is the default
    - Do NOT use fillna(0) in signature functions — the preprocessor handles NAs centrally

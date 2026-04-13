@@ -77,13 +77,19 @@ function calculate_all_signatures(
         @warn "calculate_pulse_metrics failed for gage $gage_id" exception=(e, catch_backtrace())
     end
 
+    try
+        merge!(results, calculate_negative_days(gage_data; trend_completeness=tc, decade_completeness=dc))
+    catch e
+        @warn "calculate_negative_days failed for gage $gage_id" exception=(e, catch_backtrace())
+    end
+
     # Climate-dependent signatures — use climate_data if provided (filtered to valid climate years),
     # otherwise fall back to gage_data (legacy path)
     if has_climate
         cdata = climate_data !== nothing ? climate_data : gage_data
         if "PPT" in names(cdata)
             try
-                merge!(results, analyze_Q_PPT_relationships(cdata; trend_completeness=tc, decade_completeness=dc))
+                merge!(results, analyze_Q_PPT_relationships(cdata; seasonal_flags=seasonal_flags, trend_completeness=tc, decade_completeness=dc))
             catch e
                 @warn "analyze_Q_PPT_relationships failed for gage $gage_id" exception=(e, catch_backtrace())
             end

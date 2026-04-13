@@ -287,6 +287,7 @@ Peters, N.E., & Aulenbach, B.T. (2011). Water storage at the Panola Mountain Res
 | Elasticity | `calculate_streamflow_elasticity` | Yes | 1 metric + 1 static |
 | Q-P Seasonality | `calculate_qp_seasonality` | Yes | 2 metrics |
 | Average Storage | `calculate_average_storage` | Yes | 1 metric |
+| Negative Flow Days | `calculate_negative_days` | No | 1 metric (negative_ann) |
 
 ---
 
@@ -306,7 +307,7 @@ Missing data is now handled centrally by `preprocess_daily_data()`, called once 
 
 1. **Daily grid normalization**: One row per calendar day per water year, sorted, duplicates removed
 2. **Interpolation**: Internal gaps of <=3 consecutive days are linearly interpolated. Leading/trailing (boundary) NAs are NOT interpolated.
-3. **Year rejection**: Years with >30 raw NAs, >3-day gaps, negative Q values, or residual boundary NAs are excluded
+3. **Year rejection**: Years with >30 raw NAs, >3-day gaps, or residual boundary NAs are excluded. Negative Q rejection is conditional on `reject_negative_flow` config (default: false)
 4. **Seasonal completeness**: Computed from raw (pre-interpolation) observation counts. Seasons below 80% completeness are flagged; affected seasonal metrics are set to NA
 5. **Climate NA policy**: PPT/SWE/temp have their own NA limits, tracked separately. A year can be valid for Q-only signatures but invalid for Q-PPT signatures.
 6. **Constant-SD flag**: Detects months with a single unique non-zero Q value (sensor flatline). This is a QA flag, not a rejection criterion.

@@ -5,7 +5,7 @@ Calculates annual and seasonal runoff ratios (Q/P).
 Requires precipitation (PPT) data.
 """
 
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 import numpy as np
 import pandas as pd
 from .stats import generate_stats
@@ -14,6 +14,7 @@ from .config import RUNOFF_MIN_ANNUAL_PPT, RUNOFF_MIN_SEASONAL_PPT
 
 def analyze_Q_PPT_relationships(
     streamflow_data: pd.DataFrame,
+    seasonal_flags: Optional[List[Dict]] = None,
     min_annual_ppt: float = RUNOFF_MIN_ANNUAL_PPT,
     min_seasonal_ppt: float = RUNOFF_MIN_SEASONAL_PPT,
     trend_completeness: Optional[float] = None,
@@ -112,6 +113,23 @@ def analyze_Q_PPT_relationships(
 
     for seasonal_df in [winter_ratios, spring_ratios, summer_ratios, fall_ratios]:
         all_ratios = all_ratios.merge(seasonal_df, on="water_year", how="left")
+
+    # Apply seasonal completeness flags: set incomplete seasons to NA
+    if seasonal_flags is not None and len(seasonal_flags) > 0:
+        ratio_season_map = {
+            "winter_runoff_ratio": "winter_complete",
+            "spring_runoff_ratio": "spring_complete",
+            "summer_runoff_ratio": "summer_complete",
+            "fall_runoff_ratio": "fall_complete",
+        }
+        flags_df = pd.DataFrame(seasonal_flags)
+        for ratio_col, flag_col in ratio_season_map.items():
+            if ratio_col in all_ratios.columns and flag_col in flags_df.columns:
+                merged = all_ratios[["water_year"]].merge(
+                    flags_df[["water_year", flag_col]], on="water_year", how="left"
+                )
+                incomplete_mask = merged[flag_col].eq(False)
+                all_ratios.loc[incomplete_mask, ratio_col] = np.nan
 
     # Get metric columns
     metric_cols = [c for c in all_ratios.columns if c != "water_year"]

@@ -13,7 +13,7 @@ USGS (dataRetrieval)  ──┐
   (streamflow only)     ├──> Parquet Storage ──┐
                         │                       │
 Canadian HYDAT  ────────┘                       ├──> Signature ──> CSV Summary
-  (streamflow only)                             │    Extraction     (550+ columns)
+  (streamflow only)                             │    Extraction     (560+ columns)
                                                 │
 Daymet (climate data)  ──> Parquet Storage ─────┘
   (PPT, temp, SWE)         (joined at runtime)
@@ -31,7 +31,7 @@ Caravan NetCDF ──────────────> Direct Processing ─
 
 3. **Strict Output Schema** — The CSV output format (column names, ordering) is a contract. Downstream tools depend on exact column names. Every signature produces exactly 8 statistics via `generate_stats()`.
 
-4. **Per-Year Quality Filtering** — Each water year is independently evaluated against data completeness thresholds (95% non-NA days, 30+ days above minimum flow). Years that fail are excluded; gages need 20+ qualifying years.
+4. **Per-Year Quality Filtering** — Each water year is independently evaluated by `preprocess_daily_data()` against data completeness thresholds (>30 raw NAs, >3-day gaps, residual boundary NAs). Negative Q rejection is config-driven (`reject_negative_flow: false` by default). Constant-SD is a QA flag only. Years that fail are excluded; gages need 20+ qualifying years.
 
 5. **Centralized NA Handling** — Missing data is handled once per gage via `preprocess_daily_data()` before any signatures are computed. This replaces ad-hoc per-signature NA handling (fillna(0), forward-fill, etc.) with a standardized pipeline: daily grid normalization → interpolation (<=3 day internal gaps) → year rejection → residual check. Configuration is in `config/signatures_config.json` under `na_handling`.
 
@@ -45,7 +45,7 @@ preprocess_daily_data()           ◄── Called ONCE per gage, BEFORE all sig
     │
     ├── 1. Daily grid normalization (one row/day, sorted, unique)
     ├── 2. Raw diagnostics (NA count, max run, seasonal completeness, negative check)
-    ├── 3. Year rejection (>30 raw NAs, >3-day gaps, negative Q)
+    ├── 3. Year rejection (>30 raw NAs, >3-day gaps, negative Q if config-enabled)
     ├── 4. Interpolation (internal gaps <=3 days, linear, no extrapolation)
     ├── 5. Residual check (boundary NAs → reject year)
     ├── 6. PPT handling (same rules, tracked separately)
@@ -62,8 +62,10 @@ Signature functions receive clean data
 
 **Key design decisions:**
 - `config/signatures_config.json` → `na_handling` section is the single source of truth
-- `use_legacy_filtering: true` enables backward-compatible staged migration
+- `use_legacy_filtering: false` — new preprocessing is the default
+- Negative Q rejection is conditional on `reject_negative_flow` (default: false); `negative_ann` signature counts Q<0 days instead
 - Constant-SD detection is a QA flag, not a year rejection criterion
+- `ice_affected_days_total` per-gage output aggregates ice-related NA days from diagnostics
 - Seasonal completeness is computed from RAW observations (pre-interpolation)
 - `generate_stats()` has optional `trend_completeness` / `decade_completeness` params
 

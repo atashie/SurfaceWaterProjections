@@ -28,31 +28,8 @@ function calculate_flashiness(Q::AbstractVector{<:Real})
         return NaN
     end
 
-    # Interpolate NaN values (matching R's approx() and Python's np.interp)
-    # to preserve temporal adjacency — removing NaNs and compacting
-    # creates artificial jumps between non-adjacent days
-    Q_interp = Float64.(Q)  # Already creates a new array; no copy needed
-    if n_valid < length(Q)
-        valid_indices = findall(valid_mask)
-        valid_values = Q_interp[valid_indices]
-        for i in 1:length(Q_interp)
-            if isnan(Q_interp[i])
-                # Find surrounding valid indices for linear interpolation
-                left = findlast(j -> j < i, valid_indices)
-                right = findfirst(j -> j > i, valid_indices)
-                if left === nothing && right !== nothing
-                    Q_interp[i] = valid_values[right]  # extrapolate from nearest
-                elseif right === nothing && left !== nothing
-                    Q_interp[i] = valid_values[left]    # extrapolate from nearest
-                elseif left !== nothing && right !== nothing
-                    # Linear interpolation
-                    li, ri = valid_indices[left], valid_indices[right]
-                    frac = (i - li) / (ri - li)
-                    Q_interp[i] = valid_values[left] + frac * (valid_values[right] - valid_values[left])
-                end
-            end
-        end
-    end
+    # Preprocessor guarantees no NaNs in valid years
+    Q_interp = Float64.(Q)
 
     total_Q = sum(Q_interp)
     if total_Q <= 0

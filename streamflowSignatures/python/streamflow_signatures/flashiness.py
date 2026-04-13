@@ -64,20 +64,8 @@ def analyze_flashiness_trends(
         if "dowy" in year_data.columns:
             year_data = year_data.sort_values("dowy")
 
-        # Get Q values
+        # Get Q values (preprocessor guarantees no NAs in valid years)
         q_values = year_data["Q"].values.copy()
-
-        # Interpolate missing values if some are present
-        if np.any(np.isnan(q_values)):
-            # Linear interpolation
-            indices = np.arange(len(q_values))
-            valid_mask = ~np.isnan(q_values)
-            if valid_mask.sum() >= 2:
-                q_values = np.interp(
-                    indices,
-                    indices[valid_mask],
-                    q_values[valid_mask]
-                )
 
         # Calculate absolute day-to-day changes
         q_diff = np.abs(np.diff(q_values))

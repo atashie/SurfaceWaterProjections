@@ -29,7 +29,7 @@ Returns
 Dict{String, Float64}
     Dictionary of signature statistics (5 metrics × 8 stats = 40 values)
 """
-function analyze_Q_PPT_relationships(df::DataFrame; trend_completeness::Union{Nothing, Float64}=nothing, decade_completeness::Union{Nothing, Float64}=nothing)
+function analyze_Q_PPT_relationships(df::DataFrame; seasonal_flags::Union{Nothing, DataFrame}=nothing, trend_completeness::Union{Nothing, Float64}=nothing, decade_completeness::Union{Nothing, Float64}=nothing)
     result = Dict{String, Float64}()
 
     metrics = [
@@ -102,6 +102,29 @@ function analyze_Q_PPT_relationships(df::DataFrame; trend_completeness::Union{No
 
             if P_season >= CFG_RUNOFF_MIN_SEASONAL_PPT
                 annual_data[yr_idx, Symbol("$(season)_runoff_ratio")] = Q_season / P_season
+            end
+        end
+    end
+
+    # Apply seasonal completeness flags: set incomplete seasons to NA
+    if seasonal_flags !== nothing && nrow(seasonal_flags) > 0
+        ratio_flag_map = Dict(
+            :winter_runoff_ratio => :winter_complete,
+            :spring_runoff_ratio => :spring_complete,
+            :summer_runoff_ratio => :summer_complete,
+            :fall_runoff_ratio => :fall_complete
+        )
+        for (ratio_col, flag_col) in ratio_flag_map
+            if String(ratio_col) in names(annual_data) && String(flag_col) in names(seasonal_flags)
+                for i in 1:nrow(annual_data)
+                    yr = annual_data.water_year[i]
+                    flag_rows = filter(row -> row.water_year == yr, eachrow(seasonal_flags))
+                    for fr in flag_rows
+                        if haskey(fr, flag_col) && fr[flag_col] == false
+                            annual_data[i, ratio_col] = NaN
+                        end
+                    end
+                end
             end
         end
     end

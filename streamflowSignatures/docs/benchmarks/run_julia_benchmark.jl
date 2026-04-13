@@ -207,6 +207,12 @@ function main()
         signatures["end_water_year"] = isempty(qual_years) ? NaN : Float64(maximum(qual_years))
         signatures["num_water_years"] = length(qual_years)
 
+        # Add per-gage ice-affected day total from diagnostics
+        if !use_legacy && haskey(preprocess_cache, orig_gage_id)
+            pp_diag = preprocess_cache[orig_gage_id].diagnostics
+            signatures["ice_affected_days_total"] = Float64(sum(pp_diag.na_cause_ice))
+        end
+
         push!(all_results, signatures)
     end
 

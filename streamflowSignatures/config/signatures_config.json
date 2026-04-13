@@ -15,7 +15,7 @@
     },
     "year_rejection": {
       "max_raw_na_per_year": 30,
-      "reject_negative_flow": true,
+      "reject_negative_flow": false,
       "reject_residual_na": true
     },
     "constant_sd_flag": {

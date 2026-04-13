@@ -93,50 +93,13 @@ threshold_pct : Float64
     Minimum magnitude threshold as fraction of current flow (default 0.02 = 2%)
 """
 function count_flow_reversals(Q::AbstractVector{<:Real}; threshold_pct::Float64=0.02)
-    # Linear interpolation for NaN values (matching R's approx() behavior)
-    # This avoids creating false reversals from NA gaps
+    # Preprocessor guarantees no NaNs in valid years
     n = length(Q)
     if n < 3
         return 0
     end
 
-    # Find non-NA indices and values
-    non_na_idx = findall(!isnan, Q)
-    if length(non_na_idx) < 3
-        return 0
-    end
-
-    # Linear interpolation to fill NA values
-    Q_interp = Vector{Float64}(undef, n)
-    non_na_vals = Q[non_na_idx]
-
-    for i in 1:n
-        if !isnan(Q[i])
-            Q_interp[i] = Q[i]
-        else
-            # Find surrounding non-NA indices for interpolation
-            left_idx = findlast(j -> j < i, non_na_idx)
-            right_idx = findfirst(j -> j > i, non_na_idx)
-
-            if isnothing(left_idx) && !isnothing(right_idx)
-                # Extrapolate from right (use rule=2 like R)
-                Q_interp[i] = Q[non_na_idx[right_idx]]
-            elseif isnothing(right_idx) && !isnothing(left_idx)
-                # Extrapolate from left (use rule=2 like R)
-                Q_interp[i] = Q[non_na_idx[left_idx]]
-            elseif !isnothing(left_idx) && !isnothing(right_idx)
-                # Linear interpolation
-                x1 = non_na_idx[left_idx]
-                x2 = non_na_idx[right_idx]
-                y1 = Q[x1]
-                y2 = Q[x2]
-                Q_interp[i] = y1 + (y2 - y1) * (i - x1) / (x2 - x1)
-            else
-                # Shouldn't happen if we have >= 3 non-NA values
-                Q_interp[i] = 0.0
-            end
-        end
-    end
+    Q_interp = Float64.(Q)
 
     reversals = 0
 
@@ -337,6 +300,32 @@ function calculate_pulse_metrics(df::DataFrame; trend_completeness::Union{Nothin
 
     # Generate statistics for all metrics
     result = generate_stats(annual_data; value_cols=metrics, trend_completeness=trend_completeness, decade_completeness=decade_completeness)
+
+    return result
+end
+
+
+"""
+    calculate_negative_days(df; trend_completeness=nothing, decade_completeness=nothing)
+
+Count days with negative streamflow (Q < 0) per water year.
+"""
+function calculate_negative_days(df::DataFrame; trend_completeness::Union{Nothing, Float64}=nothing, decade_completeness::Union{Nothing, Float64}=nothing)
+    result = Dict{String, Float64}()
+
+    valid, missing_cols = validate_columns(df, ["Q", "water_year"])
+    if !valid
+        @warn "calculate_negative_days: Missing columns: $missing_cols"
+        merge!(result, empty_stats("negative_ann"))
+        return result
+    end
+
+    annual_data = combine(groupby(df, :water_year),
+        :Q => (q -> sum(x -> !isnan(x) && x < 0, q)) => :negative_ann
+    )
+
+    result = generate_stats(annual_data; value_cols=["negative_ann"],
+        trend_completeness=trend_completeness, decade_completeness=decade_completeness)
 
     return result
 end

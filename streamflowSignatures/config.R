@@ -592,7 +592,9 @@ EXPECTED_SIGNATURE_BASES <- c(
   # Q-P seasonality (Wrede et al. 2015)
   "qp_slope_sd", "qp_bimodality",
   # Average storage (Peters & Aulenbach 2011)
-  "avg_storage"
+  "avg_storage",
+  # Negative flow days
+  "negative_ann"
 )
 
 # Static elasticity column (doesn't follow standard suffix pattern)

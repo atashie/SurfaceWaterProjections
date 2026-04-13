@@ -63,7 +63,7 @@ export analyze_fdc_trends
 # Export complex signatures
 export analyze_baseflow_indices, eckhardt_filter, lyne_hollick_filter
 export analyze_recession_parameters
-export calculate_pulse_metrics
+export calculate_pulse_metrics, calculate_negative_days
 
 # Export climate-dependent signatures
 export analyze_Q_PPT_relationships

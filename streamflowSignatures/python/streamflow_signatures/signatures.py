@@ -12,7 +12,7 @@ from .timing import analyze_flow_timing_trends
 from .fdc import analyze_fdc_trends
 from .baseflow import analyze_baseflow_indices
 from .recession import analyze_recession_parameters
-from .pulses import calculate_pulse_metrics
+from .pulses import calculate_pulse_metrics, calculate_negative_days
 from .runoff_ratios import analyze_Q_PPT_relationships
 from .elasticity import calculate_streamflow_elasticity
 from .qp_seasonality import calculate_qp_seasonality
@@ -105,12 +105,19 @@ def calculate_all_signatures(
     except Exception:
         pass
 
+    try:
+        results.update(calculate_negative_days(gage_data, **trend_kwargs))
+    except Exception:
+        pass
+
     # Climate-dependent signatures
     # Use climate_data if provided, otherwise fall back to gage_data
     climate_df = climate_data if climate_data is not None else gage_data
     if has_climate and "PPT" in climate_df.columns:
         try:
-            results.update(analyze_Q_PPT_relationships(climate_df, **trend_kwargs))
+            results.update(analyze_Q_PPT_relationships(
+                climate_df, seasonal_flags=seasonal_flags, **trend_kwargs
+            ))
         except Exception:
             pass
 
