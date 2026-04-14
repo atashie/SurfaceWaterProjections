@@ -1,14 +1,12 @@
 """
-Build an interactive HTML dashboard comparing Julia benchmark output
-before and after Guidelines Section 3 changes.
+Build an interactive HTML dashboard comparing Julia (post-Section 3)
+output against the Golden R reference.
 
 Usage:
-    python docs/benchmarks/build_section3_dashboard.py
+    python docs/benchmarks/build_julia_vs_golden_r_dashboard.py
 
 Output:
-    docs/benchmarks/signature_comparison_section3.html
-
-Also writes a CSV summary: docs/benchmarks/section3_comparison_summary.csv
+    docs/benchmarks/julia_vs_golden_r_dashboard.html
 """
 import pandas as pd
 import numpy as np
@@ -19,14 +17,17 @@ import sys
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
 
-OLD_PATH = os.path.join(SCRIPT_DIR, "julia_signatures_pre_section3.csv")
-NEW_PATH = os.path.join(SCRIPT_DIR, "julia_signatures.csv")
-OUTPUT_HTML = os.path.join(SCRIPT_DIR, "signature_comparison_section3.html")
-OUTPUT_CSV = os.path.join(SCRIPT_DIR, "section3_comparison_summary.csv")
+GOLDEN_R_PATH = os.path.join(PROJECT_ROOT, "golden-outputs",
+                              "streamflow_signatures_full_10feb2026.csv")
+JULIA_PATH = os.path.join(SCRIPT_DIR, "julia_signatures.csv")
+OUTPUT_HTML = os.path.join(SCRIPT_DIR, "julia_vs_golden_r_dashboard.html")
 
-# Signatures grouped by category — includes both old and new names
 SIGNATURE_GROUPS = {
     "Flow Volumes": ["Qann", "Qwin", "Qspr", "Qsum", "Qfal"],
+    "Flow Percentiles": [
+        "Q1", "Q5", "Q10", "Q20", "Q25", "Q30", "Q40", "Q50",
+        "Q60", "Q70", "Q75", "Q80", "Q90", "Q95", "Q99", "Q95_Q10",
+    ],
     "Flow Timing": [
         "D1_day", "D5_day", "D10_day", "D20_day", "D30_day", "D40_day",
         "D50_day", "D60_day", "D70_day", "D80_day", "D90_day", "D95_day",
@@ -35,7 +36,10 @@ SIGNATURE_GROUPS = {
     "Baseflow": ["BFI_Eckhardt", "BFI_LyneHollick"],
     "Flashiness": ["flashinessRB"],
     "Pulses": ["TQmean", "n_low_pulses_all", "dur_low_pulses_all",
-               "n_high_pulses_all", "dur_high_pulses_all"],
+               "n_high_pulses_all", "dur_high_pulses_all",
+               "Flow_Reversals_annual", "Flow_Reversals_winter",
+               "Flow_Reversals_spring", "Flow_Reversals_summer",
+               "Flow_Reversals_fall"],
     "FDC": ["FDCall", "FDC90th", "FDCmid"],
     "Recession": ["log_a_pointcloud", "log_a_events", "b_pointcloud",
                   "b_events", "concavity", "n_recession_events"],
@@ -45,9 +49,11 @@ SIGNATURE_GROUPS = {
     "Elasticity": ["elasticity_rolling", "elasticity_annual"],
     "Q-P Seasonality": ["qp_slope_sd", "qp_bimodality"],
     "Storage": ["avg_storage"],
+    "Negative Flow": ["negative_ann"],
 }
 
-STATS = ["_mean", "_median", "_senn_slp", "_mk_pval"]
+STATS = ["_mean", "_median", "_senn_slp", "_linear_slp",
+         "_spearman_rho", "_spearman_pval", "_mk_rho", "_mk_pval"]
 
 SINGLE_VALUE_SIGS = [
     "elasticity_static",
@@ -62,21 +68,27 @@ SINGLE_VALUE_SIGS = [
     "log_a_seasonality_amplitude_last_half",
 ]
 
-# Columns that were renamed: old_name -> new_name
-RENAMED_COLS = {
-    "elasticity_mean": "elasticity_rolling_mean",
-    "elasticity_median": "elasticity_rolling_median",
-    "elasticity_senn_slp": "elasticity_rolling_senn_slp",
-    "elasticity_linear_slp": "elasticity_rolling_linear_slp",
-    "elasticity_spearman_rho": "elasticity_rolling_spearman_rho",
-    "elasticity_spearman_pval": "elasticity_rolling_spearman_pval",
-    "elasticity_mk_rho": "elasticity_rolling_mk_rho",
-    "elasticity_mk_pval": "elasticity_rolling_mk_pval",
-}
+STAT_SUFFIXES = ["_senn_slp", "_linear_slp", "_spearman_rho", "_spearman_pval",
+                 "_mk_rho", "_mk_pval", "_mean", "_median"]
+
+
+def normalize_col(col):
+    """Normalize R column names to Julia convention."""
+    col = col.replace("-", "_")
+    col = col.replace(".", "_")
+    col = col.replace("FDC_all", "FDCall")
+    col = col.replace("FDC_90th", "FDC90th")
+    col = col.replace("FDC_mid", "FDCmid")
+    return col
+
+
+# R's "elasticity_*" was renamed to "elasticity_rolling_*" in Julia
+RENAMED_R_TO_JL = {}
+for suf in STAT_SUFFIXES:
+    RENAMED_R_TO_JL[f"elasticity{suf}"] = f"elasticity_rolling{suf}"
 
 
 def r2_identity(x, y):
-    """R² of the identity line y=x (not best-fit)."""
     mask = np.isfinite(x) & np.isfinite(y)
     if mask.sum() < 10:
         return np.nan
@@ -89,172 +101,96 @@ def r2_identity(x, y):
 
 
 def build_data():
-    print("Loading pre-Section 3 Julia output...")
-    old = pd.read_csv(OLD_PATH, low_memory=False)
-    print(f"  {old.shape[0]} gages x {old.shape[1]} cols")
+    print("Loading Golden R output...")
+    r_df = pd.read_csv(GOLDEN_R_PATH, low_memory=False)
+    r_df["gage_id"] = r_df["gage_id"].astype(str).str.strip()
+    print(f"  {r_df.shape[0]} gages x {r_df.shape[1]} cols")
 
-    print("Loading post-Section 3 Julia output...")
-    new = pd.read_csv(NEW_PATH, low_memory=False)
-    print(f"  {new.shape[0]} gages x {new.shape[1]} cols")
+    print("Loading Julia post-Section 3 output...")
+    jl_df = pd.read_csv(JULIA_PATH, low_memory=False)
+    jl_df["gage_id"] = jl_df["gage_id"].astype(str).str.strip()
+    print(f"  {jl_df.shape[0]} gages x {jl_df.shape[1]} cols")
 
-    old["gage_id"] = old["gage_id"].astype(str).str.strip()
-    new["gage_id"] = new["gage_id"].astype(str).str.strip()
-
-    common_gages = sorted(set(old["gage_id"]) & set(new["gage_id"]))
+    common_gages = sorted(set(r_df["gage_id"]) & set(jl_df["gage_id"]))
     print(f"  Common gages: {len(common_gages)}")
 
-    o = old.set_index("gage_id").loc[common_gages]
-    n = new.set_index("gage_id").loc[common_gages]
+    r = r_df[r_df["gage_id"].isin(common_gages)].set_index("gage_id").loc[common_gages]
+    j = jl_df[jl_df["gage_id"].isin(common_gages)].set_index("gage_id").loc[common_gages]
 
-    # Fill missing coordinates from metadata if needed
-    METADATA_PATH = os.path.join(PROJECT_ROOT, "golden-outputs",
-                                 "combined_watershed_metadata_09feb2026.csv")
-    if os.path.exists(METADATA_PATH):
-        n_missing_coords = n["latitude"].isna().sum() if "latitude" in n.columns else len(n)
-        if n_missing_coords > 100:
-            print(f"  {n_missing_coords} gages missing coords, backfilling from metadata...")
-            meta = pd.read_csv(METADATA_PATH, usecols=["gage_id", "latitude", "longitude"],
-                               low_memory=False)
-            meta["gage_id"] = meta["gage_id"].astype(str).str.strip()
-            # Normalize: strip leading zeros from numeric IDs for matching
-            def normalize_id(gid):
-                return gid.lstrip("0") or "0" if gid.isdigit() else gid
-            meta["_nid"] = meta["gage_id"].apply(normalize_id)
-            meta_coords = meta.drop_duplicates(subset="_nid").set_index("_nid")[["latitude", "longitude"]]
+    # Normalize R column names and apply renames
+    r_rename_map = {}
+    for c in r.columns:
+        nc = normalize_col(c)
+        if nc in RENAMED_R_TO_JL:
+            r_rename_map[c] = RENAMED_R_TO_JL[nc]
+        elif nc != c:
+            r_rename_map[c] = nc
+    r = r.rename(columns=r_rename_map)
 
-            n_nids = pd.Series([normalize_id(g) for g in n.index], index=n.index)
-            for col in ["latitude", "longitude"]:
-                mask = n[col].isna() if col in n.columns else pd.Series(True, index=n.index)
-                if mask.any():
-                    fill_vals = n_nids[mask].map(meta_coords[col])
-                    if col not in n.columns:
-                        n[col] = np.nan
-                    n.loc[mask, col] = fill_vals.values
-            n_filled = n["latitude"].notna().sum()
-            print(f"  After backfill: {n_filled}/{len(n)} gages have coords")
+    # Get coordinates from Julia output (already has metadata merged)
+    # If Julia is missing coords, backfill from golden-R or metadata
+    for df_src, df_tgt in [(r, j), (j, r)]:
+        if "latitude" in df_tgt.columns:
+            n_missing = df_tgt["latitude"].isna().sum()
+            if n_missing > 0 and "latitude" in df_src.columns:
+                mask = df_tgt["latitude"].isna() & df_src["latitude"].notna()
+                df_tgt.loc[mask, "latitude"] = df_src.loc[mask, "latitude"]
+                df_tgt.loc[mask, "longitude"] = df_src.loc[mask, "longitude"]
 
-    # Rename old columns to match new names for comparison
-    o = o.rename(columns=RENAMED_COLS)
+    # Use Julia coords as primary (post-metadata-fix)
+    lat_col = j["latitude"] if "latitude" in j.columns else r.get("latitude")
+    lon_col = j["longitude"] if "longitude" in j.columns else r.get("longitude")
 
-    # Build target column list — columns present in BOTH (after rename)
+    # Build target column list
     target_cols = []
+    col_to_display = {}  # normalized col -> display name for dropdown
+
     for sigs in SIGNATURE_GROUPS.values():
         for sig in sigs:
             for stat in STATS:
                 col = sig + stat
-                if col in o.columns and col in n.columns:
+                if col in r.columns and col in j.columns:
                     target_cols.append(col)
+                elif col in j.columns and col not in r.columns:
+                    target_cols.append(col)  # Julia-only
 
     for col in SINGLE_VALUE_SIGS:
-        if col in o.columns and col in n.columns:
+        jl_col = col
+        if col in r.columns and jl_col in j.columns:
             target_cols.append(col)
+        elif jl_col in j.columns:
+            target_cols.append(jl_col)
 
-    # Also find NEW-ONLY columns (not in old output)
-    new_only_cols = []
-    for sigs in SIGNATURE_GROUPS.values():
-        for sig in sigs:
-            for stat in STATS:
-                col = sig + stat
-                if col in n.columns and col not in o.columns:
-                    new_only_cols.append(col)
-    for col in SINGLE_VALUE_SIGS:
-        if col in n.columns and col not in o.columns:
-            new_only_cols.append(col)
+    # Deduplicate
+    target_cols = list(dict.fromkeys(target_cols))
 
-    print(f"  Comparable columns: {len(target_cols)}")
-    print(f"  New-only columns: {len(new_only_cols)}")
-    if new_only_cols:
-        print(f"    {new_only_cols[:10]}{'...' if len(new_only_cols) > 10 else ''}")
+    n_common = sum(1 for c in target_cols if c in r.columns and c in j.columns)
+    n_jl_only = sum(1 for c in target_cols if c in j.columns and c not in r.columns)
+    print(f"  Target columns: {len(target_cols)} ({n_common} common, {n_jl_only} Julia-only)")
 
-    # Build comparison summary CSV
-    summary_rows = []
-    for col in target_cols:
-        ov = pd.to_numeric(o[col], errors="coerce").values
-        nv = pd.to_numeric(n[col], errors="coerce").values
-        r2 = r2_identity(ov, nv)
-        n_paired = int(np.sum(np.isfinite(ov) & np.isfinite(nv)))
-        n_old_na = int(np.sum(~np.isfinite(ov)))
-        n_new_na = int(np.sum(~np.isfinite(nv)))
-
-        # Compute mean absolute difference for paired values
-        mask = np.isfinite(ov) & np.isfinite(nv)
-        mad = float(np.mean(np.abs(ov[mask] - nv[mask]))) if mask.sum() > 0 else np.nan
-        max_diff = float(np.max(np.abs(ov[mask] - nv[mask]))) if mask.sum() > 0 else np.nan
-
-        summary_rows.append({
-            "column": col,
-            "r2_identity": round(r2, 6) if np.isfinite(r2) else np.nan,
-            "n_paired": n_paired,
-            "n_old_na": n_old_na,
-            "n_new_na": n_new_na,
-            "mean_abs_diff": round(mad, 6) if np.isfinite(mad) else np.nan,
-            "max_abs_diff": round(max_diff, 6) if np.isfinite(max_diff) else np.nan,
-        })
-
-    # Add new-only columns to summary
-    for col in new_only_cols:
-        nv = pd.to_numeric(n[col], errors="coerce").values
-        n_valid = int(np.sum(np.isfinite(nv)))
-        summary_rows.append({
-            "column": col,
-            "r2_identity": np.nan,
-            "n_paired": 0,
-            "n_old_na": len(common_gages),
-            "n_new_na": len(common_gages) - n_valid,
-            "mean_abs_diff": np.nan,
-            "max_abs_diff": np.nan,
-        })
-
-    summary_df = pd.DataFrame(summary_rows)
-    summary_df.to_csv(OUTPUT_CSV, index=False)
-    print(f"\n  Summary CSV written to: {OUTPUT_CSV}")
-
-    # Print summary statistics
-    comparable = summary_df[summary_df["n_paired"] > 0]
-    n_perfect = int((comparable["r2_identity"] >= 0.999).sum())
-    n_good = int(((comparable["r2_identity"] >= 0.99) & (comparable["r2_identity"] < 0.999)).sum())
-    n_poor = int((comparable["r2_identity"] < 0.99).sum())
-    n_changed = int((comparable["r2_identity"] < 1.0).sum())
-
-    print(f"\n  === COMPARISON SUMMARY ===")
-    print(f"  Common gages: {len(common_gages)}")
-    print(f"  Comparable columns: {len(target_cols)}")
-    print(f"  New-only columns: {len(new_only_cols)}")
-    print(f"  Perfect (R2>=0.999): {n_perfect}")
-    print(f"  Good (0.99<=R2<0.999): {n_good}")
-    print(f"  Poor (R2<0.99): {n_poor}")
-    print(f"  Changed (R2<1.0): {n_changed}")
-
-    if n_poor > 0:
-        poor = comparable[comparable["r2_identity"] < 0.99].sort_values("r2_identity")
-        print(f"\n  Poor columns (R²<0.99):")
-        for _, row in poor.iterrows():
-            print(f"    {row['column']}: R²={row['r2_identity']:.4f}, "
-                  f"MAD={row['mean_abs_diff']:.4f}, max_diff={row['max_abs_diff']:.4f}")
-
-    # Build columnar JSON data for dashboard
+    # Build JSON data
     data = {
         "g": list(common_gages),
-        "lt": [round(v, 4) if pd.notna(v) else None
-               for v in n["latitude"].astype(float).values],
-        "ln": [round(v, 4) if pd.notna(v) else None
-               for v in n["longitude"].astype(float).values],
-        "r": {},  # "old" / pre-Section 3
-        "j": {},  # "new" / post-Section 3
+        "lt": [round(float(v), 4) if pd.notna(v) else None
+               for v in lat_col.values],
+        "ln": [round(float(v), 4) if pd.notna(v) else None
+               for v in lon_col.values],
+        "r": {},
+        "j": {},
     }
 
     for col in target_cols:
-        ov = pd.to_numeric(o[col], errors="coerce").values
-        nv = pd.to_numeric(n[col], errors="coerce").values
-        data["r"][col] = [round(float(v), 4) if np.isfinite(v) else None for v in ov]
-        data["j"][col] = [round(float(v), 4) if np.isfinite(v) else None for v in nv]
+        if col in r.columns:
+            rv = pd.to_numeric(r[col], errors="coerce").values
+            data["r"][col] = [round(float(v), 6) if np.isfinite(v) else None for v in rv]
+        else:
+            data["r"][col] = [None] * len(common_gages)
 
-    # For new-only columns, old values are all None
-    for col in new_only_cols:
-        nv = pd.to_numeric(n[col], errors="coerce").values
-        data["r"][col] = [None] * len(common_gages)
-        data["j"][col] = [round(float(v), 4) if np.isfinite(v) else None for v in nv]
-        target_cols.append(col)
+        if col in j.columns:
+            jv = pd.to_numeric(j[col], errors="coerce").values
+            data["j"][col] = [round(float(v), 6) if np.isfinite(v) else None for v in jv]
+        else:
+            data["j"][col] = [None] * len(common_gages)
 
     return data, target_cols
 
@@ -275,7 +211,6 @@ def build_html(data, target_cols):
                 f'<optgroup label="{group_name}">{"".join(opts)}</optgroup>'
             )
 
-    # Single-value group
     sv_opts = []
     for sig in SINGLE_VALUE_SIGS:
         if sig in target_cols:
@@ -302,7 +237,7 @@ HTML_TEMPLATE = r'''<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Section 3 Changes - Pre vs Post Comparison</title>
+<title>Julia (Post-Section 3) vs Golden R Reference</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -311,13 +246,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .toolbar label { font-size: 13px; color: #a0a0c0; }
 .toolbar select { padding: 6px 10px; border-radius: 4px; border: 1px solid #0f3460; background: #1a1a2e; color: #e0e0e0; font-size: 14px; cursor: pointer; }
 .toolbar select:disabled { opacity: 0.4; cursor: default; }
-#summary { font-size: 14px; padding: 8px 20px; background: #16213e; border-bottom: 1px solid #0f3460; }
+#summary { font-size: 14px; padding: 8px 20px; background: #16213e; border-bottom: 1px solid #0f3460; line-height: 1.6; }
 #summary .r2-val { font-weight: bold; font-size: 16px; }
-#summary .r2-perfect { color: #4ade80; }
-#summary .r2-good { color: #facc15; }
-#summary .r2-poor { color: #f87171; }
+.tier-perfect { color: #4ade80; }
+.tier-good { color: #86efac; }
+.tier-poor { color: #facc15; }
+.tier-low { color: #fb923c; }
+.tier-verylow { color: #f87171; }
+.tier-extremelylow { color: #ef4444; font-weight: bold; }
+#tier-bar { font-size: 12px; padding: 4px 20px; background: #0f3460; display: flex; gap: 14px; flex-wrap: wrap; }
+#tier-bar span { white-space: nowrap; }
 #selection-info { font-size: 13px; padding: 4px 20px; background: #0f3460; color: #facc15; display: none; }
-.maps-row { display: flex; height: 45vh; min-height: 300px; }
+.maps-row { display: flex; height: 40vh; min-height: 280px; }
 .map-col { flex: 1; position: relative; }
 .map-col .map-label { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 1000; background: rgba(22,33,62,0.9); color: #e0e0e0; padding: 4px 12px; border-radius: 4px; font-size: 13px; font-weight: 600; pointer-events: none; }
 .map-container { width: 100%; height: 100%; }
@@ -325,7 +265,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .legend .grad { width: 20px; height: 120px; margin: 4px 0; }
 .legend .labels { display: flex; flex-direction: column; justify-content: space-between; height: 120px; margin-left: 4px; }
 .legend-row { display: flex; align-items: stretch; }
-#scatter-container { height: 45vh; min-height: 350px; padding: 0 10px 10px 10px; background: #1a1a2e; }
+#scatter-container { height: 50vh; min-height: 380px; padding: 0 10px 10px 10px; background: #1a1a2e; }
 </style>
 </head>
 <body>
@@ -343,20 +283,25 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
       <option value="_mean">Mean</option>
       <option value="_median">Median</option>
       <option value="_senn_slp">Theil-Sen Slope</option>
+      <option value="_linear_slp">Linear Slope</option>
+      <option value="_spearman_rho">Spearman Rho</option>
+      <option value="_spearman_pval">Spearman P-value</option>
+      <option value="_mk_rho">Mann-Kendall Tau</option>
       <option value="_mk_pval">Mann-Kendall P-value</option>
     </select>
   </div>
 </div>
 <div id="summary"></div>
+<div id="tier-bar"></div>
 <div id="selection-info"></div>
 
 <div class="maps-row">
   <div class="map-col">
-    <div class="map-label">Pre-Section 3</div>
+    <div class="map-label">Golden R (Feb 2026)</div>
     <div id="map-r" class="map-container"></div>
   </div>
   <div class="map-col">
-    <div class="map-label">Post-Section 3</div>
+    <div class="map-label">Julia Post-Section 3 (Apr 2026)</div>
     <div id="map-julia" class="map-container"></div>
   </div>
 </div>
@@ -378,7 +323,6 @@ const SINGLE_VALUE = new Set([
   "log_a_seasonality_amplitude_first_half", "log_a_seasonality_amplitude_last_half"
 ]);
 
-// Viridis-ish palette (8 stops)
 const VIRIDIS = [
   [68,1,84],[72,35,116],[64,67,135],[33,144,140],
   [53,183,121],[143,215,68],[210,226,27],[253,231,37]
@@ -412,11 +356,37 @@ function r2Identity(rArr, jArr) {
   return 1.0 - ssRes / ssTot;
 }
 
+function classifyR2(r2) {
+  if (r2 === null) return { tier: "N/A", cls: "" };
+  if (r2 >= 0.999) return { tier: "Perfect", cls: "tier-perfect" };
+  if (r2 >= 0.99) return { tier: "Good", cls: "tier-good" };
+  if (r2 >= 0.95) return { tier: "Poor", cls: "tier-poor" };
+  if (r2 >= 0.9) return { tier: "Low", cls: "tier-low" };
+  if (r2 >= 0.5) return { tier: "Very Low", cls: "tier-verylow" };
+  return { tier: "Extremely Low", cls: "tier-extremelylow" };
+}
+
 function percentile(arr, p) {
   let s = arr.slice().sort((a, b) => a - b);
   let idx = (p / 100) * (s.length - 1);
   let lo = Math.floor(idx), hi = Math.ceil(idx);
   return s[lo] + (s[hi] - s[lo]) * (idx - lo);
+}
+
+// Compute global tier counts across all columns for the tier bar
+function computeGlobalTiers() {
+  let tiers = { "Perfect": 0, "Good": 0, "Poor": 0, "Low": 0, "Very Low": 0, "Extremely Low": 0, "N/A": 0 };
+  let allCols = Object.keys(DATA.r);
+  for (let col of allCols) {
+    let rArr = DATA.r[col], jArr = DATA.j[col];
+    if (!rArr || !jArr) continue;
+    // Skip Julia-only columns (all R values are null)
+    if (rArr.every(v => v === null)) continue;
+    let r2 = r2Identity(rArr, jArr);
+    let t = classifyR2(r2).tier;
+    tiers[t] = (tiers[t] || 0) + 1;
+  }
+  return tiers;
 }
 
 // Initialize maps
@@ -430,7 +400,6 @@ L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
   attribution: '&copy; OSM &copy; CARTO', maxZoom: 18
 }).addTo(mapJ);
 
-// Sync maps
 let syncing = false;
 function syncMap(source, target) {
   source.on("moveend zoomend", function () {
@@ -443,7 +412,6 @@ function syncMap(source, target) {
 syncMap(mapR, mapJ);
 syncMap(mapJ, mapR);
 
-// Create circle markers
 const markersR = [];
 const markersJ = [];
 const N = DATA.g.length;
@@ -459,7 +427,7 @@ for (let i = 0; i < N; i++) {
   markersJ.push(mJ);
 }
 
-// Legend (on right map)
+// Legend
 const legendDiv = document.createElement("div");
 legendDiv.className = "legend";
 legendDiv.innerHTML = `
@@ -492,9 +460,9 @@ function drawLegend(vMin, vMax, isPval) {
   document.getElementById("leg-min").textContent = fmt(vMin);
 }
 
-// Plotly scatter
 const scatterDiv = document.getElementById("scatter-container");
 const selInfo = document.getElementById("selection-info");
+const tierBar = document.getElementById("tier-bar");
 
 let highlightR = null;
 let highlightJ = null;
@@ -536,17 +504,14 @@ function highlightGage(dataIdx) {
   if (mR) mR.openPopup();
   if (mJ) mJ.openPopup();
 
-  let sig = document.getElementById("sig-select").value;
-  let stat = document.getElementById("stat-select").value;
-  let isSingle = SINGLE_VALUE.has(sig);
-  let colKey = isSingle ? sig : sig + stat;
+  let colKey = getCurrentColKey();
   let rV = DATA.r[colKey] ? DATA.r[colKey][dataIdx] : null;
   let jV = DATA.j[colKey] ? DATA.j[colKey][dataIdx] : null;
   let diff = (rV !== null && jV !== null) ? (jV - rV).toPrecision(4) : "N/A";
   selInfo.innerHTML =
     `Selected: <strong>${DATA.g[dataIdx]}</strong> &nbsp;|&nbsp; ` +
-    `Pre = ${rV !== null ? rV : "NA"} &nbsp;|&nbsp; ` +
-    `Post = ${jV !== null ? jV : "NA"} &nbsp;|&nbsp; ` +
+    `Golden R = ${rV !== null ? rV : "NA"} &nbsp;|&nbsp; ` +
+    `Julia = ${jV !== null ? jV : "NA"} &nbsp;|&nbsp; ` +
     `Diff = ${diff} &nbsp; ` +
     `<span style="cursor:pointer;text-decoration:underline;" onclick="clearSelection()">[clear]</span>`;
   selInfo.style.display = "block";
@@ -554,9 +519,6 @@ function highlightGage(dataIdx) {
 
 function clearSelection() {
   clearHighlight();
-  let colKey = getCurrentColKey();
-  let rVals = DATA.r[colKey], jVals = DATA.j[colKey];
-  if (!rVals) return;
   let colors = scatterToData.map(() => "rgba(99,179,237,0.5)");
   let sizes = scatterToData.map(() => 3);
   Plotly.restyle(scatterDiv, { "marker.color": [colors], "marker.size": [sizes] }, [0]);
@@ -566,6 +528,27 @@ function getCurrentColKey() {
   let sig = document.getElementById("sig-select").value;
   let stat = document.getElementById("stat-select").value;
   return SINGLE_VALUE.has(sig) ? sig : sig + stat;
+}
+
+// Show global tier bar
+function showGlobalTiers() {
+  let tiers = computeGlobalTiers();
+  let total = Object.values(tiers).reduce((a, b) => a + b, 0) - (tiers["N/A"] || 0);
+  let parts = [
+    ["Perfect", "tier-perfect", ">= 0.999"],
+    ["Good", "tier-good", ">= 0.99"],
+    ["Poor", "tier-poor", ">= 0.95"],
+    ["Low", "tier-low", ">= 0.90"],
+    ["Very Low", "tier-verylow", ">= 0.50"],
+    ["Extremely Low", "tier-extremelylow", "< 0.50"],
+  ];
+  let html = '<span style="color:#a0a0c0;">All columns:</span> ';
+  for (let [name, cls, desc] of parts) {
+    let c = tiers[name] || 0;
+    let pct = total > 0 ? (100 * c / total).toFixed(1) : "0";
+    html += `<span class="${cls}">${name}: ${c} (${pct}%)</span> `;
+  }
+  tierBar.innerHTML = html;
 }
 
 function update() {
@@ -580,11 +563,10 @@ function update() {
   let rVals = DATA.r[colKey];
   let jVals = DATA.j[colKey];
   if (!rVals || !jVals) {
-    document.getElementById("summary").innerHTML = `<em>Column "${colKey}" not found in data.</em>`;
+    document.getElementById("summary").innerHTML = `<em>Column "${colKey}" not found.</em>`;
     return;
   }
 
-  // Stats
   let nR_NA = rVals.filter(v => v === null).length;
   let nJ_NA = jVals.filter(v => v === null).length;
   let r2 = r2Identity(rVals, jVals);
@@ -592,15 +574,16 @@ function update() {
   for (let i = 0; i < N; i++) if (rVals[i] !== null && jVals[i] !== null) nPaired++;
 
   let r2Str = r2 !== null ? r2.toFixed(4) : "N/A";
-  let r2Class = r2 === null ? "" : r2 >= 0.999 ? "r2-perfect" : r2 >= 0.99 ? "r2-good" : "r2-poor";
-  let newOnlyNote = nR_NA === N ? " <em>(NEW column — no pre-Section 3 data)</em>" : "";
+  let { tier, cls } = classifyR2(r2);
+  let jlOnlyNote = nR_NA === N ? " <em>(NEW column -- no Golden R data)</em>" : "";
   document.getElementById("summary").innerHTML =
     `<strong>${colKey}</strong> &mdash; ` +
-    `R&sup2; = <span class="r2-val ${r2Class}">${r2Str}</span> &nbsp;|&nbsp; ` +
+    `R&sup2; = <span class="r2-val ${cls}">${r2Str}</span> ` +
+    `<span class="${cls}">[${tier}]</span> &nbsp;|&nbsp; ` +
     `N paired = ${nPaired} &nbsp;|&nbsp; ` +
-    `Pre NA = ${nR_NA}, Post NA = ${nJ_NA}` + newOnlyNote;
+    `Golden R NA = ${nR_NA}, Julia NA = ${nJ_NA}` + jlOnlyNote;
 
-  // Compute color scale
+  // Color scale
   let allVals = [];
   for (let i = 0; i < N; i++) {
     if (rVals[i] !== null) allVals.push(rVals[i]);
@@ -626,18 +609,17 @@ function update() {
     return interpColor(pal, t);
   }
 
-  // Update markers
   for (let m of markersR) {
     let v = rVals[m._idx];
     m.setStyle({ fillColor: colorFor(v) });
     m.unbindPopup();
-    m.bindPopup(`<b>${DATA.g[m._idx]}</b><br>Pre: ${v !== null ? v : "NA"}`);
+    m.bindPopup(`<b>${DATA.g[m._idx]}</b><br>Golden R: ${v !== null ? v : "NA"}`);
   }
   for (let m of markersJ) {
     let v = jVals[m._idx];
     m.setStyle({ fillColor: colorFor(v) });
     m.unbindPopup();
-    m.bindPopup(`<b>${DATA.g[m._idx]}</b><br>Post: ${v !== null ? v : "NA"}`);
+    m.bindPopup(`<b>${DATA.g[m._idx]}</b><br>Julia: ${v !== null ? v : "NA"}`);
   }
 
   drawLegend(vMin, vMax, isPval);
@@ -673,15 +655,15 @@ function update() {
     mode: "markers",
     type: "scattergl",
     marker: { size: 3, color: "rgba(99,179,237,0.5)" },
-    hovertemplate: "<b>%{text}</b><br>Pre: %{x:.4f}<br>Post: %{y:.4f}<extra></extra>"
+    hovertemplate: "<b>%{text}</b><br>Golden R: %{x:.4f}<br>Julia: %{y:.4f}<extra></extra>"
   }], {
     shapes: [{
       type: "line", x0: pLo, y0: pLo, x1: pHi, y1: pHi,
       line: { color: "rgba(250,200,50,0.5)", width: 1.5, dash: "dash" }
     }],
-    xaxis: { title: "Pre-Section 3", range: [pLo, pHi], gridcolor: "#2a2a4a", color: "#a0a0c0" },
-    yaxis: { title: "Post-Section 3", range: [pLo, pHi], gridcolor: "#2a2a4a", color: "#a0a0c0" },
-    title: { text: `${colKey}  (R\u00b2 = ${r2Str},  N = ${nPaired})`, font: { color: "#e0e0e0", size: 14 } },
+    xaxis: { title: "Golden R (Feb 2026)", range: [pLo, pHi], gridcolor: "#2a2a4a", color: "#a0a0c0" },
+    yaxis: { title: "Julia Post-Section 3 (Apr 2026)", range: [pLo, pHi], gridcolor: "#2a2a4a", color: "#a0a0c0" },
+    title: { text: `${colKey}  (R\u00b2 = ${r2Str},  N = ${nPaired},  Tier: ${tier})`, font: { color: "#e0e0e0", size: 14 } },
     plot_bgcolor: "#1a1a2e",
     paper_bgcolor: "#1a1a2e",
     margin: { t: 40, b: 50, l: 60, r: 20 },
@@ -692,6 +674,7 @@ function update() {
 document.getElementById("sig-select").addEventListener("change", update);
 document.getElementById("stat-select").addEventListener("change", update);
 
+showGlobalTiers();
 update();
 
 scatterDiv.on("plotly_click", function(eventData) {

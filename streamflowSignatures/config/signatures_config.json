@@ -101,7 +101,7 @@
   "metadata": {
     "include_human_interference": true,
     "gages_ii_dir": "D:/gagesMetadata",
-    "hydat_path": null,
+    "hydat_path": "metadata/canadian_hydat_interference.csv",
     "interference_columns": [
       "NDAMS_2009",
       "MAJ_DDENS_2009",

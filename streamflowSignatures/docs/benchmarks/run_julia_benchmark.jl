@@ -245,8 +245,18 @@ function main()
         metadata = CSV.read(METADATA_PATH, DataFrame)
 
         # Ensure gage_id is String in both DataFrames for merging
+        # Metadata stores USGS IDs without leading zeros (e.g. "1011000"),
+        # while benchmark output preserves them (e.g. "01011000").
+        # Strip leading zeros from NUMERIC-only IDs for matching, then restore originals.
         results_df.gage_id = string.(results_df.gage_id)
         metadata.gage_id = string.(metadata.gage_id)
+
+        # Create normalized join key: strip leading zeros from numeric IDs only
+        results_df[!, :_join_id] = [all(isdigit, id) ? lstrip(id, '0') : id for id in results_df.gage_id]
+        metadata[!, :_join_id] = [all(isdigit, id) ? lstrip(id, '0') : id for id in metadata.gage_id]
+        # Handle edge case: all-zeros ID
+        results_df._join_id = [id == "" ? "0" : id for id in results_df._join_id]
+        metadata._join_id = [id == "" ? "0" : id for id in metadata._join_id]
 
         # Rename basin_area_km2 to basin_area to match R output
         if "basin_area_km2" in names(metadata)
@@ -264,9 +274,15 @@ function main()
 
         if length(available_meta_cols) > 1  # More than just gage_id
             println("  Merging $(length(available_meta_cols)-1) metadata columns...")
-            results_df = leftjoin(results_df, metadata[:, Symbol.(available_meta_cols)], on=:gage_id)
+            # Join on normalized key, then drop temp columns
+            meta_join_cols = [c == "gage_id" ? "_join_id" : c for c in available_meta_cols]
+            results_df = leftjoin(results_df, metadata[:, Symbol.(meta_join_cols)], on=:_join_id)
+            n_matched = count(!ismissing, results_df.latitude)
+            println("  Matched $n_matched / $(nrow(results_df)) gages with metadata")
+            select!(results_df, Not(:_join_id))
         else
             println("  Warning: No metadata columns found to merge")
+            select!(results_df, Not(:_join_id))
         end
 
         # Enrich with human interference metadata from GAGES-II
@@ -299,9 +315,39 @@ function main()
                 end
             end
 
-            # Add empty RHBN/REGULATED columns (Canadian HYDAT not available from Julia)
-            results_df[!, :RHBN] = fill(missing, nrow(results_df))
-            results_df[!, :REGULATED] = fill(missing, nrow(results_df))
+            # Load Canadian HYDAT interference metadata (RHBN, REGULATED)
+            println("  Loading Canadian HYDAT interference metadata...")
+            canadian = load_canadian_interference()
+            if nrow(canadian) > 0
+                # Initialize RHBN/REGULATED as missing, then fill from Canadian data
+                results_df[!, :RHBN] = fill(missing, nrow(results_df))
+                results_df[!, :REGULATED] = fill(missing, nrow(results_df))
+                # Build lookup from Canadian data
+                can_lookup = Dict{String, NamedTuple{(:rhbn, :regulated, :hic), Tuple{Any, Any, String}}}()
+                for row in eachrow(canadian)
+                    can_lookup[string(row.gage_id)] = (
+                        rhbn = hasproperty(row, :RHBN) ? row.RHBN : missing,
+                        regulated = hasproperty(row, :REGULATED) ? row.REGULATED : missing,
+                        hic = hasproperty(row, :human_interference_class) ? row.human_interference_class : "unknown"
+                    )
+                end
+                n_can_matched = 0
+                for i in 1:nrow(results_df)
+                    gid = string(results_df.gage_id[i])
+                    if haskey(can_lookup, gid)
+                        results_df[i, :RHBN] = can_lookup[gid].rhbn
+                        results_df[i, :REGULATED] = can_lookup[gid].regulated
+                        # Override human_interference_class from Canadian data
+                        results_df[i, :human_interference_class] = can_lookup[gid].hic
+                        n_can_matched += 1
+                    end
+                end
+                println("  Matched $n_can_matched Canadian gages with HYDAT metadata")
+            else
+                println("  Warning: No Canadian HYDAT metadata available - RHBN/REGULATED will be missing")
+                results_df[!, :RHBN] = fill(missing, nrow(results_df))
+                results_df[!, :REGULATED] = fill(missing, nrow(results_df))
+            end
             println("  Interference columns added: $(length(avail_int_cols) + 3)")
         else
             println("  Warning: GAGES-II data not available")

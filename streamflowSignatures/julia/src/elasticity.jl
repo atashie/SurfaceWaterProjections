@@ -93,7 +93,8 @@ function calculate_streamflow_elasticity(
     P = annual_data.P_annual
 
     # Filter out years with near-zero P (using config value, like R/Python)
-    valid_mask = P .>= min_annual_ppt
+    # Must use strict > to match R/Python (not >=)
+    valid_mask = P .> min_annual_ppt
     Q_valid = Q[valid_mask]
     P_valid = P[valid_mask]
 

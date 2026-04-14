@@ -176,6 +176,12 @@ function load_canadian_interference(hydat_path=CFG_HYDAT_PATH)
         )
     end
 
+    # Resolve relative paths against the project root (parent of config/)
+    if !isabspath(hydat_path)
+        project_root = joinpath(@__DIR__, "..", "..")
+        hydat_path = joinpath(project_root, hydat_path)
+    end
+
     if !isfile(hydat_path)
         @warn "HYDAT file not found: $hydat_path"
         return DataFrame(
