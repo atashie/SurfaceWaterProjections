@@ -92,6 +92,7 @@ streamflowSignatures/
 │   ├── run_enrich_metadata.R    # Human interference metadata enrichment
 │   ├── run_regenerate_metadata.R # Regenerate combined metadata
 │   ├── precompute_cross_signature_analysis.R  # Offline computation
+│   ├── export_hydat_metadata.R  # One-time: export HYDAT RHBN/REGULATED to CSV
 │   └── tests/                   # R test suite
 │       ├── smoke_test.R         # Quick validation on subset (10 gages)
 │       ├── smoke_test_reorganization.R
@@ -124,13 +125,12 @@ streamflowSignatures/
 ├── config/                      # Cross-language configuration
 │   └── signatures_config.json
 │
-├── golden-outputs/              # R reference outputs for validation (Feb 2026, pre-Round 6)
+├── golden-outputs/              # R reference outputs for validation (Feb 2026)
 │   ├── README.md
 │   ├── streamflow_signatures_full_10feb2026.csv
 │   └── combined_watershed_metadata_09feb2026.csv
-│   # Note: Golden outputs pre-date Round 6 code quality changes.
-│   # Round 6 produced identical correlations, so these remain valid.
-│   # Refresh after next methodology change.
+│   # Note: Golden outputs pre-date April 2026 changes (trend_completeness,
+│   # Section 3 signatures, recession fix). Refresh planned.
 │
 ├── docs/                        # Extended documentation
 │   ├── DEVELOPMENT.md           # This file
@@ -144,8 +144,12 @@ streamflowSignatures/
 │   │   ├── run_julia_benchmark.jl
 │   │   ├── run_r_benchmark.R
 │   │   ├── compare_three_way.py
+│   │   ├── compare_julia_vs_golden_r.py  # 6-tier Julia vs Golden R comparison
 │   │   ├── compare_outputs.py
+│   │   ├── build_julia_vs_golden_r_dashboard.py  # Interactive HTML dashboard
+│   │   ├── build_section3_dashboard.py   # Section 3 pre/post dashboard
 │   │   ├── comparison_report.md
+│   │   ├── julia_vs_golden_r_summary.md  # Generated comparison report
 │   │   └── diagnostics/        # Archived diagnostic scripts
 │   └── plans/                   # Planning notes
 │
@@ -156,7 +160,8 @@ streamflowSignatures/
 │   ├── app.R                    # Main Shiny application
 │   └── helperFunctions.R        # App-specific utilities
 │
-├── metadata/                    # Basin and gage metadata (42 files)
+├── metadata/                    # Basin and gage metadata (43 files)
+│   └── canadian_hydat_interference.csv  # RHBN + REGULATED for 8,012 Canadian stations
 ├── archive/                     # Archived/deprecated files (DO NOT USE)
 │
 ├── data_out/                    # Processed outputs (gitignored)
@@ -301,27 +306,32 @@ testthat::test_dir("R/tests/")
 
 Python and Julia implementations are validated against R using the R² of the identity line (y = x) across 5,707 common gages and 551 signature columns. This measures whether values are identical (not just correlated). Spearman rank correlation is reported as a secondary diagnostic.
 
-### Current Status (March 2026, Post-Round 6)
+### Current Status (April 2026)
 
 | Metric | rpkg | Julia | Python | R (canonical) |
 |--------|------|-------|--------|---------------|
-| Total Time | 114 min | 9.2 min | 78.9 min | 874 min* |
-| Gages Processed | 7,369 | 7,369 | 7,369 | 5,707 |
+| Total Time | 114 min | ~10 min | 78.9 min | 874 min* |
+| Gages Processed | 7,369 | 7,313 | 7,369 | 5,707 |
 | Processing Rate | 1.08/s | 13.4/s | 1.56/s | 0.11/s* |
 
 *March 16-17, 2026 re-run. R canonical ran concurrently with Python/Julia — timing inflated by I/O contention. Previous solo R runs: ~1-2 hours.
 
-#### Three-Way (R canonical vs Python vs Julia)
+#### Three-Way Identity R² (April 2026, post R canonical fixes + Julia tau-b fix)
 
 | Pair | Mean R² | Median R² | Min R² | Cols < 0.99 |
 |------|---------|-----------|--------|-------------|
-| R vs Python | 0.9968 | 1.0000 | 0.6745 | 17 |
-| R vs Julia | 0.9965 | 1.0000 | 0.6745 | 19 |
-| Python vs Julia | 0.9997 | 1.0000 | 0.9771 | 3 |
+| R vs Python | 0.9990 | 1.0000 | 0.7621 | 4 |
+| R vs Julia | 0.9991 | 1.0000 | 0.7621 | 4 |
+| Python vs Julia | 0.9999 | 1.0000 | 0.9979 | 0 |
 
-475 perfect (R²>=0.999), 56 good (0.99-0.999), 20 poor (<0.99). 531 of 551 columns (96.4%) have R² >= 0.99 across all 3 pairs. All 3 languages are production-ready. The 20 poor columns are trend statistics (slopes, p-values) sensitive to small numerical differences — the underlying signature means/medians are near-identical.
+542 perfect (R²>=0.999), 5 good (0.99-0.999), 4 poor (<0.99). 547 of 551 columns (99.3%) have R² >= 0.99 across all 3 pairs. Python-Julia agreement is perfect (0 columns below 0.99). Remaining 4 poor columns are irreducible: 2 recession Spearman p-values (exact permutation test vs t-approximation for small n), 2 FDC90th p-values (28-gage NA mismatch from floating-point precision).
 
-#### rpkg vs Other Implementations
+**R canonical fixes that drove this improvement** (from March 2026's 20 poor → 4 poor):
+1. Removed leftover min_Q filter (affected ~150 gages' year populations)
+2. FDC negative Q filter (`Q >= 0` guard matching Python/Julia)
+3. seasonal_flags passthrough to flow volumes and Q-PPT functions
+
+#### rpkg vs Other Implementations (March 2026)
 
 | Pair | Perfect (>=0.999) | Good (0.99-0.999) | Poor (<0.99) |
 |------|-------------------|-------------------|-------------|
@@ -329,7 +339,26 @@ Python and Julia implementations are validated against R using the R² of the id
 | rpkg vs Julia | **515** | 28 | 8 |
 | rpkg vs R (canonical) | **490** | 51 | 10 |
 
-rpkg aligns more closely with Python/Julia than canonical R does (527 vs 475 perfect columns with Python), because rpkg uses config-driven parameters consistently. The 10 poor columns vs canonical R are all explained by 4 intentional design decisions documented in [rpkg/README.md](../rpkg/README.md#intentional-differences-from-canonical-r) and [CROSS_LANGUAGE_STATUS.md](CROSS_LANGUAGE_STATUS.md#rpkg-intentional-design-decisions).
+rpkg aligns more closely with Python/Julia than canonical R does, because rpkg uses config-driven parameters consistently. The 10 poor columns vs canonical R are explained by 4 intentional design decisions documented in [rpkg/README.md](../rpkg/README.md#intentional-differences-from-canonical-r) and [CROSS_LANGUAGE_STATUS.md](CROSS_LANGUAGE_STATUS.md#rpkg-intentional-design-decisions).
+
+#### Known Remaining Divergences (4 columns, April 2026)
+
+All 4 poor columns are irreducible library-level differences:
+- 2 recession pointcloud p-values: OLS library differences (R's `lm()` QR rank-checking vs Python/Julia SVD)
+- 2 FDC90th p-values: 28-gage NA mismatch from floating-point precision in near-zero regression
+
+Python and Julia agree perfectly: 0 columns below 0.99 (min Py-Jl R² = 0.998).
+
+#### Julia Post-Section 3 vs Golden R (Feb 2026)
+
+Julia's April 2026 output includes Guidelines Section 3 changes (new signatures, recession algorithm fix, trend_completeness) that the Feb 2026 Golden R reference predates. A separate comparison pipeline (`compare_julia_vs_golden_r.py`) uses 6-tier R² classification. See `docs/benchmarks/julia_vs_golden_r_summary.md` for the full report. Key divergence drivers:
+
+| Root Cause | Cols Affected | Type |
+|------------|--------------|------|
+| trend_completeness (80% gate) | 220 | Temporal gap — Golden R predates feature |
+| Recession algorithm rewrite | 46 | Intentional — R/Python sync pending |
+| Elasticity operator bug (fixed) | 9 | Bug fix applied |
+| dur_low_pulses_all NAs | 6 | Under investigation |
 
 #### Alignment Progress (Spearman rho, cols < 0.99 — historical metric through Round 6)
 
@@ -339,34 +368,7 @@ rpkg aligns more closely with Python/Julia than canonical R does (527 vs 475 per
 | R vs Julia | 321 | 49 | 5 | 4 | **4** | **4** | 98.8% reduction |
 | Python vs Julia | 73 | 30 | 3 | 3 | **0** | **0** | 100% reduction |
 
-Note: Rounds 0-6 used Spearman rank correlation. Post-Round 6, the primary metric switched to identity R² (see table above), which is stricter and reveals 20 poor columns vs Spearman's 4.
-
-#### Known Remaining Divergences (20 columns with R² < 0.99, March 2026)
-
-Under the identity R² metric, 20 columns fall below 0.99. All are trend statistics (slopes, p-values) where small numerical differences amplify:
-- 4 recession pointcloud p-values: Irreducible OLS library differences (R's `lm()` QR rank-checking vs Python/Julia SVD)
-- 7 FDC90th trend stats: R has 1 extra NA gage; Python/Julia have 35 extra NAs from stricter filtering
-- 2 BFI_LyneHollick p-values, 2 elasticity p-values, 2 avg_storage p-values: Small filter differences amplified through trend fitting
-- 2 n_low_pulses trend stats, 1 flashiness trend stat: Edge-case gage differences
-
-Python and Julia agree near-perfectly on all columns (min Py-Jl R² = 0.977, only 3 cols < 0.99).
-
-#### April 2026 R Canonical Fixes (benchmark complete)
-
-Three fixes to R canonical's `process_signatures_from_parquet()` address the primary sources of R-vs-Python/Julia divergence:
-1. **Removed leftover min_Q filter**: R had an additional year-qualification filter that Python/Julia never had, affecting ~150 gages' year populations
-2. **FDC negative Q filter**: Added `Q >= 0` guard matching Python/Julia
-3. **seasonal_flags passthrough**: Flow volumes and Q-PPT functions now receive seasonal completeness flags
-
-**Updated results (April 2026, post R canonical fixes + Julia tau-b fix):**
-
-| Pair | Mean R² | Median R² | Min R² | Cols < 0.99 |
-|------|---------|-----------|--------|-------------|
-| R vs Python | 0.9990 | 1.0000 | 0.7621 | 4 |
-| R vs Julia | 0.9991 | 1.0000 | 0.7621 | 4 |
-| Python vs Julia | 0.9999 | 1.0000 | 0.9979 | 0 |
-
-542 perfect (R²>=0.999), 5 good (0.99-0.999), 4 poor (<0.99). 547 of 551 columns (99.3%) have R² >= 0.99 across all 3 pairs. Python-Julia agreement is now perfect (0 columns below 0.99). Remaining 4 poor columns are irreducible: 2 recession Spearman p-values (R's exact permutation test vs Python/Julia's t-approximation for small n), 2 FDC90th p-values (28-gage NA mismatch from floating-point precision in near-zero regression).
+Note: Rounds 0-6 used Spearman rank correlation. Post-Round 6, the primary metric switched to identity R² (see tables above), which is stricter.
 
 ### Running Benchmarks
 
@@ -403,8 +405,12 @@ python docs/benchmarks/compare_rpkg.py
 | `docs/benchmarks/run_julia_benchmark.jl` | Julia full signature extraction |
 | `docs/benchmarks/compare_three_way.py` | **PRIMARY** — Three-way comparison using R² of identity line (y=x) |
 | `docs/benchmarks/compare_rpkg.py` | rpkg vs all other implementations |
+| `docs/benchmarks/compare_julia_vs_golden_r.py` | Julia post-Section 3 vs Golden R (Feb 2026) — 6-tier R² classification |
 | `docs/benchmarks/build_comparison_dashboard.py` | Generates interactive HTML dashboard (maps + scatterplot) |
+| `docs/benchmarks/build_julia_vs_golden_r_dashboard.py` | Interactive HTML: Julia vs Golden R with dual maps + scatterplot |
+| `docs/benchmarks/build_section3_dashboard.py` | Section 3 pre/post comparison dashboard |
 | `docs/benchmarks/comparison_report.md` | Generated comparison report |
+| `docs/benchmarks/julia_vs_golden_r_summary.md` | Generated Julia vs Golden R detailed report |
 
 For implementation details, alignment history, and known divergences, see [`CROSS_LANGUAGE_STATUS.md`](CROSS_LANGUAGE_STATUS.md).
 
@@ -417,8 +423,9 @@ For implementation details, alignment history, and known divergences, see [`CROS
 
 ### Canadian HYDAT (via tidyhydat)
 - Parameter: Flow (m3/s)
-- Excludes regulated stations
+- Includes both regulated and unregulated stations (REGULATED flag tracked in metadata)
 - Conversion: m3/s -> mm/day using drainage area
+- Interference metadata (RHBN, REGULATED) exported to `metadata/canadian_hydat_interference.csv` for cross-language use
 
 ### Caravan
 - NetCDF format with daily streamflow + climate variables

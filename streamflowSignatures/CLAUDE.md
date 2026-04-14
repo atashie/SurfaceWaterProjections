@@ -19,7 +19,9 @@ This project provides identical signature calculations in R (canonical), Python,
 | `python/` | Python | Active | Port of R signatures |
 | `julia/` | Julia | Active | Port of R signatures |
 
-**Change Workflow**: R is canonical. Changes are made in R first, then propagated to Python/Julia. Golden outputs from R validate other implementations.
+**Change Workflow**: R is canonical. Changes are normally made in R first, then propagated to Python/Julia. Golden outputs from R (Feb 2026) validate other implementations. Exception: Guidelines Section 3 changes (April 2026) were implemented Julia-first for faster iteration (~10 min benchmark vs hours for R); R/Python sync is pending.
+
+**Canadian HYDAT Metadata**: RHBN and REGULATED status for Canadian gages is pre-exported to `metadata/canadian_hydat_interference.csv` (via `R/export_hydat_metadata.R` using tidyhydat). Julia reads this CSV directly; R uses tidyhydat at runtime.
 
 ## Canonical Code
 
@@ -73,6 +75,9 @@ Other `helperFunctions*.R` files in `archive/` are deprecated.
 **Exceptions** (documented in `config.R`):
 - `elasticity_static` - single value, not time series
 - `log_a_seasonality_amplitude`, `log_a_seasonality_minimum` - recession seasonality
+- `runoff_ratio_high_count` - per-gage scalar (count of years with ratio > 2.0)
+- `elasticity_years_total`, `elasticity_years_low_ppt` - per-gage diagnostics
+- `ice_affected_days_total` - per-gage diagnostic
 
 ## Code Status
 

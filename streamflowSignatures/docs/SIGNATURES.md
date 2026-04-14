@@ -308,12 +308,12 @@ Peters, N.E., & Aulenbach, B.T. (2011). Water storage at the Panola Mountain Res
 | Flow Volumes | `calculate_flow_vols_by_year` | No | 22 metrics (5 totals + 16 percentiles + Q95-Q10) |
 | FDC | `analyze_fdc_trends_from_streamflow` | No | 3 metrics (FDCall, FDC90th, FDCmid) |
 | Baseflow | `analyze_baseflow_indices` | No | 2 metrics |
-| Recession | `analyze_recession_parameters` | No | 6 metrics + 6 seasonality |
+| Recession | `analyze_recession_parameters` | No | 7 metrics + 6 seasonality |
 | Pulse Metrics | `calculate_pulse_metrics` | No | 15 metrics |
 | Flashiness | `analyze_flashiness_trends` | No | 1 metric |
 | Flow Timing | `analyze_flow_timing_trends` | No | 15 metrics |
 | Q-PPT Relationships | `analyze_Q_PPT_relationships` | Yes | 5 metrics + 1 diagnostic |
-| Elasticity | `calculate_streamflow_elasticity` | Yes | 2 metrics + 1 static + 2 diagnostics |
+| Elasticity | `calculate_streamflow_elasticity` | Yes | 3 metrics (rolling + annual + static) + 2 diagnostics |
 | Q-P Seasonality | `calculate_qp_seasonality` | Yes | 2 metrics |
 | Average Storage | `calculate_average_storage` | Yes | 1 metric |
 | Negative Flow Days | `calculate_negative_days` | No | 1 metric (negative_ann) |

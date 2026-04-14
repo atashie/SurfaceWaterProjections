@@ -12,6 +12,29 @@ For historical entries (Dec 2025 – March 2026), see [docs/CHANGELOG_ARCHIVE.md
 - Implement synchrony metrics (cross-correlation, lag analysis)
 - Recession-informed BFI (Collischonn & Fan 2013) — deferred from Section 3 review
 - Sync R/Python with Julia Section 3 changes (D1/D99, recession fix, n_recession_events, elasticity rename/annual, runoff ratio flag, diagnostics)
+- Regenerate Golden R outputs with current code (trend_completeness, no min_Q filter)
+
+### Julia vs Golden R Comparison & Fixes (April 2026)
+
+**Julia vs Golden R comparison tooling** — New comparison pipeline for validating Julia post-Section 3 output against Feb 2026 Golden R reference:
+- `docs/benchmarks/compare_julia_vs_golden_r.py`: 6-tier R² comparison across 551 common columns and 5,697 common gages
+- `docs/benchmarks/build_julia_vs_golden_r_dashboard.py`: Interactive HTML dashboard with dual Leaflet maps and Plotly scatterplot
+- `docs/benchmarks/julia_vs_golden_r_summary.md`: Detailed markdown report with per-category and per-stat breakdowns
+
+**Elasticity operator fix (LOW)**: Changed `>=` to `>` for `min_annual_ppt` filter in `julia/src/elasticity.jl`. R and Python use strict `>` (excluding years where `P_annual == 10mm`); Julia was using `>=` (including them). Single-character fix aligns all 3 languages.
+
+**Canadian HYDAT metadata for Julia** — Previously all 1,333 Canadian gages had `human_interference_class = "unknown"` with empty RHBN/REGULATED columns in Julia output:
+- New `R/export_hydat_metadata.R`: One-time script to export 8,012 Canadian stations (RHBN + REGULATED) from tidyhydat to CSV
+- Exported to `metadata/canadian_hydat_interference.csv` (tracked in git for cross-language use)
+- Updated `config/signatures_config.json`: `hydat_path` from `null` to `"metadata/canadian_hydat_interference.csv"`
+- Updated `julia/src/metadata.jl`: Relative path resolution against project root in `load_canadian_interference()`
+- Updated `docs/benchmarks/run_julia_benchmark.jl`: Calls `load_canadian_interference()` and merges RHBN/REGULATED/human_interference_class for Canadian gages
+
+**Julia vs Golden R divergence analysis** — Root-cause investigation of 288 divergent columns (R² < 0.99):
+- **Recession (46 cols)**: Intentional algorithm change (position-marking vs look-ahead). Expected; R/Python sync pending.
+- **trend_completeness (220 cols)**: Julia applies 80% non-NA gate for trend stats; Golden R (Feb 2026) predates this feature. Affects slopes/p-values across all categories; means/medians unaffected. Expected; resolves when Golden R is regenerated.
+- **Elasticity (9 cols)**: `>=` vs `>` operator bug (fixed above) + Golden R's since-removed min_Q filter.
+- **dur_low_pulses_all (6 cols)**: Julia produces 3,469 more NAs than R — investigation pending.
 
 ### Guidelines Section 3 Alignment — Julia-First (April 2026)
 

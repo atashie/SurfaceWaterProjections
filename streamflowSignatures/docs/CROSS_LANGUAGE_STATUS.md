@@ -8,7 +8,7 @@ For summary results and how-to-run commands, see the [Cross-Language Benchmarks 
 
 **rpkg** (`rpkg/`): Production-ready R package. Proper installable package mirroring Julia/Python structure. Uses shared `config/signatures_config.json` for all parameters. Incorporates code review fixes that improve cross-language alignment relative to canonical R. Key design decisions documented below.
 
-**Julia**: Production-ready. Major fixes applied across 6 alignment rounds:
+**Julia**: Production-ready. Major fixes applied across 6 alignment rounds + Guidelines Section 3 changes (April 2026):
 - BFI_LyneHollick: Fixed NaN propagation in sum() to match R's na.rm=TRUE
 - BFI valid_q_mask: Removed `Q > 0` filter (zeros are valid data)
 - Flow_Reversals: Implemented linear interpolation matching R's approx()
@@ -17,7 +17,7 @@ For summary results and how-to-run commands, see the [Cross-Language Benchmarks 
 - Recession log_a_events: Recalculation using median_b matching R
 - Recession pointcloud: Pre-populated annual_data with all years; added near-singularity guard (Round 5)
 - Runoff ratios: Removed min_days=250 gate (R/Python have no such filter)
-- Elasticity: Fixed rolling window year assignment and leap year handling
+- Elasticity: Fixed rolling window year assignment, leap year handling, and `>=` to `>` operator for min_annual_ppt
 - FDC naming: Renamed to match R canonical names (FDCall, FDC90th, FDCmid)
 - FDC exceedance: Fixed from Hazen x100 scale to Weibull [0,1] scale matching R/Python
 - FDC min_days: Now config-driven via `CFG_FDC_MIN_DAYS` instead of hardcoded 250
@@ -25,6 +25,12 @@ For summary results and how-to-run commands, see the [Cross-Language Benchmarks 
 - generate_stats: Pre-filter NaN values from years array before stat calculations
 - OLS denominator guard: `abs() < 1e-10` instead of exact `== 0` (Round 6)
 - DataFrame pre-allocation in 5 modules replacing `push!` pattern (Round 6)
+- **Section 3 (April 2026, Julia-only pending R/Python sync):**
+  - Recession event detection: position-level marking replacing look-ahead algorithm (captures full event length)
+  - New signatures: D1/D99 timing, n_recession_events, elasticity_annual, negative_ann, runoff_ratio_high_count
+  - Renamed: `elasticity_*` → `elasticity_rolling_*`; added elasticity diagnostics (years_total, years_low_ppt)
+  - Canadian HYDAT metadata: RHBN, REGULATED, human_interference_class from pre-exported CSV
+  - Mann-Kendall: tau-b tie adjustment, n≤3 p-value guard matching R
 
 **R**: Canonical. Key fixes applied:
 - R16: Eckhardt filter now forward-fills baseflow on NaN Q, matching Python/Julia
@@ -67,16 +73,15 @@ R² of the identity line (y = x): measures whether implementations produce ident
 
 | Pair | Mean R² | Median R² | Min R² | Cols < 0.99 |
 |------|---------|-----------|--------|-------------|
-| R vs Python | 0.9980 | 1.0000 | 0.7152 | 6 |
-| R vs Julia | 0.9977 | 1.0000 | 0.6886 | 8 |
-| Python vs Julia | 0.9997 | 1.0000 | 0.9797 | 2 |
+| R vs Python | 0.9990 | 1.0000 | 0.7621 | 4 |
+| R vs Julia | 0.9991 | 1.0000 | 0.7621 | 4 |
+| Python vs Julia | 0.9999 | 1.0000 | 0.9979 | 0 |
 
-522 perfect (R²>=0.999), 21 good (0.99-0.999), 8 poor (<0.99). 543 of 551 columns (98.5%) have R² >= 0.99 across all 3 pairs. Improvement from March 2026 (475 perfect, 20 poor) driven by removal of leftover min_Q filter in R canonical.
+542 perfect (R²>=0.999), 5 good (0.99-0.999), 4 poor (<0.99). 547 of 551 columns (99.3%) have R² >= 0.99 across all 3 pairs. Improvement from March 2026 (475 perfect, 20 poor) driven by: removal of leftover min_Q filter in R canonical, Julia tau-b tie adjustment, n≤3 p-value guard.
 
-The 8 remaining poor columns are irreducible:
-- 4 recession pointcloud p-values: OLS library differences (R's `lm()` QR rank-checking vs Python/Julia SVD)
-- 2 FDC90th p-values: R has 569 NAs vs Python/Julia 597 (28 extra NAs from stricter filtering)
-- 2 n_low_pulses mk_rho: Julia-specific Mann-Kendall tau divergence (R-Py=1.000)
+The 4 remaining poor columns are irreducible:
+- 2 recession pointcloud p-values: OLS library differences (R's `lm()` QR rank-checking vs Python/Julia SVD)
+- 2 FDC90th p-values: 28-gage NA mismatch from floating-point precision in near-zero regression
 
 ## rpkg Benchmark Results (March 2026)
 
@@ -141,71 +146,82 @@ Canonical R's `process_signatures_from_parquet()` removes all NA-Q rows before m
 
 Note: Rounds 0-6 used Spearman rank correlation. Post-Round 6, the primary metric switched to identity R² (see above), which is stricter and reveals 20 poor columns vs Spearman's 4. Round 6 = post-R16 (Eckhardt forward-fill in R canonical) + code quality fixes P11-P13, J13-J14.
 
-## Per-Category Results (Identity R², March 2026)
+## Per-Category Results (Identity R², April 2026, Three-Way)
+
+Post R canonical fixes + Julia tau-b fix. 551 common columns across 5,707 common gages.
 
 | Category | Total Cols | Perfect (>=0.999) | Good (>=0.99) | Poor (<0.99) | Min R² |
 |----------|-----------|-------------------|---------------|-------------|--------|
-| Baseflow | 16 | 8 | 6 | 2 | 0.9778 |
-| Elasticity | 9 | 3 | 4 | 2 | 0.9841 |
-| FDC | 24 | 11 | 6 | 7 | 0.6745 |
-| Flashiness | 8 | 7 | 0 | 1 | 0.9856 |
-| Flow Percentiles | 128 | 123 | 5 | 0 | 0.9976 |
+| Baseflow | 16 | 12 | 4 | 0 | 0.9930 |
+| Elasticity | 9 | 5 | 4 | 0 | 0.9907 |
+| FDC | 24 | 18 | 2 | 4 | 0.7621 |
+| Flashiness | 8 | 8 | 0 | 0 | 0.9998 |
+| Flow Percentiles | 128 | 128 | 0 | 0 | 0.9996 |
 | Flow Timing | 104 | 104 | 0 | 0 | 1.0000 |
 | Flow Volumes | 40 | 40 | 0 | 0 | 0.9999 |
-| Pulse Metrics | 112 | 99 | 7 | 6 | 0.9768 |
-| Q-P Seasonality | 16 | 14 | 2 | 0 | 0.9989 |
-| Recession | 46 | 32 | 10 | 4 | 0.6846 |
-| Runoff Ratios | 40 | 40 | 0 | 0 | 0.9998 |
-| Storage | 8 | 0 | 6 | 2 | 0.9851 |
+| Pulse Metrics | 112 | 108 | 4 | 0 | 0.9914 |
+| Q-P Seasonality | 16 | 16 | 0 | 0 | 1.0000 |
+| Recession | 46 | 42 | 4 | 0 | 0.9908 |
+| Runoff Ratios | 40 | 40 | 0 | 0 | 1.0000 |
+| Storage | 8 | 5 | 3 | 0 | 0.9960 |
 
-## Known Remaining Divergences (20 columns with R² < 0.99)
+Note: These are three-way results (R vs Python vs Julia on the same 551 pre-Section 3 columns). Julia post-Section 3 has additional columns (D1/D99, n_recession_events, elasticity_annual, negative_ann, diagnostics) not included here.
 
-All 20 poor columns are trend statistics (slopes, p-values) where small numerical differences amplify through trend fitting. Signature means and medians remain near-identical across all 3 languages.
+## Known Remaining Divergences
+
+### Three-Way (8 columns with R² < 0.99, April 2026)
+
+After R canonical fixes (min_Q filter removal, FDC negative Q guard, seasonal_flags passthrough) and Julia tau-b fix, 4 poor columns remain across all 3 pairs. These are irreducible:
 
 | Column | R-Py R² | R-Jl R² | Py-Jl R² | Root Cause |
 |--------|---------|---------|----------|------------|
-| `FDC90th_senn_slp` | 0.675 | 0.675 | 1.000 | 1 extra NA in R; different year populations |
-| `log_a_pointcloud_mk_pval` | 0.711 | 0.685 | 0.998 | OLS library edge case (QR vs SVD) |
-| `b_pointcloud_mk_pval` | 0.724 | 0.700 | 0.998 | OLS library edge case (QR vs SVD) |
-| `b_pointcloud_spearman_pval` | 0.759 | 0.759 | 1.000 | OLS library edge case (QR vs SVD) |
-| `log_a_pointcloud_spearman_pval` | 0.771 | 0.771 | 1.000 | OLS library edge case (QR vs SVD) |
-| `FDC90th_linear_slp` | 0.960 | 0.960 | 1.000 | 1 extra NA in R |
-| `FDC90th_mk_pval` | 0.976 | 0.978 | 0.997 | NA population difference (R:1, Py/Jl:36) |
-| `n_low_pulses_year_mk_rho` | 1.000 | 0.977 | 0.977 | NA population difference |
-| `BFI_LyneHollick_mk_pval` | 0.978 | 0.978 | 1.000 | Filter propagation differences |
-| `FDC90th_spearman_pval` | 0.978 | 0.979 | 0.998 | NA population difference |
-| `BFI_LyneHollick_spearman_pval` | 0.978 | 0.978 | 1.000 | Filter propagation differences |
-| `n_low_pulses_all_mk_rho` | 1.000 | 0.979 | 0.980 | NA population difference (Py/Jl: 309 extra NAs) |
-| `FDC90th_median` | 0.983 | 0.983 | 1.000 | 1 extra NA in R |
-| `elasticity_mk_pval` | 0.984 | 0.984 | 1.000 | Rolling window edge cases |
-| `elasticity_spearman_pval` | 0.984 | 0.984 | 1.000 | Rolling window edge cases |
-| `avg_storage_mk_pval` | 0.985 | 0.986 | 1.000 | Interpolation tie-handling |
-| `FDC90th_mean` | 0.985 | 0.985 | 1.000 | 1 extra NA in R |
-| `flashinessRB_linear_slp` | 1.000 | 0.986 | 0.986 | Small numerical differences |
-| `avg_storage_spearman_pval` | 0.986 | 0.986 | 1.000 | Interpolation tie-handling |
-| `FDC90th_mk_rho` | 0.990 | 0.994 | 0.991 | NA population difference |
+| `log_a_pointcloud_spearman_pval` | ~0.72 | ~0.69 | ~1.00 | OLS library (R `lm()` QR vs Python/Julia SVD) |
+| `b_pointcloud_spearman_pval` | ~0.76 | ~0.76 | ~1.00 | OLS library (R `lm()` QR vs Python/Julia SVD) |
+| `FDC90th_mk_pval` | ~0.76 | ~0.76 | ~1.00 | 28-gage NA mismatch from floating-point precision |
+| `FDC90th_spearman_pval` | ~0.76 | ~0.76 | ~1.00 | 28-gage NA mismatch from floating-point precision |
 
-**Python and Julia agree near-perfectly**: min Py-Jl R² = 0.977, only 3 columns below 0.99.
+**Python and Julia agree perfectly**: 0 columns below 0.99 (min Py-Jl R² = 0.998).
+
+### Historical (20 columns, March 2026 — pre-R canonical fixes)
+
+The March 2026 three-way comparison showed 20 poor columns. The April 2026 R canonical fixes resolved 16 of these by removing the leftover min_Q filter, adding the FDC negative Q guard, and passing seasonal_flags. See [CHANGELOG_ARCHIVE.md](CHANGELOG_ARCHIVE.md) for the full March 2026 table.
+
+### Julia Post-Section 3 vs Golden R (288 columns with R² < 0.99)
+
+Julia's April 2026 output (post-Section 3 changes) diverges substantially from the Feb 2026 Golden R reference. This is expected — the Golden R output predates trend_completeness, the recession algorithm fix, and several other April 2026 changes. Root causes:
+
+| Category | Cols Affected | Root Cause | Type |
+|----------|--------------|------------|------|
+| All categories (trend stats) | 220 | trend_completeness filtering (80% gate) | Temporal gap with Golden R |
+| Recession | 46 | Intentional algorithm change (position-marking) | Julia-only, R/Python sync pending |
+| Elasticity | 9 | `>=` vs `>` operator bug (fixed) + removed min_Q filter | Bug + temporal gap |
+| dur_low_pulses_all | 6 | Julia produces more NAs | Under investigation |
+
+See `docs/benchmarks/julia_vs_golden_r_summary.md` for the full detailed report.
 
 ## Filtering Alignment
 
-Both Python and Julia benchmarks use per-year quality filtering matching R's `process_signatures_from_parquet()`:
+All languages use centralized per-year quality filtering via `preprocess_daily_data()` (April 2026):
 
-1. Min 30 days with Q > 0.0001 mm/day per water year
-2. Min 95% non-NA days per water year (accounting for leap years)
-3. Min 20 qualifying water years per gage
+1. Daily grid normalization (one row/day, sorted, unique)
+2. Linear interpolation of internal gaps ≤3 days
+3. Year rejection: >30 raw NAs, >3-day gaps, residual boundary NAs
+4. Negative Q rejection: config-driven (`reject_negative_flow: false` by default)
+5. Constant-SD: QA flag only, not a rejection criterion
+6. Min 20 qualifying water years per gage
+7. Trend completeness: ≥80% non-NA annual values required for trend stats (slopes, p-values); mean/median always computed. Recession and elasticity exempted.
 
-Config constants are imported from shared `config/signatures_config.json` instead of hardcoded.
+Config constants are imported from shared `config/signatures_config.json` instead of hardcoded. Legacy filtering (`use_legacy_filtering: true`) preserves the old 95%-non-NA-days rule.
 
 Output metadata columns are aligned: `basin_area`, `start_water_year`, `end_water_year`, `num_water_years`.
 
-Python/Julia produce 7,369 qualifying gages (vs R's 5,707). The 1,662 extra gages lack Daymet climate coverage — R only iterates gages with Daymet data, while Python/Julia process all gages and leave climate signatures as NA when Daymet is unavailable.
+Python/Julia produce 7,313-7,369 qualifying gages (vs R's 5,707). The extra gages lack Daymet climate coverage — R only iterates gages with Daymet data, while Python/Julia process all gages and leave climate signatures as NA when Daymet is unavailable.
 
 ## Output Column Notes
 
 ### Human Interference Metadata (13 columns)
 
-All three languages include GAGES-II human interference metadata in their output: `NDAMS_2009`, `MAJ_DDENS_2009`, `STOR_NID_2009`, `IMPNLCD06`, `DEVNLCD06`, `FRESHW_WITHDRAWAL`, `HYDRO_DISTURB_INDX`, `CLASS`, `RHBN`, `REGULATED`, `human_interference_class`, plus `area_normalized` and `gage_type`. R loads both GAGES-II (USGS gages) and HYDAT (Canadian gages) metadata via `tidyhydat`. Python/Julia load GAGES-II metadata; RHBN/REGULATED columns are present but empty (HYDAT integration is R-only for now — to be resolved in a future round).
+All three languages include GAGES-II human interference metadata in their output: `NDAMS_2009`, `MAJ_DDENS_2009`, `STOR_NID_2009`, `IMPNLCD06`, `DEVNLCD06`, `FRESHW_WITHDRAWAL`, `HYDRO_DISTURB_INDX`, `CLASS`, `RHBN`, `REGULATED`, `human_interference_class`, plus `area_normalized` and `gage_type`. R loads both GAGES-II (USGS gages) and HYDAT (Canadian gages) metadata via `tidyhydat`. Julia loads GAGES-II metadata directly and Canadian HYDAT metadata from `metadata/canadian_hydat_interference.csv` (pre-exported from tidyhydat via `R/export_hydat_metadata.R`; 8,012 stations with RHBN and REGULATED status). Python loads GAGES-II metadata; Canadian HYDAT integration pending.
 
 ### Q95.Q10 Naming Convention (temporary)
 
@@ -243,11 +259,12 @@ Python and Julia benchmarks compute 12 `flagged_*` QA/QC columns (e.g., `flagged
 - **BFI_Eckhardt denominator**: Attempted fix to use total valid Q in Python; reverted because it worsened correlations
 - **Net result**: 499 perfect columns (>=0.999), 45 good (0.99-0.999), 7 poor (<0.99)
 
-## Validation Notes
+## Validation Notes (April 2026)
 
-- 547 of 551 columns have rho >= 0.99 across all 3 pairs (99.3%)
-- Median rho = 1.000 for all 3 pairs
-- 505 columns have rho >= 0.999 across all 3 pairs (91.7% perfect agreement)
-- Python-Julia: 0 columns below 0.99 (min rho = 0.9976) — **perfect pairwise alignment**
+- 547 of 551 columns have R² >= 0.99 across all 3 pairs (99.3%)
+- Median R² = 1.000 for all 3 pairs
+- 542 columns have R² >= 0.999 across all 3 pairs (98.4% perfect agreement)
+- Python-Julia: 0 columns below 0.99 (min R² = 0.998) — **perfect pairwise alignment**
 - All 5,707 R gages matched in Python/Julia output
-- Julia is ~7-14x faster than Python for full benchmark (9.8 min vs 69-133 min depending on contention)
+- Julia is ~7-14x faster than Python for full benchmark (~10 min vs 69-133 min depending on contention)
+- Julia post-Section 3: 595 output columns (551 shared + 32 new stats + 8 renamed + 4 scalar diagnostics)
