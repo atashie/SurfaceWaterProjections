@@ -4,7 +4,15 @@
 \alias{calculate_all_signatures}
 \title{Calculate all streamflow signatures for a single gage}
 \usage{
-calculate_all_signatures(streamflow_data, has_climate = FALSE)
+calculate_all_signatures(
+  streamflow_data,
+  has_climate = FALSE,
+  seasonal_flags = NULL,
+  trend_completeness = NULL,
+  decade_completeness = NULL,
+  climate_data = NULL,
+  include_qa_flags = FALSE
+)
 }
 \arguments{
 \item{streamflow_data}{A data.frame/data.table with columns: water_year, Q,
@@ -12,9 +20,26 @@ month, dowy. For climate signatures, also needs PPT.}
 
 \item{has_climate}{Logical. If TRUE and PPT column exists, compute climate
 signatures (runoff ratios, elasticity, Q-P seasonality, avg storage).}
+
+\item{seasonal_flags}{Optional data.table from \code{preprocess_daily_data()}
+with per-year seasonal completeness flags. Passed to
+\code{calculate_flow_vols_by_year()} and \code{analyze_Q_PPT_relationships()}.}
+
+\item{trend_completeness}{Numeric in (0,1] or NULL. Forwarded to
+\code{generate_stats()} in all signature functions.}
+
+\item{decade_completeness}{Numeric in (0,1] or NULL. Forwarded to
+\code{generate_stats()} in all signature functions.}
+
+\item{climate_data}{Optional data.frame/data.table with climate columns (PPT).
+If provided, used instead of \code{streamflow_data} for climate signatures.}
+
+\item{include_qa_flags}{Logical. If TRUE, append 12 QA/QC flag columns from
+\code{compute_qa_flags()} to the output. Default FALSE.}
 }
 \value{
-Named list with ~478 (no climate) or ~551 (with climate) elements.
+Named list with ~478 (no climate) or ~551 (with climate) elements,
+plus 12 flag columns if \code{include_qa_flags = TRUE}.
 }
 \description{
 Orchestrator function that calls all signature modules and merges results

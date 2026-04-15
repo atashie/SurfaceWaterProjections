@@ -396,3 +396,11 @@ The expected relationship **BFI_Eckhardt < BFI_LyneHollick** is validated in QA/
 - Edge cases in filter initialization
 
 **Recommendation**: Flag gages where this relationship is violated for manual review.
+
+### Recession-Informed BFI (Not Yet Implemented)
+
+The guidelines describe `analyze_baseflow_indices_with_parameters()` — calculating BFI using recession parameters as inputs to the Eckhardt and Lyne-Hollick filters (Collischonn & Fan 2013). This is **formally deferred** and not implemented in any codebase. The current BFI functions use fixed default parameters (BFImax=0.8, a=0.98 for Eckhardt; alpha=0.925 for Lyne-Hollick).
+
+### Elasticity 30% Diagnostic (Pending)
+
+The guidelines request a counterfactual diagnostic: "what the number of excluded years would be if the value was <30% data missing." This is **pending clarification with domain experts**. Current diagnostics (`elasticity_years_total`, `elasticity_years_low_ppt`) track actual exclusions but not this hypothetical threshold.

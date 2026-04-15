@@ -19,14 +19,8 @@ identify_pulses <- function(flow_vector, threshold, above = TRUE) {
 count_flow_reversals <- function(flow_vector, threshold_pct = NULL) {
   if (is.null(threshold_pct)) threshold_pct <- pkg_env$flow_reversal_threshold
 
-  if (any(is.na(flow_vector))) {
-    non_na_idx <- which(!is.na(flow_vector))
-    if (length(non_na_idx) < 3) return(0L)
-    flow_clean <- approx(non_na_idx, flow_vector[non_na_idx],
-                         xout = seq_along(flow_vector), rule = 2)$y
-  } else {
-    flow_clean <- flow_vector
-  }
+  stopifnot(!any(is.na(flow_vector)))
+  flow_clean <- flow_vector
 
   n <- length(flow_clean)
   if (n < 3) return(0L)

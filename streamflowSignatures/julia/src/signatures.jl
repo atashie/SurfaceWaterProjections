@@ -24,7 +24,8 @@ function calculate_all_signatures(
     seasonal_flags::Union{Nothing, DataFrame}=nothing,
     trend_completeness::Union{Nothing, Float64}=nothing,
     decade_completeness::Union{Nothing, Float64}=nothing,
-    climate_data::Union{Nothing, DataFrame}=nothing
+    climate_data::Union{Nothing, DataFrame}=nothing,
+    include_qa_flags::Bool=false
 )::Dict{String, Any}
     results = Dict{String, Any}()
 
@@ -124,6 +125,21 @@ function calculate_all_signatures(
             catch e
                 @warn "calculate_average_storage failed for gage $gage_id" exception=(e, catch_backtrace())
             end
+        end
+    end
+
+    # QA/QC flags (optional)
+    if include_qa_flags
+        try
+            row_df = DataFrame(Dict(k => [v] for (k, v) in results))
+            flagged_df = compute_qa_flags(row_df)
+            for col in get_flag_columns()
+                if col in names(flagged_df)
+                    results[col] = flagged_df[1, col]
+                end
+            end
+        catch e
+            @warn "QA/QC flags failed for gage $gage_id" exception=(e, catch_backtrace())
         end
     end
 

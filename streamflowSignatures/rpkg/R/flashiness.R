@@ -22,15 +22,12 @@ analyze_flashiness_trends <- function(streamflow_data,
     }
 
     q_values <- year_data$Q
+    stopifnot(!any(is.na(q_values)))
 
-    if (any(is.na(q_values))) {
-      q_values <- approx(seq_along(q_values), q_values, seq_along(q_values), rule = 2)$y
-    }
-
-    total_q <- sum(q_values, na.rm = TRUE)
+    total_q <- sum(q_values)
     if (total_q == 0) next
 
-    rb_index <- sum(abs(diff(q_values)), na.rm = TRUE) / total_q
+    rb_index <- sum(abs(diff(q_values))) / total_q
     flashiness_by_year$RB_index[flashiness_by_year$water_year == yr] <- rb_index
   }
 

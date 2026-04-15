@@ -16,13 +16,17 @@
 #'   \code{generate_stats()} in all signature functions.
 #' @param climate_data Optional data.frame/data.table with climate columns (PPT).
 #'   If provided, used instead of \code{streamflow_data} for climate signatures.
-#' @return Named list with ~478 (no climate) or ~551 (with climate) elements.
+#' @param include_qa_flags Logical. If TRUE, append 12 QA/QC flag columns from
+#'   \code{compute_qa_flags()} to the output. Default FALSE.
+#' @return Named list with ~478 (no climate) or ~551 (with climate) elements,
+#'   plus 12 flag columns if \code{include_qa_flags = TRUE}.
 #' @export
 calculate_all_signatures <- function(streamflow_data, has_climate = FALSE,
                                      seasonal_flags = NULL,
                                      trend_completeness = NULL,
                                      decade_completeness = NULL,
-                                     climate_data = NULL) {
+                                     climate_data = NULL,
+                                     include_qa_flags = FALSE) {
   results <- list()
 
   # Season exclusion year counts (per-gage scalar diagnostics)
@@ -111,6 +115,15 @@ calculate_all_signatures <- function(streamflow_data, has_climate = FALSE,
                        decade_completeness = decade_completeness)
       if (!is.null(out)) results <- c(results, out)
     }
+  }
+
+  # QA/QC flags (optional)
+  if (isTRUE(include_qa_flags)) {
+    qa_flags <- tryCatch(compute_qa_flags(results), error = function(e) {
+      warning(paste("QA/QC flags failed:", e$message))
+      NULL
+    })
+    if (!is.null(qa_flags)) results <- c(results, qa_flags)
   }
 
   results

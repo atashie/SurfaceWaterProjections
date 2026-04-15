@@ -26,6 +26,7 @@ def calculate_all_signatures(
     climate_data: Optional[pd.DataFrame] = None,
     trend_completeness: Optional[float] = None,
     decade_completeness: Optional[float] = None,
+    include_qa_flags: bool = False,
 ) -> dict:
     """Calculate all signatures for a single gage.
 
@@ -54,11 +55,14 @@ def calculate_all_signatures(
     decade_completeness : float, optional
         Minimum fraction of decades that must contain data for trend statistics
         to be computed. Forwarded to generate_stats().
+    include_qa_flags : bool, default False
+        If True, append 12 QA/QC flag columns from compute_qa_flags() to output.
 
     Returns
     -------
     dict
-        Dictionary mapping signature column names to values (floats or NaN).
+        Dictionary mapping signature column names to values (floats or NaN),
+        plus 12 boolean flag columns if include_qa_flags is True.
     """
     results = {}
 
@@ -150,5 +154,19 @@ def calculate_all_signatures(
             results.update(calculate_average_storage(climate_df, **trend_kwargs))
         except Exception:
             pass
+
+    # QA/QC flags (optional)
+    if include_qa_flags:
+        import logging as _logging
+        try:
+            from .qa_qc import compute_qa_flags, get_flag_columns
+            row_df = pd.DataFrame([results])
+            flagged_df = compute_qa_flags(row_df)
+            for col in get_flag_columns():
+                if col in flagged_df.columns:
+                    val = flagged_df[col].iloc[0]
+                    results[col] = bool(val) if not pd.isna(val) else False
+        except Exception as _e:
+            _logging.warning("QA/QC flags failed: %s", _e)
 
     return results

@@ -10,9 +10,10 @@ compute_qa_flags(sigs)
 \item{sigs}{Named list of signature values (output of calculate_all_signatures).}
 }
 \value{
-Named list of logical flags (TRUE = potential issue).
+Named list of 12 logical flags (TRUE = potential issue).
+Uses \code{flagged_for_*} naming convention matching Python/Julia.
 }
 \description{
 Checks ranges for common signatures and returns a named logical list
-of flags.
+of 12 flags matching the Python/Julia \code{flagged_for_*} convention.
 }

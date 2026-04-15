@@ -37,6 +37,27 @@ Systematic audit comparing `SIGNATURE_GUIDELINES.md` against Python, Julia, and 
 - Finding #3: Seasonal flow reversals (`Flow_Reversals_winter/spring/summer/fall`) — **kept and documented**. Complement the annual count.
 - Finding #6: Q95_Q10 column name — **underscore (`Q95_Q10`) is the standard**. R canonical still outputs `Q95-Q10` (hyphen); will be updated when R is synced.
 
+**rpkg flashiness dead ad-hoc NA interpolation (HIGH — Audit Finding #1)**: Removed inline `approx(rule=2)` interpolation from `rpkg/R/flashiness.R:26-28`. This was removed from Python, Julia, and R canonical in April 2026 (CHANGELOG Fix 6) but rpkg was missed. `rule=2` does constant boundary extrapolation, violating centralized NA design. Replaced with `stopifnot(!any(is.na(q_values)))` defensive assertion.
+
+**rpkg flow reversals dead ad-hoc NA interpolation (HIGH — Audit Finding #2)**: Removed inline `approx(rule=2)` interpolation from `rpkg/R/pulses.R` `count_flow_reversals()` (lines 22-28). Python, Julia, and R canonical are all clean. Replaced with `stopifnot(!any(is.na(flow_vector)))` + direct assignment.
+
+**QA/QC flag integration into calculate_all_signatures() (MEDIUM — Audit Finding #3)**: Added optional `include_qa_flags` parameter to `calculate_all_signatures()` in all 3 packages (rpkg, Python, Julia). When TRUE/True/true, appends 12 QA/QC flag columns from `compute_qa_flags()` to output. Previously QA flags were only called from benchmark runners, not the public API.
+
+**Recession-informed BFI formally deferred (MEDIUM — Audit Finding #4)**: Guidelines describe `analyze_baseflow_indices_with_parameters()` (Collischonn & Fan 2013). Not implemented in any codebase. Added "Not Yet Implemented" note in `SIGNATURES.md`.
+
+**Elasticity 30% diagnostic deferred (MEDIUM — Audit Finding #5)**: Guidelines request counterfactual "what if <30% missing" diagnostic. Pending domain expert clarification. Documented in `SIGNATURES.md`.
+
+**Guidelines items requiring Google Doc update** (second round — no code changes):
+- Audit Finding #6: Qann glossary says "mean" but code computes "total" (sum of daily mm/day); same for seasonal
+- Audit Finding #7: `elasticity` → `elasticity_rolling` rename not in glossary
+- Audit Finding #8: Missing `n_recession_events` in recession glossary
+- Audit Finding #9: Missing `elasticity_annual` + "elastacity" typo in glossary
+- Audit Finding #10: PPT threshold "zero" → "10mm annual / 1mm seasonal"
+- Audit Finding #11: Negative Q contradictory ("remove" vs "count") — code resolves via config
+- Audit Finding #12: Constant-SD contradictory ("remove" vs "flag") — code flags only
+- Audit Finding #13: Stale "Need to fix: julian" note — all codebases use `D*_day`
+- Audit Finding #14: `elasticity_static` output description ambiguous
+
 ### Section 3 Sync to Python & rpkg + Benchmark Re-Run (April 2026)
 
 Synced all 7 Section 3 changes from Julia to Python and rpkg. Re-ran all 3 benchmarks and validated.
