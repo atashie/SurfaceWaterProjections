@@ -19,7 +19,7 @@ This project provides identical signature calculations in R (canonical), Python,
 | `python/` | Python | Active | Port of R signatures |
 | `julia/` | Julia | Active | Port of R signatures |
 
-**Change Workflow**: R is canonical. Changes are normally made in R first, then propagated to Python/Julia. Golden outputs from R (Feb 2026) validate other implementations. Exception: Guidelines Section 3 changes (April 2026) were implemented Julia-first for faster iteration (~10 min benchmark vs hours for R); R/Python sync is pending.
+**Change Workflow**: R is canonical. Changes are normally made in R first, then propagated to Python/Julia. Golden outputs from R (Feb 2026) validate other implementations. Exception: Guidelines Section 3 changes (April 2026) were implemented Julia-first for faster iteration (~10 min benchmark vs hours for R); Python and rpkg synced April 14-15; R canonical recession algorithm sync still pending.
 
 **Canadian HYDAT Metadata**: RHBN and REGULATED status for Canadian gages is pre-exported to `metadata/canadian_hydat_interference.csv` (via `R/export_hydat_metadata.R` using tidyhydat). Julia reads this CSV directly; R uses tidyhydat at runtime.
 

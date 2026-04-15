@@ -11,8 +11,51 @@ For historical entries (Dec 2025 – March 2026), see [docs/CHANGELOG_ARCHIVE.md
 - Add ERA5/PRISM data fetching for USGS/HYDAT gages
 - Implement synchrony metrics (cross-correlation, lag analysis)
 - Recession-informed BFI (Collischonn & Fan 2013) — deferred from Section 3 review
-- Sync R/Python with Julia Section 3 changes (D1/D99, recession fix, n_recession_events, elasticity rename/annual, runoff ratio flag, diagnostics)
+- Sync R canonical recession algorithm with position-marking (last remaining divergence source)
 - Regenerate Golden R outputs with current code (trend_completeness, no min_Q filter)
+
+### Section 3 Sync to Python & rpkg + Benchmark Re-Run (April 2026)
+
+Synced all 7 Section 3 changes from Julia to Python and rpkg. Re-ran all 3 benchmarks and validated.
+
+**Julia runoff_ratios fix (LOW)**: Changed `>=` to `>` for PPT threshold in `julia/src/runoff_ratios.jl` (lines 90, 105). Julia was using `>=` for `CFG_RUNOFF_MIN_ANNUAL_PPT` and `CFG_RUNOFF_MIN_SEASONAL_PPT`; R and Python use strict `>`. Two-character fix.
+
+**Python Section 3 sync** (4 files):
+- `python/streamflow_signatures/recession.py`: Replaced look-ahead algorithm with position-marking; added `n_recession_events` per-year count (independent of min_events gate)
+- `python/streamflow_signatures/elasticity.py`: Renamed `elasticity` → `elasticity_rolling`; added `elasticity_annual` (year-over-year); added `elasticity_years_total` and `elasticity_years_low_ppt` diagnostics
+- `python/streamflow_signatures/runoff_ratios.py`: Added `runoff_ratio_high_count` per-gage scalar
+- `python/streamflow_signatures/signatures.py`: Added `calculate_negative_days` call
+
+**rpkg Section 3 sync** (6 files):
+- `rpkg/R/recession.R`: Replaced look-ahead algorithm with position-marking; added `n_recession_events`
+- `rpkg/R/elasticity.R`: Added `elasticity_annual`; added `elasticity_years_total` and `elasticity_years_low_ppt`; fixed NA template
+- `rpkg/R/runoff_ratios.R`: Added `runoff_ratio_high_count` per-gage scalar
+- `rpkg/R/pulses.R`: Added `calculate_negative_days()` function
+- `rpkg/R/signatures.R`: Added `calculate_negative_days` call
+- `rpkg/NAMESPACE`: Exported `calculate_negative_days`
+- `rpkg/inst/config/signatures_config.json`: Synced with project-level config (was severely outdated — missing `use_legacy_filtering: false`, `na_handling` section, D1/D99 percentiles)
+
+**Comparison script updates**:
+- `docs/benchmarks/compare_three_way.py`: Updated `categorize_metric()` for new Section 3 columns (n_recession, negative_ann, D1/D99)
+- `docs/benchmarks/compare_rpkg.py`: Same categorization updates
+
+**Julia benchmark runner fixes**:
+- `julia/src/StreamflowSignatures.jl`: Added `load_canadian_interference` to module exports
+- `docs/benchmarks/run_julia_benchmark.jl`: Fixed `Vector{Missing}` → `Vector{Union{Missing, Bool}}` for RHBN/REGULATED columns
+
+**Benchmark results (April 14-15, 2026)** — All 3 synced implementations (rpkg, Python, Julia) now produce 594 signature columns across 7,313 gages:
+
+| Pair | Perfect (>=0.999) | Good (0.99-0.999) | Poor (<0.99) | Min R² |
+|------|-------------------|-------------------|-------------|--------|
+| Python vs Julia | 619 | 5 | 3 | 0.986 |
+| rpkg vs Julia | 586 | 4 | 4 | 0.967 |
+| rpkg vs Python | 582 | 5 | 7 | 0.967 |
+
+Poor columns are all irreducible library-level differences: recession pointcloud p-values (2), FDC90th p-values (2), recession seasonality minimum (3). Python-Julia agreement: 0 columns below 0.95.
+
+rpkg vs R canonical: 490 perfect, 46 poor (all recession — R canonical still has old look-ahead algorithm).
+
+**Net column impact**: 594 signature columns per gage (was 551 pre-Section 3). +16 D1/D99, +8 n_recession_events, +8 elasticity_annual, +8 negative_ann, +2 elasticity diagnostics, +1 runoff_ratio_high_count = +43 new; elasticity renamed (8 cols).
 
 ### Julia vs Golden R Comparison & Fixes (April 2026)
 
@@ -38,7 +81,7 @@ For historical entries (Dec 2025 – March 2026), see [docs/CHANGELOG_ARCHIVE.md
 
 ### Guidelines Section 3 Alignment — Julia-First (April 2026)
 
-Six changes implementing Guidelines Document Section 3 function review. Julia-first; R/Python sync pending.
+Six changes implementing Guidelines Document Section 3 function review. Julia-first; Python and rpkg synced April 14-15, 2026.
 
 **Step 1 (LOW): Add D1 and D99 flow timing percentiles**
 Added `1` and `99` to `d_percentiles` in `config/signatures_config.json`. Julia's `timing.jl` reads config dynamically — also fixed hardcoded DataFrame pre-allocation to use config-driven column creation. 16 new columns (`D1_day_*`, `D99_day_*`). Caveat: D1 may be near-constant for flashy streams; D99 may always be ~364-365.

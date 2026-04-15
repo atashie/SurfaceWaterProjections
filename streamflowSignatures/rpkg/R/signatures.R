@@ -61,6 +61,13 @@ calculate_all_signatures <- function(streamflow_data, has_climate = FALSE,
                    streamflow_data)
   if (!is.null(out)) results <- c(results, out)
 
+  # Negative days
+  out <- safe_call(calculate_negative_days, "Negative days",
+                   streamflow_data,
+                   trend_completeness = trend_completeness,
+                   decade_completeness = decade_completeness)
+  if (!is.null(out)) results <- c(results, out)
+
   # Climate signatures
   clim_input <- if (!is.null(climate_data)) climate_data else streamflow_data
   if (has_climate && "PPT" %in% colnames(clim_input)) {

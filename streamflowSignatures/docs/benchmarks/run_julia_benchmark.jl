@@ -319,9 +319,9 @@ function main()
             println("  Loading Canadian HYDAT interference metadata...")
             canadian = load_canadian_interference()
             if nrow(canadian) > 0
-                # Initialize RHBN/REGULATED as missing, then fill from Canadian data
-                results_df[!, :RHBN] = fill(missing, nrow(results_df))
-                results_df[!, :REGULATED] = fill(missing, nrow(results_df))
+                # Initialize RHBN/REGULATED as Union{Missing, Bool} to allow Bool assignment
+                results_df[!, :RHBN] = Vector{Union{Missing, Bool}}(fill(missing, nrow(results_df)))
+                results_df[!, :REGULATED] = Vector{Union{Missing, Bool}}(fill(missing, nrow(results_df)))
                 # Build lookup from Canadian data
                 can_lookup = Dict{String, NamedTuple{(:rhbn, :regulated, :hic), Tuple{Any, Any, String}}}()
                 for row in eachrow(canadian)

@@ -131,14 +131,15 @@ def categorize_metric(base):
         return "FDC"
     if base.startswith("BFI"):
         return "Baseflow"
-    if base.startswith(("log_a", "b_", "concavity")):
+    if base.startswith(("log_a", "b_", "concavity", "n_recession")):
         return "Recession"
     if base.startswith(("n_high", "n_low", "dur_high", "dur_low", "TQmean", "Flow_Reversal")):
         return "Pulse Metrics"
     if base.startswith("flashiness"):
         return "Flashiness"
-    if base.startswith(("D5", "D10", "D20", "D25", "D30", "D40", "D50",
-                        "D60", "D70", "D80", "D90", "D95", "Dmax")):
+    if base.startswith("negative_ann"):
+        return "Negative Days"
+    if base.startswith("D") and ("_day" in base or base in ("D25_to_D75", "Dmax")):
         return "Flow Timing"
     if "runoff_ratio" in base:
         return "Runoff Ratios"

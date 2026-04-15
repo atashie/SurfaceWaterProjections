@@ -75,7 +75,7 @@ export calculate_average_storage
 export compute_qa_flags, get_flag_columns
 
 # Export metadata functions
-export load_gages_ii_interference, enrich_signatures_with_metadata
+export load_gages_ii_interference, load_canadian_interference, enrich_signatures_with_metadata
 
 # Export config constants (used by benchmark runners)
 export CFG_MIN_NUM_YEARS, CFG_MIN_FRAC_GOOD_DATA, CFG_MIN_Q_VALUE,

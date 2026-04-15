@@ -4,7 +4,44 @@
     "min_frac_good_data": 0.95,
     "min_q_value": 0.0001,
     "min_days_above_threshold": 30,
-    "min_nona_days_annual": 250
+    "min_nona_days_annual": 250,
+    "use_legacy_filtering": false
+  },
+  "na_handling": {
+    "interpolation": {
+      "max_gap_days": 3,
+      "method": "linear",
+      "internal_only": true
+    },
+    "year_rejection": {
+      "max_raw_na_per_year": 30,
+      "reject_negative_flow": false,
+      "reject_residual_na": true
+    },
+    "constant_sd_flag": {
+      "enabled": true,
+      "min_nonzero_days_per_month": 15,
+      "max_unique_values": 1
+    },
+    "trend_completeness": {
+      "min_fraction": 0.80,
+      "decade_min_fraction": 0.80
+    },
+    "seasonal_completeness": {
+      "min_fraction": 0.80,
+      "use_raw_observations": true,
+      "season_definitions": {
+        "winter": [12, 1, 2],
+        "spring": [3, 4, 5],
+        "summer": [6, 7, 8],
+        "fall": [9, 10, 11]
+      }
+    },
+    "climate_na_policy": {
+      "max_raw_na_per_year_ppt": 30,
+      "max_interpolation_gap_ppt": 3,
+      "reject_negative_ppt": true
+    }
   },
   "water_year": {
     "start_month": 10
@@ -13,9 +50,7 @@
     "eckhardt_bfimax": 0.8,
     "eckhardt_alpha": 0.98,
     "lyne_hollick_alpha": 0.925,
-    "lyne_hollick_passes": 2,
-    "min_days": 250,
-    "max_missing_frac": 0.2
+    "lyne_hollick_passes": 2
   },
   "recession": {
     "min_length": 5,
@@ -24,44 +59,33 @@
   "pulses": {
     "high_percentile": 0.90,
     "low_percentile": 0.10,
-    "flow_reversal_threshold": 0.02,
-    "min_days": 250
+    "flow_reversal_threshold": 0.02
   },
   "timing": {
-    "min_days": 300,
-    "d_percentiles": [5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95]
+    "d_percentiles": [1, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 99]
   },
   "elasticity": {
     "window_years": 11,
     "min_years": 15,
-    "min_data_completeness": 0.9,
     "min_annual_ppt": 10
   },
   "qp_seasonality": {
     "slope_window_days": 30,
-    "min_years": 10,
-    "min_days_per_year": 300,
-    "max_na_frac": 0.1
+    "min_years": 10
   },
   "runoff_ratios": {
     "min_annual_ppt": 10,
     "min_seasonal_ppt": 1
   },
   "flow_volumes": {
-    "min_days": 250,
     "percentiles": [1, 5, 10, 20, 25, 30, 40, 50, 60, 70, 75, 80, 90, 95, 99]
   },
   "fdc": {
-    "min_days": 250
   },
   "flashiness": {
-    "min_days": 250,
-    "max_missing_frac": 0.2
   },
   "storage": {
-    "min_years": 10,
-    "min_days_per_year": 300,
-    "max_na_frac": 0.1
+    "min_years": 10
   },
   "qa_qc": {
     "qann_range": [0, 2000],
@@ -77,7 +101,7 @@
   "metadata": {
     "include_human_interference": true,
     "gages_ii_dir": "D:/gagesMetadata",
-    "hydat_path": null,
+    "hydat_path": "metadata/canadian_hydat_interference.csv",
     "interference_columns": [
       "NDAMS_2009",
       "MAJ_DDENS_2009",

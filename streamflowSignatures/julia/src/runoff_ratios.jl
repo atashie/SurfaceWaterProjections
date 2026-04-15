@@ -87,7 +87,7 @@ function analyze_Q_PPT_relationships(df::DataFrame; seasonal_flags::Union{Nothin
         total_Q = sum(valid_mask) > 0 ? sum(Q_clean[valid_mask]) : 0.0
         total_P = sum(valid_mask) > 0 ? sum(PPT_clean[valid_mask]) : 0.0
 
-        if total_P >= CFG_RUNOFF_MIN_ANNUAL_PPT
+        if total_P > CFG_RUNOFF_MIN_ANNUAL_PPT
             annual_data[yr_idx, :annual_runoff_ratio] = total_Q / total_P
         end
 
@@ -102,7 +102,7 @@ function analyze_Q_PPT_relationships(df::DataFrame; seasonal_flags::Union{Nothin
             Q_season = sum(s_valid) > 0 ? sum(season_Q[s_valid]) : 0.0
             P_season = sum(s_valid) > 0 ? sum(season_PPT[s_valid]) : 0.0
 
-            if P_season >= CFG_RUNOFF_MIN_SEASONAL_PPT
+            if P_season > CFG_RUNOFF_MIN_SEASONAL_PPT
                 annual_data[yr_idx, Symbol("$(season)_runoff_ratio")] = Q_season / P_season
             end
         end

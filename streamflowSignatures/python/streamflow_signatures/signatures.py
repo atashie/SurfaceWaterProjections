@@ -95,6 +95,7 @@ def calculate_all_signatures(
     except Exception:
         pass
 
+    # Recession: inherently sparse (event-based), no trend completeness
     try:
         results.update(analyze_recession_parameters(gage_data))
     except Exception:
@@ -121,6 +122,7 @@ def calculate_all_signatures(
         except Exception:
             pass
 
+        # Elasticity: rolling window produces fewer values than years, no trend completeness
         try:
             results.update(calculate_streamflow_elasticity(climate_df))
         except Exception:

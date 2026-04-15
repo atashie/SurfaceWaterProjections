@@ -15,6 +15,22 @@ from .config import (
     ELASTICITY_MIN_ANNUAL_PPT,
 )
 
+_SUFFIXES = [
+    "_senn_slp", "_linear_slp", "_spearman_rho", "_spearman_pval",
+    "_mk_rho", "_mk_pval", "_mean", "_median",
+]
+
+
+def _empty_elasticity() -> Dict[str, float]:
+    """Return NaN dict for all elasticity outputs."""
+    result = {"elasticity_static": np.nan}
+    for prefix in ("elasticity_rolling", "elasticity_annual"):
+        for suffix in _SUFFIXES:
+            result[f"{prefix}{suffix}"] = np.nan
+    result["elasticity_years_total"] = np.nan
+    result["elasticity_years_low_ppt"] = np.nan
+    return result
+
 
 def calculate_streamflow_elasticity(
     streamflow_data: pd.DataFrame,
@@ -27,8 +43,14 @@ def calculate_streamflow_elasticity(
     """
     Calculate streamflow elasticity trends.
 
-    Elasticity measures how streamflow changes in response to
-    precipitation changes. E = (dQ/dP) / (Q_mean/P_mean)
+    Calculates:
+    - elasticity_static: Overall catchment elasticity (single value)
+    - elasticity_rolling: Rolling window (11-year) elasticity trends (8 statistics)
+      Uses departure-from-mean method (Sawicz et al. 2011)
+    - elasticity_annual: Year-over-year elasticity trends (8 statistics)
+      Uses consecutive-year differences for year-to-year sensitivity
+    - elasticity_years_total: Total years available (diagnostic scalar)
+    - elasticity_years_low_ppt: Years excluded due to low PPT (diagnostic scalar)
 
     Parameters
     ----------
@@ -47,15 +69,8 @@ def calculate_streamflow_elasticity(
     Returns
     -------
     dict
-        Dictionary of signature statistics with keys:
-            - elasticity_static: Overall median elasticity (single value)
-            - elasticity_senn_slp, elasticity_linear_slp, etc.: Trend statistics
-
-    Notes
-    -----
-    - E ~ 1.0: Proportional response (10% more P -> 10% more Q)
-    - E > 1.0: Amplified response (more sensitive to P changes)
-    - E < 1.0: Dampened response (less sensitive to P changes)
+        Dictionary with elasticity_static, elasticity_rolling_*, elasticity_annual_*
+        statistics, and diagnostic scalars.
 
     Reference:
         Sawicz, K., et al. (2011). Catchment classification:
@@ -76,33 +91,35 @@ def calculate_streamflow_elasticity(
     }).reset_index()
     annual.columns = ["water_year", "Q_annual", "P_annual"]
 
+    # Track totals BEFORE filtering (Step 5: diagnostics)
+    elasticity_years_total = float(len(annual))
+
     # Remove years with zero or very low precipitation
     annual = annual[annual["P_annual"] > min_annual_ppt]
+    elasticity_years_low_ppt = elasticity_years_total - float(len(annual))
 
     # Return NAs if insufficient years
     if len(annual) < min_years:
-        return {
-            "elasticity_static": np.nan,
-            "elasticity_senn_slp": np.nan,
-            "elasticity_linear_slp": np.nan,
-            "elasticity_spearman_rho": np.nan,
-            "elasticity_spearman_pval": np.nan,
-            "elasticity_mk_rho": np.nan,
-            "elasticity_mk_pval": np.nan,
-            "elasticity_mean": np.nan,
-            "elasticity_median": np.nan,
-        }
+        result = _empty_elasticity()
+        result["elasticity_years_total"] = elasticity_years_total
+        result["elasticity_years_low_ppt"] = elasticity_years_low_ppt
+        return result
 
     # Calculate long-term means
     Q_mean = annual["Q_annual"].mean()
     P_mean = annual["P_annual"].mean()
 
-    # Calculate annual elasticity values
-    # E_i = (dQ_i/dP_i) / (Q_mean/P_mean)
+    if P_mean <= 0 or Q_mean <= 0:
+        result = _empty_elasticity()
+        result["elasticity_years_total"] = elasticity_years_total
+        result["elasticity_years_low_ppt"] = elasticity_years_low_ppt
+        return result
+
+    # Calculate annual elasticity values (departure-from-mean)
+    annual = annual.copy()
     annual["dQ"] = annual["Q_annual"] - Q_mean
     annual["dP"] = annual["P_annual"] - P_mean
 
-    # Avoid division by zero
     annual["elasticity"] = np.where(
         np.abs(annual["dP"]) > 0.1,
         (annual["dQ"] / annual["dP"]) / (Q_mean / P_mean),
@@ -112,10 +129,16 @@ def calculate_streamflow_elasticity(
     # Static elasticity is the median
     elasticity_static = annual["elasticity"].median()
 
-    # Calculate rolling window elasticity
-    if rolling_window is not None and len(annual) >= rolling_window:
-        annual = annual.sort_values("water_year")
+    result = {
+        "elasticity_static": elasticity_static,
+        "elasticity_years_total": elasticity_years_total,
+        "elasticity_years_low_ppt": elasticity_years_low_ppt,
+    }
 
+    # --- Rolling window elasticity (Sawicz et al. 2011) ---
+    annual = annual.sort_values("water_year")
+
+    if rolling_window is not None and len(annual) >= rolling_window + 3:
         rolling_elasticity = []
         rolling_years = []
 
@@ -139,52 +162,58 @@ def calculate_streamflow_elasticity(
             rolling_elasticity.append(window["e_w"].median())
             rolling_years.append(annual.iloc[end_idx]["water_year"])
 
-        rolling_df = pd.DataFrame({
-            "water_year": rolling_years,
-            "elasticity_rolling": rolling_elasticity
-        })
+        if len(rolling_elasticity) >= 3:
+            rolling_df = pd.DataFrame({
+                "water_year": rolling_years,
+                "elasticity_rolling": rolling_elasticity
+            })
 
-        # Calculate trend statistics on rolling elasticity
-        trend_stats = generate_stats(
-            rolling_df,
-            value_cols=["elasticity_rolling"],
-            year_col="water_year",
-            trend_completeness=trend_completeness,
-            decade_completeness=decade_completeness,
-        )
-
-        result = {
-            "elasticity_static": elasticity_static,
-            "elasticity_senn_slp": trend_stats.get("elasticity_rolling_senn_slp", np.nan),
-            "elasticity_linear_slp": trend_stats.get("elasticity_rolling_linear_slp", np.nan),
-            "elasticity_spearman_rho": trend_stats.get("elasticity_rolling_spearman_rho", np.nan),
-            "elasticity_spearman_pval": trend_stats.get("elasticity_rolling_spearman_pval", np.nan),
-            "elasticity_mk_rho": trend_stats.get("elasticity_rolling_mk_rho", np.nan),
-            "elasticity_mk_pval": trend_stats.get("elasticity_rolling_mk_pval", np.nan),
-            "elasticity_mean": trend_stats.get("elasticity_rolling_mean", np.nan),
-            "elasticity_median": trend_stats.get("elasticity_rolling_median", np.nan),
-        }
+            rolling_stats = generate_stats(
+                rolling_df,
+                value_cols=["elasticity_rolling"],
+                year_col="water_year",
+                trend_completeness=trend_completeness,
+                decade_completeness=decade_completeness,
+            )
+            result.update(rolling_stats)
+        else:
+            for suffix in _SUFFIXES:
+                result[f"elasticity_rolling{suffix}"] = np.nan
     else:
-        # No rolling window - use annual values for stats
-        annual_valid = annual[~annual["elasticity"].isna()]
-        trend_stats = generate_stats(
-            annual_valid,
-            value_cols=["elasticity"],
+        for suffix in _SUFFIXES:
+            result[f"elasticity_rolling{suffix}"] = np.nan
+
+    # --- Year-over-year elasticity (consecutive-year differences) ---
+    # E_t = ((Q_t - Q_{t-1}) / (P_t - P_{t-1})) / (Q_mean / P_mean)
+    Q_valid = annual["Q_annual"].values
+    P_valid = annual["P_annual"].values
+    years_valid = annual["water_year"].values
+
+    yoy_elasticity = []
+    yoy_years = []
+    for i in range(1, len(Q_valid)):
+        dQ = Q_valid[i] - Q_valid[i - 1]
+        dP = P_valid[i] - P_valid[i - 1]
+        if abs(dP) > 0.1:
+            e = (dQ / dP) / (Q_mean / P_mean)
+            yoy_elasticity.append(e)
+            yoy_years.append(int(years_valid[i]))
+
+    if len(yoy_elasticity) >= 3:
+        yoy_df = pd.DataFrame({
+            "water_year": yoy_years,
+            "elasticity_annual": yoy_elasticity
+        })
+        yoy_stats = generate_stats(
+            yoy_df,
+            value_cols=["elasticity_annual"],
             year_col="water_year",
             trend_completeness=trend_completeness,
             decade_completeness=decade_completeness,
         )
-
-        result = {
-            "elasticity_static": elasticity_static,
-            "elasticity_senn_slp": trend_stats.get("elasticity_senn_slp", np.nan),
-            "elasticity_linear_slp": trend_stats.get("elasticity_linear_slp", np.nan),
-            "elasticity_spearman_rho": trend_stats.get("elasticity_spearman_rho", np.nan),
-            "elasticity_spearman_pval": trend_stats.get("elasticity_spearman_pval", np.nan),
-            "elasticity_mk_rho": trend_stats.get("elasticity_mk_rho", np.nan),
-            "elasticity_mk_pval": trend_stats.get("elasticity_mk_pval", np.nan),
-            "elasticity_mean": trend_stats.get("elasticity_mean", np.nan),
-            "elasticity_median": trend_stats.get("elasticity_median", np.nan),
-        }
+        result.update(yoy_stats)
+    else:
+        for suffix in _SUFFIXES:
+            result[f"elasticity_annual{suffix}"] = np.nan
 
     return result

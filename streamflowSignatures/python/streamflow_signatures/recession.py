@@ -20,17 +20,19 @@ def identify_recession_events(
     min_length: int = RECESSION_MIN_LENGTH
 ) -> List[Dict]:
     """
-    Identify recession events in a streamflow time series.
+    Identify recession events using position-level marking.
 
-    A recession event is a period of monotonically decreasing flow
-    with decreasing rate of change (|dQ/dt| also decreasing).
+    Marks each position where both recession criteria hold (Q decreasing AND
+    |dQ/dt| decreasing), then finds contiguous runs of valid positions >=
+    min_length. This captures the full extent of each recession event, unlike
+    the previous look-ahead algorithm which could truncate events.
 
     Parameters
     ----------
     Q : np.ndarray
         Daily discharge values
     min_length : int, default 5
-        Minimum number of consecutive days for a recession event
+        Minimum number of valid transitions for a recession event
 
     Returns
     -------
@@ -41,76 +43,48 @@ def identify_recession_events(
     if n < min_length + 1:
         return []
 
-    # Calculate dQ/dt (forward difference)
-    dQ_dt = np.diff(Q)
-    dQ_dt = np.append(dQ_dt, np.nan)
+    # Calculate dQ/dt (forward difference) with NaN at end
+    dQ_dt = np.append(np.diff(Q), np.nan)
 
+    # Step 1: Mark each position where both recession criteria hold
+    # Position i is "valid" if Q[i+1] < Q[i] AND |dQdt[i+1]| < |dQdt[i]|
+    is_valid = np.zeros(n, dtype=bool)
+    for i in range(n - 1):
+        if (not np.isnan(Q[i]) and not np.isnan(Q[i + 1]) and
+                not np.isnan(dQ_dt[i]) and not np.isnan(dQ_dt[i + 1])):
+            if Q[i + 1] < Q[i] and abs(dQ_dt[i + 1]) < abs(dQ_dt[i]):
+                is_valid[i] = True
+
+    # Step 2: Find contiguous runs of valid positions >= min_length
+    # A run of k valid transitions at positions start to start+k-1 covers
+    # days start to start+k (k+1 days).
     recession_events = []
-    in_recession = False
-    start_idx = None
-
-    for i in range(n - min_length):
-        # Check if we have valid data
-        if np.isnan(Q[i]) or np.isnan(dQ_dt[i]):
-            if in_recession:
-                # End current recession if we hit NA
-                if start_idx is not None and (i - start_idx) >= min_length:
+    run_start = -1
+    for i in range(n):
+        if is_valid[i]:
+            if run_start < 0:
+                run_start = i
+        else:
+            if run_start >= 0:
+                run_length = i - run_start  # number of valid transitions
+                if run_length >= min_length:
+                    # Event covers days run_start through i (inclusive)
                     recession_events.append({
-                        'start': start_idx,
-                        'end': i - 1,
-                        'indices': list(range(start_idx, i))
+                        'start': run_start,
+                        'end': i,
+                        'indices': list(range(run_start, i + 1))
                     })
-                in_recession = False
-                start_idx = None
-            continue
+                run_start = -1
 
-        # Check for monotonic decrease in both Q and |dQ/dt|
-        if i < n - 1:
-            is_recession = True
-
-            # Check next min_length consecutive decreases
-            for j in range(min_length):
-                idx = i + j
-                if idx + 1 >= n:
-                    is_recession = False
-                    break
-                if (np.isnan(Q[idx]) or np.isnan(Q[idx + 1]) or
-                    np.isnan(dQ_dt[idx]) or np.isnan(dQ_dt[idx + 1])):
-                    is_recession = False
-                    break
-
-                # Check if Q is decreasing
-                if Q[idx + 1] >= Q[idx]:
-                    is_recession = False
-                    break
-
-                # Check if |dQ/dt| is decreasing (becoming less negative)
-                if abs(dQ_dt[idx + 1]) >= abs(dQ_dt[idx]):
-                    is_recession = False
-                    break
-
-            if is_recession and not in_recession:
-                # Start new recession
-                in_recession = True
-                start_idx = i
-            elif not is_recession and in_recession:
-                # End current recession
-                if start_idx is not None and (i - start_idx) >= min_length:
-                    recession_events.append({
-                        'start': start_idx,
-                        'end': i - 1,
-                        'indices': list(range(start_idx, i))
-                    })
-                in_recession = False
-                start_idx = None
-
-    # Check if we ended in a recession
-    if in_recession and start_idx is not None and (n - start_idx) >= min_length:
-        recession_events.append({
-            'start': start_idx,
-            'end': n - 1,
-            'indices': list(range(start_idx, n))
-        })
+    # Handle run ending at data boundary
+    if run_start >= 0:
+        run_length = n - run_start
+        if run_length >= min_length:
+            recession_events.append({
+                'start': run_start,
+                'end': n - 1,
+                'indices': list(range(run_start, n))
+            })
 
     return recession_events
 
@@ -303,6 +277,7 @@ def analyze_recession_parameters(
         "b_pointcloud": np.nan,
         "b_events": np.nan,
         "concavity": np.nan,
+        "n_recession_events": np.nan,
     })
 
     # Store all recession events with timing
@@ -316,6 +291,10 @@ def analyze_recession_parameters(
 
         # Identify recession events
         recession_events = identify_recession_events(Q)
+
+        # Store event count for this year (INDEPENDENT of min_events gate)
+        yr_idx = annual_metrics.index[annual_metrics["water_year"] == yr]
+        annual_metrics.loc[yr_idx, "n_recession_events"] = len(recession_events)
 
         # Collect all recession data for point cloud
         all_Q = []
@@ -425,9 +404,22 @@ def analyze_recession_parameters(
         if len(event_concavities) > 0:
             annual_metrics.loc[annual_metrics["water_year"] == yr, "concavity"] = np.mean(event_concavities)
 
+    # n_recession_events stats computed INDEPENDENTLY of min_events gate
+    events_df = annual_metrics[["water_year", "n_recession_events"]].dropna()
+    if len(events_df) >= 3:
+        n_events_stats = generate_stats(
+            events_df, value_cols=["n_recession_events"], year_col="water_year",
+            trend_completeness=trend_completeness, decade_completeness=decade_completeness,
+        )
+    else:
+        n_events_stats = {}
+        for suffix in ["_senn_slp", "_linear_slp", "_spearman_rho", "_spearman_pval",
+                       "_mk_rho", "_mk_pval", "_mean", "_median"]:
+            n_events_stats[f"n_recession_events{suffix}"] = np.nan
+
     # Check minimum events requirement
     if len(all_recession_events) < min_events:
-        # Return all NAs
+        # Return all NAs (but include n_recession_events stats)
         result = {}
         for sig in signatures_with_stats:
             for suffix in ["_senn_slp", "_linear_slp", "_spearman_rho", "_spearman_pval",
@@ -435,6 +427,7 @@ def analyze_recession_parameters(
                 result[f"{sig}{suffix}"] = np.nan
         for sig in seasonality_signatures:
             result[sig] = np.nan
+        result.update(n_events_stats)
         return result
 
     # Generate statistics for main signatures
@@ -445,6 +438,9 @@ def analyze_recession_parameters(
         trend_completeness=trend_completeness,
         decade_completeness=decade_completeness,
     )
+
+    # Add n_recession_events stats (computed independently above)
+    result.update(n_events_stats)
 
     # Add seasonality signatures (single values, not trends)
     for sig in seasonality_signatures:

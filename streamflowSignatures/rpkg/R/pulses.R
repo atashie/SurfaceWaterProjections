@@ -125,3 +125,32 @@ calculate_pulse_metrics <- function(streamflow_data,
                  trend_completeness = trend_completeness,
                  decade_completeness = decade_completeness)
 }
+
+#' Count days with negative streamflow per water year
+#'
+#' Counts the number of days with Q < 0 in each water year, then produces
+#' 8 trend statistics via \code{generate_stats()}.
+#'
+#' @param streamflow_data A data.frame with columns: water_year, Q.
+#' @param trend_completeness Forwarded to generate_stats.
+#' @param decade_completeness Forwarded to generate_stats.
+#' @return Named list with 8 statistics for negative_ann.
+#' @export
+calculate_negative_days <- function(streamflow_data,
+                                    trend_completeness = NULL,
+                                    decade_completeness = NULL) {
+  required_cols <- c("water_year", "Q")
+  missing <- setdiff(required_cols, colnames(streamflow_data))
+  if (length(missing) > 0) {
+    warning(paste("calculate_negative_days: Missing columns:", paste(missing, collapse = ", ")))
+    return(empty_stats("negative_ann"))
+  }
+
+  annual <- aggregate(Q ~ water_year, data = streamflow_data,
+                      FUN = function(q) sum(!is.na(q) & q < 0))
+  names(annual)[2] <- "negative_ann"
+
+  generate_stats(annual, value_cols = "negative_ann", year_col = "water_year",
+                 trend_completeness = trend_completeness,
+                 decade_completeness = decade_completeness)
+}

@@ -1,4 +1,9 @@
-#' Identify recession events using look-ahead algorithm
+#' Identify recession events using position-level marking
+#'
+#' Marks each position where both recession criteria hold (Q decreasing AND
+#' |dQ/dt| decreasing), then finds contiguous runs of valid positions >=
+#' min_length. This captures the full extent of each recession event, unlike
+#' the previous look-ahead algorithm which could truncate events.
 #' @keywords internal
 identify_recession_events <- function(Q_vector, min_length = NULL) {
   if (is.null(min_length)) min_length <- pkg_env$recession_min_length
@@ -6,54 +11,44 @@ identify_recession_events <- function(Q_vector, min_length = NULL) {
   if (n < min_length + 1) return(list())
 
   dQ_dt <- c(diff(Q_vector), NA)
-  recession_events <- list()
-  in_recession <- FALSE
-  start_idx <- NA_integer_
 
-  for (i in seq_len(n - min_length)) {
-    if (is.na(Q_vector[i]) || is.na(dQ_dt[i])) {
-      if (in_recession) {
-        if (!is.na(start_idx) && (i - start_idx) >= min_length) {
-          recession_events[[length(recession_events) + 1]] <- list(
-            start = start_idx, end = i - 1L, indices = start_idx:(i - 1L)
-          )
-        }
-        in_recession <- FALSE
-        start_idx <- NA_integer_
-      }
-      next
-    }
-
-    if (i < n - 1) {
-      is_rec <- TRUE
-      for (j in 0:(min_length - 1)) {
-        if (i + j + 1 > n || is.na(Q_vector[i + j]) || is.na(Q_vector[i + j + 1]) ||
-            is.na(dQ_dt[i + j]) || is.na(dQ_dt[i + j + 1])) {
-          is_rec <- FALSE; break
-        }
-        if (Q_vector[i + j + 1] >= Q_vector[i + j]) { is_rec <- FALSE; break }
-        if (abs(dQ_dt[i + j + 1]) >= abs(dQ_dt[i + j])) { is_rec <- FALSE; break }
-      }
-
-      if (is_rec && !in_recession) {
-        in_recession <- TRUE
-        start_idx <- i
-      } else if (!is_rec && in_recession) {
-        if (!is.na(start_idx) && (i - start_idx) >= min_length) {
-          recession_events[[length(recession_events) + 1]] <- list(
-            start = start_idx, end = i - 1L, indices = start_idx:(i - 1L)
-          )
-        }
-        in_recession <- FALSE
-        start_idx <- NA_integer_
+  # Step 1: Mark each position where both recession criteria hold
+  is_valid <- logical(n)
+  for (i in seq_len(n - 1)) {
+    if (!is.na(Q_vector[i]) && !is.na(Q_vector[i + 1]) &&
+        !is.na(dQ_dt[i]) && !is.na(dQ_dt[i + 1])) {
+      if (Q_vector[i + 1] < Q_vector[i] && abs(dQ_dt[i + 1]) < abs(dQ_dt[i])) {
+        is_valid[i] <- TRUE
       }
     }
   }
 
-  if (in_recession && !is.na(start_idx) && (n - start_idx) >= min_length) {
-    recession_events[[length(recession_events) + 1]] <- list(
-      start = start_idx, end = n, indices = start_idx:n
-    )
+  # Step 2: Find contiguous runs of valid positions >= min_length
+  recession_events <- list()
+  run_start <- 0L
+  for (i in seq_len(n)) {
+    if (is_valid[i]) {
+      if (run_start == 0L) run_start <- i
+    } else {
+      if (run_start > 0L) {
+        run_length <- i - run_start
+        if (run_length >= min_length) {
+          recession_events[[length(recession_events) + 1]] <- list(
+            start = run_start, end = i, indices = run_start:i
+          )
+        }
+        run_start <- 0L
+      }
+    }
+  }
+  # Handle run ending at data boundary
+  if (run_start > 0L) {
+    run_length <- n - run_start
+    if (run_length >= min_length) {
+      recession_events[[length(recession_events) + 1]] <- list(
+        start = run_start, end = n, indices = run_start:n
+      )
+    }
   }
 
   recession_events
@@ -132,6 +127,7 @@ analyze_recession_parameters <- function(streamflow_data,
   # Build NA result template
   make_na_result <- function() {
     out <- unlist(lapply(signatures_with_stats, empty_stats), recursive = FALSE)
+    out <- c(out, unlist(empty_stats("n_recession_events"), recursive = FALSE))
     for (s in seasonality_sigs) out[[s]] <- NA_real_
     out
   }
@@ -139,7 +135,8 @@ analyze_recession_parameters <- function(streamflow_data,
   years <- unique(streamflow_data$water_year)
   annual_metrics <- data.frame(water_year = years, log_a_pointcloud = NA_real_,
                                log_a_events = NA_real_, b_pointcloud = NA_real_,
-                               b_events = NA_real_, concavity = NA_real_)
+                               b_events = NA_real_, concavity = NA_real_,
+                               n_recession_events = NA_real_)
 
   streamflow_data <- streamflow_data[order(streamflow_data$water_year, streamflow_data$dowy), ]
 
@@ -150,6 +147,9 @@ analyze_recession_parameters <- function(streamflow_data,
     year_data <- year_data[order(year_data$dowy), ]
 
     recession_events <- identify_recession_events(year_data$Q)
+
+    # Store event count for this year (INDEPENDENT of min_events gate)
+    annual_metrics$n_recession_events[annual_metrics$water_year == yr] <- length(recession_events)
 
     all_Q <- numeric(0)
     all_dQ_dt <- numeric(0)
@@ -241,13 +241,33 @@ analyze_recession_parameters <- function(streamflow_data,
     }
   }
 
+  # n_recession_events stats computed INDEPENDENTLY of min_events gate
+  events_df <- annual_metrics[!is.na(annual_metrics$n_recession_events),
+                              c("water_year", "n_recession_events")]
+  if (nrow(events_df) >= 3) {
+    n_events_stats <- generate_stats(events_df, value_cols = "n_recession_events",
+                                     year_col = "water_year",
+                                     trend_completeness = trend_completeness,
+                                     decade_completeness = decade_completeness)
+  } else {
+    n_events_stats <- empty_stats("n_recession_events")
+  }
+
   # Check minimum events
-  if (length(all_recession_events) < min_events) return(make_na_result())
+  if (length(all_recession_events) < min_events) {
+    na_result <- make_na_result()
+    # Override n_recession_events with actual computed stats
+    for (nm in names(n_events_stats)) na_result[[nm]] <- n_events_stats[[nm]]
+    return(na_result)
+  }
 
   result <- generate_stats(annual_metrics, value_cols = signatures_with_stats,
                            year_col = "water_year",
                            trend_completeness = trend_completeness,
                            decade_completeness = decade_completeness)
+
+  # Add n_recession_events stats (computed independently above)
+  result <- c(result, n_events_stats)
 
   # Seasonality
   for (s in seasonality_sigs) result[[s]] <- NA_real_

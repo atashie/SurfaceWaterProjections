@@ -1,0 +1,37 @@
+======================================================================
+PYTHON BENCHMARK - Streamflow Signatures
+======================================================================
+Start time: 2026-04-13 09:15:46
+Config: MIN_NUM_YEARS=20, MIN_FRAC_GOOD_DATA=0.95, MIN_Q_VALUE=0.0001, MIN_DAYS_ABOVE=30
+
+Phase 1: Loading streamflow data...
+  Loaded 111,624,189 rows in 28.99s
+  Unique gages: 8014
+
+Phase 2: Loading climate data...
+  Loaded 97,757,220 rows in 51.88s
+  Merging climate data with streamflow...
+  Merged in 163.26s
+
+Phase 3: Per-year quality filtering (legacy=False)...
+  Preprocessing gage 500...
+  Preprocessing gage 1000...
+  Preprocessing gage 1500...
+Traceback (most recent call last):
+  File "C:\Users\arikt\Documents\GitHub\SurfaceWaterProjections\streamflowSignatures\docs\benchmarks\run_python_benchmark.py", line 375, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "C:\Users\arikt\Documents\GitHub\SurfaceWaterProjections\streamflowSignatures\docs\benchmarks\run_python_benchmark.py", line 149, in main
+    result = preprocess_daily_data(gage_data)
+  File "C:\Users\arikt\Documents\GitHub\SurfaceWaterProjections\streamflowSignatures\python\streamflow_signatures\io.py", line 596, in preprocess_daily_data
+    cleaned_data = pd.concat(cleaned_frames, ignore_index=True)
+  File "C:\Users\arikt\AppData\Local\Programs\Python\Python313\Lib\site-packages\pandas\core\reshape\concat.py", line 395, in concat
+    return op.get_result()
+           ~~~~~~~~~~~~~^^
+  File "C:\Users\arikt\AppData\Local\Programs\Python\Python313\Lib\site-packages\pandas\core\reshape\concat.py", line 684, in get_result
+    new_data = concatenate_managers(
+        mgrs_indexers, self.new_axes, concat_axis=self.bm_axis, copy=self.copy
+    )
+  File "C:\Users\arikt\AppData\Local\Programs\Python\Python313\Lib\site-packages\pandas\core\internals\concat.py", line 177, in concatenate_managers
+    values = np.concatenate(vals, axis=1)  # type: ignore[arg-type]
+numpy._core._exceptions._ArrayMemoryError: Unable to allocate 114. KiB for an array with shape (1, 14609) and data type float64

@@ -135,10 +135,17 @@ def analyze_Q_PPT_relationships(
     metric_cols = [c for c in all_ratios.columns if c != "water_year"]
 
     # Generate statistics
-    return generate_stats(
+    result = generate_stats(
         all_ratios,
         value_cols=metric_cols,
         year_col="water_year",
         trend_completeness=trend_completeness,
         decade_completeness=decade_completeness,
     )
+
+    # Count years where annual runoff ratio > 2.0 (per-gage scalar diagnostic)
+    arr = all_ratios["annual_runoff_ratio"].values
+    n_high = int(np.nansum(arr > 2.0))
+    result["runoff_ratio_high_count"] = float(n_high)
+
+    return result

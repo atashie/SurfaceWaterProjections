@@ -304,50 +304,50 @@ testthat::test_dir("R/tests/")
 
 ## Cross-Language Benchmarks
 
-Python and Julia implementations are validated against R using the R² of the identity line (y = x) across 5,707 common gages and 551 signature columns. This measures whether values are identical (not just correlated). Spearman rank correlation is reported as a secondary diagnostic.
+Python, Julia, and rpkg implementations are validated using the R² of the identity line (y = x). This measures whether implementations produce identical values (not just correlated). Spearman rank correlation is reported as a secondary diagnostic.
 
-### Current Status (April 2026)
+### Current Status (April 15, 2026 — post Section 3 sync)
+
+All three synced implementations (rpkg, Python, Julia) now produce 594 signature columns across 7,313 gages. R canonical still has the old recession algorithm (46 poor columns, sync pending).
 
 | Metric | rpkg | Julia | Python | R (canonical) |
 |--------|------|-------|--------|---------------|
-| Total Time | 114 min | ~10 min | 78.9 min | 874 min* |
-| Gages Processed | 7,369 | 7,313 | 7,369 | 5,707 |
-| Processing Rate | 1.08/s | 13.4/s | 1.56/s | 0.11/s* |
+| Total Time | 867 min* | 27.5 min | 175.5 min | 874 min** |
+| Gages Processed | 7,313 | 7,313 | 7,313 | 5,707 |
+| Signature Columns | 594 | 594 | 594 | 551 |
+| Processing Rate | 0.6/s* | 4.43/s | 0.69/s | 0.11/s** |
 
-*March 16-17, 2026 re-run. R canonical ran concurrently with Python/Julia — timing inflated by I/O contention. Previous solo R runs: ~1-2 hours.
+*rpkg April 15 re-run had severe I/O contention (14.5 hrs vs typical 2-3 hrs). Previous solo run: ~114 min.
+**R canonical March 16-17 re-run, also with I/O contention. Previous solo R runs: ~1-2 hours.
 
-#### Three-Way Identity R² (April 2026, post R canonical fixes + Julia tau-b fix)
+#### Synced Implementations (rpkg, Python, Julia — April 15, 2026)
+
+| Pair | Perfect (>=0.999) | Good (0.99-0.999) | Poor (<0.99) | Min R² |
+|------|-------------------|-------------------|-------------|--------|
+| Python vs Julia | **619** | 5 | 3 | 0.986 |
+| rpkg vs Julia | **586** | 4 | 4 | 0.967 |
+| rpkg vs Python | **582** | 5 | 7 | 0.967 |
+
+Python-Julia: 624 of 627 columns (99.5%) have R² >= 0.99. All 51 new Section 3 columns have R² >= 0.994.
+
+rpkg-Julia: 590 of 594 columns (99.3%) have R² >= 0.99.
+
+#### R Canonical vs Synced Implementations (April 14, 2026)
 
 | Pair | Mean R² | Median R² | Min R² | Cols < 0.99 |
 |------|---------|-----------|--------|-------------|
-| R vs Python | 0.9990 | 1.0000 | 0.7621 | 4 |
-| R vs Julia | 0.9991 | 1.0000 | 0.7621 | 4 |
-| Python vs Julia | 0.9999 | 1.0000 | 0.9979 | 0 |
+| R vs Python | 0.6018 | 0.9999 | -49.72 | 49 |
+| R vs Julia | 0.6022 | 0.9999 | -49.72 | 49 |
+| rpkg vs R | 0.6791 | 0.9999 | -50.04 | 46 |
 
-542 perfect (R²>=0.999), 5 good (0.99-0.999), 4 poor (<0.99). 547 of 551 columns (99.3%) have R² >= 0.99 across all 3 pairs. Python-Julia agreement is perfect (0 columns below 0.99). Remaining 4 poor columns are irreducible: 2 recession Spearman p-values (exact permutation test vs t-approximation for small n), 2 FDC90th p-values (28-gage NA mismatch from floating-point precision).
+All 46-49 poor columns are recession metrics — R canonical still has the old look-ahead algorithm. Non-recession categories show near-perfect agreement (0 poor columns).
 
-**R canonical fixes that drove this improvement** (from March 2026's 20 poor → 4 poor):
-1. Removed leftover min_Q filter (affected ~150 gages' year populations)
-2. FDC negative Q filter (`Q >= 0` guard matching Python/Julia)
-3. seasonal_flags passthrough to flow volumes and Q-PPT functions
+#### Known Remaining Divergences (7 columns max, April 2026)
 
-#### rpkg vs Other Implementations (March 2026)
-
-| Pair | Perfect (>=0.999) | Good (0.99-0.999) | Poor (<0.99) |
-|------|-------------------|-------------------|-------------|
-| rpkg vs Python | **527** | 18 | 6 |
-| rpkg vs Julia | **515** | 28 | 8 |
-| rpkg vs R (canonical) | **490** | 51 | 10 |
-
-rpkg aligns more closely with Python/Julia than canonical R does, because rpkg uses config-driven parameters consistently. The 10 poor columns vs canonical R are explained by 4 intentional design decisions documented in [rpkg/README.md](../rpkg/README.md#intentional-differences-from-canonical-r) and [CROSS_LANGUAGE_STATUS.md](CROSS_LANGUAGE_STATUS.md#rpkg-intentional-design-decisions).
-
-#### Known Remaining Divergences (4 columns, April 2026)
-
-All 4 poor columns are irreducible library-level differences:
-- 2 recession pointcloud p-values: OLS library differences (R's `lm()` QR rank-checking vs Python/Julia SVD)
+All poor columns across the 3 synced implementations are irreducible library-level differences:
+- 2 recession pointcloud p-values: Spearman p-value calculation differences (exact permutation vs t-approximation for small n)
 - 2 FDC90th p-values: 28-gage NA mismatch from floating-point precision in near-zero regression
-
-Python and Julia agree perfectly: 0 columns below 0.99 (min Py-Jl R² = 0.998).
+- 3 recession seasonality minimum: Sinusoidal fit sensitivity (Python-Julia only, R²=0.984-0.989)
 
 #### Julia Post-Section 3 vs Golden R (Feb 2026)
 
@@ -356,19 +356,21 @@ Julia's April 2026 output includes Guidelines Section 3 changes (new signatures,
 | Root Cause | Cols Affected | Type |
 |------------|--------------|------|
 | trend_completeness (80% gate) | 220 | Temporal gap — Golden R predates feature |
-| Recession algorithm rewrite | 46 | Intentional — R/Python sync pending |
+| Recession algorithm rewrite | 46 | Intentional — R canonical sync pending |
 | Elasticity operator bug (fixed) | 9 | Bug fix applied |
 | dur_low_pulses_all NAs | 6 | Under investigation |
 
-#### Alignment Progress (Spearman rho, cols < 0.99 — historical metric through Round 6)
+#### Alignment Progress (historical — Spearman rho through Round 6, then identity R²)
 
-| Pair | Round 0 | Round 2 | Round 3 | Round 4 | Round 5 | Round 6 | Improvement |
-|------|---------|---------|---------|---------|---------|---------|-------------|
-| R vs Python | 323 | 21 | 7 | 6 | **4** | **4** | 98.8% reduction |
-| R vs Julia | 321 | 49 | 5 | 4 | **4** | **4** | 98.8% reduction |
-| Python vs Julia | 73 | 30 | 3 | 3 | **0** | **0** | 100% reduction |
+| Pair | Round 0 | Round 6 | Post-tau-b (Apr) | Post-Section 3 (Apr 15) |
+|------|---------|---------|-----------------|------------------------|
+| R vs Python | 323 | **4** | 4 | 49* |
+| R vs Julia | 321 | **4** | 4 | 49* |
+| Python vs Julia | 73 | **0** | 0 | **3** |
+| rpkg vs Python | — | — | 6 | **7** |
+| rpkg vs Julia | — | — | 8 | **4** |
 
-Note: Rounds 0-6 used Spearman rank correlation. Post-Round 6, the primary metric switched to identity R² (see tables above), which is stricter.
+*R canonical recession divergence (46 cols) is intentional — old algorithm, sync pending. Non-recession: 3 poor cols (FDC90th p-values + dur_low_pulses).
 
 ### Running Benchmarks
 

@@ -71,7 +71,13 @@ analyze_Q_PPT_relationships <- function(streamflow_data, seasonal_flags = NULL,
   }
 
   metric_cols <- setdiff(names(all_ratios), "water_year")
-  generate_stats(all_ratios, value_cols = metric_cols, year_col = "water_year",
-                 trend_completeness = trend_completeness,
-                 decade_completeness = decade_completeness)
+  result <- generate_stats(all_ratios, value_cols = metric_cols, year_col = "water_year",
+                           trend_completeness = trend_completeness,
+                           decade_completeness = decade_completeness)
+
+  # Count years where annual runoff ratio > 2.0 (per-gage scalar diagnostic)
+  n_high <- sum(all_ratios$annual_runoff_ratio > 2.0, na.rm = TRUE)
+  result$runoff_ratio_high_count <- as.numeric(n_high)
+
+  result
 }
