@@ -28,6 +28,18 @@ function calculate_all_signatures(
 )::Dict{String, Any}
     results = Dict{String, Any}()
 
+    # Season exclusion year counts (per-gage scalar diagnostics)
+    if seasonal_flags !== nothing && nrow(seasonal_flags) > 0
+        for (season, col) in [("winter", :win_complete), ("spring", :spr_complete),
+                               ("summer", :sum_complete), ("fall", :fal_complete)]
+            if hasproperty(seasonal_flags, col)
+                results["season_excluded_years_$(season)"] = Float64(sum(.!seasonal_flags[!, col]))
+            else
+                results["season_excluded_years_$(season)"] = 0.0
+            end
+        end
+    end
+
     tc = trend_completeness
     dc = decade_completeness
 

@@ -13,7 +13,7 @@ Calculates 22 metrics:
 - Qann: Annual total flow
 - Qwin, Qspr, Qsum, Qfal: Seasonal totals
 - Q1, Q5, Q10, Q20, Q25, Q30, Q40, Q50, Q60, Q70, Q75, Q80, Q90, Q95, Q99: Percentiles
-- Q95_Q10: High-low flow ratio
+- Q95_Q10: High-low flow difference (Q95 - Q10)
 
 Each metric produces 8 statistics via generate_stats().
 

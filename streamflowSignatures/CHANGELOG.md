@@ -14,6 +14,29 @@ For historical entries (Dec 2025 – March 2026), see [docs/CHANGELOG_ARCHIVE.md
 - Sync R canonical recession algorithm with position-marking (last remaining divergence source)
 - Regenerate Golden R outputs with current code (trend_completeness, no min_Q filter)
 
+### Guidelines vs Implementation Audit (April 2026)
+
+Systematic audit comparing `SIGNATURE_GUIDELINES.md` against Python, Julia, and rpkg codebases.
+
+**Season exclusion year counts (HIGH — Finding #1)**: Added 4 per-gage scalar diagnostics: `season_excluded_years_winter`, `season_excluded_years_spring`, `season_excluded_years_summer`, `season_excluded_years_fall`. Counts of years where each season failed the 80% completeness threshold. Guidelines explicitly requested this but it was never implemented. Added to Python (`signatures.py`), Julia (`signatures.jl`), rpkg (`signatures.R`). Registered in `config.R` as `EXPECTED_SEASON_EXCLUDED_YEARS`.
+
+**Q95_Q10 documentation fix (MEDIUM — Finding #5)**: Fixed "ratio" → "difference" in code comments and documentation. The metric computes Q95 - Q10 (subtraction), not Q95/Q10 (division). Fixed in: `config.R`, `SIGNATURES.md`, `julia/src/flow_volumes.jl`, `rpkg/R/flow_volumes.R`, `rpkg/man/calculate_flow_vols_by_year.Rd`. Python already correct.
+
+**Trend completeness exemptions documented (LOW — Finding #12)**: Added documentation in `SIGNATURES.md` explaining why recession and elasticity are exempt from the 80% trend completeness gate.
+
+**Guidelines items requiring Google Doc update** (no code changes — user to update):
+- Finding #4: Runoff PPT thresholds (10mm annual, 1mm seasonal) stricter than guidelines' zero-only spec
+- Finding #7: Qann glossary says "mean" but code computes "total" (sum of daily mm/day)
+- Finding #8: `elasticity` → `elasticity_rolling` rename not reflected in glossary
+- Finding #9: Negative Q — guidelines say both "remove" and "count"; code resolves by config-driven rejection (off by default) + `negative_ann` count
+- Finding #10: Constant-SD — guidelines say both "remove" and "flag"; code flags only (per user decision)
+- Finding #11: "Need to fix: julian" note is stale — all codebases use `D*_day` names
+
+**User decisions (documented in `SIGNATURES.md`)**:
+- Finding #2: Pulse `*_year` variants (per-year percentiles) — **kept and documented**. Complement the guidelines-specified `*_all` (period-of-record) variants.
+- Finding #3: Seasonal flow reversals (`Flow_Reversals_winter/spring/summer/fall`) — **kept and documented**. Complement the annual count.
+- Finding #6: Q95_Q10 column name — **underscore (`Q95_Q10`) is the standard**. R canonical still outputs `Q95-Q10` (hyphen); will be updated when R is synced.
+
 ### Section 3 Sync to Python & rpkg + Benchmark Re-Run (April 2026)
 
 Synced all 7 Section 3 changes from Julia to Python and rpkg. Re-ran all 3 benchmarks and validated.

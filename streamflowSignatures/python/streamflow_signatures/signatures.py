@@ -62,6 +62,19 @@ def calculate_all_signatures(
     """
     results = {}
 
+    # Season exclusion year counts (per-gage scalar diagnostics)
+    if seasonal_flags is not None and len(seasonal_flags) > 0:
+        import pandas as _pd
+        _sf = _pd.DataFrame(seasonal_flags)
+        for season, col in [("winter", "winter_complete"), ("spring", "spring_complete"),
+                            ("summer", "summer_complete"), ("fall", "fall_complete")]:
+            if col in _sf.columns:
+                results[f"season_excluded_years_{season}"] = float(
+                    (~_sf[col].astype(bool)).sum()
+                )
+            else:
+                results[f"season_excluded_years_{season}"] = 0.0
+
     # Common kwargs for trend completeness
     trend_kwargs = dict(
         trend_completeness=trend_completeness,

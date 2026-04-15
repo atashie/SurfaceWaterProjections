@@ -14,6 +14,6 @@ Named list of statistics.
 }
 \description{
 Computes annual and seasonal flow totals plus 15 flow percentiles and
-the Q95_Q10 ratio, then applies \code{generate_stats()} to produce 8
+the Q95_Q10 difference (Q95 - Q10), then applies \code{generate_stats()} to produce 8
 statistics per metric (22 metrics x 8 stats = 176 columns).
 }

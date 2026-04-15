@@ -564,7 +564,7 @@ EXPECTED_SIGNATURE_BASES <- c(
   # Flow percentiles (Q1 through Q99)
   "Q1", "Q5", "Q10", "Q20", "Q25", "Q30", "Q40", "Q50",
   "Q60", "Q70", "Q75", "Q80", "Q90", "Q95", "Q99",
-  "Q95-Q10",  # Ratio of high to low flows
+  "Q95-Q10",  # Difference of high to low flow percentiles (Q95 - Q10)
   # Flow Duration Curve metrics
   "FDC90th", "FDCall", "FDCmid",
   # Baseflow indices
@@ -614,6 +614,12 @@ EXPECTED_RUNOFF_RATIO_HIGH <- "runoff_ratio_high_count"
 # Elasticity diagnostics (per-gage scalars, not 8-stat pattern)
 EXPECTED_ELASTICITY_DIAGNOSTICS <- c("elasticity_years_total", "elasticity_years_low_ppt")
 
+# Season exclusion year counts (per-gage scalars, not 8-stat pattern)
+EXPECTED_SEASON_EXCLUDED_YEARS <- c(
+  "season_excluded_years_winter", "season_excluded_years_spring",
+  "season_excluded_years_summer", "season_excluded_years_fall"
+)
+
 # Validate output CSV schema
 validate_output_schema <- function(output_df, strict = FALSE, context = NULL) {
   log_info("Validating output schema...", context = context)
@@ -636,7 +642,8 @@ validate_output_schema <- function(output_df, strict = FALSE, context = NULL) {
 
   # Add non-standard columns (don't follow 8-stat suffix pattern)
   expected_sig_cols <- c(expected_sig_cols, EXPECTED_RECESSION_SEASONALITY,
-                         EXPECTED_RUNOFF_RATIO_HIGH, EXPECTED_ELASTICITY_DIAGNOSTICS)
+                         EXPECTED_RUNOFF_RATIO_HIGH, EXPECTED_ELASTICITY_DIAGNOSTICS,
+                         EXPECTED_SEASON_EXCLUDED_YEARS)
 
   present_sig_cols <- intersect(expected_sig_cols, names(output_df))
   missing_sig_cols <- setdiff(expected_sig_cols, names(output_df))

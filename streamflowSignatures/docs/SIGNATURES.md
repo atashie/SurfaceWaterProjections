@@ -35,7 +35,10 @@ Each signature produces **8 statistics** via `generate_stats()`:
 | **Qsum** | Summer total (Jun-Aug) |
 | **Qfal** | Fall total (Sep-Nov) |
 | **Q1-Q99** | Flow percentiles (Q1, Q5, Q10, Q20, Q25, Q30, Q40, Q50, Q60, Q70, Q75, Q80, Q90, Q95, Q99) |
-| **Q95-Q10** | Ratio of high to low flow percentiles |
+| **Q95_Q10** | Difference of high to low flow percentiles (Q95 - Q10) |
+
+### Notes
+- **Q95_Q10 naming**: The standard column name is `Q95_Q10` (underscore). R canonical currently outputs `Q95-Q10` (hyphen) which R auto-converts to `Q95.Q10` in data frames. The underscore form is canonical going forward.
 
 ### Units
 - Qann, Qwin, Qspr, Qsum, Qfal: mm (total over period, summed from daily mm/day values)
@@ -43,6 +46,15 @@ Each signature produces **8 statistics** via `generate_stats()`:
 
 ### Data Quality
 Year qualification is handled centrally by `preprocess_daily_data()` before any signature functions run.
+
+### Diagnostics
+
+| Metric | Description |
+|--------|-------------|
+| **season_excluded_years_winter** | Count of years where winter failed 80% completeness threshold (per-gage scalar) |
+| **season_excluded_years_spring** | Count of years where spring failed 80% completeness threshold (per-gage scalar) |
+| **season_excluded_years_summer** | Count of years where summer failed 80% completeness threshold (per-gage scalar) |
+| **season_excluded_years_fall** | Count of years where fall failed 80% completeness threshold (per-gage scalar) |
 
 ---
 
@@ -104,14 +116,29 @@ Analyzes recession curve behavior using dQ/dt = a*Q^b relationship.
 
 ### Metrics
 
+Two sets of pulse metrics are computed: `*_year` variants use per-year percentile thresholds, while `*_all` variants use period-of-record percentiles (as specified in the guidelines). Both are retained for scientific flexibility.
+
 | Metric | Description | Threshold |
 |--------|-------------|-----------|
-| **n_high_pulses_year** | Count of high pulse events | > 90th percentile |
-| **n_low_pulses_year** | Count of low pulse events | < 10th percentile |
-| **dur_high_pulses_year** | Mean duration of high pulses | days |
-| **dur_low_pulses_year** | Mean duration of low pulses | days |
+| **n_high_pulses_year** | Count of high pulse events (per-year percentiles) | > year-specific 90th percentile |
+| **n_low_pulses_year** | Count of low pulse events (per-year percentiles) | < year-specific 10th percentile |
+| **dur_high_pulses_year** | Mean duration of high pulses (per-year percentiles) | days |
+| **dur_low_pulses_year** | Mean duration of low pulses (per-year percentiles) | days |
+| **n_high_pulses_all** | Count of high pulse events (period-of-record percentiles) | > period-of-record 90th percentile |
+| **n_low_pulses_all** | Count of low pulse events (period-of-record percentiles) | < period-of-record 10th percentile |
+| **dur_high_pulses_all** | Mean duration of high pulses (period-of-record percentiles) | days |
+| **dur_low_pulses_all** | Mean duration of low pulses (period-of-record percentiles) | days |
 | **TQmean** | Percentage of days with flow above annual mean | % |
-| **Flow_Reversals** | Direction changes in flow | annual and seasonal |
+| **Flow_Reversals_annual** | Annual count of flow direction changes | count |
+| **Flow_Reversals_winter** | Winter (Dec-Feb) flow direction changes | count |
+| **Flow_Reversals_spring** | Spring (Mar-May) flow direction changes | count |
+| **Flow_Reversals_summer** | Summer (Jun-Aug) flow direction changes | count |
+| **Flow_Reversals_fall** | Fall (Sep-Nov) flow direction changes | count |
+
+### Notes
+- The `*_all` variants match the guidelines' requirement to "calculate annual metrics using period-of-record percentiles"
+- The `*_year` variants provide complementary per-year sensitivity analysis
+- Seasonal flow reversals complement the annual count with seasonal decomposition
 
 ---
 
@@ -305,11 +332,11 @@ Peters, N.E., & Aulenbach, B.T. (2011). Water storage at the Panola Mountain Res
 
 | Category | Function | Requires Climate | Notes |
 |----------|----------|------------------|-------|
-| Flow Volumes | `calculate_flow_vols_by_year` | No | 22 metrics (5 totals + 16 percentiles + Q95-Q10) |
+| Flow Volumes | `calculate_flow_vols_by_year` | No | 22 metrics (5 totals + 16 percentiles + Q95-Q10) + 4 season exclusion diagnostics |
 | FDC | `analyze_fdc_trends_from_streamflow` | No | 3 metrics (FDCall, FDC90th, FDCmid) |
 | Baseflow | `analyze_baseflow_indices` | No | 2 metrics |
 | Recession | `analyze_recession_parameters` | No | 7 metrics + 6 seasonality |
-| Pulse Metrics | `calculate_pulse_metrics` | No | 15 metrics |
+| Pulse Metrics | `calculate_pulse_metrics` | No | 15 metrics (8 pulse + TQmean + 5 flow reversals + negative_ann) |
 | Flashiness | `analyze_flashiness_trends` | No | 1 metric |
 | Flow Timing | `analyze_flow_timing_trends` | No | 15 metrics |
 | Q-PPT Relationships | `analyze_Q_PPT_relationships` | Yes | 5 metrics + 1 diagnostic |
@@ -345,6 +372,15 @@ Missing data is now handled centrally by `preprocess_daily_data()`, called once 
 **Configuration**: `config/signatures_config.json` → `na_handling` section. `use_legacy_filtering: true` preserves the old 95%-non-NA-days rule.
 
 **Previous behavior** (preserved when `use_legacy_filtering: true`): The flow timing function replaced missing daily flow values with zero before computing cumulative sums. This was a conservative approach that prevented NA propagation through cumsum. The new preprocessing eliminates this need by ensuring valid years have no NAs.
+
+### Trend Completeness Exemptions
+
+The 80% trend completeness gate (requiring >=80% non-NA annual values and >=80% in first/last decades) is **not applied** to two signature categories:
+
+- **Recession**: Event-based and inherently sparse. Many years may have no recession events, so annual value counts naturally fall well below 80%. Applying the gate would eliminate most gages.
+- **Elasticity**: Rolling-window method produces N-10 values from N input years, inherently falling below the 80% threshold relative to the full record length.
+
+These exemptions are implemented consistently in Python, Julia, and rpkg orchestration functions.
 
 ### Seasonality Model Periodicity
 

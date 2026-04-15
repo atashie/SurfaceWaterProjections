@@ -25,6 +25,23 @@ calculate_all_signatures <- function(streamflow_data, has_climate = FALSE,
                                      climate_data = NULL) {
   results <- list()
 
+  # Season exclusion year counts (per-gage scalar diagnostics)
+  if (!is.null(seasonal_flags) && nrow(seasonal_flags) > 0) {
+    for (pair in list(
+      list(season = "winter", col = "winter_complete"),
+      list(season = "spring", col = "spring_complete"),
+      list(season = "summer", col = "summer_complete"),
+      list(season = "fall",   col = "fall_complete")
+    )) {
+      key <- paste0("season_excluded_years_", pair$season)
+      if (pair$col %in% names(seasonal_flags)) {
+        results[[key]] <- as.numeric(sum(!seasonal_flags[[pair$col]]))
+      } else {
+        results[[key]] <- 0
+      }
+    }
+  }
+
   # Safe wrapper for calling signature functions
   safe_call <- function(fn, label, ...) {
     tryCatch(fn(...), error = function(e) {

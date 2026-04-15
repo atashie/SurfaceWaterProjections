@@ -1,7 +1,7 @@
 #' Calculate flow volume signatures by water year
 #'
 #' Computes annual and seasonal flow totals plus 15 flow percentiles and
-#' the Q95_Q10 ratio, then applies \code{generate_stats()} to produce 8
+#' the Q95_Q10 difference (Q95 - Q10), then applies \code{generate_stats()} to produce 8
 #' statistics per metric (22 metrics x 8 stats = 176 columns).
 #'
 #' @param streamflow_data A data.frame with columns: water_year, Q, month, dowy.
@@ -73,7 +73,7 @@ calculate_flow_vols_by_year <- function(streamflow_data, seasonal_flags = NULL,
     all_metrics <- merge(all_metrics, pct_df, by = "water_year", all.x = TRUE)
   }
 
-  # Q95_Q10 ratio
+  # Q95_Q10 difference
   if ("Q95" %in% names(all_metrics) && "Q10" %in% names(all_metrics)) {
     all_metrics[["Q95_Q10"]] <- all_metrics$Q95 - all_metrics$Q10
   } else {
