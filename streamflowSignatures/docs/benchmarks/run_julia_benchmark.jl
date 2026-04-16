@@ -21,15 +21,26 @@ const STREAMFLOW_PATH = raw"D:\processedOuts_feb2026\combined_streamflow_data_09
 const CLIMATE_PATH = raw"D:\processedOuts_feb2026\daymet_1980_2023.parquet"
 const METADATA_PATH = raw"D:\processedOuts_feb2026\combined_watershed_metadata_09feb2026.csv"
 const OUTPUT_DIR = @__DIR__
-
-
+const OUTPUT_PREFIX = get(ENV, "STREAMFLOW_OUTPUT_PREFIX", "julia")
 
 function main()
+    # Read experiment controls from ENV at runtime (not from module constants)
+    # to avoid Julia precompilation caching issues
+    local start_water_year = let
+        v = get(ENV, "STREAMFLOW_START_WATER_YEAR", "")
+        v != "" ? parse(Int, v) : nothing
+    end
+    local min_qualifying_frac = let
+        v = get(ENV, "STREAMFLOW_MIN_QUALIFYING_DATA_FRACTION", "")
+        v != "" ? parse(Float64, v) : nothing
+    end
+
     println("=" ^ 70)
     println("JULIA BENCHMARK - Streamflow Signatures")
     println("=" ^ 70)
     println("Start time: $(Dates.format(now(), "yyyy-mm-dd HH:MM:SS"))")
     println("Config: MIN_NUM_YEARS=$(CFG_MIN_NUM_YEARS), MIN_FRAC_GOOD_DATA=$(CFG_MIN_FRAC_GOOD_DATA), MIN_Q_VALUE=$(CFG_MIN_Q_VALUE), MIN_DAYS_ABOVE=$(CFG_MIN_DAYS_ABOVE_THRESHOLD)")
+    println("Experiment: OUTPUT_PREFIX=$(OUTPUT_PREFIX), START_WY=$(start_water_year), MIN_QUAL_FRAC=$(min_qualifying_frac)")
     println()
 
     timing = Dict{String, Any}(
@@ -130,6 +141,37 @@ function main()
             end
 
             result = preprocess_daily_data(gage_df)
+
+            # Apply start-water-year filter if configured
+            if start_water_year !== nothing
+                wy_mask_data = result.data.water_year .>= start_water_year
+                wy_mask_sf = result.seasonal_flags.water_year .>= start_water_year
+                wy_mask_diag = result.diagnostics.water_year .>= start_water_year
+                result = (
+                    data = result.data[wy_mask_data, :],
+                    valid_years = filter(yr -> yr >= start_water_year, result.valid_years),
+                    valid_climate_years = filter(yr -> yr >= start_water_year, result.valid_climate_years),
+                    rejected_years = result.rejected_years,
+                    seasonal_flags = result.seasonal_flags[wy_mask_sf, :],
+                    diagnostics = result.diagnostics[wy_mask_diag, :],
+                )
+            end
+
+            # Apply min qualifying data fraction filter if configured
+            if min_qualifying_frac !== nothing
+                all_wy = unique(gage_df.water_year)
+                start_yr = start_water_year !== nothing ? start_water_year : minimum(all_wy)
+                wy_in_range = filter(yr -> yr >= start_yr, all_wy)
+                if !isempty(wy_in_range)
+                    max_wy = maximum(wy_in_range)
+                    total_possible = max_wy - start_yr + 1
+                    frac = length(result.valid_years) / total_possible
+                    if frac < min_qualifying_frac
+                        continue  # Skip this gage
+                    end
+                end
+            end
+
             if length(result.valid_years) >= CFG_MIN_NUM_YEARS
                 push!(qualifying_entries, (key.gage_id, result.valid_years))
                 preprocess_cache[key.gage_id] = result
@@ -219,6 +261,14 @@ function main()
     t1 = time()
     timing["phases"]["process_signatures"] = t1 - t0
     println("  Processed $(length(all_results)) gages in $(round(t1-t0, digits=2))s")
+
+    # Zero-gage guard
+    if isempty(all_results)
+        println("WARNING: Zero gages qualified. Writing empty output.")
+        CSV.write(joinpath(OUTPUT_DIR, "$(OUTPUT_PREFIX)_signatures.csv"),
+                  DataFrame(gage_id=String[]))
+        return 0
+    end
 
     # Phase 5: Merge metadata and compute QA/QC flags
     println("\nPhase 5: Merging metadata and computing QA/QC flags...")
@@ -386,7 +436,7 @@ function main()
 
     results_df = results_df[:, final_cols]
 
-    output_path = joinpath(OUTPUT_DIR, "julia_signatures.csv")
+    output_path = joinpath(OUTPUT_DIR, "$(OUTPUT_PREFIX)_signatures.csv")
     CSV.write(output_path, results_df)
 
     t1 = time()
@@ -407,7 +457,7 @@ function main()
     timing["n_qaqc_flags"] = n_flags
 
     # Save timing
-    timing_path = joinpath(OUTPUT_DIR, "julia_timing.json")
+    timing_path = joinpath(OUTPUT_DIR, "$(OUTPUT_PREFIX)_timing.json")
     open(timing_path, "w") do f
         JSON.print(f, timing, 2)
     end

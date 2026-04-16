@@ -9,7 +9,8 @@ using JSON3
 
 # Find config file relative to this module
 const _CONFIG_DIR = joinpath(@__DIR__, "..", "..", "config")
-const _CONFIG_FILE = joinpath(_CONFIG_DIR, "signatures_config.json")
+const _DEFAULT_CONFIG_FILE = joinpath(_CONFIG_DIR, "signatures_config.json")
+const _CONFIG_FILE = get(ENV, "STREAMFLOW_CONFIG", _DEFAULT_CONFIG_FILE)
 
 function load_config()
     if !isfile(_CONFIG_FILE)
@@ -29,6 +30,33 @@ const CFG_MIN_FRAC_GOOD_DATA = _config.filtering.min_frac_good_data
 const CFG_MIN_Q_VALUE = _config.filtering.min_q_value
 const CFG_MIN_DAYS_ABOVE_THRESHOLD = _config.filtering.min_days_above_threshold
 const CFG_MIN_NONA_DAYS_ANNUAL = _config.filtering.min_nona_days_annual
+
+# Experiment controls — JSON defaults with ENV overrides
+const CFG_START_WATER_YEAR = let
+    json_val = get(get(_config, "filtering", Dict()), "start_water_year", nothing)
+    env_val = get(ENV, "STREAMFLOW_START_WATER_YEAR", "")
+    v = if env_val != ""
+        try parse(Int, env_val) catch e
+            error("Invalid STREAMFLOW_START_WATER_YEAR='$env_val': must be an integer")
+        end
+    else
+        json_val
+    end
+    v === nothing ? nothing : Int(v)
+end
+
+const CFG_MIN_QUALIFYING_DATA_FRACTION = let
+    json_val = get(get(_config, "filtering", Dict()), "min_qualifying_data_fraction", nothing)
+    env_val = get(ENV, "STREAMFLOW_MIN_QUALIFYING_DATA_FRACTION", "")
+    v = if env_val != ""
+        try parse(Float64, env_val) catch e
+            error("Invalid STREAMFLOW_MIN_QUALIFYING_DATA_FRACTION='$env_val': must be a number")
+        end
+    else
+        json_val
+    end
+    v === nothing ? nothing : Float64(v)
+end
 
 # =============================================================================
 # Water Year

@@ -5,7 +5,9 @@
     "min_q_value": 0.0001,
     "min_days_above_threshold": 30,
     "min_nona_days_annual": 250,
-    "use_legacy_filtering": false
+    "use_legacy_filtering": false,
+    "start_water_year": null,
+    "min_qualifying_data_fraction": null
   },
   "na_handling": {
     "interpolation": {
