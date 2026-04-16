@@ -14,6 +14,36 @@ For historical entries (Dec 2025 – March 2026), see [docs/CHANGELOG_ARCHIVE.md
 - Sync R canonical recession algorithm with position-marking (last remaining divergence source)
 - Regenerate Golden R outputs with current code (trend_completeness, no min_Q filter)
 
+### Julia Experiment Infrastructure (April 2026)
+
+Sensitivity experiment framework for Julia benchmarks. Two experiments test how restricting the analysis period and gage quality affect results.
+
+**Configuration** (`config/signatures_config.json`):
+- Added `filtering.start_water_year` (null default) — restrict analysis to water years >= specified year
+- Added `filtering.min_qualifying_data_fraction` (null default) — require minimum fraction of possible years with qualifying data
+
+**Infrastructure**:
+- `julia/src/config.jl`: ENV-based overrides (`STREAMFLOW_START_WATER_YEAR`, `STREAMFLOW_MIN_QUALIFYING_DATA_FRACTION`, `STREAMFLOW_CONFIG`, `STREAMFLOW_OUTPUT_PREFIX`) with JSON fallback
+- `docs/benchmarks/run_julia_benchmark.jl`: Added filtering logic, parameterized output paths, zero-gage guard. Experiment controls read from ENV at runtime (not module constants) to avoid Julia precompilation caching of `const` values
+- `docs/benchmarks/run_julia_benchmark_startIn1993.jl`: Thin wrapper — WY >= 1993
+- `docs/benchmarks/run_julia_benchmark_startIn1993_60pct.jl`: Thin wrapper — WY >= 1993 + 60% qualifying fraction
+- `docs/benchmarks/compare_experiment_vs_julia.py`: Parameterized comparison (CSV + markdown report) with gage diff analysis, years-per-gage stats, 6-tier R² classification
+- `docs/benchmarks/build_experiment_vs_julia_dashboard.py`: Parameterized interactive HTML dashboard (dual Leaflet maps + Plotly scatterplot)
+
+**Results (April 16, 2026)**:
+
+| Experiment | Gages | Dropped | Time | Rate |
+|------------|-------|---------|------|------|
+| Baseline | 7,313 | — | 27.5 min | 4.4/s |
+| startIn1993 | 6,678 | 635 | 24 min | 4.7/s |
+| startIn1993+60pct | 6,579 | 734 | 18 min | 5.9/s |
+
+- 635 gages dropped by WY>=1993 restriction (485 USGS, 150 Canadian — lost pre-1993 years below 20-year min)
+- 99 additional gages dropped by 60% filter (all had exactly 20 qualifying years; `frac=20/34=0.588` due to partial WY2026 in raw parquet)
+- Trend statistics diverge significantly vs baseline (expected — different period-of-record); means/medians stable
+
+**Bug found and fixed**: Julia precompilation caches `const` values in `.ji` files. ENV vars set by experiment wrappers were silently ignored after first compilation. Fixed by reading ENV vars at runtime in `main()` as local variables.
+
 ### Guidelines vs Implementation Audit (April 2026)
 
 Systematic audit comparing `SIGNATURE_GUIDELINES.md` against Python, Julia, and rpkg codebases.

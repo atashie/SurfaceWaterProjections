@@ -148,6 +148,10 @@ streamflowSignatures/
 │   │   ├── compare_outputs.py
 │   │   ├── build_julia_vs_golden_r_dashboard.py  # Interactive HTML dashboard
 │   │   ├── build_section3_dashboard.py   # Section 3 pre/post dashboard
+│   │   ├── compare_experiment_vs_julia.py  # Parameterized experiment comparison
+│   │   ├── build_experiment_vs_julia_dashboard.py  # Experiment dashboard builder
+│   │   ├── run_julia_benchmark_startIn1993.jl  # Experiment: WY >= 1993
+│   │   ├── run_julia_benchmark_startIn1993_60pct.jl  # Experiment: WY >= 1993 + 60% filter
 │   │   ├── comparison_report.md
 │   │   ├── julia_vs_golden_r_summary.md  # Generated comparison report
 │   │   └── diagnostics/        # Archived diagnostic scripts
@@ -395,6 +399,16 @@ python docs/benchmarks/compare_three_way.py
 
 # rpkg comparison (rpkg vs R canonical, Python, Julia)
 python docs/benchmarks/compare_rpkg.py
+
+# Sensitivity experiments (~10-20 min each)
+julia docs/benchmarks/run_julia_benchmark_startIn1993.jl
+julia docs/benchmarks/run_julia_benchmark_startIn1993_60pct.jl
+
+# Experiment comparisons + dashboards
+python docs/benchmarks/compare_experiment_vs_julia.py startIn1993
+python docs/benchmarks/compare_experiment_vs_julia.py startIn1993_60pct
+python docs/benchmarks/build_experiment_vs_julia_dashboard.py startIn1993
+python docs/benchmarks/build_experiment_vs_julia_dashboard.py startIn1993_60pct
 ```
 
 ### Benchmark Files
@@ -411,6 +425,10 @@ python docs/benchmarks/compare_rpkg.py
 | `docs/benchmarks/build_comparison_dashboard.py` | Generates interactive HTML dashboard (maps + scatterplot) |
 | `docs/benchmarks/build_julia_vs_golden_r_dashboard.py` | Interactive HTML: Julia vs Golden R with dual maps + scatterplot |
 | `docs/benchmarks/build_section3_dashboard.py` | Section 3 pre/post comparison dashboard |
+| `docs/benchmarks/compare_experiment_vs_julia.py` | Parameterized experiment vs Julia baseline comparison |
+| `docs/benchmarks/build_experiment_vs_julia_dashboard.py` | Parameterized experiment dashboard (HTML) |
+| `docs/benchmarks/run_julia_benchmark_startIn1993.jl` | Experiment: WY >= 1993 wrapper |
+| `docs/benchmarks/run_julia_benchmark_startIn1993_60pct.jl` | Experiment: WY >= 1993 + 60% qualifying fraction wrapper |
 | `docs/benchmarks/comparison_report.md` | Generated comparison report |
 | `docs/benchmarks/julia_vs_golden_r_summary.md` | Generated Julia vs Golden R detailed report |
 
