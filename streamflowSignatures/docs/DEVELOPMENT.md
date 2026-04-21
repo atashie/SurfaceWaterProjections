@@ -152,6 +152,7 @@ streamflowSignatures/
 │   │   ├── build_experiment_vs_julia_dashboard.py  # Experiment dashboard builder
 │   │   ├── run_julia_benchmark_startIn1993.jl  # Experiment: WY >= 1993
 │   │   ├── run_julia_benchmark_startIn1993_60pct.jl  # Experiment: WY >= 1993 + 60% filter
+│   │   ├── run_julia_benchmark_startIn1993_80pct.jl  # Experiment: WY >= 1993 + 80% filter
 │   │   ├── comparison_report.md
 │   │   ├── julia_vs_golden_r_summary.md  # Generated comparison report
 │   │   └── diagnostics/        # Archived diagnostic scripts
@@ -403,12 +404,15 @@ python docs/benchmarks/compare_rpkg.py
 # Sensitivity experiments (~10-20 min each)
 julia docs/benchmarks/run_julia_benchmark_startIn1993.jl
 julia docs/benchmarks/run_julia_benchmark_startIn1993_60pct.jl
+julia docs/benchmarks/run_julia_benchmark_startIn1993_80pct.jl
 
 # Experiment comparisons + dashboards
 python docs/benchmarks/compare_experiment_vs_julia.py startIn1993
 python docs/benchmarks/compare_experiment_vs_julia.py startIn1993_60pct
+python docs/benchmarks/compare_experiment_vs_julia.py startIn1993_80pct
 python docs/benchmarks/build_experiment_vs_julia_dashboard.py startIn1993
 python docs/benchmarks/build_experiment_vs_julia_dashboard.py startIn1993_60pct
+python docs/benchmarks/build_experiment_vs_julia_dashboard.py startIn1993_80pct
 ```
 
 ### Benchmark Files
@@ -429,6 +433,7 @@ python docs/benchmarks/build_experiment_vs_julia_dashboard.py startIn1993_60pct
 | `docs/benchmarks/build_experiment_vs_julia_dashboard.py` | Parameterized experiment dashboard (HTML) |
 | `docs/benchmarks/run_julia_benchmark_startIn1993.jl` | Experiment: WY >= 1993 wrapper |
 | `docs/benchmarks/run_julia_benchmark_startIn1993_60pct.jl` | Experiment: WY >= 1993 + 60% qualifying fraction wrapper |
+| `docs/benchmarks/run_julia_benchmark_startIn1993_80pct.jl` | Experiment: WY >= 1993 + 80% qualifying fraction wrapper |
 | `docs/benchmarks/comparison_report.md` | Generated comparison report |
 | `docs/benchmarks/julia_vs_golden_r_summary.md` | Generated Julia vs Golden R detailed report |
 

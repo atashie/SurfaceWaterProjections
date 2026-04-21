@@ -166,6 +166,9 @@ def tier_counts(r2_series):
 def get_experiment_description(name):
     """Auto-detect experiment type and return description."""
     name_lower = name.lower()
+    if "1993" in name_lower and "80pct" in name_lower:
+        return ("Water years >= 1993 AND at least 80% of possible years "
+                "(WY1993 to gage max) must have qualifying data.")
     if "1993" in name_lower and "60pct" in name_lower:
         return ("Water years >= 1993 AND at least 60% of possible years "
                 "(WY1993 to gage max) must have qualifying data.")
