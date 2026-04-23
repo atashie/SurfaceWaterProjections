@@ -1,3 +1,12 @@
+# ============================================================
+# DEPRECATED — Julia is the canonical implementation (April 2026)
+# This file is maintained as a legacy shim for data ingestion
+# and utility scripts. For signature development, use:
+#   julia/src/  (canonical)
+#   rpkg/       (R port)
+# New signature features will NOT be added to this file.
+# ============================================================
+
 require(data.table)     # for fread
 require(lubridate)		# for dates
 require(dataRetrieval)	# for USGS hydro data

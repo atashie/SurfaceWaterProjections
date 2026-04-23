@@ -1,3 +1,9 @@
+# ============================================================
+# DEPRECATED — Julia is the canonical implementation (April 2026)
+# For signature extraction, use: julia docs/benchmarks/run_julia_benchmark.jl
+# For the R port, use: rpkg/
+# This script is retained for legacy/ingestion compatibility only.
+# ============================================================
 ################################################################################
 # Full Streamflow Signature Processing Script
 #

@@ -1,5 +1,5 @@
 """
-Compare rpkg output against canonical R, Python, and Julia benchmark outputs.
+Compare rpkg output against canonical Julia, Python, and R benchmark outputs.
 
 Uses the same R² identity-line metric as compare_three_way.py.
 """
@@ -200,7 +200,7 @@ def main():
 
     # Load other benchmarks
     pairs = []
-    for name, filename in [("R (canonical)", "r_signatures.csv"),
+    for name, filename in [("R (legacy)", "r_signatures.csv"),
                             ("Python", "python_signatures.csv"),
                             ("Julia", "julia_signatures.csv")]:
         path = BENCHMARK_DIR / filename

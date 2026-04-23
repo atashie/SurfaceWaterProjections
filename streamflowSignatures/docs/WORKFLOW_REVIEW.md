@@ -1,3 +1,5 @@
+> **Historical Note**: This document was written when R was the canonical implementation. Julia became canonical in April 2026.
+
 # Streamflow Signatures Workflow Review - Comprehensive Analysis
 
 **Date:** February 2026

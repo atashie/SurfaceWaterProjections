@@ -1,6 +1,6 @@
 # Streamflow Signatures
 
-A framework for extracting hydrological signatures from daily streamflow data, with implementations in R (canonical), Python, and Julia. Processes data from USGS, Canadian HYDAT, and Caravan datasets to calculate 100+ metrics characterizing flow regimes, trends, and variability.
+A framework for extracting hydrological signatures from daily streamflow data, with implementations in Julia (canonical), Python, and R. Processes data from USGS, Canadian HYDAT, and Caravan datasets to calculate 100+ metrics characterizing flow regimes, trends, and variability.
 
 ## Project Goals
 
@@ -10,7 +10,7 @@ A framework for extracting hydrological signatures from daily streamflow data, w
 
 **Secondary:**
 3. **Visualization** — Interactive Shiny dashboard for exploring signatures, trends, and cross-signature relationships across thousands of gages.
-4. **Cross-Language Implementations** — Python and Julia ports produce near-identical results to the R canonical implementation (99.3% of columns have Spearman rho >= 0.99). Goal: publishable packages/libraries for community use.
+4. **Cross-Language Implementations** — Python and R ports produce near-identical results to the Julia canonical implementation (99.5% of columns have R² >= 0.99). Goal: publishable packages/libraries for community use.
 
 ## Features
 
@@ -24,7 +24,20 @@ A framework for extracting hydrological signatures from daily streamflow data, w
 
 ### Prerequisites
 
-**R** (canonical):
+**Julia** (canonical, 1.9+):
+```julia
+cd("julia/")
+using Pkg; Pkg.activate("."); Pkg.instantiate()
+```
+
+**Python** (3.9+):
+```bash
+cd python/
+pip install -e .
+# Or: pip install numpy pandas pyarrow scipy
+```
+
+**R** (legacy):
 ```r
 install.packages(c(
   "data.table", "arrow", "lubridate",
@@ -36,38 +49,30 @@ install.packages(c(
 install.packages(c("shiny", "leaflet", "plotly", "aws.s3"))
 ```
 
-**Python** (3.9+):
-```bash
-cd python/
-pip install -e .
-# Or: pip install numpy pandas pyarrow scipy
-```
+### Julia: Extract Signatures (Canonical)
 
-**Julia** (1.9+):
 ```julia
-cd("julia/")
-using Pkg; Pkg.activate("."); Pkg.instantiate()
-```
+using StreamflowSignatures, DataFrames
 
-### R: Extract Signatures from Parquet
+df = read_parquet("path/to/streamflow.parquet")
+df = add_water_year_columns(df)  # auto-detects "Date" or "date" column
+gage_data = df[df.gage_id .== "01011000", :]
 
-```r
-# Source config and helper functions
-source("config.R")
-source("R/helperFunctions.R")
-
-# Process signatures
-summary_output <- process_signatures_from_parquet(
-  parquet_file_path = "path/to/streamflow.parquet",
-  metadata_file_path = "path/to/metadata.csv",
-  output_file = "path/to/output.csv",
-  min_Q_value_and_days = c(0.0001, 30),  # Min flow threshold
-  min_num_years = 20,                      # Min years of data
-  min_frac_good_data = 0.95               # Min data completeness
+# Calculate signatures (each returns a Dict{String, Float64})
+all_signatures = merge(
+    calculate_flow_vols_by_year(gage_data),
+    analyze_flashiness_trends(gage_data),
+    analyze_flow_timing_trends(gage_data),
+    analyze_fdc_trends(gage_data),
+    analyze_baseflow_indices(gage_data),
+    analyze_recession_parameters(gage_data),
+    calculate_pulse_metrics(gage_data),
 )
 ```
 
-**Note:** Examples use `"path/to/streamflow.parquet"` as a placeholder. Your parquet needs columns `gage_id`, `Date` (or `date`), and `Q` (mm/day). To list available gages: `df["gage_id"].unique()` (Python) or `unique(df.gage_id)` (Julia). See `docs/DEVELOPMENT.md` → "Parquet Data Files" for data locations.
+**Note:** Examples use `"path/to/streamflow.parquet"` as a placeholder. Your parquet needs columns `gage_id`, `Date` (or `date`), and `Q` (mm/day). To list available gages: `unique(df.gage_id)` (Julia) or `df["gage_id"].unique()` (Python). See `docs/DEVELOPMENT.md` → "Parquet Data Files" for data locations.
+
+See [`julia/README.md`](julia/README.md) for full API details, input format, and climate-dependent signatures.
 
 ### Python: Extract Signatures
 
@@ -105,28 +110,23 @@ all_signatures = {
 
 See [`python/README.md`](python/README.md) for full API details, input format, and climate-dependent signatures.
 
-### Julia: Extract Signatures
+### R (Legacy): Extract Signatures from Parquet
 
-```julia
-using StreamflowSignatures, DataFrames
+```r
+# Source config and helper functions
+source("config.R")
+source("R/helperFunctions.R")
 
-df = read_parquet("path/to/streamflow.parquet")
-df = add_water_year_columns(df)  # auto-detects "Date" or "date" column
-gage_data = df[df.gage_id .== "01011000", :]
-
-# Calculate signatures (each returns a Dict{String, Float64})
-all_signatures = merge(
-    calculate_flow_vols_by_year(gage_data),
-    analyze_flashiness_trends(gage_data),
-    analyze_flow_timing_trends(gage_data),
-    analyze_fdc_trends(gage_data),
-    analyze_baseflow_indices(gage_data),
-    analyze_recession_parameters(gage_data),
-    calculate_pulse_metrics(gage_data),
+# Process signatures
+summary_output <- process_signatures_from_parquet(
+  parquet_file_path = "path/to/streamflow.parquet",
+  metadata_file_path = "path/to/metadata.csv",
+  output_file = "path/to/output.csv",
+  min_Q_value_and_days = c(0.0001, 30),  # Min flow threshold
+  min_num_years = 20,                      # Min years of data
+  min_frac_good_data = 0.95               # Min data completeness
 )
 ```
-
-See [`julia/README.md`](julia/README.md) for full API details, input format, and climate-dependent signatures.
 
 ### R: Process Caravan Data
 
@@ -167,15 +167,15 @@ Each signature includes 8 statistics: `_senn_slp` (Theil-Sen trend), `_linear_sl
 
 ## Cross-Language Alignment
 
-R is the canonical implementation. Python and Julia are validated ports producing near-identical results:
+Julia is the canonical implementation. Python and R are validated ports producing near-identical results:
 
-| Metric | R | Python | Julia |
-|--------|---|--------|-------|
-| Approx. processing time (7,369 gages) | ~1-2 hrs | ~70 min | ~10 min |
-| Columns with rho >= 0.99 vs R | -- | 547/551 (99.3%) | 547/551 (99.3%) |
-| Python-Julia agreement | -- | -- | 551/551 (100%) |
+| Metric | Julia | Python | rpkg (R port) | R (legacy) |
+|--------|-------|--------|---------------|------------|
+| Approx. processing time (7,313 gages) | ~10 min | ~70 min | ~2 hrs | ~1-2 hrs |
+| Signature columns | 594 | 594 | 594 | 551 |
+| Signature cols with R² >= 0.99 vs Julia | -- | 591/594 (99.5%) | 590/594 (99.3%) | 502/551 (91.1%) |
 
-All three languages share configuration via `config/signatures_config.json`. The 4 remaining columns below 0.99 are recession pointcloud p-values caused by irreducible OLS library differences.
+All implementations share configuration via `config/signatures_config.json`. The few remaining columns below 0.99 are irreducible library-level differences (Spearman p-value calculations, floating-point precision in near-zero regression). R legacy still uses the old recession algorithm (46 divergent columns).
 
 See [`docs/CROSS_LANGUAGE_STATUS.md`](docs/CROSS_LANGUAGE_STATUS.md) for full alignment history and methodology.
 
@@ -221,19 +221,20 @@ Watershed metadata is automatically enriched with human interference indicators:
 
 ```
 streamflowSignatures/
-├── config.R                       # Configuration (source first)
-├── R/helperFunctions.R            # Core functions (canonical)
-├── R/tests/                       # R test suite
-├── run_full_processing.R          # PRIMARY entry point
-├── run_ingest_usgs_hydat.R        # Raw data ingestion
-├── run_caravan_processing.R       # Caravan processing
-├── python/                        # Python implementation
-├── julia/                         # Julia implementation
+├── julia/                         # Julia implementation (canonical)
+├── python/                        # Python implementation (port)
+├── rpkg/                          # R package (port)
 ├── config/signatures_config.json  # Shared cross-language config (thresholds, parameters)
-├── golden-outputs/                # R reference outputs for validation
+├── golden-outputs/                # Reference outputs for validation
 ├── docs/                          # Extended documentation & benchmarks
-├── streamflowAndClimateVisualizationApp/  # Shiny dashboard
 ├── metadata/                      # Basin/gage metadata
+├── config.R                       # R legacy configuration
+├── R/helperFunctions.R            # R legacy core functions (deprecated)
+├── R/tests/                       # R legacy test suite
+├── run_full_processing.R          # R legacy entry point
+├── run_ingest_usgs_hydat.R        # Raw data ingestion (R)
+├── run_caravan_processing.R       # Caravan processing (R)
+├── streamflowAndClimateVisualizationApp/  # Shiny dashboard
 ├── logs/                          # Processing logs (gitignored)
 └── data_out/                      # Output files (gitignored)
 ```
@@ -305,10 +306,11 @@ See the following documentation:
 
 ### Adding New Signatures
 
-1. Create calculation function in `R/helperFunctions.R`
-2. Add function call in `process_signatures_from_parquet()`
+1. Create calculation function in `julia/src/` (canonical implementation)
+2. Add function call in the signature orchestration (`julia/src/signatures.jl`)
 3. Follow naming convention: `{metric}_{stat}` (e.g., `NewMetric_senn_slp`, `NewMetric_mk_pval`)
-4. Update documentation
+4. Propagate to Python and rpkg
+5. Update documentation
 
 ## References
 

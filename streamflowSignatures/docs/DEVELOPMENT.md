@@ -13,7 +13,7 @@ USGS (dataRetrieval)  ──┐
   (streamflow only)     ├──> Parquet Storage ──┐
                         │                       │
 Canadian HYDAT  ────────┘                       ├──> Signature ──> CSV Summary
-  (streamflow only)                             │    Extraction     (560+ columns)
+  (streamflow only)                             │    Extraction     (594 columns)
                                                 │
 Daymet (climate data)  ──> Parquet Storage ─────┘
   (PPT, temp, SWE)         (joined at runtime)
@@ -27,7 +27,7 @@ Caravan NetCDF ──────────────> Direct Processing ─
 
 1. **Plain-English Guardrails** — Domain experts define signature methodology in `SIGNATURE_GUIDELINES.md` (auto-synced from a shared Google Doc). Code implements those definitions. This separates hydrological expertise from implementation. Note: Notion was evaluated as an alternative hosting platform (March 2026) but rejected — Notion's JS-rendered published pages are unreliable for automated fetching, and Google Docs' static HTML + permanent URLs are better suited to the auto-sync workflow.
 
-2. **R Canonical, Others Follow** — All changes are made in R first, validated, then propagated to Python/Julia. Golden outputs from R serve as the reference for cross-language validation.
+2. **Julia Canonical, Others Follow** — All changes are made in Julia first, validated via benchmark (~27 min), then propagated to Python and rpkg. Golden outputs from Julia serve as the reference for cross-language validation.
 
 3. **Strict Output Schema** — The CSV output format (column names, ordering) is a contract. Downstream tools depend on exact column names. Every signature produces exactly 8 statistics via `generate_stats()`.
 
@@ -85,8 +85,8 @@ streamflowSignatures/
 ├── run_caravan_processing.R     # Caravan data processing
 ├── run_restricted_processing.R  # Restricted processing
 │
-├── R/                           # R canonical implementation + tests
-│   ├── helperFunctions.R        # CANONICAL - All core functions (45+ functions)
+├── R/                           # Legacy R (deprecated for signatures — ingestion utilities still active)
+│   ├── helperFunctions.R        # DEPRECATED — Legacy shim (ingestion utilities only)
 │   ├── load_config.R            # Config loader
 │   ├── run_conversion.R         # Daymet ZIP to Parquet conversion
 │   ├── run_enrich_metadata.R    # Human interference metadata enrichment
@@ -103,7 +103,7 @@ streamflowSignatures/
 │       ├── generate_golden_outputs.R
 │       └── verify_no_regression.R  # Golden output regression check
 │
-├── rpkg/                        # R package (production-ready, mirrors Julia/Python structure)
+├── rpkg/                        # R port (production-ready, mirrors Julia/Python structure)
 │   ├── DESCRIPTION
 │   ├── NAMESPACE
 │   ├── README.md
@@ -116,7 +116,7 @@ streamflowSignatures/
 │   ├── streamflow_signatures/   # 17 modules
 │   └── tests/                   # Python tests
 │
-├── julia/                       # Julia package (production-ready)
+├── julia/                       # Julia canonical implementation (production-ready)
 │   ├── README.md
 │   ├── Project.toml
 │   ├── src/                     # 17 modules
@@ -125,12 +125,13 @@ streamflowSignatures/
 ├── config/                      # Cross-language configuration
 │   └── signatures_config.json
 │
-├── golden-outputs/              # R reference outputs for validation (Feb 2026)
+├── golden-outputs/              # Julia canonical (April 2026) + R historical (Feb 2026)
 │   ├── README.md
 │   ├── streamflow_signatures_full_10feb2026.csv
 │   └── combined_watershed_metadata_09feb2026.csv
-│   # Note: Golden outputs pre-date April 2026 changes (trend_completeness,
-│   # Section 3 signatures, recession fix). Refresh planned.
+│   # Julia is the canonical golden output (April 2026). R golden outputs (Feb 2026)
+│   # are historical — they pre-date trend_completeness, Section 3 signatures,
+│   # and recession fix.
 │
 ├── docs/                        # Extended documentation
 │   ├── DEVELOPMENT.md           # This file
@@ -178,37 +179,33 @@ streamflowSignatures/
 
 ### Run Signature Extraction
 
-```r
-source("config.R")              # Load configuration
-source("R/helperFunctions.R")   # Load all functions
+**Julia (canonical)**:
 
-summary_output <- process_signatures_from_parquet(
-  parquet_file_path = "path/to/streamflow.parquet",
-  metadata_file_path = "path/to/metadata.csv",
-  output_file = "path/to/output.csv",
-  min_Q_value_and_days = MIN_Q_VALUE_AND_DAYS,  # From config.R
-  min_num_years = MIN_NUM_YEARS,                 # From config.R
-  min_frac_good_data = MIN_FRAC_GOOD_DATA        # From config.R
-)
+```julia
+using StreamflowSignatures
+# See docs/benchmarks/run_julia_benchmark.jl for full pipeline
 ```
 
-### Run Full Processing Pipeline (Recommended)
+**R (via rpkg)**:
 
-The easiest way to run a complete signature extraction with climate data:
+```r
+library(streamflowsignatures)
+# See docs/benchmarks/run_rpkg_benchmark.R for full pipeline
+```
+
+### Run Full Processing Pipeline
+
+The fastest way to run a complete signature extraction:
 
 ```bash
-# From the streamflowSignatures directory:
+# Julia (canonical, ~27 min for 7,313 gages):
+julia docs/benchmarks/run_julia_benchmark.jl
+
+# R legacy (deprecated — use Julia or rpkg instead):
 Rscript run_full_processing.R
 ```
 
-This script:
-- Loads configuration from `config.R`
-- Reads parquet data from `PARQUET_DATA_DIR` (configured in config.R)
-- Integrates Daymet climate data if available
-- Outputs to `data_out/streamflow_signatures_full_JAN2026.csv`
-- Logs progress to `data_out/processing_log_JAN2026.txt`
-
-**Prerequisites:** Edit `config.R` to set `PARQUET_DATA_DIR` to your data location.
+**Prerequisites:** Data paths are configured in `config/signatures_config.json` and `config.R`.
 
 ### Validate Output Quality
 
@@ -250,30 +247,39 @@ process_caravan_to_annual(
 
 ## Adding a New Signature
 
-### Step-by-Step Process
+### Step-by-Step Process (Julia-First Workflow)
 
-1. **Create calculation function** in `R/helperFunctions.R`
-   - Function should accept daily data and return annual values
-   - Use `data.table` for the return value with a `water_year` column
+1. **Create calculation function** in the appropriate `julia/src/` module file
+   - Function should accept daily data and return annual values as a DataFrame
+   - Use the existing module structure (e.g., `flow_volumes.jl`, `pulses.jl`, `recession.jl`)
 
 2. **Apply the 8-statistic rule** using `generate_stats()`:
-   ```r
+   ```julia
    # Your function should return annual values, then call:
-   stats <- generate_stats(annual_data, value_cols = "metric_name", year_col = "water_year")
+   stats = generate_stats(annual_df, [:metric_name], :water_year)
    # This produces 8 columns: metric_senn_slp, metric_linear_slp,
    # metric_spearman_rho, metric_spearman_pval, metric_mk_rho,
    # metric_mk_pval, metric_mean, metric_median
    ```
 
-3. **Add call to `process_signatures_from_parquet()`** in the signature extraction section
+3. **Add call in `julia/src/signatures.jl`** in the `calculate_all_signatures()` function
 
-4. **Register the signature** in `config.R`:
-   - Add base name to `EXPECTED_SIGNATURE_BASES`
+4. **Register the signature** in `config/signatures_config.json` and `config.R` (for R tests):
+   - Add base name to `EXPECTED_SIGNATURE_BASES` in `config.R`
 
-5. **Test with smoke test**:
-   ```r
-   source("R/tests/smoke_test.R")
-   # Verify schema validation passes
+5. **Run Julia benchmark** (~27 min) to validate:
+   ```bash
+   julia docs/benchmarks/run_julia_benchmark.jl
+   ```
+
+6. **Port to Python and rpkg**:
+   - Python: Add function in the appropriate `python/streamflow_signatures/` module, call from `signatures.py`
+   - rpkg: Add function in the appropriate `rpkg/R/` module, call from `signatures.R`, export in `NAMESPACE`
+
+7. **Run cross-language comparison** to verify alignment:
+   ```bash
+   python docs/benchmarks/compare_three_way.py
+   python docs/benchmarks/compare_rpkg.py
    ```
 
 ### Output Column Naming Convention
@@ -309,7 +315,7 @@ testthat::test_dir("R/tests/")
 
 ## Cross-Language Benchmarks
 
-Python, Julia, and rpkg implementations are validated using the R² of the identity line (y = x). This measures whether implementations produce identical values (not just correlated). Spearman rank correlation is reported as a secondary diagnostic.
+Python, rpkg, and R canonical implementations are validated against Julia golden outputs using the R² of the identity line (y = x). This measures whether implementations produce identical values (not just correlated). Spearman rank correlation is reported as a secondary diagnostic.
 
 ### Current Status (April 15, 2026 — post Section 3 sync)
 
@@ -395,10 +401,16 @@ python docs/benchmarks/run_python_benchmark.py
 # Julia benchmark (~10 min)
 julia docs/benchmarks/run_julia_benchmark.jl
 
-# Three-way comparison (R canonical vs Python vs Julia)
-python docs/benchmarks/compare_three_way.py
+# Primary comparisons: Python/rpkg vs Julia golden (canonical)
+python docs/benchmarks/compare_python_vs_golden_julia.py
+python docs/benchmarks/compare_rpkg_vs_golden_julia.py
 
-# rpkg comparison (rpkg vs R canonical, Python, Julia)
+# Julia golden dashboards
+python docs/benchmarks/build_julia_golden_dashboard.py python
+python docs/benchmarks/build_julia_golden_dashboard.py rpkg
+
+# Legacy three-way comparison (historical — uses R as baseline)
+python docs/benchmarks/compare_three_way.py
 python docs/benchmarks/compare_rpkg.py
 
 # Sensitivity experiments (~10-20 min each)
@@ -422,12 +434,15 @@ python docs/benchmarks/build_experiment_vs_julia_dashboard.py startIn1993_80pct
 | `docs/benchmarks/run_r_benchmark.R` | R canonical full signature extraction |
 | `docs/benchmarks/run_rpkg_benchmark.R` | rpkg package full signature extraction |
 | `docs/benchmarks/run_python_benchmark.py` | Python full signature extraction |
-| `docs/benchmarks/run_julia_benchmark.jl` | Julia full signature extraction |
-| `docs/benchmarks/compare_three_way.py` | **PRIMARY** — Three-way comparison using R² of identity line (y=x) |
-| `docs/benchmarks/compare_rpkg.py` | rpkg vs all other implementations |
-| `docs/benchmarks/compare_julia_vs_golden_r.py` | Julia post-Section 3 vs Golden R (Feb 2026) — 6-tier R² classification |
-| `docs/benchmarks/build_comparison_dashboard.py` | Generates interactive HTML dashboard (maps + scatterplot) |
-| `docs/benchmarks/build_julia_vs_golden_r_dashboard.py` | Interactive HTML: Julia vs Golden R with dual maps + scatterplot |
+| `docs/benchmarks/run_julia_benchmark.jl` | **CANONICAL** — Julia full signature extraction (reference output) |
+| `docs/benchmarks/compare_python_vs_golden_julia.py` | **PRIMARY** — Python vs Julia golden, 6-tier R² classification |
+| `docs/benchmarks/compare_rpkg_vs_golden_julia.py` | **PRIMARY** — rpkg vs Julia golden, 6-tier R² classification |
+| `docs/benchmarks/build_julia_golden_dashboard.py` | Interactive HTML dashboard: Python or rpkg vs Julia golden |
+| `docs/benchmarks/compare_three_way.py` | Legacy — Three-way comparison (historical, uses R as baseline) |
+| `docs/benchmarks/compare_rpkg.py` | Legacy — rpkg vs all other implementations |
+| `docs/benchmarks/compare_julia_vs_golden_r.py` | Historical — Julia vs Golden R (Feb 2026) — 6-tier R² classification |
+| `docs/benchmarks/build_comparison_dashboard.py` | Historical — Interactive HTML dashboard (maps + scatterplot) |
+| `docs/benchmarks/build_julia_vs_golden_r_dashboard.py` | Historical — Julia vs Golden R with dual maps + scatterplot |
 | `docs/benchmarks/build_section3_dashboard.py` | Section 3 pre/post comparison dashboard |
 | `docs/benchmarks/compare_experiment_vs_julia.py` | Parameterized experiment vs Julia baseline comparison |
 | `docs/benchmarks/build_experiment_vs_julia_dashboard.py` | Parameterized experiment dashboard (HTML) |

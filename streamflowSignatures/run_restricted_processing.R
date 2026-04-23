@@ -1,3 +1,9 @@
+# ============================================================
+# DEPRECATED — Julia is the canonical implementation (April 2026)
+# For sensitivity experiments, use the Julia experiment wrappers:
+#   julia docs/benchmarks/run_julia_benchmark_startIn1993.jl
+# This script is retained for legacy compatibility only.
+# ============================================================
 ################################################################################
 # Restricted Water Year Streamflow Signature Processing Script
 #

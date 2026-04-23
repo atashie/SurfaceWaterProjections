@@ -1,8 +1,8 @@
 """
-Test Python signatures against R golden outputs.
+Test Python signatures against golden outputs.
 
 This test suite validates that the Python implementation produces
-results within tolerance of the canonical R implementation.
+results within tolerance of the golden reference outputs.
 
 Run with: pytest tests/test_against_golden.py -v
 """

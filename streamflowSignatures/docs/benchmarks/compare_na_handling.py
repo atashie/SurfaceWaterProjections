@@ -198,7 +198,7 @@ def main():
     # --- 7. Golden Output Comparison (if available) ---
     if has_golden:
         print(f"\n{'─' * 50}")
-        print("7. NEW JULIA vs GOLDEN OUTPUTS (R canonical, Feb 2026)")
+        print("7. NEW JULIA vs GOLDEN OUTPUTS (R historical, Feb 2026)")
         print(f"{'─' * 50}")
 
         golden_ids = set(golden.index)

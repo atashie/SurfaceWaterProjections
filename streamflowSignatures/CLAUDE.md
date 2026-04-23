@@ -7,34 +7,43 @@ This project has two primary goals and two secondary goals:
 1. **Data Processing** — Ingest raw streamflow data (USGS, HYDAT, Caravan), clean/filter/collate metadata, standardize outputs.
 2. **Signature Extraction** — Extract 100+ hydrological signatures under strict guardrails. Domain experts update methodology via plain-English instructions in `docs/SIGNATURE_GUIDELINES.md`; code implements those definitions.
 3. **Visualization** (secondary) — Shiny dashboard for broader audience exploration.
-4. **Cross-Language Implementations** (secondary) — R is canonical; Python and Julia produce near-identical results for community sharing (future: publishable packages/libraries).
+4. **Cross-Language Implementations** (secondary) — Julia is canonical; Python and rpkg produce near-identical results for community sharing (future: publishable packages/libraries).
 
 ## Multi-Language Architecture
 
-This project provides identical signature calculations in R (canonical), Python, and Julia:
+This project provides identical signature calculations in Julia (canonical), Python, and R:
 
 | Directory | Language | Status | Description |
 |-----------|----------|--------|-------------|
-| `R/` | R | **Canonical** | Reference implementation - all changes start here |
-| `python/` | Python | Active | Port of R signatures |
-| `julia/` | Julia | Active | Port of R signatures |
+| `julia/` | Julia | **Canonical** | Reference implementation - all changes start here |
+| `python/` | Python | Active | Port of Julia signatures |
+| `rpkg/` | R | Active | R port of Julia signatures |
+| `R/` | R | Deprecated | Legacy shim (still functional for ingestion) |
 
-**Change Workflow**: R is canonical. Changes are normally made in R first, then propagated to Python/Julia. Golden outputs from R (Feb 2026) validate other implementations. Exception: Guidelines Section 3 changes (April 2026) were implemented Julia-first for faster iteration (~10 min benchmark vs hours for R); Python and rpkg synced April 14-15; R canonical recession algorithm sync still pending.
+**Change Workflow**: Julia is canonical. Changes are made in Julia first, then propagated to Python and rpkg. Golden outputs from Julia (April 2026) validate other implementations. Historical note: R was canonical through March 2026; Guidelines Section 3 changes (April 2026) were implemented Julia-first for faster iteration (~10 min benchmark vs hours for R), which drove the transition. Python and rpkg synced April 14-15.
 
 **Canadian HYDAT Metadata**: RHBN and REGULATED status for Canadian gages is pre-exported to `metadata/canadian_hydat_interference.csv` (via `R/export_hydat_metadata.R` using tidyhydat). Julia reads this CSV directly; R uses tidyhydat at runtime.
 
 ## Canonical Code
 
-**Always source in this order:**
-1. `config.R` - Configuration, logging, validation (source FIRST)
-2. `R/helperFunctions.R` - All core functions (45+ functions)
+**Julia canonical source:**
+- `julia/src/` - All canonical signature modules (17 files under `StreamflowSignatures.jl`)
+- `config/signatures_config.json` - Cross-language configuration (source of truth)
+- `config.R` - R-side configuration, logging, validation (still active for R ingestion scripts)
 
-Other `helperFunctions*.R` files in `archive/` are deprecated.
+**R port:**
+- `rpkg/` - Proper R package mirroring Julia structure (active, production-ready)
+
+**Deprecated:**
+- `R/helperFunctions.R` - Legacy monolithic R implementation (deprecated; use rpkg instead)
+- Other `helperFunctions*.R` files in `archive/` are deprecated.
 
 ## Key Entry Points
 
-- `run_full_processing.R` - PRIMARY: Full signature extraction with climate
-- `run_ingest_usgs_hydat.R` - Raw USGS/HYDAT data ingestion to parquet
+- `julia/src/StreamflowSignatures.jl` - PRIMARY: Julia package module (canonical)
+- `docs/benchmarks/run_julia_benchmark.jl` - Full signature extraction benchmark (~27 min, 7,313 gages)
+- `run_ingest_usgs_hydat.R` - Raw USGS/HYDAT data ingestion to parquet (R, still active)
+- `run_full_processing.R` - Legacy: Full R signature extraction with climate (still functional for ingestion)
 - `run_caravan_processing.R` - Caravan data processing (lower priority)
 - `streamflowAndClimateVisualizationApp/app.R` - Shiny dashboard
 
@@ -83,20 +92,27 @@ Other `helperFunctions*.R` files in `archive/` are deprecated.
 
 | File | Status | Notes |
 |------|--------|-------|
-| `config.R` | **ACTIVE** | Source first |
-| `R/helperFunctions.R` | **CANONICAL** | All core functions |
-| `run_full_processing.R` | **PRIMARY** | Main entry point |
-| `run_ingest_usgs_hydat.R` | **ACTIVE** | Raw data ingestion |
-| `R/tests/smoke_test.R` | **ACTIVE** | Quick validation |
+| `julia/src/*.jl` | **CANONICAL** | All canonical signature modules (17 files) |
+| `docs/benchmarks/run_julia_benchmark.jl` | **PRIMARY** | Full benchmark entry point |
+| `config/signatures_config.json` | **ACTIVE** | Cross-language configuration |
+| `python/streamflow_signatures/` | **ACTIVE** | Python port |
+| `rpkg/` | **ACTIVE** | R port (proper package) |
+| `config.R` | **ACTIVE** | R-side config (ingestion scripts) |
+| `run_ingest_usgs_hydat.R` | **ACTIVE** | Raw data ingestion (R) |
+| `R/helperFunctions.R` | **DEPRECATED** | Legacy shim - use rpkg instead |
+| `run_full_processing.R` | **LEGACY** | Still functional for R ingestion |
+| `R/tests/smoke_test.R` | **ACTIVE** | Quick R validation |
 | `R/tests/qa_qc_signatures.R` | **ACTIVE** | Output validation |
 | `archive/*` | **DO NOT USE** | Reference only |
 
 ## Adding New Signatures
 
-1. Create function in `R/helperFunctions.R` returning annual values
+1. Create function in appropriate `julia/src/*.jl` module returning annual values
 2. Call `generate_stats()` to produce 8 statistics
-3. Add base name to `EXPECTED_SIGNATURE_BASES` in `config.R`
-4. Run `R/tests/smoke_test.R` to verify
+3. Register in `julia/src/signatures.jl` orchestration function
+4. Add base name to `EXPECTED_SIGNATURE_BASES` in `config.R`
+5. Run Julia benchmark (`docs/benchmarks/run_julia_benchmark.jl`, ~27 min) to verify
+6. Port to Python (`python/streamflow_signatures/`) and rpkg (`rpkg/R/`)
 
 ## References
 
@@ -129,8 +145,9 @@ The guidelines document is a core design feature: domain experts write plain-Eng
 
 6. **Implementation workflow**: For each suggestion:
    - Create todo item
-   - Implement the change
-   - Run `R/tests/smoke_test.R` to verify
+   - Implement the change in Julia first (`julia/src/`)
+   - Run Julia benchmark (`docs/benchmarks/run_julia_benchmark.jl`, ~27 min) to verify
+   - Port to Python and rpkg
    - Mark todo complete
 
 ## Changelog Maintenance

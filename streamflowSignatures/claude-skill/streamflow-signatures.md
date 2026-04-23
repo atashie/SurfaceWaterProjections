@@ -4,7 +4,7 @@ A skill for helping users understand, use, and interpret the streamflow signatur
 
 ## Overview
 
-This skill assists scientists working with hydrological signature extraction from daily streamflow time series. It covers the R (canonical), Python, and Julia implementations.
+This skill assists scientists working with hydrological signature extraction from daily streamflow time series. It covers the Julia (canonical), Python, and R implementations.
 
 ## What Are Streamflow Signatures?
 
@@ -98,12 +98,13 @@ The output may include flags for:
 
 ## Language-Specific Notes
 
-### R (Canonical)
+### Julia (Canonical)
 
-```r
-source("config.R")
-source("R/helperFunctions.R")
-result <- process_signatures_from_parquet(parquet_file, metadata_file, output_file)
+```julia
+using StreamflowSignatures
+df = CSV.read("streamflow_data.csv", DataFrame)
+df = add_water_year_columns(df)
+signatures = calculate_flow_vols_by_year(df)
 ```
 
 ### Python
@@ -114,13 +115,12 @@ df = add_water_year_columns(df, date_col="date")
 signatures = calculate_flow_vols_by_year(df)
 ```
 
-### Julia
+### R
 
-```julia
-using StreamflowSignatures
-df = CSV.read("streamflow_data.csv", DataFrame)
-df = add_water_year_columns(df)
-signatures = calculate_flow_vols_by_year(df)
+```r
+source("config.R")
+source("R/helperFunctions.R")
+result <- process_signatures_from_parquet(parquet_file, metadata_file, output_file)
 ```
 
 ## References
@@ -131,7 +131,7 @@ signatures = calculate_flow_vols_by_year(df)
 
 ## Cross-Language Alignment
 
-When debugging divergences between R, Python, and Julia implementations, use the **cross-language-alignment** skill. It provides a systematic 4-phase workflow, a 9-pattern divergence taxonomy, and the Iron Rule (one fix at a time, benchmark after each, revert if worse).
+When debugging divergences between Julia, Python, and R implementations, use the **cross-language-alignment** skill. It provides a systematic 4-phase workflow, a 9-pattern divergence taxonomy, and the Iron Rule (one fix at a time, benchmark after each, revert if worse).
 
 ## Getting Help
 

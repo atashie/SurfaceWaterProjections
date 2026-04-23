@@ -1,5 +1,5 @@
 """
-Three-Way Cross-Language Comparison: R (canonical) vs Python vs Julia
+Three-Way Cross-Language Comparison: Julia (canonical) vs Python vs R
 
 Loads all three benchmark CSVs, identifies common gages and columns,
 computes R² of the identity line (y=x) to verify implementations produce

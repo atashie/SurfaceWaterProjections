@@ -1,5 +1,7 @@
 # Streamflow Signatures (Python)
 
+> **Note**: Python port of the Julia canonical implementation. See `julia/` for the reference implementation.
+
 Python implementation of hydrological signature extraction from daily streamflow time series.
 
 ## Installation
@@ -197,8 +199,8 @@ For full-scale benchmark processing (all 7,000+ gages), see `docs/benchmarks/run
 
 ## Cross-Language Validation
 
-This Python implementation is validated against the canonical R implementation.
-Golden reference outputs from R are stored in `../golden-outputs/`.
+This Python implementation is validated against the canonical Julia implementation.
+Golden reference outputs are stored in `../golden-outputs/`.
 
 ## License
 

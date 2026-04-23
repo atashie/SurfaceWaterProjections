@@ -38,7 +38,7 @@ Each signature produces **8 statistics** via `generate_stats()`:
 | **Q95_Q10** | Difference of high to low flow percentiles (Q95 - Q10) |
 
 ### Notes
-- **Q95_Q10 naming**: The standard column name is `Q95_Q10` (underscore). R canonical currently outputs `Q95-Q10` (hyphen) which R auto-converts to `Q95.Q10` in data frames. The underscore form is canonical going forward.
+- **Q95_Q10 naming**: The standard column name is `Q95_Q10` (underscore), used by Julia, Python, and rpkg.
 
 ### Units
 - Qann, Qwin, Qspr, Qsum, Qfal: mm (total over period, summed from daily mm/day values)

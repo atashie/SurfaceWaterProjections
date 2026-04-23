@@ -1,5 +1,7 @@
 # streamflowsignatures
 
+> **Note**: R port of the Julia canonical implementation. Mirrors the Julia and Python package structure.
+
 R package for extracting hydrological signatures from daily streamflow data.
 
 ## Installation
@@ -63,56 +65,56 @@ This package produces near-identical results to the Python (`streamflow_signatur
 and Julia (`StreamflowSignatures`) packages, all sharing
 `config/signatures_config.json` for parameter values.
 
-### Benchmark Results (March 2026)
+### Benchmark Results (April 2026 — post Section 3 sync)
 
-Full benchmark: 7,369 gages, 551 signature columns, 114 minutes (1.08 gages/s).
+Full benchmark: 7,313 gages, 594 signature columns. Julia canonical is the reference.
 
 | Pair | Perfect (>=0.999) | Good (0.99-0.999) | Poor (<0.99) |
 |------|-------------------|-------------------|-------------|
-| rpkg vs Python | **527** | 18 | 6 |
-| rpkg vs Julia | **515** | 28 | 8 |
-| rpkg vs R (canonical) | **490** | 51 | 10 |
+| rpkg vs Julia | **586** | 4 | 4 |
+| rpkg vs Python | **582** | 5 | 7 |
+| rpkg vs R (monolithic) | **490** | — | 46 |
 
-rpkg aligns more closely with Python/Julia than the canonical R script does,
-because rpkg uses config-driven parameters consistently.
+rpkg aligns closely with the Julia canonical implementation.
+Poor columns are irreducible library-level differences (Spearman p-values, sinusoidal fit sensitivity).
 
-### Intentional Differences from Canonical R
+### Intentional Differences from Monolithic R
 
 rpkg incorporates four design decisions that improve cross-language alignment
-but create small divergences from the canonical `R/helperFunctions.R` script.
-Users migrating from the canonical R workflow should be aware of these:
+but create small divergences from the monolithic `R/helperFunctions.R` script.
+Users migrating from the monolithic R workflow should be aware of these:
 
-#### 1. FDC `min_days` = 250 (config) vs 30 (canonical R hardcoded)
+#### 1. FDC `min_days` = 250 (config) vs 30 (monolithic R hardcoded)
 
 rpkg uses `fdc.min_days = 250` from `config/signatures_config.json`, matching
-Python/Julia. Canonical R hardcodes `30`. This rejects water years with 30-249
+Julia/Python. Monolithic R hardcodes `30`. This rejects water years with 30-249
 valid days from FDC90th computation, eliminating noisy slopes from data-sparse
 years. **Affects**: FDC90th trend statistics (4 columns).
 
-To match canonical R behavior, set `fdc.min_days = 30` in the config JSON.
+To match monolithic R behavior, set `fdc.min_days = 30` in the config JSON.
 
 #### 2. BFI_LyneHollick: paired masking vs independent sums
 
 rpkg computes BFI using paired masking: only positions where both Q and
-baseflow are non-NA contribute to the ratio. Canonical R sums numerator and
+baseflow are non-NA contribute to the ratio. Monolithic R sums numerator and
 denominator independently with `na.rm=TRUE`, which includes Q at positions
 where the Lyne-Hollick filter propagated NA to the baseflow. **Affects**:
 BFI_LyneHollick trend p-values (2 columns).
 
-The paired masking approach matches Python and avoids a subtle denominator
+The paired masking approach matches Julia/Python and avoids a subtle denominator
 mismatch when NAs propagate through the forward-backward filter passes.
 
 #### 3. Elasticity and Avg Storage: NA Q row handling
 
-Canonical R's `process_signatures_from_parquet()` removes all NA-Q rows
+Monolithic R's `process_signatures_from_parquet()` removes all NA-Q rows
 **before** merging climate data. rpkg passes the full dataset to signature
-functions, which handle NAs internally. This means:
+functions, which handle NAs internally (matching Julia/Python). This means:
 - PPT on NA-Q days is included in elasticity's `P_annual` (slightly higher)
 - Storage's water balance includes days where Q is replaced with 0
 
 **Affects**: elasticity and avg_storage trend p-values (4 columns).
 
-To match canonical R, pre-filter your data: `df <- df[!is.na(df$Q), ]` before
+To match monolithic R, pre-filter your data: `df <- df[!is.na(df$Q), ]` before
 calling `calculate_all_signatures()`.
 
 ## Testing

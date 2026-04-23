@@ -1,6 +1,6 @@
 ---
 name: cross-language-alignment
-description: Use when porting code between languages (especially R/Python/Julia), comparing numerical outputs across implementations, debugging cross-language divergences, or verifying that translated code produces equivalent results. Triggers on symptoms like mismatched outputs, NaN differences, correlation below threshold, different row populations, or systematic offsets between implementations.
+description: Use when porting code between languages (especially Julia/Python/R), comparing numerical outputs across implementations, debugging cross-language divergences, or verifying that translated code produces equivalent results. Julia is the canonical (reference) implementation. Triggers on symptoms like mismatched outputs, NaN differences, correlation below threshold, different row populations, or systematic offsets between implementations.
 ---
 
 # Cross-Language Alignment
@@ -9,7 +9,7 @@ Iterative, benchmark-driven convergence of multi-language implementations toward
 
 ## Four Guardrails
 
-1. **Canonical source**: One implementation is ground truth. Ask the user which. Frame all divergences as "X differs from canonical," never "they differ from each other."
+1. **Canonical source**: Julia is the default canonical (reference) implementation. Ask the user to confirm or override. Frame all divergences as "X differs from canonical," never "they differ from each other."
 2. **Complexity ceiling**: Revert ANY fix that worsens more outputs than it improves. No convoluted special-case logic — if the fix isn't clean, the diagnosis is wrong.
 3. **Shared config**: All parameters in a language-agnostic config file (JSON/YAML). Zero hardcoded constants across implementations.
 4. **Document everything**: Log every fix attempt (including reverts) with root cause, before/after metrics, and files changed.
@@ -63,10 +63,10 @@ Document irreducible divergences with root cause analysis. Declare threshold met
 | 2 | **Asymmetric filtering gate** | One impl has extra `min_days`, `Q > 0`, or `nrow < 3` check that canonical lacks | Remove gates not in canonical; let shared `generate_stats()` handle minimum-data logic |
 | 3 | **Off-by-one indexing** | Rolling window assigned to position 15 vs 16; overlapping vs non-overlapping half-splits | Match canonical's exact index formula — don't reason about "correct"; match the reference |
 | 4 | **Algorithm variant** | Different event identification (look-ahead vs local), exceedance formula (Weibull vs Hazen), rank method (tied vs ordinal) | Match canonical exactly; don't approximate or "improve" |
-| 5 | **Library edge case** | R's `lm()` rejects near-singular matrices; Python's `linregress()` succeeds with extreme slopes | Add equivalent guard in non-canonical (e.g., `var(x) < 1e-10` → skip) |
+| 5 | **Library edge case** | Julia's `GLM.lm` rejects near-singular matrices; Python's `linregress()` succeeds with extreme slopes | Add equivalent guard in non-canonical (e.g., `var(x) < 1e-10` → skip) |
 | 6 | **Stat pre-filtering** | Stats computed on arrays containing NaN — different n values, different p-values | Pre-filter NaN from BOTH values AND their paired year indices before computing stats |
 | 7 | **Scale/units mismatch** | Exceedance 0-100 vs 0-1; `ddof=0` vs `ddof=1`; cfs vs mm/day | Match canonical's scale and conventions exactly |
-| 8 | **Tie-handling** | Interpolation at duplicate x-values: `last` vs `mean` vs arbitrary | Match canonical's tie-handling (e.g., R's `approx(ties=mean)`) |
+| 8 | **Tie-handling** | Interpolation at duplicate x-values: `last` vs `mean` vs arbitrary | Match canonical's tie-handling (e.g., Julia's `Interpolations.LinearInterpolation`) |
 | 9 | **Column naming** | `FDC_all` vs `FDCall` — columns silently excluded from comparison | Normalize during comparison; fix naming at source |
 
 ## Comparison Methodology
@@ -74,7 +74,7 @@ Document irreducible divergences with root cause analysis. Declare threshold met
 - **Primary metric**: R² of the identity line (y = x) per column across all shared items. Measures whether implementations produce identical values, not just correlated values. Formula: R² = 1 - SS_res/SS_tot, where SS_res = Σ(y - x)², SS_tot = Σ(y - ȳ)². R²=1.0 means identical; R²<0 means worse than predicting the mean. Can be negative.
 - **Secondary metric**: Spearman rank correlation (rho) — reported alongside R² as a diagnostic. Useful for confirming monotonic agreement even when absolute values differ.
 - **Three axes**: (1) Identity R² per column, (2) NA pattern mismatches (extra NAs in one impl), (3) Per-item deep-dive on worst columns
-- **Three-way comparison**: When 3+ implementations exist, compare all pairs. The outlier is immediately visible (e.g., R-Py R²=1.000, R-Jl R²=0.57 → Julia is wrong).
+- **Three-way comparison**: When 3+ implementations exist, compare all pairs. The outlier is immediately visible (e.g., Jl-Py R²=1.000, Jl-R R²=0.57 → R is wrong).
 - **Track categories**: Group columns by signature type. If all recession columns diverge, the root cause is in recession code, not stats.
 
 ## Common Mistakes
@@ -98,21 +98,21 @@ Document irreducible divergences with root cause analysis. Declare threshold met
 
 ## Worked Example
 
-**Problem**: Julia flashiness was 26x higher than R/Python for one gage (0.496 vs 0.019).
+**Problem**: (Historical, from early alignment rounds when R was canonical.) Julia flashiness was 26x higher than R/Python for one gage (0.496 vs 0.019).
 
 **Triage**: Pattern #1 (NaN propagation) + Pattern #4 (Algorithm variant).
 
-**Root cause**: Julia removed NaN values and compacted the array before computing `diff()`, creating artificial jumps between non-adjacent days. R uses `approx()` (linear interpolation) to fill NaN gaps, preserving temporal adjacency.
+**Root cause**: Julia removed NaN values and compacted the array before computing `diff()`, creating artificial jumps between non-adjacent days. The canonical implementation uses linear interpolation to fill NaN gaps, preserving temporal adjacency.
 
-**Fix**: Rewrote Julia's `calculate_flashiness()` to interpolate NaN values using linear interpolation (matching R's `approx()`). Added `na_frac > 0.2` guard matching R/Python.
+**Fix**: Rewrote Julia's `calculate_flashiness()` to interpolate NaN values using linear interpolation. Added `na_frac > 0.2` guard matching the other implementations.
 
 **Benchmark**: Re-ran full comparison. Flashiness rho improved from outlier to >0.999. No other columns regressed. Fix kept.
 
 **Lesson**: One pattern, one fix, one benchmark. The diagnosis pointed to NaN handling; the fix matched canonical's approach exactly.
 
-### Worked Example 2: Asymmetric Filtering Gate in R Canonical
+### Worked Example 2: Asymmetric Filtering Gate in R
 
-**Problem**: After re-running R benchmark with new preprocessing, 41 columns had R² < 0.99 (regression from previous 20). Elasticity for gage 08145000: R=0.488, Python=1.398.
+**Problem**: After re-running R benchmark with new preprocessing, 41 columns had R² < 0.99 (regression from previous 20). Elasticity for gage 08145000: R=0.488, Julia/Python=1.398.
 
 **Triage**: Pattern #2 (Asymmetric filtering gate). Climate-dependent columns systematically diverged.
 
@@ -121,12 +121,12 @@ Document irreducible divergences with root cause analysis. Declare threshold met
 2. Climate merge on Date: identical PPT values (ruled out)
 3. `generate_stats()` parity: stats match on frozen data (ruled out)
 4. Preprocessor output: identical valid_years (ruled out)
-5. **Found**: R's `process_signatures_from_parquet()` had a `min_Q_value_and_days` filter loop (~10 lines) that Python/Julia never had. This removed low-flow years (e.g., WY 1984, 2011, 2018) from both flow and climate signatures.
+5. **Found**: R's `process_signatures_from_parquet()` had a `min_Q_value_and_days` filter loop (~10 lines) that Julia/Python never had. This removed low-flow years (e.g., WY 1984, 2011, 2018) from both flow and climate signatures.
 
 **Root cause**: The filter was a leftover from pre-`preprocess_daily_data()` code. It intersected `valid_climate_years` with the min_Q-filtered years, removing scientifically valid drought years from elasticity calculations.
 
-**Fix**: Removed the min_Q filter loop and the `valid_climate_years` intersection. Verified: R now produces elasticity_static=1.398 (matching Python exactly).
+**Fix**: Removed the min_Q filter loop and the `valid_climate_years` intersection. Verified: R now produces elasticity_static=1.398 (matching Julia/Python exactly).
 
 **Scope**: ~150 gages affected (2.5%), all signature categories.
 
-**Lesson**: When canonical diverges from ports, check the benchmark runner first — the bug may be in how data flows from preprocessor to signatures, not in the signature algorithms themselves. The diagnosis that "the Daymet mapping is wrong" was a red herring; the actual asymmetric gate was 15 lines of year-filtering code that Python/Julia never implemented.
+**Lesson**: When a non-canonical implementation diverges from canonical Julia, check the benchmark runner first -- the bug may be in how data flows from preprocessor to signatures, not in the signature algorithms themselves. The diagnosis that "the Daymet mapping is wrong" was a red herring; the actual asymmetric gate was 15 lines of year-filtering code that Julia/Python never implemented.

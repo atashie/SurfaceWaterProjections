@@ -1,3 +1,5 @@
+> **Historical Note**: This plan was created when R was the canonical implementation. Julia became canonical in April 2026.
+
 # Cross-Language Alignment: Fix R/Python/Julia Signature Divergences
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.

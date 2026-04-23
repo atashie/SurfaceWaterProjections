@@ -1,3 +1,5 @@
+> **Historical Note**: This document was written when R was the canonical implementation. Julia became canonical in April 2026.
+
 # Cross-Language Code Review
 
 > **Date**: March 2026

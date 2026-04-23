@@ -1,8 +1,8 @@
 """
-Test Julia signatures against R golden outputs.
+Test Julia signatures against golden outputs.
 
 This test suite validates that the Julia implementation produces
-results within tolerance of the canonical R implementation.
+results within tolerance of the golden reference outputs.
 """
 
 using StreamflowSignatures

@@ -43,7 +43,7 @@ calculate_qp_seasonality <- function(streamflow_data, slope_window_days = NULL,
       if (abs(delta_P) < 0.01) NA_real_ else delta_Q / delta_P
     }, numeric(1))
 
-    # Mid-point assignment matching R canonical
+    # Mid-point assignment matching Julia canonical
     mid_offsets <- slope_window_days:n - floor(slope_window_days / 2)
     slope_months <- yd$month[mid_offsets]
 

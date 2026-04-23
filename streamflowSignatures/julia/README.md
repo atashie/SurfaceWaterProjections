@@ -1,5 +1,7 @@
 # StreamflowSignatures.jl
 
+> **Julia is the canonical implementation (April 2026). All signature development starts here.**
+
 Julia implementation of hydrological signature extraction from daily streamflow time series.
 
 ## Installation
@@ -189,8 +191,8 @@ For full-scale benchmark processing (all 7,000+ gages), see `docs/benchmarks/run
 
 ## Cross-Language Validation
 
-This Julia implementation is validated against the canonical R implementation.
-Golden reference outputs from R are stored in `../golden-outputs/`.
+Julia is the canonical implementation. Python and rpkg are validated against Julia output.
+Historical golden reference outputs from R (Feb 2026) are stored in `../golden-outputs/`.
 
 ## License
 

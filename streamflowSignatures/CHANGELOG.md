@@ -11,8 +11,32 @@ For historical entries (Dec 2025 – March 2026), see [docs/CHANGELOG_ARCHIVE.md
 - Add ERA5/PRISM data fetching for USGS/HYDAT gages
 - Implement synchrony metrics (cross-correlation, lag analysis)
 - Recession-informed BFI (Collischonn & Fan 2013) — deferred from Section 3 review
-- Sync R canonical recession algorithm with position-marking (last remaining divergence source)
-- Regenerate Golden R outputs with current code (trend_completeness, no min_Q filter)
+- Port data ingestion utilities to Julia (long-term — currently R-only via dataRetrieval/tidyhydat)
+- Generate Julia golden outputs (594 cols, 7,313 gages)
+
+### Canonical Language Transition (April 2026)
+
+Julia replaced R as the canonical implementation. All three synced implementations (Julia, Python, rpkg) are in equilibrium (99.5% R² agreement, 594 signature columns, 7,313 gages). Julia is ~40x faster than monolithic R (~27 min vs ~18 hrs), has cleaner modular architecture (18 files vs monolithic helperFunctions.R), and already served as first-mover for Section 3 changes.
+
+**Changes:**
+- Julia (`julia/src/`) is now the canonical reference for all signature implementations
+- rpkg (`rpkg/`) is the production-ready R port (replaces monolithic R for new development)
+- Monolithic R (`R/helperFunctions.R`) deprecated as legacy shim — retained for data ingestion utilities and existing callers, but no new signature features will be added
+- Data ingestion stays in R (dataRetrieval/tidyhydat — separate concern from signatures)
+- Julia golden outputs to be generated alongside historical R golden outputs (Feb 2026)
+- New Julia-primary comparison scripts for validating Python and rpkg against Julia golden outputs
+- Recession algorithm sync to rpkg only (monolithic R skipped — deprecated)
+
+**Documentation updated:**
+- `CLAUDE.md`: Canonical references, multi-language table, change workflow, code status
+- `docs/DEVELOPMENT.md`: Design principles, adding new signatures workflow, benchmark framing
+- `README.md`: Quick-start, language table
+- `docs/CROSS_LANGUAGE_STATUS.md`: Reframed baseline
+- `docs/SIGNATURES.md`: Reference updates
+- Package READMEs (`julia/`, `python/`, `rpkg/`): Canonical/port status notes
+- `docs/WORKFLOW_REVIEW.md`, `docs/CODE_REVIEW.md`: Historical banners
+- Skills (`claude-skill/cross-language-alignment.md`, `claude-skill/streamflow-signatures.md`): Julia-canonical guardrails
+- Deprecation headers on `R/helperFunctions.R`, `run_full_processing.R`, `run_caravan_processing.R`, `run_restricted_processing.R`
 
 ### Julia Experiment Infrastructure (April 2026)
 

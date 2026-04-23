@@ -47,7 +47,7 @@ add_water_year_columns <- function(dt) {
 
 #' Filter to qualifying water years using three-stage per-year filtering
 #'
-#' Matches the canonical R filtering in process_signatures_from_parquet():
+#' Matches the canonical filtering in process_signatures_from_parquet():
 #' \enumerate{
 #'   \item Minimum days with Q > threshold per water year
 #'   \item Minimum fraction of non-NA days per water year (accounting for leap years)
