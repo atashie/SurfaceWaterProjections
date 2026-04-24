@@ -33,7 +33,8 @@ SIGNATURE_GROUPS = {
         "D50_day", "D60_day", "D70_day", "D80_day", "D90_day", "D95_day",
         "D99_day", "D25_to_D75", "Dmax",
     ],
-    "Baseflow": ["BFI_Eckhardt", "BFI_LyneHollick"],
+    "Baseflow": ["BFI_Eckhardt", "BFI_LyneHollick",
+                 "BFI_Eckhardt_param", "BFI_LyneHollick_param"],
     "Flashiness": ["flashinessRB"],
     "Pulses": ["TQmean", "n_low_pulses_all", "dur_low_pulses_all",
                "n_high_pulses_all", "dur_high_pulses_all",
@@ -44,7 +45,7 @@ SIGNATURE_GROUPS = {
                "Flow_Reversals_fall", "negative_ann"],
     "FDC": ["FDCall", "FDC90th", "FDCmid"],
     "Recession": ["log_a_pointcloud", "log_a_events", "b_pointcloud",
-                  "b_events", "concavity", "n_recession_events"],
+                  "b_events", "concavity", "n_recession_events", "alpha_linear"],
     "Runoff Ratios": ["annual_runoff_ratio", "winter_runoff_ratio",
                       "spring_runoff_ratio", "summer_runoff_ratio",
                       "fall_runoff_ratio"],
@@ -67,6 +68,11 @@ SINGLE_VALUE_SIGS = [
     "log_a_seasonality_amplitude_all",
     "log_a_seasonality_amplitude_first_half",
     "log_a_seasonality_amplitude_last_half",
+    "recession_alpha_point_cloud_linear_reservoir",
+    "season_excluded_years_winter",
+    "season_excluded_years_spring",
+    "season_excluded_years_summer",
+    "season_excluded_years_fall",
 ]
 
 

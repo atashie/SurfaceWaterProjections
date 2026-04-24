@@ -131,7 +131,8 @@ def categorize_metric(base):
         return "FDC"
     if base.startswith("BFI"):
         return "Baseflow"
-    if base.startswith(("log_a", "b_", "concavity", "n_recession")):
+    if base.startswith(("log_a", "b_", "concavity", "n_recession", "alpha_linear",
+                        "recession_alpha")):
         return "Recession"
     if base.startswith(("n_high", "n_low", "dur_high", "dur_low", "TQmean", "Flow_Reversal")):
         return "Pulse Metrics"
