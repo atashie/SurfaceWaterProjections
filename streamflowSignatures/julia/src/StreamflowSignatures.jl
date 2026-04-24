@@ -61,7 +61,7 @@ export analyze_flow_timing_trends
 export analyze_fdc_trends
 
 # Export complex signatures
-export analyze_baseflow_indices, eckhardt_filter, lyne_hollick_filter
+export analyze_baseflow_indices, analyze_baseflow_indices_with_parameters, eckhardt_filter, lyne_hollick_filter
 export analyze_recession_parameters
 export calculate_pulse_metrics, calculate_negative_days
 

@@ -242,3 +242,104 @@ function analyze_baseflow_indices(
 
     return result
 end
+
+
+"""
+    analyze_baseflow_indices_with_parameters(df::DataFrame, alpha::Float64; BFImax=0.8, passes=2) -> Dict
+
+Calculate baseflow index signatures using recession-derived filter parameters.
+
+Uses the recession-derived discrete alpha (from linear reservoir assumption, b=1)
+to parameterize both Eckhardt and Lyne-Hollick filters. BFImax remains fixed at 0.8.
+The Lyne-Hollick parameterization is heuristic — the L-H alpha parameter has no
+physical derivation from recession analysis.
+
+Produces 2 metrics × 8 statistics = 16 columns:
+- BFI_Eckhardt_param_*
+- BFI_LyneHollick_param_*
+
+# Arguments
+- `df::DataFrame`: Daily streamflow data with columns: water_year, Q, dowy
+- `alpha::Float64`: Recession-derived filter parameter (from recession_alpha_point_cloud_linear_reservoir)
+- `BFImax::Float64`: Maximum baseflow index for Eckhardt filter (default 0.8)
+- `passes::Int`: Number of passes for Lyne-Hollick filter (default 2)
+"""
+function analyze_baseflow_indices_with_parameters(
+    df::DataFrame,
+    alpha::Float64;
+    BFImax::Float64=CFG_ECKHARDT_BFIMAX,
+    passes::Int=CFG_LYNE_HOLLICK_PASSES,
+    trend_completeness::Union{Nothing, Float64}=nothing,
+    decade_completeness::Union{Nothing, Float64}=nothing
+)
+    result = Dict{String, Float64}()
+    metrics = ["BFI_Eckhardt_param", "BFI_LyneHollick_param"]
+
+    # Validate alpha is in valid range
+    if isnan(alpha) || alpha <= 0.0 || alpha >= 1.0
+        for m in metrics
+            merge!(result, empty_stats(m))
+        end
+        return result
+    end
+
+    # Column validation
+    valid, missing_cols = validate_columns(df, ["Q", "water_year", "dowy"])
+    if !valid
+        @warn "analyze_baseflow_indices_with_parameters: Missing columns: $missing_cols"
+        for m in metrics
+            merge!(result, empty_stats(m))
+        end
+        return result
+    end
+
+    if nrow(df) == 0
+        for m in metrics
+            merge!(result, empty_stats(m))
+        end
+        return result
+    end
+
+    Q_clean = coalesce_q(df.Q)
+    years = unique(df.water_year)
+    annual_data = DataFrame()
+
+    for yr in years
+        year_mask = coalesce.(df.water_year .== yr, false)
+        if !any(year_mask)
+            continue
+        end
+        dowy_clean = [coalesce(d, 999) for d in df.dowy[year_mask]]
+        year_Q = Q_clean[year_mask]
+
+        sort_idx = sortperm(dowy_clean)
+        Q = year_Q[sort_idx]
+
+        # Apply filters with recession-derived alpha
+        bf_eck = eckhardt_filter(Q; BFImax=BFImax, a=alpha)
+        bf_lh = lyne_hollick_filter(Q; alpha=alpha, passes=passes)
+
+        # Calculate BFI (same logic as analyze_baseflow_indices)
+        valid_q_mask = .!isnan.(Q)
+        total_Q = sum(Q[valid_q_mask])
+        if total_Q <= 0
+            continue
+        end
+
+        valid_eck_mask = valid_q_mask .& .!isnan.(bf_eck)
+        valid_lh_mask = valid_q_mask .& .!isnan.(bf_lh)
+
+        bfi_eck = sum(valid_eck_mask) > 0 ? sum(bf_eck[valid_eck_mask]) / total_Q : NaN
+        bfi_lh = sum(valid_lh_mask) > 0 ? sum(bf_lh[valid_lh_mask]) / total_Q : NaN
+
+        bfi_eck = clamp(bfi_eck, 0.0, 1.0)
+        bfi_lh = clamp(bfi_lh, 0.0, 1.0)
+
+        push!(annual_data, (water_year=yr, BFI_Eckhardt_param=bfi_eck, BFI_LyneHollick_param=bfi_lh))
+    end
+
+    result = generate_stats(annual_data; value_cols=metrics,
+        trend_completeness=trend_completeness, decade_completeness=decade_completeness)
+
+    return result
+end

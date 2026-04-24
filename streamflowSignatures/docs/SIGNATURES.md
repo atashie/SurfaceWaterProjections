@@ -68,13 +68,26 @@ Year qualification is handled centrally by `preprocess_daily_data()` before any 
 |--------|-------------|------------|
 | **BFI_Eckhardt** | Baseflow index using Eckhardt recursive digital filter | BFImax=0.8, a=0.98 |
 | **BFI_LyneHollick** | Baseflow index using Lyne-Hollick filter | alpha=0.925, 2 passes |
+| **BFI_Eckhardt_param** | Baseflow index using Eckhardt filter with recession-derived alpha | a=recession_alpha, BFImax=0.8 |
+| **BFI_LyneHollick_param** | Baseflow index using Lyne-Hollick filter with recession-derived alpha (heuristic) | alpha=recession_alpha, 2 passes |
 
 ### Expected Relationship
 BFI_Eckhardt < BFI_LyneHollick (validated in QA/QC)
 
+### Recession-Parameterized BFI
+
+**Function**: `analyze_baseflow_indices_with_parameters`
+
+The parameterized BFI signatures use a recession-derived discrete filter constant instead of fixed defaults. The filter constant `alpha` is estimated as the median of `Q_{i+1}/Q_i` ratios across all recession events in the entire record (stored as `recession_alpha_point_cloud_linear_reservoir`).
+
+- **Eckhardt**: `alpha` directly replaces the fixed `a=0.98`. BFImax remains fixed at 0.8.
+- **Lyne-Hollick**: `alpha` replaces the fixed `alpha=0.925`. This is a heuristic — the L-H filter parameter has no physical derivation from recession analysis (Nathan & McMahon, 1990).
+- Gages with insufficient recession data (<=10 alpha pairs in the whole record) produce NA for all parameterized BFI values.
+
 ### References
 - Eckhardt, K. (2005). How to construct recursive digital filters for baseflow separation.
 - Lyne, V., & Hollick, M. (1979). Stochastic time-variable rainfall-runoff modelling.
+- Collischonn, W., & Fan, F.M. (2013). Defining parameters for Eckhardt's digital baseflow filter.
 
 ---
 
@@ -94,6 +107,7 @@ Analyzes recession curve behavior using dQ/dt = a*Q^b relationship.
 | **b_events** | Recession exponent (event-based method) |
 | **concavity** | Difference in b between first and second halves of recession |
 | **n_recession_events** | Count of recession events per water year (independent of min_events gate) |
+| **alpha_linear** | Discrete recession constant under linear reservoir (b=1); per-year median of Q_{i+1}/Q_i ratios from point cloud |
 | **log_a_seasonality_amplitude_all** | Seasonal amplitude in recession rate (all data) |
 | **log_a_seasonality_amplitude_first_half** | Seasonal amplitude (first half of record) |
 | **log_a_seasonality_amplitude_last_half** | Seasonal amplitude (last half of record) |
@@ -106,6 +120,8 @@ Analyzes recession curve behavior using dQ/dt = a*Q^b relationship.
 - Documented in `config.R` as `EXPECTED_RECESSION_SEASONALITY`
 - Requires minimum 25 recession events (`RECESSION_MIN_EVENTS`) for all metrics except `n_recession_events`
 - `n_recession_events` is computed independently of the min_events gate (useful for gages with few events)
+- `alpha_linear` per-year values require >10 valid alpha pairs per year; same 25-event gate as other recession metrics for trend statistics
+- `recession_alpha_point_cloud_linear_reservoir` is a per-gage scalar (whole-record median of Q_{i+1}/Q_i ratios across all recession events). Computed independently of the 25-event gate (only requires >10 alpha pairs). Used to parameterize `BFI_Eckhardt_param` and `BFI_LyneHollick_param`.
 - Recession events are identified as contiguous windows where both Q and |dQ/dt| are monotonically decreasing, with a minimum length of 5 days
 
 ---
@@ -334,8 +350,9 @@ Peters, N.E., & Aulenbach, B.T. (2011). Water storage at the Panola Mountain Res
 |----------|----------|------------------|-------|
 | Flow Volumes | `calculate_flow_vols_by_year` | No | 22 metrics (5 totals + 16 percentiles + Q95-Q10) + 4 season exclusion diagnostics |
 | FDC | `analyze_fdc_trends_from_streamflow` | No | 3 metrics (FDCall, FDC90th, FDCmid) |
-| Baseflow | `analyze_baseflow_indices` | No | 2 metrics |
-| Recession | `analyze_recession_parameters` | No | 7 metrics + 6 seasonality |
+| Baseflow (Fixed) | `analyze_baseflow_indices` | No | 2 metrics |
+| Baseflow (Recession-Parameterized) | `analyze_baseflow_indices_with_parameters` | No | 2 metrics + 1 scalar |
+| Recession | `analyze_recession_parameters` | No | 8 metrics + 6 seasonality |
 | Pulse Metrics | `calculate_pulse_metrics` | No | 15 metrics (8 pulse + TQmean + 5 flow reversals + negative_ann) |
 | Flashiness | `analyze_flashiness_trends` | No | 1 metric |
 | Flow Timing | `analyze_flow_timing_trends` | No | 15 metrics |
@@ -397,9 +414,9 @@ The expected relationship **BFI_Eckhardt < BFI_LyneHollick** is validated in QA/
 
 **Recommendation**: Flag gages where this relationship is violated for manual review.
 
-### Recession-Informed BFI (Not Yet Implemented)
+### Recession-Informed BFI (Implemented April 2026)
 
-The guidelines describe `analyze_baseflow_indices_with_parameters()` — calculating BFI using recession parameters as inputs to the Eckhardt and Lyne-Hollick filters (Collischonn & Fan 2013). This is **formally deferred** and not implemented in any codebase. The current BFI functions use fixed default parameters (BFImax=0.8, a=0.98 for Eckhardt; alpha=0.925 for Lyne-Hollick).
+The guidelines describe `analyze_baseflow_indices_with_parameters()` — calculating BFI using recession parameters as inputs to the Eckhardt and Lyne-Hollick filters (Collischonn & Fan 2013). Implemented in Julia (canonical) using the discrete recession constant `alpha = Q_{i+1}/Q_i` under the linear reservoir assumption (b=1). BFImax remains fixed at 0.8; only the recession constant `a` is parameterized. The Lyne-Hollick parameterization is heuristic. See Section 2 (Baseflow) for details. Python and rpkg ports pending.
 
 ### Elasticity 30% Diagnostic (Pending)
 

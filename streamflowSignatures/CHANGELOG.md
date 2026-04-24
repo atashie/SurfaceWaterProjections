@@ -10,9 +10,55 @@ For historical entries (Dec 2025 – March 2026), see [docs/CHANGELOG_ARCHIVE.md
 - Complete `analyze_Q_PPT_relationships()` for raw data pipeline
 - Add ERA5/PRISM data fetching for USGS/HYDAT gages
 - Implement synchrony metrics (cross-correlation, lag analysis)
-- Recession-informed BFI (Collischonn & Fan 2013) — deferred from Section 3 review
 - Port data ingestion utilities to Julia (long-term — currently R-only via dataRetrieval/tidyhydat)
-- Generate Julia golden outputs (594 cols, 7,313 gages)
+- Generate Julia golden outputs (624 cols, 7,313 gages)
+- Port recession-parameterized BFI to Python and rpkg
+
+### Recession-Parameterized Baseflow Signatures (April 2026)
+
+Three new signatures using recession-derived filter parameters (Collischonn & Fan 2013, Eckhardt 2005). Julia only (canonical); Python and rpkg ports deferred.
+
+**Signature 1: `alpha_linear`** (8 stats via generate_stats)
+- Discrete recession constant under linear reservoir assumption (b=1)
+- Per-year computation: median of Q_{i+1}/Q_i ratios from point-cloud recession data
+- First day of each recession event removed (storm peak influence)
+- Alpha collection independent of power-law fit success — depends only on raw Q pairs
+- Per-year threshold: >10 valid alpha pairs; same 25-event gate as other recession metrics for trend stats
+
+**Scalar: `recession_alpha_point_cloud_linear_reservoir`** (per-gage diagnostic)
+- Whole-record median of Q_{i+1}/Q_i ratios across all recession events
+- Computed independently of 25-event gate (only requires >10 alpha pairs)
+- Used to parameterize BFI_Eckhardt_param and BFI_LyneHollick_param
+
+**Signature 2: `BFI_Eckhardt_param`** (8 stats)
+- Eckhardt BFI with recession-derived `a = recession_alpha_point_cloud_linear_reservoir`
+- BFImax fixed at 0.8 (not estimated from backward filtering)
+
+**Signature 3: `BFI_LyneHollick_param`** (8 stats)
+- Lyne-Hollick BFI with recession-derived `alpha = recession_alpha_point_cloud_linear_reservoir`
+- Heuristic parameterization — L-H alpha has no physical derivation from recession (Nathan & McMahon 1990)
+
+**Total: 24 new stat columns + 1 per-gage scalar = 25 new columns (624 total signature columns)**
+
+**Benchmark validation (April 24, 2026)**: 7,313 gages, 15.0 min (8.1 gages/s). 598 of 599 common columns Perfect (R² >= 0.999), 1 N/A (<10 paired values). Zero regression confirmed.
+
+| Metric | Non-NA gages | Range |
+|--------|-------------|-------|
+| `alpha_linear_median` | 5,825 / 7,313 | [0.273, 0.985] |
+| `recession_alpha_point_cloud_linear_reservoir` | 7,131 / 7,313 | [0.273, 0.997] |
+| `BFI_Eckhardt_param_mean` | 7,131 / 7,313 | [0.474, 0.804] |
+| `BFI_LyneHollick_param_mean` | 7,131 / 7,313 | [0.255, 0.966] |
+
+**Validation dashboard**: `docs/benchmarks/build_new_vs_golden_julia_dashboard.py` — interactive HTML with R² scatterplot for common columns and histogram + violin/box for new-only columns.
+
+**Files modified:**
+- `julia/src/recession.jl`: Added alpha_linear per-year computation and whole-record scalar to `analyze_recession_parameters()`
+- `julia/src/baseflow.jl`: Added `analyze_baseflow_indices_with_parameters()` function
+- `julia/src/signatures.jl`: Wired recession scalar extraction → parameterized BFI call
+- `julia/src/StreamflowSignatures.jl`: Added export
+- `config.R`: Registered new signature bases and scalar exception
+- `docs/SIGNATURES.md`: Documented new metrics in Baseflow and Recession sections
+- `docs/DEVELOPMENT.md`: Updated column counts (594 → 624), file structure, benchmark files table
 
 ### Canonical Language Transition (April 2026)
 

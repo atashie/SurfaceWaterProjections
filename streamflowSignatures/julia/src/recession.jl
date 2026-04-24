@@ -255,7 +255,7 @@ function analyze_recession_parameters(df::DataFrame; min_events::Int=CFG_RECESSI
     result = Dict{String, Float64}()
 
     # Define all expected output keys
-    base_metrics = ["log_a_pointcloud", "log_a_events", "b_pointcloud", "b_events", "concavity"]
+    base_metrics = ["log_a_pointcloud", "log_a_events", "b_pointcloud", "b_events", "concavity", "alpha_linear"]
     seasonality_metrics = [
         "log_a_seasonality_amplitude_all", "log_a_seasonality_minimum_all",
         "log_a_seasonality_amplitude_first_half", "log_a_seasonality_minimum_first_half",
@@ -273,6 +273,7 @@ function analyze_recession_parameters(df::DataFrame; min_events::Int=CFG_RECESSI
         for m in seasonality_metrics
             result[m] = NaN
         end
+        result["recession_alpha_point_cloud_linear_reservoir"] = NaN
         return result
     end
 
@@ -284,6 +285,7 @@ function analyze_recession_parameters(df::DataFrame; min_events::Int=CFG_RECESSI
         for m in seasonality_metrics
             result[m] = NaN
         end
+        result["recession_alpha_point_cloud_linear_reservoir"] = NaN
         return result
     end
 
@@ -292,6 +294,7 @@ function analyze_recession_parameters(df::DataFrame; min_events::Int=CFG_RECESSI
     all_b = Float64[]
     all_dowy = Int[]
     all_event_years = Int[]  # Track water year for each event (for proper half-split)
+    all_alpha_linear = Float64[]  # Whole-record alpha values for scalar
 
     years = unique(df.water_year)
 
@@ -304,7 +307,8 @@ function analyze_recession_parameters(df::DataFrame; min_events::Int=CFG_RECESSI
         log_a_pointcloud = fill(NaN, length(years)),
         b_pointcloud = fill(NaN, length(years)),
         concavity = fill(NaN, length(years)),
-        n_recession_events = fill(NaN, length(years))
+        n_recession_events = fill(NaN, length(years)),
+        alpha_linear = fill(NaN, length(years))
     )
 
     for yr in years
@@ -335,6 +339,7 @@ function analyze_recession_parameters(df::DataFrame; min_events::Int=CFG_RECESSI
         year_log_a = Float64[]
         year_b = Float64[]
         year_concavity = Float64[]
+        year_alpha_linear = Float64[]
         successful_events_Q = Vector{Vector{Float64}}()  # Store Q data for log_a recalc
 
         # Collect point cloud data for this year (like R/Python)
@@ -347,6 +352,22 @@ function analyze_recession_parameters(df::DataFrame; min_events::Int=CFG_RECESSI
 
             # Per-event fitting with remove_first_day=true (matching R/Python)
             log_a, b = fit_recession_power_law(Q_event; remove_first_day=true)
+
+            # Compute discrete recession constant alpha = Q_{i+1}/Q_i (b=1 linear reservoir)
+            # INDEPENDENT of power-law fit — depends only on raw Q pairs
+            # Remove first day (storm peak) consistent with point-cloud fitting
+            if length(Q_event) > 2  # Need at least 3 days (2 after removing first)
+                Q_alpha = Q_event[2:end]  # Remove first day
+                for j in 1:(length(Q_alpha) - 1)
+                    if Q_alpha[j] > 0 && !isnan(Q_alpha[j]) && !isnan(Q_alpha[j + 1])
+                        a_i = Q_alpha[j + 1] / Q_alpha[j]
+                        if 0 < a_i < 1  # Must be valid recession (decreasing Q)
+                            push!(year_alpha_linear, a_i)
+                            push!(all_alpha_linear, a_i)
+                        end
+                    end
+                end
+            end
 
             if !isnan(log_a) && !isnan(b)
                 push!(year_log_a, log_a)
@@ -388,6 +409,11 @@ function analyze_recession_parameters(df::DataFrame; min_events::Int=CFG_RECESSI
         # Find row index for this year
         yr_idx = findfirst(annual_data.water_year .== yr)
         yr_idx === nothing && continue
+
+        # Per-year alpha_linear (point cloud with b=1, linear reservoir)
+        if length(year_alpha_linear) > 10
+            annual_data[yr_idx, :alpha_linear] = median(year_alpha_linear)
+        end
 
         # Per-year point cloud analysis — assign independently of events (matching R/Python)
         if length(year_pc_Q) > 10
@@ -442,6 +468,13 @@ function analyze_recession_parameters(df::DataFrame; min_events::Int=CFG_RECESSI
             trend_completeness=trend_completeness, decade_completeness=decade_completeness))
     else
         merge!(result, empty_stats("n_recession_events"))
+    end
+
+    # Whole-record recession alpha (scalar — independent of min_events gate)
+    if length(all_alpha_linear) > 10
+        result["recession_alpha_point_cloud_linear_reservoir"] = median(all_alpha_linear)
+    else
+        result["recession_alpha_point_cloud_linear_reservoir"] = NaN
     end
 
     # Check minimum events requirement (matching R/Python)

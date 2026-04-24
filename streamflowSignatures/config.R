@@ -569,9 +569,11 @@ EXPECTED_SIGNATURE_BASES <- c(
   "FDC90th", "FDCall", "FDCmid",
   # Baseflow indices
   "BFI_Eckhardt", "BFI_LyneHollick",
+  # Parameterized baseflow indices (recession-derived alpha, b=1 linear reservoir)
+  "BFI_Eckhardt_param", "BFI_LyneHollick_param",
   # Recession parameters
   "log_a_pointcloud", "log_a_events", "b_pointcloud", "b_events", "concavity",
-  "n_recession_events",
+  "n_recession_events", "alpha_linear",
   # Pulse metrics (yearly and overall)
   "n_high_pulses_year", "n_low_pulses_year", "n_high_pulses_all", "n_low_pulses_all",
   "dur_high_pulses_year", "dur_low_pulses_year", "dur_high_pulses_all", "dur_low_pulses_all",
@@ -620,6 +622,9 @@ EXPECTED_SEASON_EXCLUDED_YEARS <- c(
   "season_excluded_years_summer", "season_excluded_years_fall"
 )
 
+# Recession-derived alpha for parameterized BFI (per-gage scalar, not 8-stat pattern)
+EXPECTED_RECESSION_ALPHA_SCALAR <- "recession_alpha_point_cloud_linear_reservoir"
+
 # Validate output CSV schema
 validate_output_schema <- function(output_df, strict = FALSE, context = NULL) {
   log_info("Validating output schema...", context = context)
@@ -643,7 +648,7 @@ validate_output_schema <- function(output_df, strict = FALSE, context = NULL) {
   # Add non-standard columns (don't follow 8-stat suffix pattern)
   expected_sig_cols <- c(expected_sig_cols, EXPECTED_RECESSION_SEASONALITY,
                          EXPECTED_RUNOFF_RATIO_HIGH, EXPECTED_ELASTICITY_DIAGNOSTICS,
-                         EXPECTED_SEASON_EXCLUDED_YEARS)
+                         EXPECTED_SEASON_EXCLUDED_YEARS, EXPECTED_RECESSION_ALPHA_SCALAR)
 
   present_sig_cols <- intersect(expected_sig_cols, names(output_df))
   missing_sig_cols <- setdiff(expected_sig_cols, names(output_df))

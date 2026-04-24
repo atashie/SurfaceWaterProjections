@@ -78,10 +78,23 @@ function calculate_all_signatures(
     end
 
     # Recession: inherently sparse (event-based, many years with no events) — no trend completeness
+    local recession_alpha = NaN
     try
-        merge!(results, analyze_recession_parameters(gage_data))
+        recession_results = analyze_recession_parameters(gage_data)
+        # Extract scalar for parameterized BFI before merging
+        recession_alpha = get(recession_results, "recession_alpha_point_cloud_linear_reservoir", NaN)
+        merge!(results, recession_results)
     catch e
         @warn "analyze_recession_parameters failed for gage $gage_id" exception=(e, catch_backtrace())
+    end
+
+    # Parameterized BFI using recession-derived alpha (requires recession to have run first)
+    # Uses trend completeness (same as fixed-parameter BFI)
+    try
+        merge!(results, analyze_baseflow_indices_with_parameters(gage_data, recession_alpha;
+            trend_completeness=tc, decade_completeness=dc))
+    catch e
+        @warn "analyze_baseflow_indices_with_parameters failed for gage $gage_id" exception=(e, catch_backtrace())
     end
 
     try

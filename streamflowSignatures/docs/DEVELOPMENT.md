@@ -13,7 +13,7 @@ USGS (dataRetrieval)  ──┐
   (streamflow only)     ├──> Parquet Storage ──┐
                         │                       │
 Canadian HYDAT  ────────┘                       ├──> Signature ──> CSV Summary
-  (streamflow only)                             │    Extraction     (594 columns)
+  (streamflow only)                             │    Extraction     (624 columns)
                                                 │
 Daymet (climate data)  ──> Parquet Storage ─────┘
   (PPT, temp, SWE)         (joined at runtime)
@@ -151,6 +151,7 @@ streamflowSignatures/
 │   │   ├── build_section3_dashboard.py   # Section 3 pre/post dashboard
 │   │   ├── compare_experiment_vs_julia.py  # Parameterized experiment comparison
 │   │   ├── build_experiment_vs_julia_dashboard.py  # Experiment dashboard builder
+│   │   ├── build_new_vs_golden_julia_dashboard.py  # New benchmark vs golden Julia validation
 │   │   ├── run_julia_benchmark_startIn1993.jl  # Experiment: WY >= 1993
 │   │   ├── run_julia_benchmark_startIn1993_60pct.jl  # Experiment: WY >= 1993 + 60% filter
 │   │   ├── run_julia_benchmark_startIn1993_80pct.jl  # Experiment: WY >= 1993 + 80% filter
@@ -319,13 +320,13 @@ Python, rpkg, and R canonical implementations are validated against Julia golden
 
 ### Current Status (April 15, 2026 — post Section 3 sync)
 
-All three synced implementations (rpkg, Python, Julia) now produce 594 signature columns across 7,313 gages. R canonical still has the old recession algorithm (46 poor columns, sync pending).
+All three synced implementations (rpkg, Python, Julia) produce 594 signature columns across 7,313 gages. Julia canonical now produces 624 columns (30 additional from recession-parameterized BFI). R canonical still has the old recession algorithm (46 poor columns, sync pending).
 
 | Metric | rpkg | Julia | Python | R (canonical) |
 |--------|------|-------|--------|---------------|
 | Total Time | 867 min* | 27.5 min | 175.5 min | 874 min** |
 | Gages Processed | 7,313 | 7,313 | 7,313 | 5,707 |
-| Signature Columns | 594 | 594 | 594 | 551 |
+| Signature Columns | 624 | 594 | 594 | 551 |
 | Processing Rate | 0.6/s* | 4.43/s | 0.69/s | 0.11/s** |
 
 *rpkg April 15 re-run had severe I/O contention (14.5 hrs vs typical 2-3 hrs). Previous solo run: ~114 min.
@@ -443,6 +444,7 @@ python docs/benchmarks/build_experiment_vs_julia_dashboard.py startIn1993_80pct
 | `docs/benchmarks/compare_julia_vs_golden_r.py` | Historical — Julia vs Golden R (Feb 2026) — 6-tier R² classification |
 | `docs/benchmarks/build_comparison_dashboard.py` | Historical — Interactive HTML dashboard (maps + scatterplot) |
 | `docs/benchmarks/build_julia_vs_golden_r_dashboard.py` | Historical — Julia vs Golden R with dual maps + scatterplot |
+| `docs/benchmarks/build_new_vs_golden_julia_dashboard.py` | New benchmark vs golden Julia validation dashboard |
 | `docs/benchmarks/build_section3_dashboard.py` | Section 3 pre/post comparison dashboard |
 | `docs/benchmarks/compare_experiment_vs_julia.py` | Parameterized experiment vs Julia baseline comparison |
 | `docs/benchmarks/build_experiment_vs_julia_dashboard.py` | Parameterized experiment dashboard (HTML) |
