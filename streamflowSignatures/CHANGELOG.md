@@ -13,6 +13,7 @@ For historical entries (Dec 2025 – March 2026), see [docs/CHANGELOG_ARCHIVE.md
 - Port data ingestion utilities to Julia (long-term — currently R-only via dataRetrieval/tidyhydat)
 - Generate Julia golden outputs (624 cols, 7,313 gages)
 - Port recession-parameterized BFI to Python and rpkg
+- BFImax estimation via Collischonn & Fan (2013) backward filter — would give BFI_Eckhardt_param per-gage BFImax instead of fixed 0.8, improving discriminating power (currently range [0.47–0.80] due to BFImax saturation)
 
 ### Recession-Parameterized Baseflow Signatures (April 2026)
 
@@ -50,6 +51,8 @@ Three new signatures using recession-derived filter parameters (Collischonn & Fa
 | `BFI_LyneHollick_param_mean` | 7,131 / 7,313 | [0.255, 0.966] |
 
 **Validation dashboard**: `docs/benchmarks/build_new_vs_golden_julia_dashboard.py` — interactive HTML with R² scatterplot for common columns and histogram + violin/box for new-only columns.
+
+**Known limitation — BFI_Eckhardt_param narrow range**: BFI_Eckhardt_param_mean has range [0.474, 0.804] with std=0.036, much narrower than fixed-parameter BFI_Eckhardt_mean (range [0.139, 0.802], std=0.119). This is a mathematical property of the Eckhardt filter: with BFImax=0.8 fixed, the `a` parameter only controls dynamics, while BFImax controls the steady-state level. Since 92% of gages have recession alpha < 0.95, the filter saturates at BFImax. BFI_LyneHollick_param is unaffected (range [0.255, 0.966], std=0.117). Future improvement: estimate BFImax per gage via Collischonn & Fan (2013) backward filter. See `docs/SIGNATURES.md` for details.
 
 **Files modified:**
 - `julia/src/recession.jl`: Added alpha_linear per-year computation and whole-record scalar to `analyze_recession_parameters()`

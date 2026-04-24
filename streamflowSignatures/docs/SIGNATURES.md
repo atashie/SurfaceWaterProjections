@@ -416,7 +416,33 @@ The expected relationship **BFI_Eckhardt < BFI_LyneHollick** is validated in QA/
 
 ### Recession-Informed BFI (Implemented April 2026)
 
-The guidelines describe `analyze_baseflow_indices_with_parameters()` — calculating BFI using recession parameters as inputs to the Eckhardt and Lyne-Hollick filters (Collischonn & Fan 2013). Implemented in Julia (canonical) using the discrete recession constant `alpha = Q_{i+1}/Q_i` under the linear reservoir assumption (b=1). BFImax remains fixed at 0.8; only the recession constant `a` is parameterized. The Lyne-Hollick parameterization is heuristic. See Section 2 (Baseflow) for details. Python and rpkg ports pending.
+The guidelines describe `analyze_baseflow_indices_with_parameters()` — calculating BFI using recession parameters as inputs to the Eckhardt and Lyne-Hollick filters. Implemented in Julia (canonical) using the discrete recession constant `alpha = Q_{i+1}/Q_i` under the linear reservoir assumption (b=1). BFImax remains fixed at 0.8; only the recession constant `a` is parameterized. The Lyne-Hollick parameterization is heuristic. See Section 2 (Baseflow) for details. Python and rpkg ports pending.
+
+**Known limitation — narrow BFI_Eckhardt_param range**: The parameterized Eckhardt BFI has low discriminating power across gages (range [0.47, 0.80], std=0.036) compared to the fixed-parameter version (range [0.14, 0.80], std=0.119). This is a mathematical property of the Eckhardt filter, not a bug. The `a` parameter controls filter dynamics (how fast baseflow tracks total flow), while `BFImax` controls the steady-state BFI level. Since 92% of gages have recession alpha < 0.95, the filter converges rapidly to the BFImax=0.8 ceiling. With the fixed `a=0.98`, the filter's high inertia causes BFI to deviate significantly from BFImax during storm events, producing wider variation. The parameterized L-H filter does not have this issue (range [0.25, 0.97]) because the alpha parameter plays a structurally different role.
+
+### BFImax Estimation via Backward Filter (Not Yet Implemented)
+
+To improve BFI_Eckhardt_param discriminating power, BFImax should also be parameterized per gage. Collischonn & Fan (2013) proposed a backward filter method:
+
+1. **Estimate recession constant `a`** — already available as `recession_alpha_point_cloud_linear_reservoir`
+2. **Run backward filter** — exploits the linear reservoir equation in reverse (`b_{k-1} = b_k / a`) to reconstruct the maximum possible baseflow at each timestep:
+   ```
+   Initialize: b_N = Q_N
+   For i = N-1 down to 1:
+       b_i = b_{i+1} / a
+       if b_i > Q_i: b_i = Q_i   (baseflow cannot exceed total flow)
+   ```
+3. **Compute BFImax** — `BFImax = sum(b) / sum(Q)`, or max of annual BFI values with a 0.9 safeguard
+
+This would replace the fixed BFImax=0.8 with a per-gage value (expected range ~0.3–0.9 depending on geology/hydrogeology), giving the Eckhardt filter real per-gage variation.
+
+**Known limitations of the backward filter** (Zhang et al. 2021, HESS):
+- Overestimates BFImax in humid catchments (backward baseflow approaches total flow)
+- Single recession constant assumption (no seasonal/non-stationary variation)
+- Produces an upper-bound estimate, not necessarily actual baseflow
+- Reference implementation (`xiejx5/baseflow` Python package) uses ad-hoc cap at BFImax >= 0.9
+
+**References**: Collischonn & Fan (2013), Hydrological Processes 27(18):2614-2622; Zhang et al. (2021), HESS 25:1747.
 
 ### Elasticity 30% Diagnostic (Pending)
 
