@@ -53,7 +53,8 @@ columns, and returns a named list of statistics:
 | `analyze_flow_timing_trends()` | 13 (D-days, D25_to_D75, Dmax) | No |
 | `calculate_pulse_metrics()` | 14 (pulses, TQmean, reversals) | No |
 | `analyze_baseflow_indices()` | 2 (BFI_Eckhardt, BFI_LyneHollick) | No |
-| `analyze_recession_parameters()` | 11 (recession + seasonality) | No |
+| `analyze_baseflow_indices_with_parameters()` | 2 (BFI_Eckhardt_param, BFI_LyneHollick_param) + 1 scalar | No |
+| `analyze_recession_parameters()` | 12 (recession + alpha_linear + seasonality) | No |
 | `analyze_Q_PPT_relationships()` | 5 (runoff ratios) | Yes |
 | `calculate_streamflow_elasticity()` | 1 static + 8 trend | Yes |
 | `calculate_qp_seasonality()` | 2 (qp_slope_sd, qp_bimodality) | Yes |
@@ -67,7 +68,7 @@ and Julia (`StreamflowSignatures`) packages, all sharing
 
 ### Benchmark Results (April 2026 — post Section 3 sync)
 
-Full benchmark: 7,313 gages, 594 signature columns. Julia canonical is the reference.
+Full benchmark: 7,313 gages, 624 signature columns (including recession-parameterized BFI). Julia canonical is the reference.
 
 | Pair | Perfect (>=0.999) | Good (0.99-0.999) | Poor (<0.99) |
 |------|-------------------|-------------------|-------------|

@@ -12,12 +12,11 @@ For historical entries (Dec 2025 – March 2026), see [docs/CHANGELOG_ARCHIVE.md
 - Implement synchrony metrics (cross-correlation, lag analysis)
 - Port data ingestion utilities to Julia (long-term — currently R-only via dataRetrieval/tidyhydat)
 - Generate Julia golden outputs (624 cols, 7,313 gages)
-- Port recession-parameterized BFI to Python and rpkg
 - BFImax estimation via Collischonn & Fan (2013) backward filter — would give BFI_Eckhardt_param per-gage BFImax instead of fixed 0.8, improving discriminating power (currently range [0.47–0.80] due to BFImax saturation)
 
 ### Recession-Parameterized Baseflow Signatures (April 2026)
 
-Three new signatures using recession-derived filter parameters (Collischonn & Fan 2013, Eckhardt 2005). Julia only (canonical); Python and rpkg ports deferred.
+Three new signatures using recession-derived filter parameters (Collischonn & Fan 2013, Eckhardt 2005). Implemented in all three languages (Julia canonical April 24, Python and rpkg ported April 25).
 
 **Signature 1: `alpha_linear`** (8 stats via generate_stats)
 - Discrete recession constant under linear reservoir assumption (b=1)
@@ -59,6 +58,14 @@ Three new signatures using recession-derived filter parameters (Collischonn & Fa
 - `julia/src/baseflow.jl`: Added `analyze_baseflow_indices_with_parameters()` function
 - `julia/src/signatures.jl`: Wired recession scalar extraction → parameterized BFI call
 - `julia/src/StreamflowSignatures.jl`: Added export
+- `python/streamflow_signatures/recession.py`: Ported alpha_linear + scalar (April 25)
+- `python/streamflow_signatures/baseflow.py`: Ported `analyze_baseflow_indices_with_parameters()` (April 25)
+- `python/streamflow_signatures/signatures.py`: Wired orchestration (April 25)
+- `python/streamflow_signatures/__init__.py`: Added export (April 25)
+- `rpkg/R/recession.R`: Ported alpha_linear + scalar (April 25)
+- `rpkg/R/baseflow.R`: Ported `analyze_baseflow_indices_with_parameters()` (April 25)
+- `rpkg/R/signatures.R`: Wired orchestration (April 25)
+- `rpkg/NAMESPACE`: Added export (April 25)
 - `config.R`: Registered new signature bases and scalar exception
 - `docs/SIGNATURES.md`: Documented new metrics in Baseflow and Recession sections
 - `docs/DEVELOPMENT.md`: Updated column counts (594 → 624), file structure, benchmark files table

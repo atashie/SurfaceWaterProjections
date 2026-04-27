@@ -352,7 +352,7 @@ def generate_summary_report(res, common_norms, jl_only_norms, py_only_norms,
         f.write("## Input Files\n\n")
         f.write("| Dataset | File | Gages | Columns |\n")
         f.write("|---------|------|-------|---------|\n")
-        f.write(f"| Golden Julia (canonical) | `golden-outputs/streamflow_signatures_julia_apr2026.csv` | {n_jl_total:,} | 594 |\n")
+        f.write(f"| Golden Julia (canonical) | `golden-outputs/streamflow_signatures_julia_apr2026.csv` | {n_jl_total:,} | {len(jl_norm):,} |\n")
         f.write(f"| Python benchmark | `docs/benchmarks/python_signatures.csv` | {n_py_total:,} | — |\n")
         f.write(f"\n**Common gages**: {n_common_gages:,}\n")
         f.write(f"**Common signature columns**: {len(common_norms):,}\n\n")

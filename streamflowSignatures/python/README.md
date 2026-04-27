@@ -154,10 +154,16 @@ Each signature metric produces 8 statistics:
   - BFI_Eckhardt (Eckhardt recursive digital filter)
   - BFI_LyneHollick (Lyne-Hollick filter with 2 passes)
 
-- **Recession Parameters** (`analyze_recession_parameters`): 5 metrics + 6 seasonality
+- **Recession-Parameterized Baseflow** (`analyze_baseflow_indices_with_parameters`): 2 metrics + 1 scalar
+  - BFI_Eckhardt_param (Eckhardt filter with recession-derived alpha)
+  - BFI_LyneHollick_param (Lyne-Hollick filter with recession-derived alpha)
+  - recession_alpha_point_cloud_linear_reservoir (per-gage scalar)
+
+- **Recession Parameters** (`analyze_recession_parameters`): 6 metrics + 6 seasonality
   - log_a_pointcloud, log_a_events (recession rate parameter)
   - b_pointcloud, b_events (recession exponent)
   - concavity (curvature of recession)
+  - alpha_linear (discrete recession constant, b=1 assumption)
   - log_a_seasonality_* (sinusoidal seasonality of recession)
 
 - **Pulse Metrics** (`calculate_pulse_metrics`): 14 metrics

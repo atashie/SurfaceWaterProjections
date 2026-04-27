@@ -318,31 +318,30 @@ testthat::test_dir("R/tests/")
 
 Python, rpkg, and R canonical implementations are validated against Julia golden outputs using the R² of the identity line (y = x). This measures whether implementations produce identical values (not just correlated). Spearman rank correlation is reported as a secondary diagnostic.
 
-### Current Status (April 15, 2026 — post Section 3 sync)
+### Current Status (April 25, 2026 — post recession-parameterized BFI port)
 
-All three synced implementations (rpkg, Python, Julia) produce 594 signature columns across 7,313 gages. Julia canonical now produces 624 columns (30 additional from recession-parameterized BFI). R canonical still has the old recession algorithm (46 poor columns, sync pending).
+All three synced implementations (rpkg, Python, Julia) produce 624 signature columns across 7,313 gages. R canonical still has the old recession algorithm (46 poor columns, sync pending). Recession-parameterized BFI (alpha_linear, BFI_Eckhardt_param, BFI_LyneHollick_param + recession_alpha scalar) ported to Python and rpkg April 25.
 
 | Metric | rpkg | Julia | Python | R (canonical) |
 |--------|------|-------|--------|---------------|
-| Total Time | 867 min* | 27.5 min | 175.5 min | 874 min** |
+| Total Time | 244.6 min* | 15.0 min | 150.4 min | 874 min** |
 | Gages Processed | 7,313 | 7,313 | 7,313 | 5,707 |
-| Signature Columns | 624 | 594 | 594 | 551 |
-| Processing Rate | 0.6/s* | 4.43/s | 0.69/s | 0.11/s** |
+| Signature Columns | 624 | 624 | 624 | 551 |
+| Processing Rate | 0.5/s* | 8.1/s | 0.81/s | 0.11/s** |
 
-*rpkg April 15 re-run had severe I/O contention (14.5 hrs vs typical 2-3 hrs). Previous solo run: ~114 min.
+*rpkg April 27 re-run had I/O contention (concurrent with Python benchmark). Previous solo run: ~114 min.
 **R canonical March 16-17 re-run, also with I/O contention. Previous solo R runs: ~1-2 hours.
 
-#### Synced Implementations (rpkg, Python, Julia — April 15, 2026)
+#### Synced Implementations (rpkg, Python, Julia — 624 columns, April 27, 2026)
 
 | Pair | Perfect (>=0.999) | Good (0.99-0.999) | Poor (<0.99) | Min R² |
 |------|-------------------|-------------------|-------------|--------|
-| Python vs Julia | **619** | 5 | 3 | 0.986 |
-| rpkg vs Julia | **586** | 4 | 4 | 0.967 |
-| rpkg vs Python | **582** | 5 | 7 | 0.967 |
+| Python vs Julia | **615** | 5 | 3 | 0.984 |
+| rpkg vs Julia | **614** | 4 | 5 | 0.969 |
 
-Python-Julia: 624 of 627 columns (99.5%) have R² >= 0.99. All 51 new Section 3 columns have R² >= 0.994.
+Python-Julia: 620 of 623 columns (99.5%) have R² >= 0.99. All 25 new recession-parameterized BFI columns are Perfect.
 
-rpkg-Julia: 590 of 594 columns (99.3%) have R² >= 0.99.
+rpkg-Julia: 618 of 623 columns (99.2%) have R² >= 0.99. 24 of 25 new recession-parameterized BFI columns are Perfect (1 poor: `alpha_linear_spearman_pval` — Spearman p-value library difference).
 
 #### R Canonical vs Synced Implementations (April 14, 2026)
 

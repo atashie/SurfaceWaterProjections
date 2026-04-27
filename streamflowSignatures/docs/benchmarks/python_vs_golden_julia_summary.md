@@ -1,36 +1,36 @@
 # Python vs Golden Julia (Canonical): Comparison Report
 
-**Generated**: 2026-04-23 14:40:43
+**Generated**: 2026-04-27 11:20:43
 
 ## Input Files
 
 | Dataset | File | Gages | Columns |
 |---------|------|-------|---------|
-| Golden Julia (canonical) | `golden-outputs/streamflow_signatures_julia_apr2026.csv` | 7,313 | 594 |
+| Golden Julia (canonical) | `golden-outputs/streamflow_signatures_julia_apr2026.csv` | 7,313 | 623 |
 | Python benchmark | `docs/benchmarks/python_signatures.csv` | 7,313 | — |
 
 **Common gages**: 7,313
-**Common signature columns**: 594
+**Common signature columns**: 623
 
 ## Agreement Summary
 
 | Tier | Threshold | Count | % |
 |------|-----------|-------|---|
-| Perfect | R2 >= 0.999 | 586 | 98.7% |
+| Perfect | R2 >= 0.999 | 615 | 98.7% |
 | Good | 0.99 <= R2 < 0.999 | 5 | 0.8% |
 | Poor | 0.95 <= R2 < 0.99 | 3 | 0.5% |
 | Low | 0.90 <= R2 < 0.95 | 0 | 0.0% |
 | Very Low | 0.50 <= R2 < 0.90 | 0 | 0.0% |
 | Extremely Low | R2 < 0.50 | 0 | 0.0% |
-| **Total** | | **594** | **100%** |
+| **Total** | | **623** | **100%** |
 
-**Mean R2**: 0.999841 | **Median R2**: 1.000000 | **Min R2**: 0.983785
+**Mean R2**: 0.999847 | **Median R2**: 1.000000 | **Min R2**: 0.983785
 
 ## Agreement by Category
 
 | Category | Cols | Perfect | Good | Poor | Low | Very Low | Extremely Low | Mean R2 | Min R2 |
 |----------|------|---------|------|------|-----|----------|---------------|---------|--------|
-| Baseflow | 16 | 16 | 0 | 0 | 0 | 0 | 0 | 0.999971 | 0.9998 |
+| Baseflow | 32 | 32 | 0 | 0 | 0 | 0 | 0 | 0.999971 | 0.9998 |
 | Elasticity | 19 | 19 | 0 | 0 | 0 | 0 | 0 | 0.999974 | 0.9995 |
 | FDC | 24 | 21 | 3 | 0 | 0 | 0 | 0 | 0.999748 | 0.9979 |
 | Flashiness | 8 | 8 | 0 | 0 | 0 | 0 | 0 | 0.999947 | 0.9998 |
@@ -38,9 +38,10 @@
 | Flow Timing | 120 | 120 | 0 | 0 | 0 | 0 | 0 | 0.999885 | 0.9990 |
 | Flow Volumes | 40 | 40 | 0 | 0 | 0 | 0 | 0 | 0.999965 | 0.9997 |
 | Negative Flow | 8 | 7 | 1 | 0 | 0 | 0 | 0 | 0.999258 | 0.9941 |
+| Other | 4 | 4 | 0 | 0 | 0 | 0 | 0 | 1.000000 | 1.0000 |
 | Pulse Metrics | 112 | 111 | 1 | 0 | 0 | 0 | 0 | 0.999895 | 0.9985 |
 | Q-P Seasonality | 16 | 16 | 0 | 0 | 0 | 0 | 0 | 0.999951 | 0.9996 |
-| Recession | 54 | 51 | 0 | 3 | 0 | 0 | 0 | 0.999177 | 0.9838 |
+| Recession | 63 | 60 | 0 | 3 | 0 | 0 | 0 | 0.999289 | 0.9838 |
 | Runoff Ratios | 41 | 41 | 0 | 0 | 0 | 0 | 0 | 0.999960 | 0.9996 |
 | Storage | 8 | 8 | 0 | 0 | 0 | 0 | 0 | 0.999942 | 0.9996 |
 
