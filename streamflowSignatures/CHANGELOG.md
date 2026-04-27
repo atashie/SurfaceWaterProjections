@@ -40,7 +40,7 @@ Three new signatures using recession-derived filter parameters (Collischonn & Fa
 
 **Total: 24 new stat columns + 1 per-gage scalar = 25 new columns (624 total signature columns)**
 
-**Benchmark validation (April 24, 2026)**: 7,313 gages, 15.0 min (8.1 gages/s). 598 of 599 common columns Perfect (R² >= 0.999), 1 N/A (<10 paired values). Zero regression confirmed.
+**Julia benchmark validation (April 24, 2026)**: 7,313 gages, 15.0 min (8.1 gages/s). 598 of 599 common columns Perfect (R² >= 0.999), 1 N/A (<10 paired values). Zero regression confirmed.
 
 | Metric | Non-NA gages | Range |
 |--------|-------------|-------|
@@ -49,7 +49,18 @@ Three new signatures using recession-derived filter parameters (Collischonn & Fa
 | `BFI_Eckhardt_param_mean` | 7,131 / 7,313 | [0.474, 0.804] |
 | `BFI_LyneHollick_param_mean` | 7,131 / 7,313 | [0.255, 0.966] |
 
-**Validation dashboard**: `docs/benchmarks/build_new_vs_golden_julia_dashboard.py` — interactive HTML with R² scatterplot for common columns and histogram + violin/box for new-only columns.
+**Cross-language validation (April 27, 2026)**: Python and rpkg benchmarks re-run with 624 columns, compared against Julia golden.
+
+| Pair | Perfect (>=0.999) | Good (0.99-0.999) | Poor (<0.99) | Min R² |
+|------|-------------------|-------------------|-------------|--------|
+| Python vs Julia | **615** | 5 | 3 | 0.984 |
+| rpkg vs Julia | **614** | 4 | 5 | 0.969 |
+
+- Python: all 25 new columns Perfect. 3 poor are existing recession seasonality minimum (sinusoidal fit sensitivity). 150.4 min, 0.81 gages/s.
+- rpkg: 24 of 25 new columns Perfect. 1 new poor: `alpha_linear_spearman_pval` (R² = 0.971, Spearman p-value library difference — R `cor.test` vs Julia t-approximation on tied annual values). 4 pre-existing poor unchanged. 244.6 min (I/O contention).
+- Zero regression on old columns confirmed: excluding 25 new columns, Python has 590 Perfect / 3 Poor (same 3 as before), rpkg has 590 Perfect / 4 Poor (same 4 as before).
+
+**Validation dashboards**: `docs/benchmarks/build_new_vs_golden_julia_dashboard.py` (Julia new vs golden), `docs/benchmarks/build_julia_golden_dashboard.py python` (Python vs Julia golden), `docs/benchmarks/build_julia_golden_dashboard.py rpkg` (rpkg vs Julia golden).
 
 **Known limitation — BFI_Eckhardt_param narrow range**: BFI_Eckhardt_param_mean has range [0.474, 0.804] with std=0.036, much narrower than fixed-parameter BFI_Eckhardt_mean (range [0.139, 0.802], std=0.119). This is a mathematical property of the Eckhardt filter: with BFImax=0.8 fixed, the `a` parameter only controls dynamics, while BFImax controls the steady-state level. Since 92% of gages have recession alpha < 0.95, the filter saturates at BFImax. BFI_LyneHollick_param is unaffected (range [0.255, 0.966], std=0.117). Future improvement: estimate BFImax per gage via Collischonn & Fan (2013) backward filter. See `docs/SIGNATURES.md` for details.
 

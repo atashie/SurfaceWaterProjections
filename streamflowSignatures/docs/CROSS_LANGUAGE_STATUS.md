@@ -25,7 +25,7 @@ For summary results and how-to-run commands, see the [Cross-Language Benchmarks 
 - generate_stats: Pre-filter NaN values from years array before stat calculations
 - OLS denominator guard: `abs() < 1e-10` instead of exact `== 0` (Round 6)
 - DataFrame pre-allocation in 5 modules replacing `push!` pattern (Round 6)
-- **Section 3 (April 2026, Julia-only pending R/Python sync):**
+- **Section 3 (April 2026, synced to Python/rpkg April 14-15):**
   - Recession event detection: position-level marking replacing look-ahead algorithm (captures full event length)
   - New signatures: D1/D99 timing, n_recession_events, elasticity_annual, negative_ann, runoff_ratio_high_count
   - Renamed: `elasticity_*` → `elasticity_rolling_*`; added elasticity diagnostics (years_total, years_low_ppt)

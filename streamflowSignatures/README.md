@@ -171,11 +171,9 @@ Julia is the canonical implementation. Python and R are validated ports producin
 
 | Metric | Julia | Python | rpkg (R port) | R (legacy) |
 |--------|-------|--------|---------------|------------|
-| Approx. processing time (7,313 gages) | ~10 min | ~70 min | ~2 hrs | ~1-2 hrs |
+| Approx. processing time (7,313 gages) | ~15 min | ~150 min | ~2-4 hrs | ~1-2 hrs |
 | Signature columns | 624 | 624 | 624 | 551 |
-| Signature cols with R² >= 0.99 vs Julia | -- | 591/594 (99.5%)* | 590/594 (99.3%)* | 502/551 (91.1%) |
-
-*Pre-BFI-port comparison on 594 shared columns. Post-port (624 columns) validation pending.
+| Signature cols with R² >= 0.99 vs Julia | -- | 620/623 (99.5%) | 618/623 (99.2%) | 502/551 (91.1%) |
 
 All implementations share configuration via `config/signatures_config.json`. The few remaining columns below 0.99 are irreducible library-level differences (Spearman p-value calculations, floating-point precision in near-zero regression). R legacy still uses the old recession algorithm (46 divergent columns).
 
