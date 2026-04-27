@@ -87,6 +87,7 @@ This project provides identical signature calculations in Julia (canonical), Pyt
 - `runoff_ratio_high_count` - per-gage scalar (count of years with ratio > 2.0)
 - `elasticity_years_total`, `elasticity_years_low_ppt` - per-gage diagnostics
 - `ice_affected_days_total` - per-gage diagnostic
+- `recession_alpha_point_cloud_linear_reservoir` - per-gage scalar (whole-record median Q_{i+1}/Q_i)
 
 ## Code Status
 

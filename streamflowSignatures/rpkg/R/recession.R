@@ -116,7 +116,8 @@ analyze_recession_parameters <- function(streamflow_data,
   min_events <- pkg_env$recession_min_events
 
   signatures_with_stats <- c("log_a_pointcloud", "log_a_events",
-                             "b_pointcloud", "b_events", "concavity")
+                             "b_pointcloud", "b_events", "concavity",
+                             "alpha_linear")
   seasonality_sigs <- c("log_a_seasonality_amplitude_all",
                         "log_a_seasonality_minimum_all",
                         "log_a_seasonality_amplitude_first_half",
@@ -129,6 +130,7 @@ analyze_recession_parameters <- function(streamflow_data,
     out <- unlist(lapply(signatures_with_stats, empty_stats), recursive = FALSE)
     out <- c(out, unlist(empty_stats("n_recession_events"), recursive = FALSE))
     for (s in seasonality_sigs) out[[s]] <- NA_real_
+    out[["recession_alpha_point_cloud_linear_reservoir"]] <- NA_real_
     out
   }
 
@@ -136,11 +138,13 @@ analyze_recession_parameters <- function(streamflow_data,
   annual_metrics <- data.frame(water_year = years, log_a_pointcloud = NA_real_,
                                log_a_events = NA_real_, b_pointcloud = NA_real_,
                                b_events = NA_real_, concavity = NA_real_,
-                               n_recession_events = NA_real_)
+                               n_recession_events = NA_real_,
+                               alpha_linear = NA_real_)
 
   streamflow_data <- streamflow_data[order(streamflow_data$water_year, streamflow_data$dowy), ]
 
   all_recession_events <- list()
+  all_alpha_linear <- numeric(0)
 
   for (yr in years) {
     year_data <- streamflow_data[streamflow_data$water_year == yr, ]
@@ -156,6 +160,7 @@ analyze_recession_parameters <- function(streamflow_data,
     event_log_a_values <- numeric(0)
     event_b_values <- numeric(0)
     event_concavities <- numeric(0)
+    year_alpha_linear <- numeric(0)
 
     for (event in recession_events) {
       Q_event <- year_data$Q[event$indices]
@@ -163,6 +168,22 @@ analyze_recession_parameters <- function(streamflow_data,
       event_dowy <- year_data$dowy[mid_idx]
 
       params <- fit_recession_event(Q_event, remove_first_day = TRUE)
+
+      # Compute discrete recession constant alpha = Q_{i+1}/Q_i (b=1 linear reservoir)
+      # INDEPENDENT of power-law fit — depends only on raw Q pairs
+      # Remove first day (storm peak) consistent with point-cloud fitting
+      if (length(Q_event) > 2) {
+        Q_alpha <- Q_event[-1]  # Remove first day
+        for (j in seq_len(length(Q_alpha) - 1)) {
+          if (Q_alpha[j] > 0 && !is.na(Q_alpha[j]) && !is.na(Q_alpha[j + 1])) {
+            a_i <- Q_alpha[j + 1] / Q_alpha[j]
+            if (a_i > 0 && a_i < 1) {
+              year_alpha_linear <- c(year_alpha_linear, a_i)
+              all_alpha_linear <- c(all_alpha_linear, a_i)
+            }
+          }
+        }
+      }
 
       if (!is.na(params$log_a) && !is.na(params$b)) {
         event_log_a_values <- c(event_log_a_values, params$log_a)
@@ -239,6 +260,11 @@ analyze_recession_parameters <- function(streamflow_data,
     if (length(event_concavities) > 0) {
       annual_metrics$concavity[annual_metrics$water_year == yr] <- mean(event_concavities, na.rm = TRUE)
     }
+
+    # Per-year alpha_linear (linear reservoir assumption)
+    if (length(year_alpha_linear) > 10) {
+      annual_metrics$alpha_linear[annual_metrics$water_year == yr] <- median(year_alpha_linear, na.rm = TRUE)
+    }
   }
 
   # n_recession_events stats computed INDEPENDENTLY of min_events gate
@@ -253,11 +279,19 @@ analyze_recession_parameters <- function(streamflow_data,
     n_events_stats <- empty_stats("n_recession_events")
   }
 
+  # Whole-record recession alpha (scalar — independent of min_events gate)
+  recession_alpha_scalar <- if (length(all_alpha_linear) > 10) {
+    median(all_alpha_linear, na.rm = TRUE)
+  } else {
+    NA_real_
+  }
+
   # Check minimum events
   if (length(all_recession_events) < min_events) {
     na_result <- make_na_result()
     # Override n_recession_events with actual computed stats
     for (nm in names(n_events_stats)) na_result[[nm]] <- n_events_stats[[nm]]
+    na_result[["recession_alpha_point_cloud_linear_reservoir"]] <- recession_alpha_scalar
     return(na_result)
   }
 
@@ -297,6 +331,8 @@ analyze_recession_parameters <- function(streamflow_data,
       result$log_a_seasonality_minimum_last_half   <- s2$minimum_doy
     }
   }
+
+  result[["recession_alpha_point_cloud_linear_reservoir"]] <- recession_alpha_scalar
 
   result
 }

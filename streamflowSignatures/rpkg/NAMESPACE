@@ -3,6 +3,7 @@
 export(add_water_year_columns)
 export(analyze_Q_PPT_relationships)
 export(analyze_baseflow_indices)
+export(analyze_baseflow_indices_with_parameters)
 export(analyze_fdc_trends)
 export(analyze_flashiness_trends)
 export(analyze_flow_timing_trends)

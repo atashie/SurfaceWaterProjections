@@ -257,7 +257,7 @@ def analyze_recession_parameters(
 
     # Define signatures
     signatures_with_stats = ["log_a_pointcloud", "log_a_events", "b_pointcloud",
-                             "b_events", "concavity"]
+                             "b_events", "concavity", "alpha_linear"]
     seasonality_signatures = [
         "log_a_seasonality_amplitude_all", "log_a_seasonality_minimum_all",
         "log_a_seasonality_amplitude_first_half", "log_a_seasonality_minimum_first_half",
@@ -278,10 +278,12 @@ def analyze_recession_parameters(
         "b_events": np.nan,
         "concavity": np.nan,
         "n_recession_events": np.nan,
+        "alpha_linear": np.nan,
     })
 
     # Store all recession events with timing
     all_recession_events = []
+    all_alpha_linear = []
 
     # Process each year (df already sorted by water_year and dowy)
     for yr, year_data in df.groupby("water_year", sort=False):
@@ -299,6 +301,7 @@ def analyze_recession_parameters(
         # Collect all recession data for point cloud
         all_Q = []
         all_dQ_dt = []
+        year_alpha_linear = []
 
         # Store individual event parameters
         event_log_a_values = []
@@ -316,6 +319,18 @@ def analyze_recession_parameters(
 
             # Fit parameters for this event
             log_a, b = fit_recession_event(Q_event, remove_first_day=True)
+
+            # Compute discrete recession constant alpha = Q_{i+1}/Q_i (b=1 linear reservoir)
+            # INDEPENDENT of power-law fit — depends only on raw Q pairs
+            # Remove first day (storm peak) consistent with point-cloud fitting
+            if len(Q_event) > 2:  # Need at least 3 days (2 after removing first)
+                Q_alpha = Q_event[1:]  # Remove first day (0-indexed)
+                for j in range(len(Q_alpha) - 1):
+                    if Q_alpha[j] > 0 and not np.isnan(Q_alpha[j]) and not np.isnan(Q_alpha[j + 1]):
+                        a_i = Q_alpha[j + 1] / Q_alpha[j]
+                        if 0 < a_i < 1:  # Must be valid recession (decreasing Q)
+                            year_alpha_linear.append(a_i)
+                            all_alpha_linear.append(a_i)
 
             if not np.isnan(log_a) and not np.isnan(b):
                 event_log_a_values.append(log_a)
@@ -404,6 +419,10 @@ def analyze_recession_parameters(
         if len(event_concavities) > 0:
             annual_metrics.loc[annual_metrics["water_year"] == yr, "concavity"] = np.mean(event_concavities)
 
+        # Per-year alpha_linear (linear reservoir assumption)
+        if len(year_alpha_linear) > 10:
+            annual_metrics.loc[annual_metrics["water_year"] == yr, "alpha_linear"] = np.median(year_alpha_linear)
+
     # n_recession_events stats computed INDEPENDENTLY of min_events gate
     events_df = annual_metrics[["water_year", "n_recession_events"]].dropna()
     if len(events_df) >= 3:
@@ -417,6 +436,9 @@ def analyze_recession_parameters(
                        "_mk_rho", "_mk_pval", "_mean", "_median"]:
             n_events_stats[f"n_recession_events{suffix}"] = np.nan
 
+    # Whole-record recession alpha (scalar — independent of min_events gate)
+    recession_alpha_scalar = np.median(all_alpha_linear) if len(all_alpha_linear) > 10 else np.nan
+
     # Check minimum events requirement
     if len(all_recession_events) < min_events:
         # Return all NAs (but include n_recession_events stats)
@@ -428,6 +450,7 @@ def analyze_recession_parameters(
         for sig in seasonality_signatures:
             result[sig] = np.nan
         result.update(n_events_stats)
+        result["recession_alpha_point_cloud_linear_reservoir"] = recession_alpha_scalar
         return result
 
     # Generate statistics for main signatures
@@ -480,4 +503,5 @@ def analyze_recession_parameters(
             result["log_a_seasonality_amplitude_last_half"] = amp
             result["log_a_seasonality_minimum_last_half"] = min_doy
 
+    result["recession_alpha_point_cloud_linear_reservoir"] = recession_alpha_scalar
     return result

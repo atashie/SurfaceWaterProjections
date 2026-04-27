@@ -39,7 +39,7 @@ For summary results and how-to-run commands, see the [Cross-Language Benchmarks 
 - April 2026: `process_signatures_from_parquet()` now passes `seasonal_flags` to `calculate_flow_vols_by_year()` and `analyze_Q_PPT_relationships()`, matching Python/Julia
 - April 2026: Auto-reads `trend_completeness` and `decade_completeness` from config JSON; filters climate signatures to `valid_climate_years` only
 
-**Python**: Production-ready. Major fixes applied across 6 alignment rounds:
+**Python**: Production-ready. 594 columns (Julia-equivalent except 25 recession-parameterized BFI columns — port pending). Major fixes applied across 6 alignment rounds:
 - BFI_LyneHollick: Fixed NaN propagation with paired masking
 - BFI_Eckhardt: NaN forward-fill in recursive filter to eliminate cascade (Round 5); denominator fix attempted and reverted in Round 4
 - Recession concavity: Overlapping half-split matching R
@@ -165,7 +165,7 @@ Post R monolithic fixes + Julia tau-b fix. 551 common columns across 5,707 commo
 | Runoff Ratios | 40 | 40 | 0 | 0 | 1.0000 |
 | Storage | 8 | 5 | 3 | 0 | 0.9960 |
 
-Note: These are three-way results (R vs Python vs Julia on the same 551 pre-Section 3 columns). Julia canonical output has additional columns (D1/D99, n_recession_events, elasticity_annual, negative_ann, diagnostics) not included here.
+Note: These are three-way results (R vs Python vs Julia on the same 551 pre-Section 3 columns). Julia canonical output has additional columns (D1/D99, n_recession_events, elasticity_annual, negative_ann, diagnostics) not included here. Julia also has 25 recession-parameterized BFI columns (alpha_linear, BFI_Eckhardt_param, BFI_LyneHollick_param + scalar) not yet ported to Python/rpkg.
 
 ## Known Remaining Divergences
 
@@ -267,4 +267,4 @@ Julia and Python benchmarks compute 12 `flagged_*` QA/QC columns (e.g., `flagged
 - Python-Julia: 0 columns below 0.99 (min R² = 0.998) — **perfect pairwise alignment**
 - All 5,707 R gages matched in Python/Julia output
 - Julia is ~7-14x faster than Python for full benchmark (~10 min vs 69-133 min depending on contention)
-- Julia canonical: 594 signature columns (551 shared + 32 new stats + 8 renamed + 3 scalar diagnostics)
+- Julia canonical: 624 signature columns (551 shared three-way + 43 Section 3 + 25 recession-parameterized BFI + 5 scalars/diagnostics). Python and rpkg at 594 — recession-parameterized BFI port pending (25 columns: alpha_linear×8, BFI_Eckhardt_param×8, BFI_LyneHollick_param×8, recession_alpha_point_cloud_linear_reservoir×1)

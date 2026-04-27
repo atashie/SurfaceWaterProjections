@@ -24,7 +24,7 @@ from .flow_volumes import calculate_flow_vols_by_year
 from .flashiness import analyze_flashiness_trends
 from .timing import analyze_flow_timing_trends
 from .fdc import analyze_fdc_trends
-from .baseflow import analyze_baseflow_indices, eckhardt_filter, lyne_hollick_filter
+from .baseflow import analyze_baseflow_indices, analyze_baseflow_indices_with_parameters, eckhardt_filter, lyne_hollick_filter
 from .recession import analyze_recession_parameters
 from .pulses import calculate_pulse_metrics
 from .runoff_ratios import analyze_Q_PPT_relationships
@@ -53,6 +53,7 @@ __all__ = [
     "analyze_fdc_trends",
     # Signatures - Complex (no climate data required)
     "analyze_baseflow_indices",
+    "analyze_baseflow_indices_with_parameters",
     "eckhardt_filter",
     "lyne_hollick_filter",
     "analyze_recession_parameters",

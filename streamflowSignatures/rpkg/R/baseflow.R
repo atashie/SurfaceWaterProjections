@@ -130,3 +130,74 @@ analyze_baseflow_indices <- function(streamflow_data,
                  trend_completeness = trend_completeness,
                  decade_completeness = decade_completeness)
 }
+
+#' Analyze baseflow indices with recession-derived parameters
+#'
+#' Same as \code{analyze_baseflow_indices()} but uses recession-derived alpha
+#' instead of fixed defaults. BFImax remains fixed at 0.8.
+#'
+#' @param streamflow_data A data.frame with columns: water_year, Q, dowy.
+#' @param alpha Recession-derived filter parameter (from
+#'   recession_alpha_point_cloud_linear_reservoir). Must be in (0, 1).
+#' @param BFImax Maximum baseflow index for Eckhardt filter (default from config).
+#' @param passes Number of Lyne-Hollick filter passes (default from config).
+#' @param trend_completeness Forwarded to generate_stats().
+#' @param decade_completeness Forwarded to generate_stats().
+#' @return Named list of 8 statistics per BFI metric (2 x 8 = 16 values).
+#' @export
+analyze_baseflow_indices_with_parameters <- function(
+    streamflow_data,
+    alpha,
+    BFImax = pkg_env$eckhardt_bfimax,
+    passes = pkg_env$lyne_hollick_passes,
+    trend_completeness = NULL,
+    decade_completeness = NULL
+) {
+  metrics <- c("BFI_Eckhardt_param", "BFI_LyneHollick_param")
+
+  # Validate alpha
+  if (is.na(alpha) || alpha <= 0 || alpha >= 1) {
+    result <- unlist(lapply(metrics, empty_stats), recursive = FALSE)
+    return(result)
+  }
+
+  required_cols <- c("water_year", "Q", "dowy")
+  missing <- setdiff(required_cols, colnames(streamflow_data))
+  if (length(missing) > 0) stop(paste("Missing required columns:", paste(missing, collapse = ", ")))
+
+  years <- unique(streamflow_data$water_year)
+  bfi_by_year <- data.frame(water_year = years, BFI_Eckhardt_param = NA_real_,
+                            BFI_LyneHollick_param = NA_real_)
+
+  for (yr in years) {
+    year_data <- streamflow_data[streamflow_data$water_year == yr, ]
+    year_data <- year_data[order(year_data$dowy), ]
+    Q <- year_data$Q
+
+    # Apply filters with recession-derived alpha
+    bf_eck <- eckhardt_filter(Q, BFImax = BFImax, a = alpha)
+    bf_lh <- lyne_hollick_filter(Q, alpha = alpha, passes = passes)
+
+    # Eckhardt: paired masking
+    eck_valid <- !is.na(Q) & !is.na(bf_eck)
+    total_eck <- sum(Q[eck_valid])
+    if (total_eck > 0) {
+      bfi_eck <- sum(bf_eck[eck_valid]) / total_eck
+      bfi_eck <- max(0, min(1, bfi_eck))
+      bfi_by_year$BFI_Eckhardt_param[bfi_by_year$water_year == yr] <- bfi_eck
+    }
+
+    # Lyne-Hollick: paired masking
+    lh_valid <- !is.na(Q) & !is.na(bf_lh)
+    total_lh <- sum(Q[lh_valid])
+    if (total_lh > 0) {
+      bfi_lh <- sum(bf_lh[lh_valid]) / total_lh
+      bfi_lh <- max(0, min(1, bfi_lh))
+      bfi_by_year$BFI_LyneHollick_param[bfi_by_year$water_year == yr] <- bfi_lh
+    }
+  }
+
+  generate_stats(bfi_by_year, value_cols = metrics, year_col = "water_year",
+                 trend_completeness = trend_completeness,
+                 decade_completeness = decade_completeness)
+}

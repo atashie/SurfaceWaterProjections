@@ -10,7 +10,7 @@ from .flow_volumes import calculate_flow_vols_by_year
 from .flashiness import analyze_flashiness_trends
 from .timing import analyze_flow_timing_trends
 from .fdc import analyze_fdc_trends
-from .baseflow import analyze_baseflow_indices
+from .baseflow import analyze_baseflow_indices, analyze_baseflow_indices_with_parameters
 from .recession import analyze_recession_parameters
 from .pulses import calculate_pulse_metrics, calculate_negative_days
 from .runoff_ratios import analyze_Q_PPT_relationships
@@ -113,8 +113,21 @@ def calculate_all_signatures(
         pass
 
     # Recession: inherently sparse (event-based), no trend completeness
+    recession_alpha = float('nan')
     try:
-        results.update(analyze_recession_parameters(gage_data))
+        recession_results = analyze_recession_parameters(gage_data)
+        # Extract scalar for parameterized BFI before merging
+        recession_alpha = recession_results.get(
+            "recession_alpha_point_cloud_linear_reservoir", float('nan'))
+        results.update(recession_results)
+    except Exception:
+        pass
+
+    # Parameterized BFI using recession-derived alpha (requires recession to have run first)
+    # Uses trend completeness (same as fixed-parameter BFI)
+    try:
+        results.update(analyze_baseflow_indices_with_parameters(
+            gage_data, recession_alpha, **trend_kwargs))
     except Exception:
         pass
 

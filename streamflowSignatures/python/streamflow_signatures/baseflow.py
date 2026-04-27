@@ -221,3 +221,92 @@ def analyze_baseflow_indices(
         trend_completeness=trend_completeness,
         decade_completeness=decade_completeness,
     )
+
+
+def analyze_baseflow_indices_with_parameters(
+    streamflow_data: pd.DataFrame,
+    alpha: float,
+    BFImax: float = ECKHARDT_BFIMAX,
+    passes: int = LYNE_HOLLICK_PASSES,
+    trend_completeness: Optional[float] = None,
+    decade_completeness: Optional[float] = None,
+) -> Dict[str, float]:
+    """
+    Calculate baseflow indices using recession-derived filter parameters.
+
+    Same as analyze_baseflow_indices() but uses recession-derived alpha
+    instead of fixed defaults. BFImax remains fixed at 0.8.
+
+    Parameters
+    ----------
+    streamflow_data : pd.DataFrame
+        Daily streamflow data with columns: water_year, Q, dowy.
+    alpha : float
+        Recession-derived filter parameter (from recession_alpha_point_cloud_linear_reservoir).
+        Must be in (0, 1). NaN or out-of-range returns all NaN stats.
+    BFImax : float, default 0.8
+        Maximum baseflow index for Eckhardt filter.
+    passes : int, default 2
+        Number of passes for Lyne-Hollick filter.
+
+    Returns
+    -------
+    dict
+        Dictionary with BFI_Eckhardt_param_* and BFI_LyneHollick_param_* statistics.
+    """
+    metrics = ["BFI_Eckhardt_param", "BFI_LyneHollick_param"]
+
+    # Validate alpha
+    if np.isnan(alpha) or alpha <= 0.0 or alpha >= 1.0:
+        result = {}
+        for m in metrics:
+            for suffix in ["_senn_slp", "_linear_slp", "_spearman_rho", "_spearman_pval",
+                           "_mk_rho", "_mk_pval", "_mean", "_median"]:
+                result[f"{m}{suffix}"] = np.nan
+        return result
+
+    # Validate required columns
+    required_cols = ["water_year", "Q", "dowy"]
+    missing = [c for c in required_cols if c not in streamflow_data.columns]
+    if missing:
+        raise ValueError(f"Missing required columns: {missing}")
+
+    df = streamflow_data
+    years = df["water_year"].unique()
+
+    bfi_by_year = pd.DataFrame({
+        "water_year": years,
+        "BFI_Eckhardt_param": np.nan,
+        "BFI_LyneHollick_param": np.nan,
+    })
+
+    for yr, year_data in df.groupby("water_year", sort=False):
+        year_data = year_data.copy()
+        year_data = year_data.sort_values("dowy")
+        Q = year_data["Q"].values.astype(float)
+
+        # Apply filters with recession-derived alpha
+        bf_eck = eckhardt_filter(Q, BFImax=BFImax, a=alpha)
+        bf_lh = lyne_hollick_filter(Q, alpha=alpha, passes=passes)
+
+        # Eckhardt BFI with paired masking
+        valid_eck = ~np.isnan(Q) & ~np.isnan(bf_eck)
+        if valid_eck.sum() > 0 and np.sum(Q[valid_eck]) > 0:
+            bfi_eck = np.sum(bf_eck[valid_eck]) / np.sum(Q[valid_eck])
+            bfi_eck = np.clip(bfi_eck, 0.0, 1.0)
+            bfi_by_year.loc[bfi_by_year["water_year"] == yr, "BFI_Eckhardt_param"] = bfi_eck
+
+        # Lyne-Hollick BFI with paired masking
+        valid_lh = ~np.isnan(Q) & ~np.isnan(bf_lh)
+        if valid_lh.sum() > 0 and np.sum(Q[valid_lh]) > 0:
+            bfi_lh = np.sum(bf_lh[valid_lh]) / np.sum(Q[valid_lh])
+            bfi_lh = np.clip(bfi_lh, 0.0, 1.0)
+            bfi_by_year.loc[bfi_by_year["water_year"] == yr, "BFI_LyneHollick_param"] = bfi_lh
+
+    return generate_stats(
+        bfi_by_year,
+        value_cols=metrics,
+        year_col="water_year",
+        trend_completeness=trend_completeness,
+        decade_completeness=decade_completeness,
+    )

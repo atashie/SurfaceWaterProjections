@@ -78,8 +78,23 @@ calculate_all_signatures <- function(streamflow_data, has_climate = FALSE,
   }
 
   # Recession: event-based (inherently sparse), no trend completeness
+  recession_alpha <- NaN
   out <- safe_call(analyze_recession_parameters, "Recession parameters",
                    streamflow_data)
+  if (!is.null(out)) {
+    # Extract scalar for parameterized BFI before merging
+    if ("recession_alpha_point_cloud_linear_reservoir" %in% names(out)) {
+      recession_alpha <- out[["recession_alpha_point_cloud_linear_reservoir"]]
+    }
+    results <- c(results, out)
+  }
+
+  # Parameterized BFI using recession-derived alpha (requires recession to have run first)
+  # Uses trend completeness (same as fixed-parameter BFI)
+  out <- safe_call(analyze_baseflow_indices_with_parameters, "Parameterized baseflow",
+                   streamflow_data, alpha = recession_alpha,
+                   trend_completeness = trend_completeness,
+                   decade_completeness = decade_completeness)
   if (!is.null(out)) results <- c(results, out)
 
   # Negative days
