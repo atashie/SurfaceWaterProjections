@@ -25,7 +25,8 @@ function calculate_all_signatures(
     trend_completeness::Union{Nothing, Float64}=nothing,
     decade_completeness::Union{Nothing, Float64}=nothing,
     climate_data::Union{Nothing, DataFrame}=nothing,
-    include_qa_flags::Bool=false
+    include_qa_flags::Bool=false,
+    changepoint::Union{Nothing, NamedTuple}=nothing
 )::Dict{String, Any}
     results = Dict{String, Any}()
 
@@ -43,36 +44,37 @@ function calculate_all_signatures(
 
     tc = trend_completeness
     dc = decade_completeness
+    cp = changepoint
 
     # Non-climate signatures — apply trend completeness to signatures that
     # produce one value per year. Skip for inherently sparse signatures
     # (recession is event-based, elasticity uses rolling windows).
     try
-        merge!(results, calculate_flow_vols_by_year(gage_data; seasonal_flags=seasonal_flags, trend_completeness=tc, decade_completeness=dc))
+        merge!(results, calculate_flow_vols_by_year(gage_data; seasonal_flags=seasonal_flags, trend_completeness=tc, decade_completeness=dc, changepoint=cp))
     catch e
         @warn "calculate_flow_vols_by_year failed for gage $gage_id" exception=(e, catch_backtrace())
     end
 
     try
-        merge!(results, analyze_flashiness_trends(gage_data; trend_completeness=tc, decade_completeness=dc))
+        merge!(results, analyze_flashiness_trends(gage_data; trend_completeness=tc, decade_completeness=dc, changepoint=cp))
     catch e
         @warn "analyze_flashiness_trends failed for gage $gage_id" exception=(e, catch_backtrace())
     end
 
     try
-        merge!(results, analyze_flow_timing_trends(gage_data; trend_completeness=tc, decade_completeness=dc))
+        merge!(results, analyze_flow_timing_trends(gage_data; trend_completeness=tc, decade_completeness=dc, changepoint=cp))
     catch e
         @warn "analyze_flow_timing_trends failed for gage $gage_id" exception=(e, catch_backtrace())
     end
 
     try
-        merge!(results, analyze_fdc_trends(gage_data; trend_completeness=tc, decade_completeness=dc))
+        merge!(results, analyze_fdc_trends(gage_data; trend_completeness=tc, decade_completeness=dc, changepoint=cp))
     catch e
         @warn "analyze_fdc_trends failed for gage $gage_id" exception=(e, catch_backtrace())
     end
 
     try
-        merge!(results, analyze_baseflow_indices(gage_data; trend_completeness=tc, decade_completeness=dc))
+        merge!(results, analyze_baseflow_indices(gage_data; trend_completeness=tc, decade_completeness=dc, changepoint=cp))
     catch e
         @warn "analyze_baseflow_indices failed for gage $gage_id" exception=(e, catch_backtrace())
     end
@@ -80,7 +82,7 @@ function calculate_all_signatures(
     # Recession: inherently sparse (event-based, many years with no events) — no trend completeness
     local recession_alpha = NaN
     try
-        recession_results = analyze_recession_parameters(gage_data)
+        recession_results = analyze_recession_parameters(gage_data; changepoint=cp)
         # Extract scalar for parameterized BFI before merging
         recession_alpha = get(recession_results, "recession_alpha_point_cloud_linear_reservoir", NaN)
         merge!(results, recession_results)
@@ -92,19 +94,19 @@ function calculate_all_signatures(
     # Uses trend completeness (same as fixed-parameter BFI)
     try
         merge!(results, analyze_baseflow_indices_with_parameters(gage_data, recession_alpha;
-            trend_completeness=tc, decade_completeness=dc))
+            trend_completeness=tc, decade_completeness=dc, changepoint=cp))
     catch e
         @warn "analyze_baseflow_indices_with_parameters failed for gage $gage_id" exception=(e, catch_backtrace())
     end
 
     try
-        merge!(results, calculate_pulse_metrics(gage_data; trend_completeness=tc, decade_completeness=dc))
+        merge!(results, calculate_pulse_metrics(gage_data; trend_completeness=tc, decade_completeness=dc, changepoint=cp))
     catch e
         @warn "calculate_pulse_metrics failed for gage $gage_id" exception=(e, catch_backtrace())
     end
 
     try
-        merge!(results, calculate_negative_days(gage_data; trend_completeness=tc, decade_completeness=dc))
+        merge!(results, calculate_negative_days(gage_data; trend_completeness=tc, decade_completeness=dc, changepoint=cp))
     catch e
         @warn "calculate_negative_days failed for gage $gage_id" exception=(e, catch_backtrace())
     end
@@ -115,26 +117,26 @@ function calculate_all_signatures(
         cdata = climate_data !== nothing ? climate_data : gage_data
         if "PPT" in names(cdata)
             try
-                merge!(results, analyze_Q_PPT_relationships(cdata; seasonal_flags=seasonal_flags, trend_completeness=tc, decade_completeness=dc))
+                merge!(results, analyze_Q_PPT_relationships(cdata; seasonal_flags=seasonal_flags, trend_completeness=tc, decade_completeness=dc, changepoint=cp))
             catch e
                 @warn "analyze_Q_PPT_relationships failed for gage $gage_id" exception=(e, catch_backtrace())
             end
 
             # Elasticity: rolling window produces fewer values than years — no trend completeness
             try
-                merge!(results, calculate_streamflow_elasticity(cdata))
+                merge!(results, calculate_streamflow_elasticity(cdata; changepoint=cp))
             catch e
                 @warn "calculate_streamflow_elasticity failed for gage $gage_id" exception=(e, catch_backtrace())
             end
 
             try
-                merge!(results, calculate_qp_seasonality(cdata; trend_completeness=tc, decade_completeness=dc))
+                merge!(results, calculate_qp_seasonality(cdata; trend_completeness=tc, decade_completeness=dc, changepoint=cp))
             catch e
                 @warn "calculate_qp_seasonality failed for gage $gage_id" exception=(e, catch_backtrace())
             end
 
             try
-                merge!(results, calculate_average_storage(cdata; trend_completeness=tc, decade_completeness=dc))
+                merge!(results, calculate_average_storage(cdata; trend_completeness=tc, decade_completeness=dc, changepoint=cp))
             catch e
                 @warn "calculate_average_storage failed for gage $gage_id" exception=(e, catch_backtrace())
             end

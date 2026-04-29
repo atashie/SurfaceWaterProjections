@@ -173,7 +173,7 @@ Returns
 Dict{String, Float64}
     Dictionary of signature statistics
 """
-function calculate_pulse_metrics(df::DataFrame; trend_completeness::Union{Nothing, Float64}=nothing, decade_completeness::Union{Nothing, Float64}=nothing)
+function calculate_pulse_metrics(df::DataFrame; trend_completeness::Union{Nothing, Float64}=nothing, decade_completeness::Union{Nothing, Float64}=nothing, changepoint::Union{Nothing, NamedTuple}=nothing)
     result = Dict{String, Float64}()
 
     metrics = [
@@ -299,7 +299,7 @@ function calculate_pulse_metrics(df::DataFrame; trend_completeness::Union{Nothin
     end
 
     # Generate statistics for all metrics
-    result = generate_stats(annual_data; value_cols=metrics, trend_completeness=trend_completeness, decade_completeness=decade_completeness)
+    result = generate_stats(annual_data; value_cols=metrics, trend_completeness=trend_completeness, decade_completeness=decade_completeness, changepoint=changepoint)
 
     return result
 end
@@ -310,7 +310,7 @@ end
 
 Count days with negative streamflow (Q < 0) per water year.
 """
-function calculate_negative_days(df::DataFrame; trend_completeness::Union{Nothing, Float64}=nothing, decade_completeness::Union{Nothing, Float64}=nothing)
+function calculate_negative_days(df::DataFrame; trend_completeness::Union{Nothing, Float64}=nothing, decade_completeness::Union{Nothing, Float64}=nothing, changepoint::Union{Nothing, NamedTuple}=nothing)
     result = Dict{String, Float64}()
 
     valid, missing_cols = validate_columns(df, ["Q", "water_year"])
@@ -325,7 +325,7 @@ function calculate_negative_days(df::DataFrame; trend_completeness::Union{Nothin
     )
 
     result = generate_stats(annual_data; value_cols=["negative_ann"],
-        trend_completeness=trend_completeness, decade_completeness=decade_completeness)
+        trend_completeness=trend_completeness, decade_completeness=decade_completeness, changepoint=changepoint)
 
     return result
 end

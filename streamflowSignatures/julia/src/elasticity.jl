@@ -49,7 +49,8 @@ function calculate_streamflow_elasticity(
     window::Int=CFG_ELASTICITY_WINDOW_YEARS,
     min_annual_ppt::Real=CFG_ELASTICITY_MIN_ANNUAL_PPT,
     trend_completeness::Union{Nothing, Float64}=nothing,
-    decade_completeness::Union{Nothing, Float64}=nothing
+    decade_completeness::Union{Nothing, Float64}=nothing,
+    changepoint::Union{Nothing, NamedTuple}=nothing
 )
     result = Dict{String, Float64}()
 
@@ -186,7 +187,7 @@ function calculate_streamflow_elasticity(
                 water_year = rolling_years,
                 elasticity_rolling = rolling_elasticity
             )
-            merge!(result, generate_stats(rolling_df; value_cols=["elasticity_rolling"], trend_completeness=trend_completeness, decade_completeness=decade_completeness))
+            merge!(result, generate_stats(rolling_df; value_cols=["elasticity_rolling"], trend_completeness=trend_completeness, decade_completeness=decade_completeness, changepoint=changepoint))
         else
             merge!(result, empty_stats("elasticity_rolling"))
         end
@@ -212,7 +213,7 @@ function calculate_streamflow_elasticity(
             water_year = yoy_years,
             elasticity_annual = yoy_elasticity
         )
-        merge!(result, generate_stats(yoy_df; value_cols=["elasticity_annual"], trend_completeness=trend_completeness, decade_completeness=decade_completeness))
+        merge!(result, generate_stats(yoy_df; value_cols=["elasticity_annual"], trend_completeness=trend_completeness, decade_completeness=decade_completeness, changepoint=changepoint))
     else
         merge!(result, empty_stats("elasticity_annual"))
     end

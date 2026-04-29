@@ -364,6 +364,110 @@ Peters, N.E., & Aulenbach, B.T. (2011). Water storage at the Panola Mountain Res
 
 ---
 
+## Changepoint Detection
+
+The non-parametric Pettitt test is applied to every signature's annual time series via `generate_stats()`.
+
+### Pettitt Test
+
+**Function**: `pettitt_test`
+
+Non-parametric rank-based test (Pettitt 1979) that detects a single changepoint in the mean:
+
+- **Test statistic**: K_T = max|U_t| where U_t = U_{t-1} + V_t and V_t = Σ_{j=1}^{n} sgn(x_t - x_j)
+- **P-value**: Asymptotic approximation p ≈ 2·exp(-6K²/(T³+T²))
+- **Always identifies a location**: Pettitt always returns a cp_year; use p-value for significance
+- **Complexity**: O(n²) per signature — fast for annual series (n ≤ 45)
+
+### Differential Metrics
+
+**Function**: `segment_differential_metrics`
+
+Applied at the Pettitt changepoint location:
+
+- **delta_mean**: post_mean − pre_mean
+- **pct_change**: delta_mean / |pre_mean| × 100 (NaN if |pre_mean| < 1e-10)
+- **pre_mk_pval**: Mann-Kendall p-value for the pre-changepoint segment
+- **post_mk_pval**: Mann-Kendall p-value for the post-changepoint segment
+
+### Output Columns (per signature)
+
+Each signature gains 8 changepoint columns:
+
+| Suffix | Description |
+|--------|-------------|
+| `_pettitt_cp_year` | Most likely changepoint year |
+| `_pettitt_pval` | Asymptotic p-value (< 0.05 = significant) |
+| `_pettitt_pre_mean` | Mean before Pettitt changepoint |
+| `_pettitt_post_mean` | Mean after Pettitt changepoint |
+| `_pettitt_delta_mean` | Post minus pre mean at Pettitt changepoint |
+| `_pettitt_pct_change` | Percent change at Pettitt changepoint |
+| `_pettitt_pre_mk_pval` | Mann-Kendall p-value for pre-Pettitt segment |
+| `_pettitt_post_mk_pval` | Mann-Kendall p-value for post-Pettitt segment |
+
+### Configuration
+
+From `config/signatures_config.json` → `changepoint` section:
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `enabled` | `true` | Enable/disable changepoint analysis |
+| `start_water_year` | 1980 | Start of analysis window |
+| `end_water_year` | 2024 | End of analysis window |
+| `min_total_obs` | 20 | Minimum non-NA observations required |
+| `min_segment_obs` | 10 | Minimum non-NA observations per segment |
+
+### Design Decisions
+
+- **Scope**: Applied to ALL signatures producing annual time series — redundancy across ~76 base signatures serves as a pseudo-robustness test
+- **Independence**: Changepoint analysis runs independently of the 80% trend completeness gate
+- **Non-parametric**: No distributional assumptions; robust to outliers
+- **Per-signature, not per-gage**: Each signature gets its own changepoint analysis — different signatures may identify changepoints at different years
+
+### Interpretation
+
+- p < 0.05: Significant changepoint detected
+- p ≥ 0.05: No significant changepoint (cp_year still reported but not reliable)
+
+### Signal Robustness & Known Limitations
+
+**Overall significance rate**: ~13.4% of evaluations have p < 0.05 (vs 5% expected under null). The excess is concentrated in physically interpretable categories:
+
+| Category | Sig. Rate | Notes |
+|----------|-----------|-------|
+| Flow Timing | 3.7% | Below null — timing is stationary; useful calibration anchor |
+| Q-P Seasonality | 7.7% | Near null — weak signal |
+| Storage | 6.5% | Near null |
+| Flow Volumes | 12.4% | Modest excess |
+| Baseflow | 15.1% | Real signal likely |
+| Flow Percentiles | 18.4% | Strong signal |
+| Flashiness | 19.4% | Strong signal |
+| Pulses | 15.9% | Moderate signal |
+| Elasticity | 25.8% | Inflated — elasticity_rolling at ~49% due to short series from 11-year rolling window |
+
+**Redundancy across signatures**: The effective number of independent tests is ~17 out of 76 signatures (~77% redundancy). Flow percentiles (Q5–Q95) are highly correlated with Qann: P(Q30 sig | Qann sig) ≈ 75%. Users should focus on category-level summaries rather than treating each signature independently.
+
+**Multiple testing**: With 76 tests per gage at alpha=0.05, the expected false positive count is 3.8 per gage and the family-wise error rate is ~98%. No correction is applied in the output. After Benjamini-Hochberg FDR at 0.05, approximately 3.5% of evaluations survive — a core of robust detections. Users performing per-gage analysis should apply their own multiple testing correction.
+
+**CP year center bias**: The 10-year minimum segment constraint limits cp_year to [1989, 2014], with maximum test power near the center of the window. The observed concentration around 2000–2003 (~50% of significant detections in 1998–2006) is partly a geometric artifact and partly a real hydroclimatic signal (North American drought/pluvial transitions).
+
+**Changepoint clustering within gages**: Many signatures detect the same cp_year for a given gage (median 7 significant signatures per gage, ~40% sharing the same modal year). This is expected — a real shift in Qann propagates to flow percentiles, baseflow, flashiness — but means the 608 columns overstate the independent information content.
+
+**elasticity_rolling caveat**: The 11-year rolling window produces n−10 annual values from n input years, so gages with 25 qualifying years yield only 15 elasticity values. The Pettitt test has inflated false positive rates on these short series. The near-uniform CP year distribution for this signature (vs concentrated for other signatures) is consistent with noise.
+
+**Limitations of the Pettitt test**:
+- Detects shifts in central tendency only — misses gradual trends, variance changes, and seasonal pattern shifts
+- The asymptotic p-value is conservative for small n (significance rate is 4.3% for n=20–25, below the 5% null expectation)
+- Does not distinguish step changes from trend breaks (the BIC 4-model comparison, retained in `changepoint.jl` but not called, was designed for this)
+
+**Differential metrics**: The pct_change metric discriminates well — median |pct_change| is ~40% for significant detections vs ~15% for non-significant (2.65x ratio). The pre/post MK p-values are largely uninformative: ~92% of segments show no significant within-segment trend, confirming the step-change model is appropriate but adding little actionable information.
+
+### References
+
+- Pettitt, A.N. (1979). A non-parametric approach to the change-point problem. Applied Statistics, 28(2), 126-135.
+
+---
+
 ## Implementation Design Notes
 
 The following design decisions affect how signatures are calculated and which gages produce valid results.

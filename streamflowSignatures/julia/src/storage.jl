@@ -34,7 +34,8 @@ function calculate_average_storage(
     df::DataFrame;
     min_years::Int=10,
     trend_completeness::Union{Nothing, Float64}=nothing,
-    decade_completeness::Union{Nothing, Float64}=nothing
+    decade_completeness::Union{Nothing, Float64}=nothing,
+    changepoint::Union{Nothing, NamedTuple}=nothing
 )
     result = Dict{String, Float64}()
 
@@ -154,5 +155,5 @@ function calculate_average_storage(
         avg_storage = annual_storage
     )
 
-    return generate_stats(annual_df; value_cols=["avg_storage"], trend_completeness=trend_completeness, decade_completeness=decade_completeness)
+    return generate_stats(annual_df; value_cols=["avg_storage"], trend_completeness=trend_completeness, decade_completeness=decade_completeness, changepoint=changepoint)
 end

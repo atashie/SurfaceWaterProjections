@@ -38,7 +38,8 @@ function calculate_qp_seasonality(
     slope_window::Int=CFG_QP_SLOPE_WINDOW_DAYS,
     min_years::Int=10,
     trend_completeness::Union{Nothing, Float64}=nothing,
-    decade_completeness::Union{Nothing, Float64}=nothing
+    decade_completeness::Union{Nothing, Float64}=nothing,
+    changepoint::Union{Nothing, NamedTuple}=nothing
 )
     result = Dict{String, Float64}()
     metrics = ["qp_slope_sd", "qp_bimodality"]
@@ -180,13 +181,13 @@ function calculate_qp_seasonality(
     end
 
     # Generate statistics
-    sd_stats = generate_stats(annual_data; value_cols=["qp_slope_sd"], trend_completeness=trend_completeness, decade_completeness=decade_completeness)
+    sd_stats = generate_stats(annual_data; value_cols=["qp_slope_sd"], trend_completeness=trend_completeness, decade_completeness=decade_completeness, changepoint=changepoint)
     merge!(result, sd_stats)
 
     # Bimodality - filter NaN
     bi_df = annual_data[.!isnan.(annual_data.qp_bimodality), :]
     if nrow(bi_df) >= 3
-        bi_stats = generate_stats(bi_df; value_cols=["qp_bimodality"], trend_completeness=trend_completeness, decade_completeness=decade_completeness)
+        bi_stats = generate_stats(bi_df; value_cols=["qp_bimodality"], trend_completeness=trend_completeness, decade_completeness=decade_completeness, changepoint=changepoint)
         merge!(result, bi_stats)
     else
         merge!(result, empty_stats("qp_bimodality"))

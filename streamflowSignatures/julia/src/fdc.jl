@@ -80,7 +80,7 @@ Returns
 Dict{String, Float64}
     Dictionary of signature statistics (3 metrics × 8 stats = 24 values)
 """
-function analyze_fdc_trends(df::DataFrame; trend_completeness::Union{Nothing, Float64}=nothing, decade_completeness::Union{Nothing, Float64}=nothing)
+function analyze_fdc_trends(df::DataFrame; trend_completeness::Union{Nothing, Float64}=nothing, decade_completeness::Union{Nothing, Float64}=nothing, changepoint::Union{Nothing, NamedTuple}=nothing)
     result = Dict{String, Float64}()
     metrics = ["FDCall", "FDC90th", "FDCmid"]
 
@@ -142,7 +142,7 @@ function analyze_fdc_trends(df::DataFrame; trend_completeness::Union{Nothing, Fl
     end
 
     # Generate statistics for all metrics
-    result = generate_stats(annual_data; value_cols=metrics, trend_completeness=trend_completeness, decade_completeness=decade_completeness)
+    result = generate_stats(annual_data; value_cols=metrics, trend_completeness=trend_completeness, decade_completeness=decade_completeness, changepoint=changepoint)
 
     return result
 end

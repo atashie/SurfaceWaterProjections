@@ -100,6 +100,13 @@
     "seasonal_sum_tolerance": 0.2,
     "max_na_fraction": 0.3
   },
+  "changepoint": {
+    "enabled": true,
+    "start_water_year": 1980,
+    "end_water_year": 2024,
+    "min_total_obs": 20,
+    "min_segment_obs": 10
+  },
   "metadata": {
     "include_human_interference": true,
     "gages_ii_dir": "D:/gagesMetadata",

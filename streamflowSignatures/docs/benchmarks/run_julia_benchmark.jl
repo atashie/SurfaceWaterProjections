@@ -39,7 +39,20 @@ function main()
     println("JULIA BENCHMARK - Streamflow Signatures")
     println("=" ^ 70)
     println("Start time: $(Dates.format(now(), "yyyy-mm-dd HH:MM:SS"))")
+    # Changepoint analysis configuration
+    cp_config = if CFG_CHANGEPOINT_ENABLED
+        (
+            start_year = CFG_CP_START_WATER_YEAR,
+            end_year = CFG_CP_END_WATER_YEAR,
+            min_total_obs = CFG_CP_MIN_TOTAL_OBS,
+            min_segment_obs = CFG_CP_MIN_SEGMENT_OBS
+        )
+    else
+        nothing
+    end
+
     println("Config: MIN_NUM_YEARS=$(CFG_MIN_NUM_YEARS), MIN_FRAC_GOOD_DATA=$(CFG_MIN_FRAC_GOOD_DATA), MIN_Q_VALUE=$(CFG_MIN_Q_VALUE), MIN_DAYS_ABOVE=$(CFG_MIN_DAYS_ABOVE_THRESHOLD)")
+    println("Changepoint: enabled=$(CFG_CHANGEPOINT_ENABLED), WY=$(CFG_CP_START_WATER_YEAR)-$(CFG_CP_END_WATER_YEAR), min_obs=$(CFG_CP_MIN_TOTAL_OBS), min_seg=$(CFG_CP_MIN_SEGMENT_OBS)")
     println("Experiment: OUTPUT_PREFIX=$(OUTPUT_PREFIX), START_WY=$(start_water_year), MIN_QUAL_FRAC=$(min_qualifying_frac)")
     println()
 
@@ -219,7 +232,7 @@ function main()
                 end
             end
 
-            signatures = calculate_all_signatures(gage_data, has_climate; gage_id=gage_id_str)
+            signatures = calculate_all_signatures(gage_data, has_climate; gage_id=gage_id_str, changepoint=cp_config)
         else
             # New path: use preprocessed data with seasonal flags + trend completeness
             pp = preprocess_cache[orig_gage_id]
@@ -240,7 +253,8 @@ function main()
                 seasonal_flags=pp.seasonal_flags,
                 trend_completeness=CFG_NA_TREND_MIN_FRACTION,
                 decade_completeness=CFG_NA_DECADE_MIN_FRACTION,
-                climate_data=climate_data
+                climate_data=climate_data,
+                changepoint=cp_config
             )
         end
 

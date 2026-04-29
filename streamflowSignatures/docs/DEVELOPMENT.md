@@ -13,7 +13,7 @@ USGS (dataRetrieval)  ──┐
   (streamflow only)     ├──> Parquet Storage ──┐
                         │                       │
 Canadian HYDAT  ────────┘                       ├──> Signature ──> CSV Summary
-  (streamflow only)                             │    Extraction     (624 columns)
+  (streamflow only)                             │    Extraction     (1264 columns)
                                                 │
 Daymet (climate data)  ──> Parquet Storage ─────┘
   (PPT, temp, SWE)         (joined at runtime)
@@ -318,19 +318,21 @@ testthat::test_dir("R/tests/")
 
 Python, rpkg, and R canonical implementations are validated against Julia golden outputs using the R² of the identity line (y = x). This measures whether implementations produce identical values (not just correlated). Spearman rank correlation is reported as a secondary diagnostic.
 
-### Current Status (April 25, 2026 — post recession-parameterized BFI port)
+### Current Status (April 28, 2026 — Pettitt changepoint only)
 
-All three synced implementations (rpkg, Python, Julia) produce 624 signature columns across 7,313 gages. R canonical still has the old recession algorithm (46 poor columns, sync pending). Recession-parameterized BFI (alpha_linear, BFI_Eckhardt_param, BFI_LyneHollick_param + recession_alpha scalar) ported to Python and rpkg April 25.
+Julia now produces 1,264 columns (656 base/metadata + 608 changepoint = 76 sigs × 8 Pettitt fields) across 7,313 gages. Python and rpkg remain at 624 (changepoint port pending). R canonical still has the old recession algorithm (46 poor columns, sync pending).
 
 | Metric | rpkg | Julia | Python | R (canonical) |
 |--------|------|-------|--------|---------------|
-| Total Time | 244.6 min* | 15.0 min | 150.4 min | 874 min** |
+| Total Time | 244.6 min* | ~15 min | 150.4 min | 874 min** |
 | Gages Processed | 7,313 | 7,313 | 7,313 | 5,707 |
-| Signature Columns | 624 | 624 | 624 | 551 |
-| Processing Rate | 0.5/s* | 8.1/s | 0.81/s | 0.11/s** |
+| Signature Columns | 624 | 1,264 | 624 | 551 |
+| Processing Rate | 0.5/s* | ~8/s | 0.81/s | 0.11/s** |
 
 *rpkg April 27 re-run had I/O contention (concurrent with Python benchmark). Previous solo run: ~114 min.
 **R canonical March 16-17 re-run, also with I/O contention. Previous solo R runs: ~1-2 hours.
+
+**Pettitt changepoint signal summary**: 13.4% overall significance rate (2.7x null expectation). Strongest signal in Flashiness (19.4%), Flow Percentiles (18.4%), Baseflow (15.1%); weakest in Flow Timing (3.7%, below null). Effective independence ~17/76 signatures (77% redundancy). After BH-FDR correction, ~3.5% of evaluations survive. See `docs/SIGNATURES.md` → Changepoint Detection → Signal Robustness for full analysis.
 
 #### Synced Implementations (rpkg, Python, Julia — 624 columns, April 27, 2026)
 

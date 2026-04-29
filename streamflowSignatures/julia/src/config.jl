@@ -174,6 +174,14 @@ const CFG_NA_MAX_RAW_NA_PPT = Int(get(_na_climate, "max_raw_na_per_year_ppt", 30
 const CFG_NA_MAX_GAP_PPT = Int(get(_na_climate, "max_interpolation_gap_ppt", 3))
 const CFG_NA_REJECT_NEGATIVE_PPT = get(_na_climate, "reject_negative_ppt", true)
 
+# Changepoint analysis configuration
+const _cp_config = get(_config, "changepoint", Dict())
+const CFG_CHANGEPOINT_ENABLED = Bool(get(_cp_config, "enabled", false))
+const CFG_CP_START_WATER_YEAR = Int(get(_cp_config, "start_water_year", 1980))
+const CFG_CP_END_WATER_YEAR = Int(get(_cp_config, "end_water_year", 2024))
+const CFG_CP_MIN_TOTAL_OBS = Int(get(_cp_config, "min_total_obs", 20))
+const CFG_CP_MIN_SEGMENT_OBS = Int(get(_cp_config, "min_segment_obs", 10))
+
 # Legacy filtering flag
 const CFG_USE_LEGACY_FILTERING = get(get(_config, "filtering", Dict()), "use_legacy_filtering", true)
 

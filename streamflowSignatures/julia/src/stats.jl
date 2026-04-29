@@ -12,6 +12,12 @@ const STAT_SUFFIXES = [
     "_mk_rho", "_mk_pval", "_mean", "_median"
 ]
 
+# Changepoint column suffixes (Pettitt test only)
+const CP_SUFFIXES = [
+    "_pettitt_cp_year", "_pettitt_pval", "_pettitt_pre_mean", "_pettitt_post_mean",
+    "_pettitt_delta_mean", "_pettitt_pct_change", "_pettitt_pre_mk_pval", "_pettitt_post_mk_pval"
+]
+
 """
     theil_sen_slope(x::Vector, y::Vector) -> (slope, intercept)
 
@@ -246,7 +252,8 @@ function generate_stats(
     year_col::Union{String, Symbol} = "water_year",
     min_rows::Int = 3,
     trend_completeness::Union{Nothing, Float64} = nothing,
-    decade_completeness::Union{Nothing, Float64} = nothing
+    decade_completeness::Union{Nothing, Float64} = nothing,
+    changepoint::Union{Nothing, NamedTuple} = nothing
 )
     result = Dict{String, Float64}()
 
@@ -262,6 +269,11 @@ function generate_stats(
         for col in cols_to_fill
             for suffix in STAT_SUFFIXES
                 result["$(col)$(suffix)"] = NaN
+            end
+            if changepoint !== nothing
+                for cp_suffix in CP_SUFFIXES
+                    result["$(col)$(cp_suffix)"] = NaN
+                end
             end
         end
         return result
@@ -302,6 +314,11 @@ function generate_stats(
             # Set all stats to NaN
             for suffix in STAT_SUFFIXES
                 result["$(col)$(suffix)"] = NaN
+            end
+            if changepoint !== nothing
+                for cp_suffix in CP_SUFFIXES
+                    result["$(col)$(cp_suffix)"] = NaN
+                end
             end
             continue
         end
@@ -356,6 +373,10 @@ function generate_stats(
                 result["$(col)_mk_pval"] = NaN
                 result["$(col)_mean"] = mean(valid_values)
                 result["$(col)_median"] = length(valid_values) > 0 ? median(valid_values) : NaN
+                # Changepoint analysis still runs (independent of trend completeness)
+                if changepoint !== nothing
+                    _run_changepoint_block!(result, col, valid_years, valid_values, changepoint)
+                end
                 continue
             end
         end
@@ -390,11 +411,54 @@ function generate_stats(
         # Mean and median are always computed
         result["$(col)_mean"] = mean(valid_values)
         result["$(col)_median"] = median(valid_values)
+
+        # --- Changepoint analysis (opt-in) ---
+        if changepoint !== nothing
+            _run_changepoint_block!(result, col, valid_years, valid_values, changepoint)
+        end
     end
 
     return result
 end
 
+
+"""
+Internal helper: run Pettitt test and differential metrics.
+Writes 8 keys into `result` for the given column.
+"""
+function _run_changepoint_block!(
+    result::Dict{String, Float64},
+    col::String,
+    valid_years::Vector{Float64},
+    valid_values::Vector{Float64},
+    changepoint::NamedTuple
+)
+    cp_start = get(changepoint, :start_year, 1980)
+    cp_end = get(changepoint, :end_year, 2024)
+    cp_min_obs = get(changepoint, :min_total_obs, 20)
+    cp_min_seg = get(changepoint, :min_segment_obs, 10)
+
+    # Filter to analysis window
+    cp_mask = valid_years .>= cp_start .&& valid_years .<= cp_end
+    cp_years = valid_years[cp_mask]
+    cp_vals = valid_values[cp_mask]
+
+    # --- Pettitt test (4 base columns) ---
+    pettitt = pettitt_test(cp_years, cp_vals;
+        min_total_obs=cp_min_obs, min_segment_obs=cp_min_seg)
+
+    result["$(col)_pettitt_cp_year"] = pettitt.cp_year
+    result["$(col)_pettitt_pval"] = pettitt.pval
+    result["$(col)_pettitt_pre_mean"] = pettitt.pre_mean
+    result["$(col)_pettitt_post_mean"] = pettitt.post_mean
+
+    # --- Pettitt differential metrics (4 columns) ---
+    pettitt_diff = segment_differential_metrics(cp_years, cp_vals, pettitt.cp_year)
+    result["$(col)_pettitt_delta_mean"] = pettitt_diff.delta_mean
+    result["$(col)_pettitt_pct_change"] = pettitt_diff.pct_change
+    result["$(col)_pettitt_pre_mk_pval"] = pettitt_diff.pre_mk_pval
+    result["$(col)_pettitt_post_mk_pval"] = pettitt_diff.post_mk_pval
+end
 
 """
     empty_stats(metric::String) -> Dict

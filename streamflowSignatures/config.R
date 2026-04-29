@@ -284,6 +284,18 @@ STAT_SUFFIXES <- c(
   "_median"         # Median across water years
 )
 
+# Changepoint detection suffixes (8 per signature base — Pettitt test only)
+CHANGEPOINT_SUFFIXES <- c(
+  "_pettitt_cp_year",       # Most likely changepoint year (Pettitt)
+  "_pettitt_pval",          # Asymptotic p-value (Pettitt)
+  "_pettitt_pre_mean",      # Mean before changepoint (Pettitt)
+  "_pettitt_post_mean",     # Mean after changepoint (Pettitt)
+  "_pettitt_delta_mean",    # Post-CP mean minus pre-CP mean (Pettitt)
+  "_pettitt_pct_change",    # Percent change (Pettitt)
+  "_pettitt_pre_mk_pval",   # Mann-Kendall p-value for pre-CP segment (Pettitt)
+  "_pettitt_post_mk_pval"   # Mann-Kendall p-value for post-CP segment (Pettitt)
+)
+
 # ==============================================================================
 # LOGGING SYSTEM
 # ==============================================================================
@@ -644,6 +656,12 @@ validate_output_schema <- function(output_df, strict = FALSE, context = NULL) {
   expected_sig_cols <- unlist(lapply(EXPECTED_SIGNATURE_BASES, function(base) {
     paste0(base, STAT_SUFFIXES)
   }))
+
+  # Add changepoint columns (8 per signature base: Pettitt test)
+  expected_cp_cols <- unlist(lapply(EXPECTED_SIGNATURE_BASES, function(base) {
+    paste0(base, CHANGEPOINT_SUFFIXES)
+  }))
+  expected_sig_cols <- c(expected_sig_cols, expected_cp_cols)
 
   # Add non-standard columns (don't follow 8-stat suffix pattern)
   expected_sig_cols <- c(expected_sig_cols, EXPECTED_RECESSION_SEASONALITY,

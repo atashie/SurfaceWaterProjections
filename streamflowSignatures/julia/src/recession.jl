@@ -251,7 +251,7 @@ Returns
 Dict{String, Float64}
     Dictionary of signature statistics
 """
-function analyze_recession_parameters(df::DataFrame; min_events::Int=CFG_RECESSION_MIN_EVENTS, trend_completeness::Union{Nothing, Float64}=nothing, decade_completeness::Union{Nothing, Float64}=nothing)
+function analyze_recession_parameters(df::DataFrame; min_events::Int=CFG_RECESSION_MIN_EVENTS, trend_completeness::Union{Nothing, Float64}=nothing, decade_completeness::Union{Nothing, Float64}=nothing, changepoint::Union{Nothing, NamedTuple}=nothing)
     result = Dict{String, Float64}()
 
     # Define all expected output keys
@@ -465,7 +465,7 @@ function analyze_recession_parameters(df::DataFrame; min_events::Int=CFG_RECESSI
     events_df = annual_data[.!isnan.(annual_data.n_recession_events), [:water_year, :n_recession_events]]
     if nrow(events_df) >= 3
         merge!(result, generate_stats(events_df; value_cols=["n_recession_events"],
-            trend_completeness=trend_completeness, decade_completeness=decade_completeness))
+            trend_completeness=trend_completeness, decade_completeness=decade_completeness, changepoint=changepoint))
     else
         merge!(result, empty_stats("n_recession_events"))
     end
@@ -494,7 +494,7 @@ function analyze_recession_parameters(df::DataFrame; min_events::Int=CFG_RECESSI
     if nrow(annual_data) >= 3
         for m in base_metrics
             if m in names(annual_data)
-                stats = generate_stats(annual_data; value_cols=[m], trend_completeness=trend_completeness, decade_completeness=decade_completeness)
+                stats = generate_stats(annual_data; value_cols=[m], trend_completeness=trend_completeness, decade_completeness=decade_completeness, changepoint=changepoint)
                 merge!(result, stats)
             else
                 merge!(result, empty_stats(m))

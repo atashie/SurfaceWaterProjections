@@ -14,6 +14,60 @@ For historical entries (Dec 2025 – March 2026), see [docs/CHANGELOG_ARCHIVE.md
 - Generate Julia golden outputs (624 cols, 7,313 gages)
 - BFImax estimation via Collischonn & Fan (2013) backward filter — would give BFI_Eckhardt_param per-gage BFImax instead of fixed 0.8, improving discriminating power (currently range [0.47–0.80] due to BFImax saturation)
 
+### Changepoint Detection — Pettitt Test (April 2026)
+
+Non-parametric Pettitt changepoint test applied to all time-series signatures, with differential metrics.
+
+**Pettitt Test** (`pettitt_test`). Non-parametric rank-based test (Pettitt 1979). Test statistic K = max|U_t| where U_t accumulates pairwise sign comparisons. P-value via asymptotic approximation. Always identifies a location; use p-value for significance.
+
+**Differential Metrics** (`segment_differential_metrics`). Applied at the Pettitt changepoint:
+- delta_mean (post − pre), pct_change (%), pre/post Mann-Kendall p-values
+
+Changepoint search window: WY 1980-2024, minimum 20 non-NA observations total, minimum 10 per segment. Independent of the 80% trend_completeness gate.
+
+**8 new columns per signature (76 signatures × 8 = 608 changepoint columns):**
+
+| Columns | Description |
+|---------|-------------|
+| `pettitt_cp_year`, `pettitt_pval`, `pettitt_pre_mean`, `pettitt_post_mean`, `pettitt_delta_mean`, `pettitt_pct_change`, `pettitt_pre_mk_pval`, `pettitt_post_mk_pval` | Non-parametric test + differential |
+
+**Design decisions:**
+- Per-signature changepoints (not per-gage) — different processes change at different times
+- Pettitt O(n²) is fast for annual series (n ≤ 45)
+- BIC 4-model comparison was initially implemented alongside Pettitt but removed to reduce clutter (code retained in `changepoint.jl` but not called from `generate_stats()`)
+
+**Files modified:**
+- `julia/src/changepoint.jl`: `pettitt_test()` + `segment_differential_metrics()` (+ unused BIC engine)
+- `julia/src/stats.jl`: `generate_stats()` with `changepoint` kwarg, `_run_changepoint_block!()` helper, `CP_SUFFIXES` constant (8)
+- `julia/src/signatures.jl`: Passes changepoint config to all signature functions
+- `julia/src/StreamflowSignatures.jl`: Exports for `pettitt_test`, `segment_differential_metrics`
+- `julia/src/config.jl`: `CFG_CP_*` constants
+- `config/signatures_config.json`: `changepoint` section
+- All 13 signature function files: `changepoint` kwarg propagation
+- `docs/benchmarks/run_julia_benchmark.jl`: Changepoint config NamedTuple
+- `julia/test/test_changepoint.jl`: 78 tests (39 unit + 39 integration)
+- `config.R`: `CHANGEPOINT_SUFFIXES` (8 entries)
+- `docs/benchmarks/build_changepoint_dashboard.py`: Pettitt-only dashboard
+
+**Julia benchmark (April 28, 2026)**: 7,313 gages, 1,264 columns (656 base/metadata + 608 changepoint). 76 signatures × 8 Pettitt fields.
+
+**Pettitt test results:**
+- Overall: ~13% of evaluations have p < 0.05 (69,279 / 516,992); 2.7x the 5% null expectation
+- CP year range: [1989, 2014] — respects 10-year minimum segments within WY 1980-2024
+
+**Signal robustness analysis (April 29, 2026):**
+- Significance rates vary by category: Flow Timing 3.7% (below null — stationary), Flashiness 19.4%, Baseflow 15.1%, Flow Percentiles 18.4%, Elasticity 25.8% (inflated by short rolling-window series)
+- Effective independence ~17/76 signatures (77% redundancy) — flow percentiles are highly correlated with Qann
+- After BH-FDR correction at 0.05: ~3.5% survive — a core of robust detections
+- CP year clustering: ~50% of significant detections in 1998–2006; partly center-of-window bias, partly real hydroclimatic signal
+- elasticity_rolling at ~49% significance is a methodological artifact from short series (n=15–25), not a hydrological finding
+- pct_change discriminates well: median |pct_change| ~40% (sig) vs ~15% (non-sig), 2.65x ratio
+- Pre/post MK p-values largely uninformative (92% show no within-segment trend)
+- Asymptotic p-value is conservative for small n: significance rate 4.3% for n=20–25 (below 5% null)
+
+**References:**
+- Pettitt, A.N. (1979). A non-parametric approach to the change-point problem. Applied Statistics, 28(2), 126-135.
+
 ### Recession-Parameterized Baseflow Signatures (April 2026)
 
 Three new signatures using recession-derived filter parameters (Collischonn & Fan 2013, Eckhardt 2005). Implemented in all three languages (Julia canonical April 24, Python and rpkg ported April 25).

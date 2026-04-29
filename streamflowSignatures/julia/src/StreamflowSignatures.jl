@@ -29,6 +29,7 @@ include("config.jl")
 
 # Include submodules
 include("stats.jl")
+include("changepoint.jl")
 include("io.jl")
 include("flow_volumes.jl")
 include("flashiness.jl")
@@ -47,6 +48,9 @@ include("signatures.jl")
 
 # Export stats functions
 export generate_stats, theil_sen_slope, mann_kendall_test
+
+# Export changepoint detection
+export detect_changepoint, pettitt_test, segment_differential_metrics
 
 # Export I/O functions
 export read_parquet, write_signatures, add_water_year_columns, filter_qualifying_years, preprocess_daily_data
@@ -82,6 +86,8 @@ export CFG_MIN_NUM_YEARS, CFG_MIN_FRAC_GOOD_DATA, CFG_MIN_Q_VALUE,
        CFG_MIN_DAYS_ABOVE_THRESHOLD, CFG_MIN_NONA_DAYS_ANNUAL,
        CFG_USE_LEGACY_FILTERING,
        CFG_NA_TREND_MIN_FRACTION, CFG_NA_DECADE_MIN_FRACTION,
-       CFG_START_WATER_YEAR, CFG_MIN_QUALIFYING_DATA_FRACTION
+       CFG_START_WATER_YEAR, CFG_MIN_QUALIFYING_DATA_FRACTION,
+       CFG_CHANGEPOINT_ENABLED, CFG_CP_START_WATER_YEAR, CFG_CP_END_WATER_YEAR,
+       CFG_CP_MIN_TOTAL_OBS, CFG_CP_MIN_SEGMENT_OBS
 
 end # module

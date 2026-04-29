@@ -28,7 +28,7 @@ Returns
 Dict{String, Float64}
     Dictionary of signature statistics (22 metrics × 8 stats = 176 values)
 """
-function calculate_flow_vols_by_year(df::DataFrame; seasonal_flags::Union{Nothing, DataFrame}=nothing, trend_completeness::Union{Nothing, Float64}=nothing, decade_completeness::Union{Nothing, Float64}=nothing)
+function calculate_flow_vols_by_year(df::DataFrame; seasonal_flags::Union{Nothing, DataFrame}=nothing, trend_completeness::Union{Nothing, Float64}=nothing, decade_completeness::Union{Nothing, Float64}=nothing, changepoint::Union{Nothing, NamedTuple}=nothing)
     result = Dict{String, Float64}()
 
     # Define metrics for empty results
@@ -161,7 +161,7 @@ function calculate_flow_vols_by_year(df::DataFrame; seasonal_flags::Union{Nothin
 
     # Generate statistics for all metrics
     value_cols = filter(x -> x != "water_year", names(annual_data))
-    result = generate_stats(annual_data; value_cols=value_cols, trend_completeness=trend_completeness, decade_completeness=decade_completeness)
+    result = generate_stats(annual_data; value_cols=value_cols, trend_completeness=trend_completeness, decade_completeness=decade_completeness, changepoint=changepoint)
 
     return result
 end
