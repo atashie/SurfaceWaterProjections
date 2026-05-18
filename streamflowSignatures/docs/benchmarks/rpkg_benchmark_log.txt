@@ -1,7 +1,7 @@
 ======================================================================
 rpkg BENCHMARK - Streamflow Signatures (streamflowsignatures package)
 ======================================================================
-Start time: 2026-04-14 17:57:39 
+Start time: 2026-04-27 08:48:57 
 
 Working directory: C:/Users/arikt/Documents/GitHub/SurfaceWaterProjections/streamflowSignatures 
 
@@ -13,7 +13,7 @@ Warning messages:
 ℹ Loading streamflowsignatures
 Warning message:
 package 'testthat' was built under R version 4.5.3 
-  rpkg loaded in 0.6 s
+  rpkg loaded in 2.9 s
 
 Phase 2: Loading data...
   Reading streamflow parquet...
@@ -22,7 +22,7 @@ Phase 2: Loading data...
      97757220 rows, 6087 gages with climate data
   Reading metadata...
      16994 gages in metadata
-  Data loaded in 58.2 s
+  Data loaded in 191.3 s
 
 Phase 3: Per-gage filtering and signature extraction (legacy=FALSE)...
   Total gages to attempt: 8014 
@@ -454,13 +454,13 @@ WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
-  [500/8014] processed=475 skipped=25 errors=0 | 0.8 gages/s | ETA 9945s
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
+  [500/8014] processed=475 skipped=25 errors=0 | 0.6 gages/s | ETA 12186s
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
@@ -1012,7 +1012,6 @@ WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
-  [1500/8014] processed=1045 skipped=455 errors=0 | 0.9 gages/s | ETA 6863s
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
@@ -1032,6 +1031,7 @@ WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
+  [1500/8014] processed=1045 skipped=455 errors=0 | 0.8 gages/s | ETA 8272s
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
@@ -1417,7 +1417,6 @@ WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
-  [2000/8014] processed=1477 skipped=523 errors=0 | 0.9 gages/s | ETA 6448s
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
@@ -1446,6 +1445,7 @@ WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
+  [2000/8014] processed=1477 skipped=523 errors=0 | 0.7 gages/s | ETA 8678s
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
@@ -1878,7 +1878,6 @@ WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
-  [2500/8014] processed=1971 skipped=529 errors=0 | 0.9 gages/s | ETA 6198s
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
@@ -1913,6 +1912,7 @@ WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
+  [2500/8014] processed=1971 skipped=529 errors=0 | 0.7 gages/s | ETA 8291s
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
@@ -2325,7 +2325,6 @@ WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
-  [3000/8014] processed=2463 skipped=537 errors=0 | 0.9 gages/s | ETA 5826s
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
@@ -2364,6 +2363,7 @@ WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
+  [3000/8014] processed=2463 skipped=537 errors=0 | 0.7 gages/s | ETA 7674s
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
@@ -3189,7 +3189,6 @@ WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
-  [4000/8014] processed=3428 skipped=572 errors=0 | 0.5 gages/s | ETA 8194s
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
@@ -3232,6 +3231,7 @@ WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
+  [4000/8014] processed=3428 skipped=572 errors=0 | 0.7 gages/s | ETA 6161s
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
@@ -3609,7 +3609,6 @@ WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
-  [4500/8014] processed=3917 skipped=583 errors=0 | 0.5 gages/s | ETA 6944s
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
@@ -3656,6 +3655,7 @@ WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
+  [4500/8014] processed=3917 skipped=583 errors=0 | 0.6 gages/s | ETA 5424s
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
@@ -4084,7 +4084,6 @@ WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
-  [5000/8014] processed=4410 skipped=590 errors=0 | 0.5 gages/s | ETA 5825s
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
@@ -4140,6 +4139,7 @@ WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
+  [5000/8014] processed=4410 skipped=590 errors=0 | 0.5 gages/s | ETA 5590s
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
@@ -4587,7 +4587,6 @@ WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
-  [5500/8014] processed=4885 skipped=615 errors=0 | 0.5 gages/s | ETA 4709s
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
@@ -4659,6 +4658,7 @@ WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
+  [5500/8014] processed=4885 skipped=615 errors=0 | 0.6 gages/s | ETA 4536s
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
@@ -5112,7 +5112,6 @@ WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
-  [6000/8014] processed=5369 skipped=631 errors=0 | 0.5 gages/s | ETA 3680s
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
@@ -5192,6 +5191,7 @@ WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
+  [6000/8014] processed=5369 skipped=631 errors=0 | 0.6 gages/s | ETA 3549s
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
@@ -5637,7 +5637,6 @@ WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
-  [6500/8014] processed=5848 skipped=652 errors=0 | 0.6 gages/s | ETA 2716s
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
@@ -5722,6 +5721,7 @@ WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
+  [6500/8014] processed=5848 skipped=652 errors=0 | 0.6 gages/s | ETA 2682s
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
@@ -6256,7 +6256,6 @@ WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
-  [7000/8014] processed=6341 skipped=659 errors=0 | 0.6 gages/s | ETA 1778s
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
@@ -6366,6 +6365,7 @@ WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
+  [7000/8014] processed=6341 skipped=659 errors=0 | 0.5 gages/s | ETA 1846s
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
@@ -7418,7 +7418,6 @@ WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
-  [8000/8014] processed=7299 skipped=701 errors=0 | 0.2 gages/s | ETA 91s
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
@@ -7433,25 +7432,164 @@ WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
 WARNING: Error exit, tauk2. IFAULT =  12
-  [8014/8014] processed=7313 skipped=701 errors=0 | 0.2 gages/s | ETA 0s
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+  [8000/8014] processed=7299 skipped=701 errors=0 | 0.6 gages/s | ETA 25s
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+WARNING: Error exit, tauk2. IFAULT =  12
+  [8014/8014] processed=7313 skipped=701 errors=0 | 0.6 gages/s | ETA 0s
 There were 50 or more warnings (use warnings() to see the first 50)
-  Signatures processed in 51995.1s (866.6 min)
+  Signatures processed in 14440.9s (240.7 min)
 
 Phase 4: Assembling output...
   Gages with results: 7313 
   Saved to docs/benchmarks/rpkg_signatures.csv 
-  Rows: 7313  Cols: 615 
+  Rows: 7313  Cols: 644 
   Timing saved to docs/benchmarks/rpkg_timing.json 
 
 ======================================================================
 BENCHMARK COMPLETE
 ======================================================================
-Total time: 52139.9 s ( 869  min)
+Total time: 14674.9 s ( 244.6  min)
 Gages processed: 7313 
 Gages skipped: 701 
 Gages errored: 0 
-Total columns: 615 
-  Signature columns: 594 
+Total columns: 644 
+  Signature columns: 623 
   Metadata columns: 9 
   QA/QC flag columns: 12 
-Rate: 0.14 gages/s
+Rate: 0.5 gages/s

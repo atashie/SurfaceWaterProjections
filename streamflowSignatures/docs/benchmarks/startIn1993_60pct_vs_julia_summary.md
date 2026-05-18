@@ -1,6 +1,6 @@
 # Experiment 'startIn1993_60pct' vs Julia Baseline: Comparison Report
 
-**Generated**: 2026-04-16 11:27:56
+**Generated**: 2026-04-24 14:06:01
 
 ## Experiment Description
 
@@ -10,8 +10,8 @@ Water years >= 1993 AND at least 60% of possible years (WY1993 to gage max) must
 
 | Dataset | File | Gages | Columns |
 |---------|------|-------|---------|
-| Julia Baseline | `julia_signatures.csv` | 7,313 | 627 |
-| Experiment (startIn1993_60pct) | `startIn1993_60pct_signatures.csv` | 6,579 | 631 |
+| Julia Baseline | `julia_signatures.csv` | 7,313 | 656 |
+| Experiment (startIn1993_60pct) | `startIn1993_60pct_signatures.csv` | 6,579 | 656 |
 
 **Common gages**: 6,579
 **Dropped gages** (in baseline, not in experiment): 734
@@ -44,29 +44,29 @@ Years per gage (common gages):
 
 | Metric | Value |
 |--------|-------|
-| Columns compared | 594 |
-| Mean R2 (identity) | 0.425493 |
-| Median R2 | 0.606812 |
-| SD of R2 | 0.929315 |
+| Columns compared | 619 |
+| Mean R2 (identity) | 0.433049 |
+| Median R2 | 0.608309 |
+| SD of R2 | 0.913739 |
 | Min R2 | -18.6911 |
 
 ### Agreement Tiers
 
 | Tier | Threshold | Count | % |
 |------|-----------|-------|---|
-| Perfect | R2 >= 0.999 | 34 | 5.7% |
-| Good | 0.99 <= R2 < 0.999 | 42 | 7.1% |
-| Poor | 0.95 <= R2 < 0.99 | 58 | 9.8% |
+| Perfect | R2 >= 0.999 | 34 | 5.5% |
+| Good | 0.99 <= R2 < 0.999 | 42 | 6.8% |
+| Poor | 0.95 <= R2 < 0.99 | 65 | 10.5% |
 | Low | 0.90 <= R2 < 0.95 | 9 | 1.5% |
-| Very Low | 0.50 <= R2 < 0.90 | 224 | 37.7% |
-| Extremely Low | R2 < 0.50 | 227 | 38.2% |
-| **Total** | | **594** | **100%** |
+| Very Low | 0.50 <= R2 < 0.90 | 236 | 38.1% |
+| Extremely Low | R2 < 0.50 | 233 | 37.6% |
+| **Total** | | **619** | **100%** |
 
 ## Agreement by Signature Category
 
 | Category | Cols | Perfect | Good | Poor | Low | Very Low | Extremely Low | Mean R2 | Min R2 |
 |----------|------|---------|------|------|-----|----------|---------------|---------|--------|
-| Baseflow | 16 | 0 | 4 | 0 | 0 | 8 | 4 | 0.562434 | -0.0530 |
+| Baseflow | 32 | 0 | 4 | 4 | 0 | 16 | 8 | 0.567489 | -0.0530 |
 | Elasticity | 19 | 1 | 0 | 0 | 1 | 5 | 12 | -0.676324 | -18.6911 |
 | FDC | 24 | 0 | 0 | 4 | 1 | 13 | 6 | 0.564987 | -0.0938 |
 | Flashiness | 8 | 0 | 2 | 0 | 0 | 4 | 2 | 0.578405 | -0.0318 |
@@ -76,7 +76,7 @@ Years per gage (common gages):
 | Negative Flow | 8 | 0 | 2 | 0 | 0 | 4 | 2 | 0.612747 | -0.0104 |
 | Pulse Metrics | 112 | 0 | 5 | 17 | 4 | 55 | 31 | 0.526517 | -1.8187 |
 | Q-P Seasonality | 16 | 0 | 0 | 4 | 0 | 5 | 7 | 0.427829 | -0.2851 |
-| Recession | 54 | 0 | 1 | 11 | 2 | 28 | 12 | 0.606806 | -0.0237 |
+| Recession | 63 | 0 | 1 | 14 | 2 | 32 | 14 | 0.617799 | -0.0237 |
 | Runoff Ratios | 41 | 5 | 4 | 1 | 0 | 12 | 19 | 0.381886 | -2.2003 |
 | Storage | 8 | 0 | 1 | 1 | 0 | 1 | 5 | 0.434787 | -0.2640 |
 
@@ -84,17 +84,17 @@ Years per gage (common gages):
 
 | Stat Type | Cols | Perfect | Good | Poor | Low | Very Low | Extremely Low | Mean R2 | Min R2 |
 |-----------|------|---------|------|------|-----|----------|---------------|---------|--------|
-| mean | 73 | 19 | 26 | 24 | 3 | 1 | 0 | 0.985055 | 0.7739 |
-| median | 73 | 14 | 16 | 34 | 4 | 5 | 0 | 0.975947 | 0.8237 |
-| senn_slp | 73 | 0 | 0 | 0 | 0 | 44 | 29 | 0.317049 | -1.8187 |
-| linear_slp | 73 | 0 | 0 | 0 | 0 | 46 | 27 | 0.287200 | -2.2003 |
-| spearman_rho | 73 | 0 | 0 | 0 | 0 | 60 | 13 | 0.576659 | 0.2041 |
-| spearman_pval | 73 | 0 | 0 | 0 | 0 | 0 | 73 | -0.059712 | -0.7371 |
-| mk_rho | 73 | 0 | 0 | 0 | 0 | 62 | 11 | 0.589822 | 0.2375 |
-| mk_pval | 73 | 0 | 0 | 0 | 0 | 0 | 73 | -0.054188 | -0.7465 |
-| scalar | 10 | 1 | 0 | 0 | 2 | 6 | 1 | -1.135897 | -18.6911 |
+| mean | 76 | 19 | 26 | 27 | 3 | 1 | 0 | 0.985121 | 0.7739 |
+| median | 76 | 14 | 16 | 37 | 4 | 5 | 0 | 0.976275 | 0.8237 |
+| senn_slp | 76 | 0 | 0 | 0 | 0 | 47 | 29 | 0.333459 | -1.8187 |
+| linear_slp | 76 | 0 | 0 | 0 | 0 | 49 | 27 | 0.304128 | -2.2003 |
+| spearman_rho | 76 | 0 | 0 | 0 | 0 | 63 | 13 | 0.578512 | 0.2041 |
+| spearman_pval | 76 | 0 | 0 | 0 | 0 | 0 | 76 | -0.055726 | -0.7371 |
+| mk_rho | 76 | 0 | 0 | 0 | 0 | 65 | 11 | 0.591720 | 0.2375 |
+| mk_pval | 76 | 0 | 0 | 0 | 0 | 0 | 76 | -0.049778 | -0.7465 |
+| scalar | 11 | 1 | 0 | 1 | 2 | 6 | 1 | -0.944057 | -18.6911 |
 
-## Columns with R2 < 0.99 (518 columns)
+## Columns with R2 < 0.99 (543 columns)
 
 | Column | Category | Stat | R2 | Spearman | MAD | Max Diff | Baseline NAs | Experiment NAs | NA Mismatch |
 |--------|----------|------|----|----------|-----|----------|--------------|----------------|-------------|
@@ -204,8 +204,10 @@ Years per gage (common gages):
 | `flashinessRB_mk_pval` | Flashiness | mk_pval | -0.0318 | 0.5610 | 0.2127 | 0.9973 | 615 | 524 | 501 |
 | `flashinessRB_spearman_pval` | Flashiness | spearman_pval | -0.0316 | 0.5644 | 0.2110 | 0.9810 | 615 | 524 | 501 |
 | `n_low_pulses_all_mk_pval` | Pulse Metrics | mk_pval | -0.0307 | 0.5711 | 0.2104 | 0.9973 | 940 | 857 | 505 |
+| `BFI_LyneHollick_param_mk_pval` | Baseflow | mk_pval | -0.0276 | 0.5589 | 0.2147 | 0.9825 | 725 | 667 | 520 |
 | `D95_day_mk_pval` | Flow Timing | mk_pval | -0.0273 | 0.5414 | 0.2084 | 0.9937 | 615 | 524 | 501 |
 | `Qspr_mk_pval` | Flow Volumes | mk_pval | -0.0264 | 0.5371 | 0.2135 | 0.9901 | 607 | 514 | 505 |
+| `BFI_LyneHollick_param_spearman_pval` | Baseflow | spearman_pval | -0.0242 | 0.5631 | 0.2120 | 0.9862 | 725 | 667 | 520 |
 | `b_events_spearman_pval` | Recession | spearman_pval | -0.0237 | 0.5431 | 0.2115 | 0.9795 | 1052 | 1216 | 164 |
 | `Qsum_linear_slp` | Flow Volumes | linear_slp | -0.0193 | 0.7721 | 1.8787 | 2872.1548 | 607 | 514 | 505 |
 | `Q5_mk_pval` | Flow Percentiles | mk_pval | -0.0181 | 0.5981 | 0.2080 | 0.9997 | 660 | 589 | 503 |
@@ -226,6 +228,8 @@ Years per gage (common gages):
 | `BFI_LyneHollick_mk_pval` | Baseflow | mk_pval | -0.0053 | 0.5652 | 0.2153 | 0.9867 | 615 | 524 | 501 |
 | `Qfal_spearman_pval` | Flow Volumes | spearman_pval | -0.0029 | 0.5521 | 0.2166 | 0.9777 | 607 | 514 | 505 |
 | `BFI_LyneHollick_spearman_pval` | Baseflow | spearman_pval | -0.0028 | 0.5679 | 0.2130 | 0.9921 | 615 | 524 | 501 |
+| `BFI_Eckhardt_param_spearman_pval` | Baseflow | spearman_pval | -0.0021 | 0.5533 | 0.2108 | 0.9828 | 725 | 667 | 520 |
+| `BFI_Eckhardt_param_mk_pval` | Baseflow | mk_pval | -0.0016 | 0.5523 | 0.2131 | 0.9900 | 725 | 667 | 520 |
 | `n_high_pulses_year_spearman_pval` | Pulse Metrics | spearman_pval | 0.0034 | 0.5344 | 0.2099 | 0.9686 | 607 | 514 | 505 |
 | `log_a_events_mk_pval` | Recession | mk_pval | 0.0052 | 0.5426 | 0.2114 | 0.9867 | 1052 | 1216 | 164 |
 | `FDCmid_mk_pval` | FDC | mk_pval | 0.0065 | 0.5496 | 0.2104 | 0.9834 | 607 | 514 | 505 |
@@ -279,11 +283,13 @@ Years per gage (common gages):
 | `n_recession_events_spearman_pval` | Recession | spearman_pval | 0.1391 | 0.6724 | 0.1824 | 0.9955 | 54 | 64 | 10 |
 | `Q40_mk_pval` | Flow Percentiles | mk_pval | 0.1442 | 0.6370 | 0.1941 | 0.9996 | 619 | 528 | 505 |
 | `Qsum_senn_slp` | Flow Volumes | senn_slp | 0.1489 | 0.7662 | 1.7988 | 2665.1399 | 607 | 514 | 505 |
+| `alpha_linear_spearman_pval` | Recession | spearman_pval | 0.1502 | 0.6443 | 0.1840 | 0.9832 | 1234 | 1342 | 108 |
 | `Q70_linear_slp` | Flow Percentiles | linear_slp | 0.1545 | 0.7967 | 0.0140 | 32.4460 | 607 | 514 | 505 |
 | `Q99_senn_slp` | Flow Percentiles | senn_slp | 0.1851 | 0.7491 | 0.0432 | 25.0000 | 607 | 514 | 505 |
 | `Q90_senn_slp` | Flow Percentiles | senn_slp | 0.1869 | 0.7352 | 0.0256 | 51.3101 | 607 | 514 | 505 |
 | `Qspr_linear_slp` | Flow Volumes | linear_slp | 0.1933 | 0.7686 | 1.5577 | 3150.5525 | 607 | 514 | 505 |
 | `Q95_senn_slp` | Flow Percentiles | senn_slp | 0.1974 | 0.7405 | 0.0314 | 41.8500 | 607 | 514 | 505 |
+| `alpha_linear_mk_pval` | Recession | mk_pval | 0.2018 | 0.6620 | 0.1881 | 0.9825 | 1234 | 1342 | 108 |
 | `elasticity_rolling_spearman_rho` | Elasticity | spearman_rho | 0.2041 | 0.5527 | 0.3302 | 1.4199 | 1085 | 1085 | 0 |
 | `Qspr_senn_slp` | Flow Volumes | senn_slp | 0.2045 | 0.7606 | 1.7694 | 4849.7345 | 607 | 514 | 505 |
 | `Q80_linear_slp` | Flow Percentiles | linear_slp | 0.2074 | 0.7830 | 0.0176 | 37.0060 | 607 | 514 | 505 |
@@ -373,6 +379,7 @@ Years per gage (common gages):
 | `n_high_pulses_all_spearman_rho` | Pulse Metrics | spearman_rho | 0.5804 | 0.7830 | 0.1013 | 0.7458 | 607 | 514 | 505 |
 | `Q95_mk_rho` | Flow Percentiles | mk_rho | 0.5808 | 0.7751 | 0.0698 | 0.4400 | 607 | 514 | 505 |
 | `D5_day_senn_slp` | Flow Timing | senn_slp | 0.5818 | 0.7022 | 0.1926 | 4.3639 | 615 | 524 | 501 |
+| `BFI_Eckhardt_param_spearman_rho` | Baseflow | spearman_rho | 0.5827 | 0.7838 | 0.1063 | 0.9776 | 725 | 667 | 520 |
 | `Qfal_spearman_rho` | Flow Volumes | spearman_rho | 0.5837 | 0.7485 | 0.1091 | 0.8724 | 607 | 514 | 505 |
 | `Q90_mk_rho` | Flow Percentiles | mk_rho | 0.5838 | 0.7771 | 0.0710 | 0.5087 | 607 | 514 | 505 |
 | `D50_day_senn_slp` | Flow Timing | senn_slp | 0.5840 | 0.6940 | 0.2385 | 3.0440 | 615 | 524 | 501 |
@@ -380,6 +387,7 @@ Years per gage (common gages):
 | `D70_day_senn_slp` | Flow Timing | senn_slp | 0.5880 | 0.7348 | 0.2339 | 4.0111 | 615 | 524 | 501 |
 | `Qann_mk_rho` | Flow Volumes | mk_rho | 0.5899 | 0.7916 | 0.0701 | 0.4039 | 607 | 514 | 505 |
 | `FDC90th_mk_rho` | FDC | mk_rho | 0.5905 | 0.7660 | 0.0830 | 0.5246 | 652 | 578 | 506 |
+| `BFI_Eckhardt_param_mk_rho` | Baseflow | mk_rho | 0.5916 | 0.7854 | 0.0735 | 0.6833 | 725 | 667 | 520 |
 | `Qsum_spearman_rho` | Flow Volumes | spearman_rho | 0.5938 | 0.7807 | 0.0994 | 0.7338 | 607 | 514 | 505 |
 | `annual_runoff_ratio_spearman_rho` | Runoff Ratios | spearman_rho | 0.5946 | 0.7868 | 0.1254 | 0.8608 | 1509 | 1466 | 417 |
 | `b_events_linear_slp` | Recession | linear_slp | 0.5953 | 0.7305 | 0.0183 | 0.9240 | 1052 | 1216 | 164 |
@@ -389,6 +397,7 @@ Years per gage (common gages):
 | `Q80_spearman_rho` | Flow Percentiles | spearman_rho | 0.6007 | 0.7990 | 0.1016 | 0.7460 | 607 | 514 | 505 |
 | `BFI_Eckhardt_spearman_rho` | Baseflow | spearman_rho | 0.6010 | 0.7901 | 0.1083 | 0.9792 | 615 | 524 | 501 |
 | `Qfal_mk_rho` | Flow Volumes | mk_rho | 0.6043 | 0.7494 | 0.0756 | 0.5377 | 607 | 514 | 505 |
+| `BFI_LyneHollick_param_spearman_rho` | Baseflow | spearman_rho | 0.6056 | 0.7975 | 0.1073 | 0.8648 | 725 | 667 | 520 |
 | `concavity_spearman_rho` | Recession | spearman_rho | 0.6056 | 0.7718 | 0.1040 | 0.6158 | 1052 | 1216 | 164 |
 | `D60_day_linear_slp` | Flow Timing | linear_slp | 0.6058 | 0.7249 | 0.2344 | 3.3036 | 615 | 524 | 501 |
 | `b_events_spearman_rho` | Recession | spearman_rho | 0.6061 | 0.7759 | 0.1099 | 0.6756 | 1052 | 1216 | 164 |
@@ -409,6 +418,7 @@ Years per gage (common gages):
 | `FDCmid_spearman_rho` | FDC | spearman_rho | 0.6134 | 0.7771 | 0.1011 | 0.7671 | 607 | 514 | 505 |
 | `n_low_pulses_all_mk_rho` | Pulse Metrics | mk_rho | 0.6139 | 0.7856 | 0.0943 | 0.8463 | 940 | 857 | 505 |
 | `BFI_Eckhardt_mk_rho` | Baseflow | mk_rho | 0.6145 | 0.7930 | 0.0749 | 0.6716 | 615 | 524 | 501 |
+| `BFI_LyneHollick_param_mk_rho` | Baseflow | mk_rho | 0.6170 | 0.8003 | 0.0743 | 0.5597 | 725 | 667 | 520 |
 | `flashinessRB_mk_rho` | Flashiness | mk_rho | 0.6174 | 0.8021 | 0.0806 | 0.6253 | 615 | 524 | 501 |
 | `D80_day_senn_slp` | Flow Timing | senn_slp | 0.6175 | 0.7666 | 0.2336 | 3.4375 | 615 | 524 | 501 |
 | `concavity_mk_rho` | Recession | mk_rho | 0.6176 | 0.7754 | 0.0720 | 0.4163 | 1052 | 1216 | 164 |
@@ -489,6 +499,7 @@ Years per gage (common gages):
 | `Q10_spearman_rho` | Flow Percentiles | spearman_rho | 0.6786 | 0.8130 | 0.1200 | 1.0311 | 649 | 575 | 506 |
 | `Q50_spearman_rho` | Flow Percentiles | spearman_rho | 0.6786 | 0.8230 | 0.1033 | 0.8183 | 613 | 521 | 504 |
 | `log_a_events_linear_slp` | Recession | linear_slp | 0.6791 | 0.7308 | 0.0301 | 1.8091 | 1052 | 1216 | 164 |
+| `alpha_linear_spearman_rho` | Recession | spearman_rho | 0.6824 | 0.8180 | 0.1156 | 1.6364 | 1234 | 1342 | 108 |
 | `Flow_Reversals_annual_mk_rho` | Pulse Metrics | mk_rho | 0.6830 | 0.8315 | 0.0926 | 0.6879 | 607 | 514 | 505 |
 | `Q30_spearman_rho` | Flow Percentiles | spearman_rho | 0.6836 | 0.8161 | 0.1098 | 0.8754 | 625 | 536 | 505 |
 | `Q25_spearman_rho` | Flow Percentiles | spearman_rho | 0.6858 | 0.8159 | 0.1118 | 0.8751 | 631 | 546 | 507 |
@@ -510,13 +521,18 @@ Years per gage (common gages):
 | `TQmean_linear_slp` | Pulse Metrics | linear_slp | 0.7025 | 0.7899 | 0.0584 | 0.7953 | 607 | 514 | 505 |
 | `n_low_pulses_all_senn_slp` | Pulse Metrics | senn_slp | 0.7036 | 0.7525 | 0.0328 | 1.4148 | 607 | 514 | 505 |
 | `Q40_mk_rho` | Flow Percentiles | mk_rho | 0.7046 | 0.8221 | 0.0739 | 0.5644 | 619 | 528 | 505 |
+| `alpha_linear_mk_rho` | Recession | mk_rho | 0.7051 | 0.8199 | 0.0833 | 1.4182 | 1234 | 1342 | 108 |
+| `BFI_LyneHollick_param_senn_slp` | Baseflow | senn_slp | 0.7064 | 0.7969 | 0.0006 | 0.0108 | 725 | 667 | 520 |
+| `BFI_LyneHollick_param_linear_slp` | Baseflow | linear_slp | 0.7078 | 0.7964 | 0.0006 | 0.0158 | 725 | 667 | 520 |
 | `D99_day_linear_slp` | Flow Timing | linear_slp | 0.7079 | 0.7095 | 0.1228 | 4.0688 | 615 | 524 | 501 |
 | `Flow_Reversals_fall_linear_slp` | Pulse Metrics | linear_slp | 0.7095 | 0.8185 | 0.0713 | 1.0094 | 607 | 514 | 505 |
 | `Flow_Reversals_summer_senn_slp` | Pulse Metrics | senn_slp | 0.7127 | 0.8104 | 0.0651 | 1.3000 | 607 | 514 | 505 |
 | `summer_runoff_ratio_senn_slp` | Runoff Ratios | senn_slp | 0.7137 | 0.6486 | 0.0056 | 4.9540 | 1688 | 1665 | 419 |
+| `alpha_linear_linear_slp` | Recession | linear_slp | 0.7155 | 0.7832 | 0.0005 | 0.0372 | 1234 | 1342 | 108 |
 | `log_a_pointcloud_linear_slp` | Recession | linear_slp | 0.7155 | 0.7403 | 0.0080 | 0.4060 | 1233 | 1342 | 109 |
 | `Flow_Reversals_summer_linear_slp` | Pulse Metrics | linear_slp | 0.7205 | 0.8159 | 0.0669 | 1.2650 | 607 | 514 | 505 |
 | `Flow_Reversals_spring_senn_slp` | Pulse Metrics | senn_slp | 0.7248 | 0.8062 | 0.0570 | 0.8920 | 607 | 514 | 505 |
+| `BFI_Eckhardt_param_linear_slp` | Baseflow | linear_slp | 0.7248 | 0.7690 | 0.0002 | 0.0033 | 725 | 667 | 520 |
 | `Flow_Reversals_annual_senn_slp` | Pulse Metrics | senn_slp | 0.7261 | 0.8368 | 0.2065 | 3.4220 | 607 | 514 | 505 |
 | `flashinessRB_linear_slp` | Flashiness | linear_slp | 0.7295 | 0.7811 | 0.0007 | 0.0318 | 615 | 524 | 501 |
 | `Flow_Reversals_spring_linear_slp` | Pulse Metrics | linear_slp | 0.7320 | 0.8123 | 0.0592 | 0.8214 | 607 | 514 | 505 |
@@ -524,8 +540,10 @@ Years per gage (common gages):
 | `n_recession_events_senn_slp` | Recession | senn_slp | 0.7382 | 0.8122 | 0.0158 | 0.2229 | 0 | 0 | 0 |
 | `n_high_pulses_all_senn_slp` | Pulse Metrics | senn_slp | 0.7392 | 0.7674 | 0.0274 | 0.5516 | 607 | 514 | 505 |
 | `negative_ann_spearman_rho` | Negative Flow | spearman_rho | 0.7393 | 0.9104 | 0.0624 | 0.3326 | 6536 | 6531 | 5 |
+| `BFI_Eckhardt_param_senn_slp` | Baseflow | senn_slp | 0.7417 | 0.7776 | 0.0002 | 0.0032 | 725 | 667 | 520 |
 | `flashinessRB_senn_slp` | Flashiness | senn_slp | 0.7425 | 0.7896 | 0.0007 | 0.0174 | 615 | 524 | 501 |
 | `b_pointcloud_linear_slp` | Recession | linear_slp | 0.7451 | 0.7530 | 0.0057 | 0.2029 | 1233 | 1342 | 109 |
+| `alpha_linear_senn_slp` | Recession | senn_slp | 0.7501 | 0.8090 | 0.0005 | 0.0350 | 1234 | 1342 | 108 |
 | `FDCall_senn_slp` | FDC | senn_slp | 0.7505 | 0.7545 | 0.0067 | 0.3203 | 607 | 514 | 505 |
 | `negative_ann_mk_rho` | Negative Flow | mk_rho | 0.7506 | 0.9146 | 0.0487 | 0.2671 | 6536 | 6531 | 5 |
 | `n_high_pulses_all_linear_slp` | Pulse Metrics | linear_slp | 0.7548 | 0.8240 | 0.0315 | 0.6639 | 607 | 514 | 505 |
@@ -573,6 +591,7 @@ Years per gage (common gages):
 | `D99_day_median` | Flow Timing | median | 0.9701 | 0.9891 | 1.3036 | 101.5000 | 0 | 0 | 0 |
 | `b_events_median` | Recession | median | 0.9710 | 0.9924 | 0.0900 | 3.9277 | 1052 | 1216 | 164 |
 | `Flow_Reversals_fall_median` | Pulse Metrics | median | 0.9735 | 0.9859 | 0.7451 | 18.0000 | 0 | 0 | 0 |
+| `recession_alpha_point_cloud_linear_reservoir` | Recession | scalar | 0.9743 | 0.9907 | 0.0043 | 0.2971 | 129 | 167 | 38 |
 | `b_events_mean` | Recession | mean | 0.9752 | 0.9940 | 0.1205 | 4.7767 | 1052 | 1216 | 164 |
 | `b_pointcloud_mean` | Recession | mean | 0.9756 | 0.9863 | 0.0323 | 1.1528 | 1233 | 1342 | 109 |
 | `D25_to_D75_median` | Flow Timing | median | 0.9761 | 0.9869 | 2.8880 | 88.0000 | 0 | 0 | 0 |
@@ -594,13 +613,17 @@ Years per gage (common gages):
 | `Flow_Reversals_spring_median` | Pulse Metrics | median | 0.9813 | 0.9894 | 0.5613 | 16.0000 | 0 | 0 | 0 |
 | `qp_slope_sd_median` | Q-P Seasonality | median | 0.9813 | 0.9893 | 0.1336 | 24.5498 | 1085 | 1085 | 0 |
 | `D40_day_median` | Flow Timing | median | 0.9814 | 0.9867 | 2.5803 | 97.0000 | 0 | 0 | 0 |
+| `BFI_Eckhardt_param_median` | Baseflow | median | 0.9821 | 0.9898 | 0.0021 | 0.1044 | 129 | 167 | 38 |
+| `BFI_Eckhardt_param_mean` | Baseflow | mean | 0.9835 | 0.9908 | 0.0021 | 0.0916 | 129 | 167 | 38 |
 | `D95_day_median` | Flow Timing | median | 0.9838 | 0.9916 | 2.0863 | 52.0000 | 0 | 0 | 0 |
 | `TQmean_median` | Pulse Metrics | median | 0.9839 | 0.9915 | 0.5114 | 24.8245 | 0 | 0 | 0 |
 | `D50_day_median` | Flow Timing | median | 0.9845 | 0.9907 | 2.2107 | 109.5000 | 0 | 0 | 0 |
 | `Flow_Reversals_annual_median` | Pulse Metrics | median | 0.9847 | 0.9913 | 2.1113 | 57.0000 | 0 | 0 | 0 |
 | `D5_day_mean` | Flow Timing | mean | 0.9848 | 0.9945 | 1.6315 | 38.9594 | 0 | 0 | 0 |
 | `D90_day_median` | Flow Timing | median | 0.9850 | 0.9914 | 2.1804 | 66.0000 | 0 | 0 | 0 |
+| `BFI_LyneHollick_param_median` | Baseflow | median | 0.9852 | 0.9908 | 0.0071 | 0.2367 | 129 | 167 | 38 |
 | `Flow_Reversals_winter_mean` | Pulse Metrics | mean | 0.9854 | 0.9915 | 0.6219 | 9.5007 | 0 | 0 | 0 |
+| `alpha_linear_median` | Recession | median | 0.9854 | 0.9937 | 0.0037 | 0.1199 | 1234 | 1342 | 108 |
 | `D80_day_median` | Flow Timing | median | 0.9857 | 0.9910 | 2.1036 | 101.0000 | 0 | 0 | 0 |
 | `Flow_Reversals_summer_mean` | Pulse Metrics | mean | 0.9858 | 0.9933 | 0.6268 | 8.2964 | 0 | 0 | 0 |
 | `FDCall_mean` | FDC | mean | 0.9862 | 0.9961 | 0.0704 | 2.9295 | 0 | 0 | 0 |
@@ -611,9 +634,11 @@ Years per gage (common gages):
 | `Flow_Reversals_spring_mean` | Pulse Metrics | mean | 0.9875 | 0.9933 | 0.5160 | 8.0909 | 0 | 0 | 0 |
 | `Flow_Reversals_annual_mean` | Pulse Metrics | mean | 0.9876 | 0.9934 | 2.0323 | 35.7075 | 0 | 0 | 0 |
 | `D25_to_D75_mean` | Flow Timing | mean | 0.9876 | 0.9927 | 2.3134 | 34.0380 | 0 | 0 | 0 |
+| `BFI_LyneHollick_param_mean` | Baseflow | mean | 0.9878 | 0.9922 | 0.0065 | 0.2179 | 129 | 167 | 38 |
 | `D10_day_mean` | Flow Timing | mean | 0.9882 | 0.9938 | 2.0097 | 27.5154 | 0 | 0 | 0 |
 | `log_a_pointcloud_mean` | Recession | mean | 0.9884 | 0.9954 | 0.0456 | 1.6429 | 1233 | 1342 | 109 |
 | `D99_day_mean` | Flow Timing | mean | 0.9887 | 0.9947 | 1.0550 | 30.2521 | 0 | 0 | 0 |
+| `alpha_linear_mean` | Recession | mean | 0.9890 | 0.9947 | 0.0036 | 0.0854 | 1234 | 1342 | 108 |
 | `n_high_pulses_all_median` | Pulse Metrics | median | 0.9890 | 0.9917 | 0.2881 | 7.5000 | 0 | 0 | 0 |
 | `avg_storage_median` | Storage | median | 0.9893 | 0.9828 | 22.0474 | 18500.4942 | 1085 | 1085 | 0 |
 
@@ -623,48 +648,48 @@ Columns where the number of NAs differs by >50 gages.
 
 | Column | Category | Baseline NAs | Experiment NAs | Mismatch | R2 |
 |--------|----------|--------------|----------------|----------|----|
-| `dur_low_pulses_all_mk_pval` | Pulse Metrics | 4299 | 4080 | 751 | -0.0876 |
-| `dur_low_pulses_all_linear_slp` | Pulse Metrics | 4299 | 4080 | 751 | -1.3108 |
-| `dur_low_pulses_all_spearman_rho` | Pulse Metrics | 4299 | 4080 | 751 | 0.5471 |
 | `dur_low_pulses_all_spearman_pval` | Pulse Metrics | 4299 | 4080 | 751 | -0.1004 |
-| `dur_low_pulses_all_senn_slp` | Pulse Metrics | 4299 | 4080 | 751 | -1.8187 |
+| `dur_low_pulses_all_spearman_rho` | Pulse Metrics | 4299 | 4080 | 751 | 0.5471 |
 | `dur_low_pulses_all_mk_rho` | Pulse Metrics | 4299 | 4080 | 751 | 0.5613 |
-| `dur_high_pulses_all_spearman_rho` | Pulse Metrics | 1443 | 1316 | 665 | 0.5686 |
-| `dur_high_pulses_all_spearman_pval` | Pulse Metrics | 1443 | 1316 | 665 | -0.0930 |
+| `dur_low_pulses_all_senn_slp` | Pulse Metrics | 4299 | 4080 | 751 | -1.8187 |
+| `dur_low_pulses_all_linear_slp` | Pulse Metrics | 4299 | 4080 | 751 | -1.3108 |
+| `dur_low_pulses_all_mk_pval` | Pulse Metrics | 4299 | 4080 | 751 | -0.0876 |
+| `dur_high_pulses_all_linear_slp` | Pulse Metrics | 1443 | 1316 | 665 | 0.6339 |
+| `dur_high_pulses_all_mk_pval` | Pulse Metrics | 1443 | 1316 | 665 | -0.0867 |
 | `dur_high_pulses_all_senn_slp` | Pulse Metrics | 1443 | 1316 | 665 | 0.5415 |
 | `dur_high_pulses_all_mk_rho` | Pulse Metrics | 1443 | 1316 | 665 | 0.5743 |
-| `dur_high_pulses_all_mk_pval` | Pulse Metrics | 1443 | 1316 | 665 | -0.0867 |
-| `dur_high_pulses_all_linear_slp` | Pulse Metrics | 1443 | 1316 | 665 | 0.6339 |
+| `dur_high_pulses_all_spearman_pval` | Pulse Metrics | 1443 | 1316 | 665 | -0.0930 |
+| `dur_high_pulses_all_spearman_rho` | Pulse Metrics | 1443 | 1316 | 665 | 0.5686 |
+| `dur_low_pulses_year_spearman_rho` | Pulse Metrics | 1146 | 1024 | 542 | 0.5383 |
+| `dur_low_pulses_year_spearman_pval` | Pulse Metrics | 1146 | 1024 | 542 | -0.0878 |
+| `dur_low_pulses_year_senn_slp` | Pulse Metrics | 1146 | 1024 | 542 | 0.8878 |
+| `dur_low_pulses_year_mk_rho` | Pulse Metrics | 1146 | 1024 | 542 | 0.5543 |
 | `dur_low_pulses_year_mk_pval` | Pulse Metrics | 1146 | 1024 | 542 | -0.0773 |
 | `dur_low_pulses_year_linear_slp` | Pulse Metrics | 1146 | 1024 | 542 | 0.8104 |
-| `dur_low_pulses_year_mk_rho` | Pulse Metrics | 1146 | 1024 | 542 | 0.5543 |
-| `dur_low_pulses_year_senn_slp` | Pulse Metrics | 1146 | 1024 | 542 | 0.8878 |
-| `dur_low_pulses_year_spearman_pval` | Pulse Metrics | 1146 | 1024 | 542 | -0.0878 |
-| `dur_low_pulses_year_spearman_rho` | Pulse Metrics | 1146 | 1024 | 542 | 0.5383 |
-| `Flow_Reversals_winter_spearman_rho` | Pulse Metrics | 609 | 519 | 508 | 0.6492 |
-| `Flow_Reversals_winter_mk_pval` | Pulse Metrics | 609 | 519 | 508 | 0.0287 |
-| `Flow_Reversals_winter_spearman_pval` | Pulse Metrics | 609 | 519 | 508 | 0.0413 |
-| `Flow_Reversals_winter_mk_rho` | Pulse Metrics | 609 | 519 | 508 | 0.6544 |
-| `Q25_mk_rho` | Flow Percentiles | 631 | 546 | 507 | 0.7003 |
-| `Q25_mk_pval` | Flow Percentiles | 631 | 546 | 507 | 0.0586 |
-| `Q25_spearman_rho` | Flow Percentiles | 631 | 546 | 507 | 0.6858 |
-| `Q25_spearman_pval` | Flow Percentiles | 631 | 546 | 507 | 0.0633 |
-| `n_low_pulses_year_spearman_rho` | Pulse Metrics | 650 | 576 | 506 | 0.5666 |
-| `n_low_pulses_year_spearman_pval` | Pulse Metrics | 650 | 576 | 506 | -0.0841 |
-| `n_low_pulses_year_mk_rho` | Pulse Metrics | 650 | 576 | 506 | 0.5769 |
-| `n_low_pulses_year_mk_pval` | Pulse Metrics | 650 | 576 | 506 | -0.0818 |
+| `BFI_LyneHollick_param_mk_rho` | Baseflow | 725 | 667 | 520 | 0.6170 |
+| `BFI_LyneHollick_param_senn_slp` | Baseflow | 725 | 667 | 520 | 0.7064 |
+| `BFI_LyneHollick_param_spearman_pval` | Baseflow | 725 | 667 | 520 | -0.0242 |
+| `BFI_LyneHollick_param_spearman_rho` | Baseflow | 725 | 667 | 520 | 0.6056 |
+| `BFI_LyneHollick_param_mk_pval` | Baseflow | 725 | 667 | 520 | -0.0276 |
+| `BFI_LyneHollick_param_linear_slp` | Baseflow | 725 | 667 | 520 | 0.7078 |
+| `BFI_Eckhardt_param_spearman_rho` | Baseflow | 725 | 667 | 520 | 0.5827 |
+| `BFI_Eckhardt_param_spearman_pval` | Baseflow | 725 | 667 | 520 | -0.0021 |
+| `BFI_Eckhardt_param_senn_slp` | Baseflow | 725 | 667 | 520 | 0.7417 |
+| `BFI_Eckhardt_param_mk_rho` | Baseflow | 725 | 667 | 520 | 0.5916 |
+| `BFI_Eckhardt_param_mk_pval` | Baseflow | 725 | 667 | 520 | -0.0016 |
+| `BFI_Eckhardt_param_linear_slp` | Baseflow | 725 | 667 | 520 | 0.7248 |
 
 ## Summary
 
 | Agreement Tier | Threshold | Count | % |
 |----------------|-----------|-------|---|
-| Perfect | R2 >= 0.999 | 34 | 5.7% |
-| Good | 0.99 <= R2 < 0.999 | 42 | 7.1% |
-| Poor | 0.95 <= R2 < 0.99 | 58 | 9.8% |
+| Perfect | R2 >= 0.999 | 34 | 5.5% |
+| Good | 0.99 <= R2 < 0.999 | 42 | 6.8% |
+| Poor | 0.95 <= R2 < 0.99 | 65 | 10.5% |
 | Low | 0.90 <= R2 < 0.95 | 9 | 1.5% |
-| Very Low | 0.50 <= R2 < 0.90 | 224 | 37.7% |
-| Extremely Low | R2 < 0.50 | 227 | 38.2% |
-| **Total compared** | | **594** | **100%** |
+| Very Low | 0.50 <= R2 < 0.90 | 236 | 38.1% |
+| Extremely Low | R2 < 0.50 | 233 | 37.6% |
+| **Total compared** | | **619** | **100%** |
 
 Gages dropped by experiment filter: **734**
 
