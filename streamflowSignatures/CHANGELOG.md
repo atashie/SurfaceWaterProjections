@@ -22,6 +22,21 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
 
 ---
 
+## [May 2026]
+
+### New: per-gage watershed HydroATLAS metadata (non-signature product)
+A standalone metadata file pairing each gage with the hydro-geophysical character of its **entire upstream watershed**, from HydroATLAS / BasinATLAS v10 (281 source attributes → ~211 output columns: climate, hydrology, terrain, land cover, soils/geology, anthropogenic). Sits alongside the signatures, keyed by leading-zero-safe `gage_id`: `data_out/watershed_hydroatlas_metadata_{date}.{csv,parquet}` + a generated data dictionary. 8,014 gages, ~13 MB.
+
+- **Hybrid aggregation** over each gage's delineated upstream basin set (`upstream_hydrobasins.rds`): HydroATLAS upstream-accumulated `_u` / pour-point `_p` values pass through from the outlet basin (91 attrs — the delineated set equals HydroATLAS's own upstream extent, so `_u` is the rigorous watershed value); `_s`-only attributes are SUB_AREA-weighted (92 area-weighted means incl. monthly climate, with the HydroATLAS `-9999` NoData sentinel masked; elevation as spatial min/max; 11 categoricals as area-weighted majority — glc/pnv via argmax of upstream `_u` fractions, wet + the other 8 via area-weighted mode of the source class). Percentage / areal-extent fields are always area-weighted mean (never max). A `watershed_area_rel_diff` column ( |summed member SUB_AREA − gage `basin_area`| / `basin_area`, gage-reported drainage as truth) flags gages where the delineated watershed area diverges from the reported drainage (mis-snapped outlets).
+- New `R/aggregate_hydroatlas_metadata.R` + `run_hydroatlas_metadata.R`; `HYDROATLAS_GPKG` added to `config.R`. R-only (metadata/ingestion) — not a cross-language signature, so no Julia/Python port.
+- Validated: member SUB_AREA sums to outlet UP_AREA (median rel.diff 1e-4); area-weighted `_s` reproduces HydroATLAS `_u` (elevation cor 0.9994); 100% join to the signatures file (5,707/5,707). See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) → Watershed HydroATLAS Metadata.
+- **Independent code review** (in-session) confirmed the classifier, NA-aware weighting, BFS delineation, and leading-zero joins; correctness fixes applied — `wet_cl_smj` switched from `_u`-fraction argmax to area-weighted mode (its fraction basis omits classes 10/11), `-9999` NoData masked in weighted means (`sgr_dk_sav`), and a malformed legacy-cache member id sanitized.
+
+### New: static HTML data explorer
+A self-contained, double-clickable `data_out/streamflow_explorer.html` (Leaflet + Canvas) for exploring the gages: 8,014 points colored by any of **412 variables** (dataset switcher between HydroATLAS watershed metadata and streamflow signatures); click a gage to draw its **watershed boundary** (border-only). Generators: `build_explorer.R` (unions the RAW lev12 basins per outlet for a clean dissolve — no interior sliver lines — then strips holes, simplifies, and caps at ~250 vertices → `watershed_borders.geojson` ~9.5 MB), `assemble_explorer.R` (joins points + injects into `explorer_template.html`). Full-resolution borders are ~111 MB (too heavy to inline); the clean-dissolve build is ~28 MB total. Border click-through and clean rendering verified headlessly (puppeteer-core + Chrome). See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) → Static HTML Explorer.
+
+---
+
 ## [April 2026]
 
 A large release: new signature families, the canonical-language transition, centralized NA handling, and cross-language alignment to 99.5% agreement. Output grew from 551 to **1,264 columns** (656 base/metadata + 608 Pettitt changepoint) across 7,313 gages. **Full per-change detail is in [docs/CHANGELOG_ARCHIVE.md](docs/CHANGELOG_ARCHIVE.md) → [April 2026].**

@@ -25,6 +25,11 @@ METADATA_DATA_DIR <- Sys.getenv("STREAMFLOW_METADATA_DIR",
 DOWNLOADS_DIR <- Sys.getenv("STREAMFLOW_DOWNLOADS_DIR",
                             unset = file.path(Sys.getenv("USERPROFILE", "~"), "Downloads"))
 
+# HydroATLAS / BasinATLAS v10 North-America polygons + 281 attributes + topology
+# (used by R/aggregate_hydroatlas_metadata.R to build per-gage watershed metadata)
+HYDROATLAS_GPKG <- Sys.getenv("HYDROATLAS_GPKG",
+                              unset = "D:/geospatial_derivedData/basinAt_NorAm_polys.gpkg")
+
 
 # ==============================================================================
 # DATA QUALITY THRESHOLDS

@@ -246,6 +246,92 @@ process_caravan_to_annual(
 )
 ```
 
+## Watershed HydroATLAS Metadata
+
+A standalone, per-gage metadata product describing the **hydro-geophysical character of
+each gage's entire upstream watershed** (climate, hydrology, terrain, land cover,
+soils/geology, anthropogenic), drawn from HydroATLAS / BasinATLAS v10. It sits alongside
+the signature outputs and joins by `gage_id`. This is metadata/ingestion work (R) — **not**
+a cross-language signature, so it is not ported to Julia/Python.
+
+### Run
+
+```bash
+Rscript run_hydroatlas_metadata.R                 # full run (success gages) -> data_out/
+Rscript run_hydroatlas_metadata.R --subset 40     # dry-run on 40 spread gages -> test_output/
+Rscript run_hydroatlas_metadata.R --status all    # all gages with valid coordinates
+Rscript run_hydroatlas_metadata.R --metadata <path/to/combined_watershed_metadata.csv>
+```
+
+Outputs (in `data_out/`): `watershed_hydroatlas_metadata_{date}.csv` + `.parquet` (~211
+columns, one row per gage), `watershed_hydroatlas_metadata_dictionary.csv`
+(column → theme / unit / aggregation / description), and a reusable
+`hydroatlas_member_attrs_{date}.parquet` attribute cache. `combined_watershed_metadata.csv`
+is left untouched.
+
+### How it works
+
+1. **gage → outlet basin** — one vectorized `st_join` of gage points against
+   `basinAt_NorAm_polys.gpkg` (HydroBASINS lev12, 167k NorAm basins, WGS84). s2 is disabled
+   (GEOS planar) to tolerate minor invalid loops in the source polygons.
+2. **outlet → watershed** — member basin set (outlet + all upstream) from the cached
+   `upstream_hydrobasins.rds` (keyed by outlet HYBAS_ID); outlets not yet cached are filled
+   via a `NEXT_DOWN` BFS over the topology.
+3. **aggregate (hybrid)** — rules built programmatically by `classify_hydroatlas_attributes()`:
+   - `_u` / `_p` attributes (91): **passthrough** from the outlet basin. The delineated
+     upstream set equals the extent HydroATLAS already accumulates into the outlet basin's
+     `_u` fields, so this is the rigorous watershed value (no re-aggregation).
+   - `_s`-only attributes (105): **SUB_AREA-weighted** — area-weighted mean for continuous,
+     percentage, and monthly-climate fields (HydroATLAS `-9999` NoData masked; percentages
+     always mean, never max); spatial **min/max** for elevation only; area-weighted
+     **majority** for categoricals (glc/pnv via argmax of the outlet's upstream `_u` fractions;
+     wet and the other 8 via area-weighted mode of the source class).
+   - `_s` attributes that have a `_u` twin (85) are dropped in favor of the `_u` value.
+4. **assemble + write** — one row per gage, keyed by zero-padded `gage_id`. Join to the
+   signatures with `join_hydroatlas_to_signatures()` (leading-zero-safe canonical matching).
+
+### Memory / size
+
+Aggregation runs per **unique outlet** (~7,100) over O(1) keyed member slices; the
+gage × basin × attribute long table is never materialized. The attribute table is subset to
+only the member basins actually used (~96k) and cached as parquet. The full output is ~13 MB
+CSV — all artifacts stay far under 1 GB.
+
+Config/source: `HYDROATLAS_GPKG` in `config.R`; module `R/aggregate_hydroatlas_metadata.R`;
+entry `run_hydroatlas_metadata.R`. Validation (`validate_hydroatlas_metadata()`) cross-checks
+member area vs. outlet `UP_AREA` and area-weighted `_s` vs. HydroATLAS `_u`.
+
+## Static HTML Explorer
+
+A self-contained, double-clickable map for exploring the gages and their watersheds:
+`data_out/streamflow_explorer.html` (Leaflet + Canvas). 8,014 gage points are colored by a
+selected variable; a dataset switcher toggles between the **HydroATLAS watershed metadata**
+(~207 vars) and the **streamflow signatures** (~205 vars: `_mean`, `_senn_slp`, `_mk_pval` per
+base + scalars). Clicking a gage draws its **watershed boundary** (border only).
+
+### Build
+
+```bash
+Rscript build_explorer.R     # dissolve+simplify member basins per outlet -> data_out/watershed_borders.geojson (~12 MB)
+Rscript assemble_explorer.R  # join points + inject into explorer_template.html -> data_out/streamflow_explorer.html (~31 MB)
+```
+
+- `build_explorer.R` reuses `build_upstream_members()` (cache + NEXT_DOWN BFS) so every gage
+  outlet (incl. those not in the cached RDS) gets a border. It **unions the RAW lev12 basins**
+  (identical shared edges → clean dissolve, no sliver holes/spikes — do NOT pre-simplify each
+  basin first), strips interior holes + tiny sliver parts, simplifies the clean outline to ~1 km
+  (`preserveTopology=TRUE`) with an adaptive **~250-vertex cap** on large basins, then runs a final
+  `st_make_valid` + hole-strip on the rounded GeoJSON. Flags: `--tol`, `--maxv`, `--n` (subset).
+- `assemble_explorer.R` rounds values, builds a column-oriented points object, and injects
+  `__POINTS__` / `__VARS__` / `__BORDERS__` into `explorer_template.html`.
+
+### Size note
+
+Full-resolution borders for all ~7,100 *nested* watersheds are **~111 MB** (un-inline-able); the
+clean-dissolve + simplified + vertex-capped build is **~9.5 MB**, giving a ~28 MB self-contained HTML. The page
+needs internet to load Leaflet + the CARTO basemap from CDN (points/borders still render offline
+once loaded). For a lighter file, trim the variable list in `assemble_explorer.R` or lower `--maxv`.
+
 ## Adding a New Signature
 
 ### Step-by-Step Process (Julia-First Workflow)

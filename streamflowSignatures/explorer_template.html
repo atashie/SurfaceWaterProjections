@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Streamflow / Watershed Explorer</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  html, body { margin: 0; height: 100%; font-family: system-ui, Arial, sans-serif; }
+  #app { display: flex; height: 100%; }
+  #side { width: 320px; min-width: 320px; padding: 14px 16px; box-sizing: border-box;
+          overflow-y: auto; border-right: 1px solid #ddd; background: #fafafa; }
+  #map { flex: 1; }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  .sub { color: #666; font-size: 12px; margin: 0 0 14px; }
+  label { font-size: 12px; font-weight: 600; color: #333; display: block; margin: 10px 0 3px; }
+  select, input { width: 100%; box-sizing: border-box; padding: 5px; font-size: 13px; }
+  .seg { display: flex; gap: 6px; }
+  .seg button { flex: 1; padding: 6px; font-size: 12px; cursor: pointer; border: 1px solid #bbb;
+                background: #fff; border-radius: 4px; }
+  .seg button.on { background: #2b6cb0; color: #fff; border-color: #2b6cb0; }
+  #legend { margin-top: 16px; font-size: 12px; }
+  #legend .bar { height: 12px; border-radius: 2px; margin: 4px 0;
+                 background: linear-gradient(to right, #440154, #3b528b, #21918c, #5ec962, #fde725); }
+  .legrow { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
+  .sw { width: 12px; height: 12px; border-radius: 2px; display: inline-block; border: 1px solid #999; }
+  #count { font-size: 11px; color: #888; margin-top: 14px; }
+  .note { font-size: 11px; color: #888; margin-top: 6px; line-height: 1.4; }
+  .leaflet-popup-content { font-size: 12px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="side">
+    <h1>Streamflow / Watershed Explorer</h1>
+    <p class="sub">Gages colored by the selected variable. Click a gage to draw its watershed boundary.</p>
+
+    <label>Dataset</label>
+    <div class="seg" id="dsSeg">
+      <button data-ds="HydroATLAS" class="on">HydroATLAS</button>
+      <button data-ds="Signatures">Signatures</button>
+    </div>
+
+    <label>Filter variables</label>
+    <input id="filter" type="text" placeholder="type to filter, e.g. tmp, snow, Qann..." />
+
+    <label>Variable (color)</label>
+    <select id="varSel" size="1"></select>
+
+    <div id="legend"></div>
+    <div id="count"></div>
+    <p class="note">Continuous variables use a viridis scale clipped to the 2nd-98th percentile.
+       Class variables use distinct colors. Watershed borders are simplified (~1 km) HydroBASINS
+       lev12 unions; "no border" means the gage outlet was not delineated.</p>
+  </div>
+  <div id="map"></div>
+</div>
+
+<script>
+const POINTS = __POINTS__;
+const VARS   = __VARS__;
+const BORDERS = __BORDERS__;
+</script>
+<script>
+// ---------- basemap ----------
+const cvs = L.canvas({ padding: 0.5 });
+const map = L.map('map', { preferCanvas: true }).setView([46, -96], 4);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+  { attribution: '&copy; OpenStreetMap &copy; CARTO', subdomains: 'abcd', maxZoom: 19 }).addTo(map);
+
+// ---------- border lookup ----------
+const BMAP = {};
+(BORDERS.features || []).forEach(f => { BMAP[String(f.properties.outlet)] = f; });
+
+// ---------- color scales ----------
+const VIR = [[68,1,84],[59,82,139],[33,145,140],[94,201,98],[253,231,37]];
+const lerp = (a,b,t) => a + (b-a)*t;
+function viridis(t){ t = Math.max(0, Math.min(1, t)); const s = t*(VIR.length-1);
+  const i = Math.floor(s), f = s-i, a = VIR[i], b = VIR[Math.min(i+1, VIR.length-1)];
+  return `rgb(${Math.round(lerp(a[0],b[0],f))},${Math.round(lerp(a[1],b[1],f))},${Math.round(lerp(a[2],b[2],f))})`; }
+const CATPAL = ['#e6194b','#3cb44b','#ffe119','#4363d8','#f58231','#911eb4','#42d4f4','#f032e6',
+  '#bfef45','#fabed4','#469990','#dcbeff','#9a6324','#800000','#aaffc3','#808000','#ffd8b1',
+  '#000075','#a9a9a9','#000000'];
+
+function colorFor(meta, val){
+  if (val === null || val === undefined || val === '' || (typeof val === 'number' && !isFinite(val))) return null;
+  if (meta.type === 'categorical'){ const cats = Array.isArray(meta.cats)?meta.cats:[meta.cats];
+    const idx = cats.indexOf(val); return CATPAL[(idx<0?0:idx) % CATPAL.length]; }
+  const lo = meta.domain[0], hi = meta.domain[1];
+  return viridis((val - lo) / ((hi - lo) || 1));
+}
+
+// ---------- markers ----------
+const markers = [];
+for (let i = 0; i < POINTS.n; i++){
+  const m = L.circleMarker([POINTS.lat[i], POINTS.lon[i]],
+    { renderer: cvs, radius: 3, weight: 0.4, color: '#444', fillOpacity: 0.85, fillColor: '#888' });
+  m._i = i; m.on('click', () => selectGage(i)); m.addTo(map); markers.push(m);
+}
+
+let curVar = null;
+function recolor(key){
+  const meta = VARS.find(v => v.key === key); if (!meta) return; curVar = meta;
+  const vals = POINTS.v[key];
+  let nshown = 0;
+  for (let i = 0; i < markers.length; i++){
+    const c = colorFor(meta, vals ? vals[i] : null);
+    if (c) nshown++;
+    markers[i].setStyle({ fillColor: c || '#ccc', fillOpacity: c ? 0.85 : 0.12 });
+  }
+  document.getElementById('count').textContent =
+    `${POINTS.n} gages | ${nshown} with a value for ${key}`;
+  updateLegend(meta, vals);
+}
+
+// ---------- selection: draw watershed border ----------
+let selLayer = null;
+function selectGage(i){
+  const hb = String(POINTS.hb[i]); const f = BMAP[hb];
+  window.__lastSelect = { i: i, hb: hb, hasBorder: !!f };   // debug/verification hook
+  if (selLayer){ map.removeLayer(selLayer); selLayer = null; }
+  const val = curVar && POINTS.v[curVar.key] ? POINTS.v[curVar.key][i] : null;
+  const col = curVar ? colorFor(curVar, val) : null;
+  // interactive:false + same canvas renderer as the points, so the border overlay never
+  // intercepts (or swallows) clicks meant for the gage points underneath.
+  if (f){ selLayer = L.geoJSON(f, { interactive: false, renderer: cvs,
+            style: { fill: false, color: col || '#d00000', weight: 2.2, opacity: 0.95 } }).addTo(map); }
+  L.popup().setLatLng([POINTS.lat[i], POINTS.lon[i]])
+    .setContent(`<b>${POINTS.gage_id[i]}</b><br>outlet: ${hb}`
+      + (curVar ? `<br>${curVar.key}: <b>${val === null || val === undefined ? 'NA' : val}</b>` : '')
+      + (f ? '' : '<br><i>no watershed border available</i>'))
+    .openOn(map);
+}
+
+// ---------- legend ----------
+function updateLegend(meta, vals){
+  const el = document.getElementById('legend');
+  if (meta.type === 'categorical'){
+    const cats = Array.isArray(meta.cats)?meta.cats:[meta.cats];
+    let h = `<b>${meta.key}</b><div style="margin-top:4px">`;
+    cats.forEach((c, k) => {
+      h += `<div class="legrow"><span class="sw" style="background:${CATPAL[k % CATPAL.length]}"></span>${c}</div>`;
+    });
+    el.innerHTML = h + '</div>';
+  } else {
+    el.innerHTML = `<b>${meta.key}</b><div class="bar"></div>`
+      + `<div style="display:flex;justify-content:space-between"><span>${meta.domain[0]}</span><span>${meta.domain[1]}</span></div>`;
+  }
+}
+
+// ---------- controls ----------
+const varSel = document.getElementById('varSel');
+const filterEl = document.getElementById('filter');
+let curDs = 'HydroATLAS';
+function populateVars(){
+  const filt = filterEl.value.toLowerCase();
+  const list = VARS.filter(v => v.ds === curDs && v.key.toLowerCase().includes(filt));
+  varSel.innerHTML = '';
+  list.forEach(v => { const o = document.createElement('option');
+    o.value = v.key; o.textContent = v.key + (v.type === 'categorical' ? '  (class)' : ''); varSel.appendChild(o); });
+  varSel.size = Math.max(2, Math.min(18, list.length));
+  if (list.length) recolor(list[0].key);
+}
+document.querySelectorAll('#dsSeg button').forEach(btn => btn.onclick = () => {
+  document.querySelectorAll('#dsSeg button').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on'); curDs = btn.dataset.ds; populateVars();
+});
+filterEl.oninput = populateVars;
+varSel.onchange = () => recolor(varSel.value);
+populateVars();
+</script>
+</body>
+</html>
