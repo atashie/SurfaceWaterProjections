@@ -5,7 +5,238 @@ For current/active changes, see [CHANGELOG.md](../CHANGELOG.md).
 
 ---
 
-## [Unreleased] — Completed March 2026 Items
+## [April 2026]
+
+> Detailed record of April 2026 work. For the at-a-glance summary, see [CHANGELOG.md](../CHANGELOG.md). File-level change lists are omitted here — see `git log` for exact files.
+
+### Changepoint Detection — Pettitt Test
+
+Non-parametric Pettitt changepoint test applied to all time-series signatures, with differential metrics.
+
+**Pettitt Test** (`pettitt_test`). Non-parametric rank-based test (Pettitt 1979). Test statistic K = max|U_t| where U_t accumulates pairwise sign comparisons. P-value via asymptotic approximation. Always identifies a location; use p-value for significance.
+
+**Differential Metrics** (`segment_differential_metrics`), applied at the Pettitt changepoint: delta_mean (post − pre), pct_change (%), pre/post Mann-Kendall p-values.
+
+Search window: WY 1980-2024, minimum 20 non-NA observations total, minimum 10 per segment. Independent of the 80% trend_completeness gate.
+
+**8 new columns per signature (76 signatures × 8 = 608 changepoint columns):** `pettitt_cp_year`, `pettitt_pval`, `pettitt_pre_mean`, `pettitt_post_mean`, `pettitt_delta_mean`, `pettitt_pct_change`, `pettitt_pre_mk_pval`, `pettitt_post_mk_pval`.
+
+**Design decisions:**
+- Per-signature changepoints (not per-gage) — different processes change at different times
+- Pettitt O(n²) is fast for annual series (n ≤ 45)
+- BIC 4-model comparison was initially implemented alongside Pettitt but removed to reduce clutter (code retained in `changepoint.jl` but not called from `generate_stats()`)
+
+**Julia benchmark (April 28, 2026)**: 7,313 gages, 1,264 columns (656 base/metadata + 608 changepoint). Overall ~13% of evaluations have p < 0.05 (69,279 / 516,992; 2.7× the 5% null). CP year range [1989, 2014].
+
+**Signal robustness (April 29)**: significance rates vary by category (Flow Timing 3.7% below null, Flashiness 19.4%, Elasticity 25.8% inflated by short rolling-window series); effective independence ~17/76 signatures (~77% redundancy); ~3.5% survive BH-FDR at 0.05. Full analysis in [docs/SIGNATURES.md](SIGNATURES.md) → Changepoint Detection → Signal Robustness & Known Limitations.
+
+**Reference:** Pettitt, A.N. (1979). A non-parametric approach to the change-point problem. Applied Statistics, 28(2), 126-135.
+
+### Recession-Parameterized Baseflow Signatures
+
+Three new signatures using recession-derived filter parameters (Collischonn & Fan 2013, Eckhardt 2005). Julia canonical April 24; Python and rpkg ported April 25.
+
+- **`alpha_linear`** (8 stats): discrete recession constant under linear reservoir (b=1); per-year median of Q_{i+1}/Q_i ratios from point-cloud recession data (first day of each event removed). Per-year threshold >10 valid alpha pairs.
+- **`recession_alpha_point_cloud_linear_reservoir`** (per-gage scalar): whole-record median of Q_{i+1}/Q_i ratios; computed independently of the 25-event gate. Parameterizes the two BFI signatures below.
+- **`BFI_Eckhardt_param`** (8 stats): Eckhardt BFI with recession-derived `a`; BFImax fixed at 0.8.
+- **`BFI_LyneHollick_param`** (8 stats): Lyne-Hollick BFI with recession-derived `alpha` (heuristic — L-H alpha has no physical derivation from recession; Nathan & McMahon 1990).
+
+**Total: 24 new stat columns + 1 per-gage scalar = 25 new columns (624 total signature columns).**
+
+**Julia validation (April 24)**: 7,313 gages, 15.0 min. 598 of 599 common columns Perfect (R² ≥ 0.999). Zero regression.
+
+| Metric | Non-NA gages | Range |
+|--------|-------------|-------|
+| `alpha_linear_median` | 5,825 / 7,313 | [0.273, 0.985] |
+| `recession_alpha_point_cloud_linear_reservoir` | 7,131 / 7,313 | [0.273, 0.997] |
+| `BFI_Eckhardt_param_mean` | 7,131 / 7,313 | [0.474, 0.804] |
+| `BFI_LyneHollick_param_mean` | 7,131 / 7,313 | [0.255, 0.966] |
+
+**Cross-language validation (April 27)**: Python — all 25 new columns Perfect (615 Perfect / 5 Good / 3 Poor overall vs Julia). rpkg — 24 of 25 new Perfect; 1 new poor `alpha_linear_spearman_pval` (R² 0.971, Spearman p-value library difference). Current synced-implementation benchmark tables: [docs/DEVELOPMENT.md](DEVELOPMENT.md) → Cross-Language Benchmarks.
+
+**Known limitation — BFI_Eckhardt_param narrow range** ([0.474, 0.804], std 0.036 vs fixed-parameter [0.139, 0.802], std 0.119): a mathematical property of the Eckhardt filter when BFImax is fixed at 0.8 — see [docs/SIGNATURES.md](SIGNATURES.md) → Implementation Design Notes. Future improvement: per-gage BFImax via Collischonn & Fan (2013) backward filter.
+
+### Canonical Language Transition
+
+Julia replaced R as the canonical implementation. All three synced implementations (Julia, Python, rpkg) reached equilibrium (99.5% R² agreement, 594 signature columns at the time, 7,313 gages). Julia is ~40× faster than monolithic R (~27 min vs ~18 hrs) with cleaner modular architecture, and already served as first-mover for Section 3 changes.
+
+- Julia (`julia/src/`) is now the canonical reference for all signature implementations
+- rpkg (`rpkg/`) is the production-ready R port (replaces monolithic R for new development)
+- Monolithic R (`R/helperFunctions.R`) deprecated as legacy shim — retained for data ingestion utilities and existing callers; no new signature features
+- Data ingestion stays in R (dataRetrieval/tidyhydat)
+- Recession algorithm sync to rpkg only (monolithic R skipped — deprecated)
+
+Documentation updated across `CLAUDE.md`, `README.md`, `docs/`, package READMEs, and skills; deprecation headers added to the legacy R entry points.
+
+### Julia Experiment Infrastructure
+
+Sensitivity experiment framework for Julia benchmarks. Three experiments test how restricting the analysis period and gage quality affect results.
+
+- **Config** (`config/signatures_config.json`): `filtering.start_water_year` and `filtering.min_qualifying_data_fraction` (both null by default).
+- **Infrastructure**: ENV-based config overrides in `julia/src/config.jl` (read at runtime to avoid precompilation caching of `const` values), filtering logic + parameterized output paths in the benchmark runner, three thin experiment wrappers, and parameterized comparison/dashboard scripts (`docs/benchmarks/`).
+
+**Results (April 16-17)**:
+
+| Experiment | Gages | Dropped | Time | Rate |
+|------------|-------|---------|------|------|
+| Baseline | 7,313 | — | 27.5 min | 4.4/s |
+| startIn1993 | 6,678 | 635 | 24 min | 4.7/s |
+| startIn1993+60pct | 6,579 | 734 | 18 min | 5.9/s |
+| startIn1993+80pct | 5,431 | 1,882 | 14 min | 6.5/s |
+
+- 635 gages dropped by WY≥1993 (485 USGS, 150 Canadian — lost pre-1993 years below the 20-year min)
+- 99 more dropped by the 60% filter (all had exactly 20 qualifying years; frac=20/34=0.588 due to partial WY2026 in raw parquet)
+- 1,148 more dropped by the 80% filter (need ≥28/34 valid years)
+- Trend statistics diverge vs baseline (expected — different period-of-record); means/medians stable
+
+**Bug found and fixed**: Julia precompilation caches `const` values in `.ji` files, so ENV vars set by experiment wrappers were silently ignored after first compilation. Fixed by reading ENV vars at runtime in `main()` as local variables.
+
+### Guidelines vs Implementation Audit
+
+Systematic audit comparing `SIGNATURE_GUIDELINES.md` against Python, Julia, and rpkg.
+
+- **Season exclusion year counts (HIGH)**: added 4 per-gage diagnostics `season_excluded_years_{winter,spring,summer,fall}` (years where each season failed the 80% completeness threshold). Registered as `EXPECTED_SEASON_EXCLUDED_YEARS` in `config.R`.
+- **Q95_Q10 documentation fix (MEDIUM)**: corrected "ratio" → "difference" (the metric is Q95 − Q10) in code comments and docs.
+- **Trend completeness exemptions (LOW)**: documented in `SIGNATURES.md` why recession and elasticity are exempt from the 80% gate.
+- **rpkg dead NA interpolation (2× HIGH)**: removed inline `approx(rule=2)` from `rpkg/R/flashiness.R` and `rpkg/R/pulses.R` (missed in the April cleanup that hit Python/Julia/R-canonical); replaced with `stopifnot` assertions.
+- **QA/QC flag integration (MEDIUM)**: added optional `include_qa_flags` to `calculate_all_signatures()` in all 3 packages (appends 12 flag columns from `compute_qa_flags()`).
+- **Recession-informed BFI (MEDIUM)**: documented as not-yet-implemented (later implemented — see Recession-Parameterized Baseflow above).
+- **Elasticity 30% diagnostic (MEDIUM)**: deferred pending domain-expert clarification.
+- **14 glossary/guidelines items** flagged for the user to update in the Google Doc (Qann "mean" vs "total", elasticity rename, PPT thresholds, negative-Q and constant-SD contradictions, stale "julian" note, etc.) — no code changes.
+
+### Section 3 Sync to Python & rpkg + Benchmark Re-Run
+
+Synced all 7 Section 3 changes from Julia to Python and rpkg, re-ran all 3 benchmarks, and validated.
+
+- **Julia runoff_ratios fix (LOW)**: `>=` → `>` for the PPT threshold, matching R/Python.
+- **Ported to Python** (`recession.py`, `elasticity.py`, `runoff_ratios.py`, `signatures.py`) and **rpkg** (`recession.R`, `elasticity.R`, `runoff_ratios.R`, `pulses.R`, `signatures.R`, `NAMESPACE`): position-marking recession algorithm, `n_recession_events`, elasticity rename + `elasticity_annual` + diagnostics, `runoff_ratio_high_count`, `calculate_negative_days`. Synced rpkg's bundled config (was severely outdated).
+- Updated comparison-script categorization and fixed Julia benchmark-runner metadata column typing.
+
+**Benchmark results (April 14-15)** — all 3 synced implementations at 594 signature columns, 7,313 gages:
+
+| Pair | Perfect (≥0.999) | Good (0.99-0.999) | Poor (<0.99) | Min R² |
+|------|-------------------|-------------------|-------------|--------|
+| Python vs Julia | 619 | 5 | 3 | 0.986 |
+| rpkg vs Julia | 586 | 4 | 4 | 0.967 |
+| rpkg vs Python | 582 | 5 | 7 | 0.967 |
+
+Poor columns are irreducible library-level differences (recession pointcloud p-values, FDC90th p-values, recession seasonality minimum). rpkg vs R canonical: 490 perfect, 46 poor (all recession — R canonical still has the old look-ahead algorithm).
+
+**Net column impact**: 594 columns (was 551 pre-Section 3): +16 D1/D99, +8 n_recession_events, +8 elasticity_annual, +8 negative_ann, +2 elasticity diagnostics, +1 runoff_ratio_high_count; elasticity renamed (8 cols).
+
+### Julia vs Golden R Comparison & Fixes
+
+- **Comparison tooling**: `compare_julia_vs_golden_r.py` (6-tier R² across 551 common columns, 5,697 common gages), `build_julia_vs_golden_r_dashboard.py`, and `julia_vs_golden_r_summary.md`.
+- **Elasticity operator fix (LOW)**: `>=` → `>` for `min_annual_ppt` in `julia/src/elasticity.jl`, aligning all 3 languages.
+- **Canadian HYDAT metadata for Julia**: previously all 1,333 Canadian gages were `human_interference_class = "unknown"`. New `R/export_hydat_metadata.R` exports 8,012 stations (RHBN + REGULATED) to `metadata/canadian_hydat_interference.csv` (tracked in git); Julia now reads it and merges RHBN/REGULATED/class for Canadian gages.
+- **Divergence analysis** (288 columns with R² < 0.99 vs Golden R): recession (46 cols, intentional algorithm change), trend_completeness (220 cols, Golden R predates the 80% gate), elasticity (9 cols, operator bug + since-removed min_Q filter), dur_low_pulses_all (6 cols, investigation pending).
+
+### Guidelines Section 3 Alignment — Julia-First
+
+Six changes implementing Guidelines Document Section 3. Julia-first; Python and rpkg synced April 14-15.
+
+1. **(LOW) D1/D99 flow timing percentiles** — added `1` and `99` to `d_percentiles`; made Julia's `timing.jl` allocation config-driven. 16 new columns. (D1 may be near-constant for flashy streams; D99 ~364-365.)
+2. **(MEDIUM) Recession event-detection algorithm** — replaced the look-ahead algorithm in `identify_recession_events()` with position-level marking (old algorithm truncated events by up to `min_length` days). Marks each position where both Q and |dQ/dt| decrease, then finds contiguous runs ≥ `min_length`.
+3. **(LOW) `n_recession_events`** — per-water-year event count, computed independently of the `min_events=25` gate. 8 new columns.
+4. **(LOW) `runoff_ratio_high_count`** — per-gage count of years with annual runoff ratio > 2.0.
+5. **(MEDIUM) Elasticity rename + `elasticity_annual`** — renamed `elasticity` → `elasticity_rolling` (Sawicz 2011 departure-from-mean); added year-over-year `elasticity_annual` = ((Q_t − Q_{t-1})/(P_t − P_{t-1}))/(Q_mean/P_mean). 8 renamed + 8 new.
+6. **(LOW) Elasticity diagnostics** — per-gage `elasticity_years_total` and `elasticity_years_low_ppt`.
+
+**Net impact**: +32 new stat columns, 8 renamed, 3 scalar diagnostics = 594 total (was 551).
+
+### Guidelines Alignment — Negative Q, Constant-SD, Ice Tracking
+
+Three changes aligning code with user decisions on guidelines interpretation. All 3 codebases (R, Python, Julia).
+
+1. **(MEDIUM) Constant-SD → flag only, never reject** — removed constant-SD year rejection from `preprocess_daily_data()`; the per-month uniqueness check remains as a QA diagnostic. Reverses NA Audit Fix 1 (below) — user decided even 30+ consecutive identical days should only be flagged.
+2. **(MEDIUM) Config-driven negative-Q rejection + `negative_ann`** — negative-Q year rejection is now conditional on `reject_negative_flow` (default false; previously dead code). Added `calculate_negative_days()` (counts Q<0 days per water year → 8 stats). Registered `negative_ann` in `EXPECTED_SIGNATURE_BASES`.
+3. **(LOW) Per-gage `ice_affected_days_total`** in output, summing `na_cause_ice` from preprocessor diagnostics.
+4. **(LOW) Julia season definitions from config** via new `CFG_NA_SEASON_MONTHS`.
+5. **(LOW) Julia `generate_stats()` short-data NaN fill** — returns NaN for all 8 stats instead of an empty Dict, restoring the schema contract.
+
+### NA Handling Audit Fixes
+
+Six fixes from a Codex NA-handling audit aligning code with `SIGNATURE_GUIDELINES.md`. (Fixes 1 and 5 partly superseded by the Negative-Q/Constant-SD change above.)
+
+1. **(MEDIUM) Constant-SD year rejection** — added (later reverted to flag-only, above).
+2. **(LOW) NA-cause ice tracking** — new `na_cause_ice` / `na_cause_other` diagnostics from USGS qualifier flags.
+3. **(LOW) seasonal_flags → runoff ratios** — Python/Julia now NaN-out incomplete-season runoff ratios, matching R.
+4. **(LOW) Constant-SD detection filters Q > 0** in Python, matching R/Julia.
+5. **(LOW) Removed dead ad-hoc NA interpolation** from flashiness/pulse functions (Python/Julia; R cleaned too) — `preprocess_daily_data()` already guarantees zero NAs in valid years.
+6. **(LOW) Guidelines seasonal-completeness threshold** corrected "≥68%" → "≥80%" to match config.
+
+### Mann-Kendall Tau-b Fix and n≤3 P-value Guard
+
+Two fixes improving cross-language alignment from 8 poor columns to 4.
+
+1. **(HIGH) Julia Mann-Kendall tau-b** — was computing tau-a (S / n_pairs) instead of tau-b (S / sqrt((n_pairs − T_y)·n_pairs)). R and Python both use tau-b; this caused divergence on any column with ties (pulse metrics, percentiles with zero-flow years).
+2. **(LOW) n≤3 p-value guard** — added `p_value = 1.0` for n≤3 in Python and Julia to match R's `Kendall::MannKendall` (which fails with IFAULT=12 → p=1.0).
+
+**Reverted: constant-input MK fix** — changing (NaN, NaN) → (0.0, 1.0) for constant series caused severe regressions (Julia/Python had all-zero annual values where R had tiny floating-point non-zeros), so returning tau=0 created worse mismatches than NaN exclusion. Reverted after one benchmark cycle.
+
+**Confirmed non-issues**: recession OLS already identical across languages (R²=1.000000); FDC90th 28-gage NA mismatch is irreducible (R's `lm()` yields ≈1e-15 slopes where Python's `linregress()` yields exactly 0.0).
+
+**Results (post tau-b fix)**: R vs Python / R vs Julia both 4 cols < 0.99; Python vs Julia 0. 547 of 551 columns (99.3%) at R² ≥ 0.99. Remaining 4 poor: 2 recession Spearman p-values + 2 FDC90th p-values (both irreducible).
+
+### R Canonical Alignment Fixes
+
+Three fixes to `R/helperFunctions.R` aligning `process_signatures_from_parquet()` with Python/Julia benchmark behavior.
+
+1. **(HIGH) Removed leftover min_Q_value_and_days filter** from the non-legacy path (~10 lines requiring 30+ days above a minimum flow per year). It excluded low-flow years from both `valid_climate_years` (e.g., elasticity 1.398 → 0.488 for gage 08145000) and flow years (e.g., 38 vs 46 years for 11274500). Affected ~150 gages (2.5%).
+2. **(LOW) Negative-Q filter in FDC** — `Q[!is.na(Q)]` → `Q[!is.na(Q) & Q >= 0]`, matching Python/Julia (safety net; 81 gages have some negative rows).
+3. **(MEDIUM, zero current impact) Pass seasonal_flags** to flow-volume and runoff-ratio functions.
+
+A Codex cross-language audit also found 3 remaining low-impact divergences (Julia hardcoded season months — later fixed; Julia PPT max-gap via residual-NA rejection; flat-key vs nested-JSON config APIs with matching numeric values).
+
+### Julia leftjoin Row-Order Bug Fix
+
+**HIGH**: `preprocess_daily_data()` produced incorrect `valid_climate_years` because `DataFrames.jl`'s `leftjoin` doesn't preserve row order — missing-PPT dates landed at boundary positions, so 1-day internal gaps were misread as boundary gaps and not interpolated. Fixed with `sort!(joined, :dowy)` after the join. For gage 01011000, `valid_climate_years` went 32 → 43; across the benchmark, 0 entirely-NA climate columns (was 48).
+
+### Interactive Comparison Dashboard
+
+New `docs/benchmarks/build_comparison_dashboard.py` → interactive HTML (`signature_comparison.html`): two synced Leaflet maps (original vs new filter), Plotly identity-line scatterplot, click-to-zoom, R² summary. 159 signature columns, 5,687 common gages.
+
+### Remove Per-Signature Min-Days Thresholds
+
+Removed all per-year min_days/max_na_frac/min_data_completeness checks from signature functions across all 4 codebases — `preprocess_daily_data()` is now the single source of truth for year qualification.
+
+**Root cause**: two competing year-qualification systems — per-signature thresholds rejected preprocessor-approved years, creating artificial NaN years that then failed the 80% trend-completeness check, massively inflating NAs (elasticity dropped from 5,683 to 19 gages).
+
+- **Removed** 13 per-year thresholds from config (baseflow, fdc, flashiness, flow_volumes, timing, pulses, elasticity, qp_seasonality, storage).
+- **Retained** gage-level mathematical minimums: `recession.min_length=5`, `recession.min_events=25`, `elasticity.min_years=15`, `elasticity.min_annual_ppt=10`, `qp_seasonality.min_years=10`, `storage.min_years=10`.
+- Set `use_legacy_filtering: false` permanently; exempted recession and elasticity from trend_completeness; updated Python/rpkg benchmark runners to the preprocessor path.
+
+### Julia Adversarial Review (Codex)
+
+6 HIGH, 1 MEDIUM, 1 LOW findings; no critical bugs. (All since addressed by the fixes above.)
+
+- **HIGH** FDC/flashiness min-days threshold 250 vs R's 30 — silently drops years
+- **HIGH** `Q95_Q10` vs R's `Q95-Q10` column name — schema mismatch
+- **HIGH** `generate_stats()` returns empty Dict on short data instead of a NaN row
+- **HIGH** runoff ratios aggregate Q/PPT jointly not independently
+- **HIGH** Mann-Kendall tau denominator not tie-adjusted
+- **MEDIUM** all-NA season yields NaN vs R's 0
+- **LOW** Arrow IPC output mislabeled as parquet
+
+### Standardized NA Handling
+
+Centralized pre-processing for missing data, implemented identically across R canonical, rpkg, Python, and Julia (driven by the Guidelines "NA Handling" section). This is the foundational change underlying most of the April alignment work above. Architecture diagram: [docs/DEVELOPMENT.md](DEVELOPMENT.md) → NA Handling Architecture.
+
+**New `preprocess_daily_data()`** (called once per gage, before all signatures): daily-grid normalization (one row/day, sorted, unique); linear interpolation of internal gaps ≤3 days (no extrapolation); year rejection (>30 raw NAs, gaps >3 days, negative Q); residual boundary NAs reject the year; constant-SD QA flag (sensor flatline); seasonal completeness flags from raw observations; separate climate (PPT) NA policy.
+
+**Config**: new `na_handling` section; `use_legacy_filtering` flag (initially true for staged migration, later set false).
+
+**fillna(0) removal** (3 functions): `analyze_flow_timing_trends`, `calculate_average_storage`, `calculate_qp_seasonality` no longer zero-fill — they skip years with residual NAs.
+
+**Trend completeness** in `generate_stats()`: new `trend_completeness`/`decade_completeness` params requiring ≥80% non-NA overall and in the first/last decade; if incomplete, 6 trend stats → NA, mean/median still computed (decade check skipped for series <10 years).
+
+**Seasonal completeness**: `calculate_flow_vols_by_year()` and `analyze_Q_PPT_relationships()` accept `seasonal_flags`; incomplete seasons (raw observation fraction <80%) → NA per year.
+
+**Tests**: `R/tests/test_na_handling.R`, 30+ cases.
+
+---
+
+## [March 2026] — Completed Items
 
 ### rpkg: Proper R Package Implementation (March 2026)
 
