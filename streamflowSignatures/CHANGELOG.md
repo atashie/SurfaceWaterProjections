@@ -22,6 +22,16 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
 
 ---
 
+## [June 2026]
+
+### New: per-watershed MODIS Earth Observation products (LAI + LULC, non-signature)
+Two new per-gage EO products aggregated over each gage's upstream watershed from MODIS Collection 061, sitting alongside the signatures and joining by leading-zero-safe `gage_id`/`canon_id`. Python (not a cross-language signature — like HydroATLAS, this is metadata/ingestion). 7,964 watersheds. New subproject `EO_data_processing/` (its own README, pipelines, manifests). All artifacts on S3 `s3://climate-ai-data-science-shiny-app-data/streamflow/`. Full detail: [EO_data_processing/README.md](EO_data_processing/README.md).
+
+- **Watershed geometry layer** (prerequisite) — official basin polygons primary (US GAGES-II + Canada ECCC MDA_ADP), HydroBasins delineation fallback; 7,964 basins (8,018 universe − 54 >100,000 km²). `watershed_polygons_26jun2026.{gpkg,parquet}`. Codex-reviewed.
+- **LAI (MCD15A3H, monthly, 2002–2024)** — 270-month panel, 2,150,280 rows (7,964 × 270). Two-stage spatial-distribution-of-monthly-mean (day-weighted per-pixel monthly mean → coverage-weighted basin mean + spatial heterogeneity stats), QA fractions from FparLai_QC/FparExtra_QC. Catalog (GEOLATELY/us-east-2) + LP DAAC backfill for far-N + 2024-11; 17 urban basins permanently NA (MODIS fill code 250). Codex-GO.
+- **LULC (MCD12Q1, annual, 2001–2024)** — 191,136 rows (7,964 × 24), 109 cols: per-class % coverage for all 8 classification bands (LC_Type1–5 + LC_Prop1–3, 102 class columns) via coverage-weighted exactextract over VRT-mosaicked sinusoidal tiles. All 8 bands sum to 100 within 1e-13; manifest matches v061 spec. **Codex-reviewed 29 Jun (gpt-5.5) = GO**; 2 latent code hazards (tile-success accounting, unknown-code drop) hardened with the delivered output byte-identical.
+- **Cross-cutting**: leading-zero canonical key reconciliation (metadata zero-stripped vs signatures zero-padded); LP DAAC HDF4 read via `pyhdf` (pip-GDAL lacks the driver); Earthdata account-lock handled by completeness-guard + retry/backoff (self-healing, resumable).
+
 ## [May 2026]
 
 ### New: per-gage watershed HydroATLAS metadata (non-signature product)

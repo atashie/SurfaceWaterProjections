@@ -121,6 +121,7 @@ This project provides identical signature calculations in Julia (canonical), Pyt
 - **@docs/SIGNATURES.md** - Detailed signature documentation (10 categories)
 - **@CHANGELOG.md** - Current work, roadmap (historical: `docs/CHANGELOG_ARCHIVE.md`)
 - **@docs/SIGNATURE_GUIDELINES.md** - Collaborative guidelines from hydrology colleagues (auto-synced)
+- **@EO_data_processing/README.md** - Earth Observation (MODIS LULC & LAI) per-watershed ingestion and processing
 
 ## Session-Start Workflow: Guidelines Sync
 
