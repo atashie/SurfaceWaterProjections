@@ -10,6 +10,11 @@ This is a **metadata / ingestion product** (like the HydroATLAS watershed metada
 to Julia/R. See "Implementation language" below for why this one is **Python** rather
 than R.
 
+> **Status (30 Jun 2026)**: ALL THREE DATA LAYERS DONE + on S3 — geometry (7,964 watersheds),
+> LAI (monthly, 270-month panel; **`good_coverage_frac` QA column added → `..._30jun2026.parquet`**),
+> and LULC (annual, 24-yr, Codex-GO). **LAI QA/QC explorer** built + on S3
+> (`watershed_modis_lai_explorer.html`; builder `viz/build_lai_explorer.py`). LULC explorer = next.
+>
 > **Status (29 Jun 2026)**: ALL THREE LAYERS DONE + on S3 — geometry (7,964 watersheds),
 > LAI (monthly, 270-month panel), and LULC (annual, 24-yr, Codex-GO). Pipeline COMPLETE.
 >

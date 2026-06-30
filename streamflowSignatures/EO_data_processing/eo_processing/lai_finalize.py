@@ -35,7 +35,10 @@ DICT=[("gage_id","string","zero-padded gage id; joins to streamflow_signatures")
 ("frac_backup_algorithm","0-1","fraction of land obs from empirical/backup retrieval (SCF_QC 2-3) vs main RT"),
 ("n_composites","count","# QA-good 4-day MCD15A3H composites contributing to the month (month-level)"),
 ("low_confidence","bool","geometry low-confidence (HydroBasins fallback / area outlier)"),
-("partial_month","bool","True if n_composites<6 (thin month: fewer obs, less robust; incl. late-2024 record edge)")]
+("partial_month","bool","True if n_composites<6 (thin month: fewer obs, less robust; incl. late-2024 record edge)"),
+("good_coverage_frac","0-1","valid pixel-observations / (all basin pixels x ALL expected composite dates in the month) "
+ "= mean_obs_valid_frac x min(1, n_composites/expected_for_calendar_month). 0 = no usable data "
+ "(urban/deep winter/cloud/missing), 1 = fully observed & clear. Continuous generalization of partial_month.")]
 
 def load_concat(d):
     f=f"{d}/backfill_lai_monthly.parquet"
@@ -54,6 +57,12 @@ def main():
     k=lambda d:d.gage_id+"_"+d.year.astype(str)+"_"+d.month.astype(str)
     merged=pd.concat([m[~k(m).isin(set(k(bf)))],bf],ignore_index=True).sort_values(["gage_id","year","month"])
     merged["partial_month"]=merged.n_composites<6
+    # % good coverage = valid pixel-obs / (all basin pixels x ALL expected composite dates in the month)
+    #   = mean_obs_valid_frac (areal x among-present-dates) x (present composites / expected composites)
+    # expected = normal full count for that calendar month (mode; robust to the few gap months)
+    nexp={mm:int(merged.loc[merged.month==mm,"n_composites"].mode().iloc[0]) for mm in range(1,13)}
+    temporal=(merged.n_composites/merged.month.map(nexp)).clip(0,1)
+    merged["good_coverage_frac"]=(merged.mean_obs_valid_frac.fillna(0)*temporal).round(4)
     assert merged.duplicated(["gage_id","year","month"]).sum()==0, "duplicate keys after merge"
     # write product
     if os.path.exists(f"{OUT}/watershed_modis_lai_monthly.parquet") and not os.path.exists(f"{OUT}/watershed_modis_lai_monthly_prebackfill.parquet"):
@@ -68,8 +77,11 @@ def main():
     geo["gage_id"]=geo.gage_id.astype(str)
     sc=geo[geo.gage_id.isin(na_ids)].copy()
     sc["na_reason"]="urban_builtup_no_modis_lai"; sc["backfillable_from_lpdaac"]=False
-    sc.sort_values("gage_id").to_csv(f"{OUT}/lai_always_na_basins.csv",index=False)
-    pd.DataFrame(DICT,columns=["column","unit","description"]).to_csv(f"{OUT}/watershed_modis_lai_dictionary.csv",index=False)
+    sc=sc.sort_values("gage_id"); sc.to_csv(f"{OUT}/lai_always_na_basins.csv",index=False)
+    sc.to_csv(f"{OUT}/watershed_modis_lai_na_basins_{a.date}.csv",index=False)
+    dd=pd.DataFrame(DICT,columns=["column","unit","description"])
+    dd.to_csv(f"{OUT}/watershed_modis_lai_dictionary.csv",index=False)
+    dd.to_csv(f"{OUT}/watershed_modis_lai_dictionary_{a.date}.csv",index=False)
     print(f"finalized: {len(merged)} rows, {merged.gage_id.nunique()} gages, "
           f"{merged[['year','month']].drop_duplicates().shape[0]} months, partial={int(merged.partial_month.sum())}, always-NA={len(na_ids)}")
 
