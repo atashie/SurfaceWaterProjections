@@ -367,9 +367,15 @@ EO_data_processing/
 │   ├── validate.py           # range / sum-to-100 / monotonic-quantile / area checks
 │   └── io.py                 # CSV+parquet writers; data dictionary generator
 ├── notebooks/                # pilots (LAI compute pricing, small-basin checks)
+├── viz/                      # self-contained QA/QC HTML explorers (Leaflet + Canvas)
+│   ├── build_lai_explorer.py   # → lai_explorer.html  (S3: watershed_modis_lai_explorer.html)
+│   └── build_lulc_explorer.py  # → lulc_explorer.html (S3: watershed_modis_lulc_explorer.html)
 └── tests/
 ```
 Outputs land in `data_out/` (gitignored), alongside the signature outputs.
+(NOTE: the `eo_processing/` listing above is the original *proposal*; the as-built modules are
+`lai_pipeline.py`, `lulc_pipeline.py`, `lai_backfill_lpdaac.py`, `lai_finalize.py`,
+`lulc_finalize.py`, and `lulc_legends.csv` — see §11 for what each does.)
 
 ---
 
@@ -450,6 +456,15 @@ Outputs land in `data_out/` (gitignored), alongside the signature outputs.
 6. **✅ DONE — Outputs, data dictionary, validation** — both LAI (monthly) and LULC (annual)
    tables + dictionaries written, QA'd, Codex-reviewed (GO), and delivered to S3. gage_id join to
    the signatures confirmed (leading-zero-safe `gage_id`/`canon_id`). **EO pipeline COMPLETE.**
+7. **✅ DONE — QA/QC HTML explorers (both products) + on S3** — self-contained Leaflet maps for
+   manual human review (`viz/build_lai_explorer.py`, `viz/build_lulc_explorer.py`; outputs in
+   `data_out/eo_lai/`, on S3 as `watershed_modis_lai_explorer.html` / `watershed_modis_lulc_explorer.html`).
+   LAI: 7,964 points by 17 QA/summary vars + per-gage monthly time series (quantile bands +
+   good-coverage strip). LULC: 27 map variables (10 IGBP-derived summary + 17 individual IGBP classes;
+   overlapping static `pct_*` roll-ups intentionally dropped) + per-gage stacked-area composition
+   2001–2024 with a band switcher across all 8 schemes; glossary carries the MODIS caveats (SE-US
+   woody-savanna labeling; 2021+ reduced confidence). Both headless-validated (puppeteer/Chrome).
+   **EO pipeline + both explorers COMPLETE.**
 
 Environment (runs from **us-east-2**): Python, **`pyhdf`** for HDF4 reads (env pip-GDAL has NO HDF4 driver),
 `earthaccess rioxarray rasterio exactextract geopandas pyproj shapely pandas pyarrow
