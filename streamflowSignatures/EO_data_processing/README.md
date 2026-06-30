@@ -12,8 +12,12 @@ than R.
 
 > **Status (30 Jun 2026)**: ALL THREE DATA LAYERS DONE + on S3 — geometry (7,964 watersheds),
 > LAI (monthly, 270-month panel; **`good_coverage_frac` QA column added → `..._30jun2026.parquet`**),
-> and LULC (annual, 24-yr, Codex-GO). **LAI QA/QC explorer** built + on S3
-> (`watershed_modis_lai_explorer.html`; builder `viz/build_lai_explorer.py`). LULC explorer = next.
+> and LULC (annual, 24-yr, Codex-GO). **BOTH QA/QC explorers built + on S3**:
+> `watershed_modis_lai_explorer.html` (builder `viz/build_lai_explorer.py`) and
+> `watershed_modis_lulc_explorer.html` (builder `viz/build_lulc_explorer.py`). The LULC explorer
+> maps 27 variables (10 IGBP-derived summary + all 17 individual IGBP classes; non-overlapping —
+> static `pct_*` roll-ups dropped) and draws per-gage stacked-area class composition 2001–2024 with
+> a band switcher across all 8 MODIS schemes. **EO pipeline + viz COMPLETE.**
 >
 > **Status (29 Jun 2026)**: ALL THREE LAYERS DONE + on S3 — geometry (7,964 watersheds),
 > LAI (monthly, 270-month panel), and LULC (annual, 24-yr, Codex-GO). Pipeline COMPLETE.
