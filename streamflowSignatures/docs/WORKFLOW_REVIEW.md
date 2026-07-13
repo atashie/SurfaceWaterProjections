@@ -222,7 +222,7 @@ Every signature metric produces 8 statistics via `generate_stats()`:
 | Pulse Metrics | `calculate_pulse_metrics()` | No | 120 |
 | Flashiness | `analyze_flashiness_trends()` | No | 8 |
 | Flow Timing | `analyze_flow_timing_trends()` | No | 104 |
-| FDC | `analyze_fdc_trends_from_streamflow()` | No | 24 |
+| FDC | `analyze_fdc_trends()` | No | 24 |
 | Q-PPT Ratios | `analyze_Q_PPT_relationships()` | Yes | 40 |
 | Elasticity | `calculate_streamflow_elasticity()` | Yes | 9 |
 | Q-P Seasonality | `calculate_qp_seasonality()` | Yes | 16 |

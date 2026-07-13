@@ -58,7 +58,43 @@ Year qualification is handled centrally by `preprocess_daily_data()` before any 
 
 ---
 
-## 2. Baseflow
+## 2. Flow Duration Curve (FDC)
+
+**Function**: `analyze_fdc_trends`
+
+Constructs an empirical flow duration curve (FDC) for each water year and fits the slope of the curve (in log space) over three exceedance-probability ranges. FDC slope characterizes flow variability: steeper (more negative) slopes indicate flashier, more variable regimes, while flatter slopes indicate damped, baseflow-dominated regimes. Follows Yilmaz et al. (2008) and Sawicz et al. (2011), though the segment definitions and fitting method differ (see Method).
+
+### Metrics
+
+| Metric | Description | Exceedance range |
+|--------|-------------|------------------|
+| **FDCall** | Slope of the annual FDC across the full range | 0.0–1.0 |
+| **FDC90th** | Slope over the low-flow tail (driest ~10% of days) | ≥ 0.90 |
+| **FDCmid** | Slope over the mid-segment | 0.20–0.80 |
+
+### Method
+
+1. Within each water year, drop NaN and negative daily flows (zeros are retained); require **≥10 valid daily values**, otherwise all three slopes for that year are NA.
+2. Sort the valid daily flows in descending order and assign exceedance probabilities via the Weibull plotting position, `p = i / (n + 1)` for `i = 1…n`.
+3. Log-transform flows as `log10(Q + 1e-10)`; the small constant keeps zero-flow days finite.
+4. For each segment, subset to its exceedance range and fit the slope as the coefficient of an ordinary least-squares regression of `log10(Q)` on exceedance probability. A segment with **<3 points** yields NA for that year.
+
+This differs from the two-point percentile-difference formula of Sawicz et al. (2011): regressing over a full segment is less sensitive to the choice of endpoint percentiles.
+
+### Units
+
+`log10(mm/day)` per unit exceedance probability. Slopes are typically negative (flow decreases as exceedance probability increases); a trend toward more negative values indicates increasing flow variability.
+
+### Data Quality
+
+Year qualification is handled centrally by `preprocess_daily_data()` before this function runs. FDC applies no additional per-year completeness filter beyond the ≥10-valid-value and ≥3-points-per-segment guards inside the slope fit.
+
+### Reference
+Yilmaz, K.K., Gupta, H.V., & Wagener, T. (2008). A process-based diagnostic approach to model evaluation: application to the NWS distributed hydrologic model. *Water Resources Research*, 44(9), W09417.
+
+---
+
+## 3. Baseflow
 
 **Function**: `analyze_baseflow_indices`
 
@@ -91,7 +127,7 @@ The parameterized BFI signatures use a recession-derived discrete filter constan
 
 ---
 
-## 3. Recession
+## 4. Recession
 
 **Function**: `analyze_recession_parameters`
 
@@ -126,7 +162,7 @@ Analyzes recession curve behavior using dQ/dt = a*Q^b relationship.
 
 ---
 
-## 4. Pulse Metrics
+## 5. Pulse Metrics
 
 **Function**: `calculate_pulse_metrics`
 
@@ -158,7 +194,7 @@ Two sets of pulse metrics are computed: `*_year` variants use per-year percentil
 
 ---
 
-## 5. Flashiness
+## 6. Flashiness
 
 **Function**: `analyze_flashiness_trends`
 
@@ -180,7 +216,7 @@ Baker, D.B., et al. (2004). A new flashiness index: characteristics and applicat
 
 ---
 
-## 6. Flow Timing
+## 7. Flow Timing
 
 **Function**: `analyze_flow_timing_trends`
 
@@ -212,7 +248,7 @@ Baker, D.B., et al. (2004). A new flashiness index: characteristics and applicat
 
 ---
 
-## 7. Q-PPT Relationships
+## 8. Q-PPT Relationships
 
 **Function**: `analyze_Q_PPT_relationships`
 
@@ -240,7 +276,7 @@ Baker, D.B., et al. (2004). A new flashiness index: characteristics and applicat
 
 ---
 
-## 8. Streamflow Elasticity
+## 9. Streamflow Elasticity
 
 **Function**: `calculate_streamflow_elasticity`
 
@@ -289,7 +325,7 @@ Sawicz, K., et al. (2011). Catchment classification: empirical analysis of hydro
 
 ---
 
-## 9. Q-P Seasonality
+## 10. Q-P Seasonality
 
 **Function**: `calculate_qp_seasonality`
 
@@ -314,7 +350,7 @@ Wrede, S., et al. (2015). Towards a common classification framework for hydrolog
 
 ---
 
-## 10. Average Storage
+## 11. Average Storage
 
 **Function**: `calculate_average_storage`
 
@@ -349,7 +385,7 @@ Peters, N.E., & Aulenbach, B.T. (2011). Water storage at the Panola Mountain Res
 | Category | Function | Requires Climate | Notes |
 |----------|----------|------------------|-------|
 | Flow Volumes | `calculate_flow_vols_by_year` | No | 22 metrics (5 totals + 16 percentiles + Q95-Q10) + 4 season exclusion diagnostics |
-| FDC | `analyze_fdc_trends_from_streamflow` | No | 3 metrics (FDCall, FDC90th, FDCmid) |
+| FDC | `analyze_fdc_trends` | No | 3 metrics (FDCall, FDC90th, FDCmid) |
 | Baseflow (Fixed) | `analyze_baseflow_indices` | No | 2 metrics |
 | Baseflow (Recession-Parameterized) | `analyze_baseflow_indices_with_parameters` | No | 2 metrics + 1 scalar |
 | Recession | `analyze_recession_parameters` | No | 8 metrics + 6 seasonality |
@@ -520,7 +556,7 @@ The expected relationship **BFI_Eckhardt < BFI_LyneHollick** is validated in QA/
 
 ### Recession-Informed BFI (Implemented April 2026)
 
-The guidelines describe `analyze_baseflow_indices_with_parameters()` — calculating BFI using recession parameters as inputs to the Eckhardt and Lyne-Hollick filters. Implemented in all three languages (Julia canonical April 24, Python and rpkg ported April 25) using the discrete recession constant `alpha = Q_{i+1}/Q_i` under the linear reservoir assumption (b=1). BFImax remains fixed at 0.8; only the recession constant `a` is parameterized. The Lyne-Hollick parameterization is heuristic. See Section 2 (Baseflow) for details.
+The guidelines describe `analyze_baseflow_indices_with_parameters()` — calculating BFI using recession parameters as inputs to the Eckhardt and Lyne-Hollick filters. Implemented in all three languages (Julia canonical April 24, Python and rpkg ported April 25) using the discrete recession constant `alpha = Q_{i+1}/Q_i` under the linear reservoir assumption (b=1). BFImax remains fixed at 0.8; only the recession constant `a` is parameterized. The Lyne-Hollick parameterization is heuristic. See Section 3 (Baseflow) for details.
 
 **Known limitation — narrow BFI_Eckhardt_param range**: The parameterized Eckhardt BFI has low discriminating power across gages (range [0.47, 0.80], std=0.036) compared to the fixed-parameter version (range [0.14, 0.80], std=0.119). This is a mathematical property of the Eckhardt filter, not a bug. The `a` parameter controls filter dynamics (how fast baseflow tracks total flow), while `BFImax` controls the steady-state BFI level. Since 92% of gages have recession alpha < 0.95, the filter converges rapidly to the BFImax=0.8 ceiling. With the fixed `a=0.98`, the filter's high inertia causes BFI to deviate significantly from BFImax during storm events, producing wider variation. The parameterized L-H filter does not have this issue (range [0.25, 0.97]) because the alpha parameter plays a structurally different role.
 
