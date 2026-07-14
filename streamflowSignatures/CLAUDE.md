@@ -129,7 +129,7 @@ The guidelines document is a core design feature: domain experts write plain-Eng
 
 1. **Fetch fresh content** from the Google Doc:
    ```
-   URL: https://docs.google.com/document/u/1/d/e/2PACX-1vSVjtqLKk1r9TczxLEBhlnzfBWbm1TQVfvqERm-jEwLISZTEWx73ofV4Ng9H0JaXA/pub
+   URL: https://docs.google.com/document/d/e/2PACX-1vQnt7OCPm19vnWF4yynXL9JTzTvq9CrGoEaDv7yFSngLoFsypiWsx6fZLKWwaO5YQ/pub
    ```
 
 2. **Save to `docs/SIGNATURE_GUIDELINES.md`** (overwrite previous content)
