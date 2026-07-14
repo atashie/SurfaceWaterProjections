@@ -27,6 +27,7 @@ def calculate_all_signatures(
     trend_completeness: Optional[float] = None,
     decade_completeness: Optional[float] = None,
     include_qa_flags: bool = False,
+    area_normalized: bool = True,
 ) -> dict:
     """Calculate all signatures for a single gage.
 
@@ -57,6 +58,11 @@ def calculate_all_signatures(
         to be computed. Forwarded to generate_stats().
     include_qa_flags : bool, default False
         If True, append 12 QA/QC flag columns from compute_qa_flags() to output.
+    area_normalized : bool, default True
+        Whether Q is area-normalized to mm/day. When False (gages with no
+        drainage area -- Q left in raw m3/s), all Q-to-PPT signatures (runoff
+        ratios, elasticity, Q-P seasonality, storage) are skipped because Q and
+        PPT units don't match. Q-only signatures are unaffected.
 
     Returns
     -------
@@ -142,9 +148,17 @@ def calculate_all_signatures(
         pass
 
     # Climate-dependent signatures
-    # Use climate_data if provided, otherwise fall back to gage_data
+    # Use climate_data if provided, otherwise fall back to gage_data.
+    # Gate: Q-to-PPT signatures are undefined when Q is not area-normalized
+    # (raw m3/s vs PPT in mm -- units don't match, so Q/P ratios, dQ/dP, and
+    # cumsum(P - Q) are all meaningless).
+    if has_climate and not area_normalized:
+        import logging as _logging
+        _logging.info(
+            "Skipping Q-to-PPT signatures (area_normalized=False -- "
+            "Q in raw m3/s, PPT in mm)")
     climate_df = climate_data if climate_data is not None else gage_data
-    if has_climate and "PPT" in climate_df.columns:
+    if has_climate and area_normalized and "PPT" in climate_df.columns:
         try:
             results.update(analyze_Q_PPT_relationships(
                 climate_df, seasonal_flags=seasonal_flags, **trend_kwargs

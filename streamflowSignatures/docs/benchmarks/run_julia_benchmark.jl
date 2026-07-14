@@ -53,6 +53,7 @@ function main()
 
     println("Config: MIN_NUM_YEARS=$(CFG_MIN_NUM_YEARS), MIN_FRAC_GOOD_DATA=$(CFG_MIN_FRAC_GOOD_DATA), MIN_Q_VALUE=$(CFG_MIN_Q_VALUE), MIN_DAYS_ABOVE=$(CFG_MIN_DAYS_ABOVE_THRESHOLD)")
     println("Changepoint: enabled=$(CFG_CHANGEPOINT_ENABLED), WY=$(CFG_CP_START_WATER_YEAR)-$(CFG_CP_END_WATER_YEAR), min_obs=$(CFG_CP_MIN_TOTAL_OBS), min_seg=$(CFG_CP_MIN_SEGMENT_OBS)")
+    println("Annual values: save=$(CFG_SAVE_ANNUAL_VALUES)")
     println("Experiment: OUTPUT_PREFIX=$(OUTPUT_PREFIX), START_WY=$(start_water_year), MIN_QUAL_FRAC=$(min_qualifying_frac)")
     println()
 
@@ -88,9 +89,11 @@ function main()
     t0 = time()
 
     has_climate = false
+    has_swe = false
+    climate_cols = [:gage_id, :date, :PPT]
     local climate
     if isfile(CLIMATE_PATH)
-        climate = read_parquet(CLIMATE_PATH)  # auto-normalizes columns
+        climate = read_parquet(CLIMATE_PATH)  # auto-normalizes columns (incl. swe -> SWE)
 
         # Add water year columns if needed
         if !("water_year" in names(climate))
@@ -98,12 +101,54 @@ function main()
         end
 
         has_climate = true
+        has_swe = "SWE" in names(climate)
+        if has_swe
+            push!(climate_cols, :SWE)
+        end
         t1 = time()
         timing["phases"]["load_climate"] = t1 - t0
         println("  Loaded $(nrow(climate)) rows in $(round(t1-t0, digits=2))s")
+        println("  SWE column: $(has_swe ? "present (snow metrics enabled)" : "absent (snow metrics skipped)")")
     else
         println("  Climate file not found, skipping climate signatures")
         timing["phases"]["load_climate"] = 0.0
+    end
+
+    # Phase 2b: Area-normalization lookup (Q-to-PPT gate).
+    # Gages with no drainage area (HYDAT gap — canals, dam outflows, channel
+    # splits) carry Q in raw m³/s; Q-to-PPT signatures (runoff ratios,
+    # elasticity, Q-P seasonality, storage) are skipped for them because Q and
+    # PPT units don't match. Keys use the same leading-zero-stripped join id
+    # as the Phase 5 metadata merge.
+    # Accepts any AbstractString (CSV.jl yields InlineStrings, not String) and
+    # always returns a concrete String for stable Dict keys
+    normalize_join_id(id::AbstractString) = begin
+        jid = all(isdigit, id) ? lstrip(id, '0') : id
+        isempty(jid) ? "0" : String(jid)
+    end
+    # Only an explicit false-like value gates (Bool false, numeric 0, "FALSE"/"0"
+    # strings — harmonized with the Python/rpkg runners); missing/absent defaults
+    # to normalized (true)
+    is_explicit_false(v) = !ismissing(v) && (
+        (v isa Real && v == 0) ||
+        (v isa AbstractString && uppercase(strip(v)) in ("FALSE", "0"))
+    )
+
+    area_norm_lookup = Dict{String, Bool}()
+    if isfile(METADATA_PATH)
+        meta_header = names(CSV.read(METADATA_PATH, DataFrame; limit=0))
+        if "area_normalized" in meta_header && "gage_id" in meta_header
+            meta_an = CSV.read(METADATA_PATH, DataFrame; select=["gage_id", "area_normalized"])
+            for row in eachrow(meta_an)
+                area_norm_lookup[normalize_join_id(string(row.gage_id))] = !is_explicit_false(row.area_normalized)
+            end
+            n_unnorm = count(!, values(area_norm_lookup))
+            println("  Area-normalization lookup: $(length(area_norm_lookup)) gages, $n_unnorm not normalized (Q-to-PPT signatures will be skipped for these)")
+        else
+            println("  Metadata has no area_normalized column — assuming all gages area-normalized")
+        end
+    else
+        println("  Metadata not found — assuming all gages area-normalized")
     end
 
     # Phase 3: Per-year quality filtering
@@ -143,10 +188,10 @@ function main()
             end
             gage_df = DataFrame(gage_data_view)
 
-            # Merge climate data BEFORE preprocessing so PPT is available
+            # Merge climate data BEFORE preprocessing so PPT (and SWE) are available
             if has_climate && grouped_climate !== nothing
                 try
-                    gage_climate = DataFrame(grouped_climate[(key.gage_id,)])[:, [:gage_id, :date, :PPT]]
+                    gage_climate = DataFrame(grouped_climate[(key.gage_id,)])[:, climate_cols]
                     gage_df = leftjoin(gage_df, gage_climate, on=[:gage_id, :date])
                 catch
                     # Climate data not available for this gage
@@ -164,6 +209,7 @@ function main()
                     data = result.data[wy_mask_data, :],
                     valid_years = filter(yr -> yr >= start_water_year, result.valid_years),
                     valid_climate_years = filter(yr -> yr >= start_water_year, result.valid_climate_years),
+                    valid_swe_years = filter(yr -> yr >= start_water_year, result.valid_swe_years),
                     rejected_years = result.rejected_years,
                     seasonal_flags = result.seasonal_flags[wy_mask_sf, :],
                     diagnostics = result.diagnostics[wy_mask_diag, :],
@@ -205,6 +251,14 @@ function main()
 
     all_results = Vector{Dict{String, Any}}()
 
+    # Annual-values accumulators (long format; one collector per gage, drained
+    # here with the gage_id tag). See docs/plans/annual_values_export_plan.md.
+    save_annual = CFG_SAVE_ANNUAL_VALUES
+    annual_gage_id = String[]
+    annual_signature = String[]
+    annual_water_year = Int32[]
+    annual_value = Float64[]
+
     for (i, (orig_gage_id, qual_years)) in enumerate(qualifying_entries)
         if i % 100 == 0 || i == 1
             elapsed = time() - t0
@@ -214,6 +268,8 @@ function main()
         end
 
         gage_id_str = string(orig_gage_id)
+        gage_collector = save_annual ? AnnualCollector() : nothing
+        gage_area_normalized = get(area_norm_lookup, normalize_join_id(gage_id_str), true)
 
         if use_legacy
             # Legacy path: raw data + per-year filter
@@ -226,13 +282,17 @@ function main()
             # Merge climate data if available
             if has_climate && grouped_climate !== nothing
                 try
-                    gage_climate = DataFrame(grouped_climate[(orig_gage_id,)])[:, [:gage_id, :date, :PPT]]
+                    gage_climate = DataFrame(grouped_climate[(orig_gage_id,)])[:, climate_cols]
                     gage_data = leftjoin(gage_data, gage_climate, on=[:gage_id, :date])
                 catch
                 end
             end
 
-            signatures = calculate_all_signatures(gage_data, has_climate; gage_id=gage_id_str, changepoint=cp_config)
+            # Legacy snow input: explicit and unfiltered (deprecated compat mode —
+            # legacy has no valid_swe_years concept, mirroring its climate handling)
+            legacy_snow = "SWE" in names(gage_data) ? gage_data : nothing
+
+            signatures = calculate_all_signatures(gage_data, has_climate; gage_id=gage_id_str, changepoint=cp_config, collector=gage_collector, area_normalized=gage_area_normalized, snow_data=legacy_snow)
         else
             # New path: use preprocessed data with seasonal flags + trend completeness
             pp = preprocess_cache[orig_gage_id]
@@ -247,6 +307,16 @@ function main()
                 climate_data = gage_data[in.(gage_data.water_year, Ref(climate_yr_set)), :]
             end
 
+            # Snow data: explicit opt-in frame filtered to SWE-valid years. Possibly
+            # 0 rows (gage has SWE but no valid SWE year -> full NaN snow key set);
+            # nothing when the gage has no SWE column at all -> snow keys absent.
+            # NO fallback to gage_data inside the orchestrator (plan, Codex finding 1).
+            snow_data = nothing
+            if "SWE" in names(gage_data)
+                swe_yr_set = Set(pp.valid_swe_years)
+                snow_data = gage_data[in.(gage_data.water_year, Ref(swe_yr_set)), :]
+            end
+
             signatures = calculate_all_signatures(
                 gage_data, gage_has_climate;
                 gage_id=gage_id_str,
@@ -254,8 +324,23 @@ function main()
                 trend_completeness=CFG_NA_TREND_MIN_FRACTION,
                 decade_completeness=CFG_NA_DECADE_MIN_FRACTION,
                 climate_data=climate_data,
-                changepoint=cp_config
+                snow_data=snow_data,
+                snow_climate_years=pp.valid_climate_years,
+                changepoint=cp_config,
+                collector=gage_collector,
+                area_normalized=gage_area_normalized
             )
+        end
+
+        # Drain per-gage annual values into the global long-format accumulators
+        if gage_collector !== nothing
+            n_rows = length(gage_collector.value)
+            if n_rows > 0
+                append!(annual_gage_id, fill(gage_id_str, n_rows))
+                append!(annual_signature, gage_collector.signature)
+                append!(annual_water_year, gage_collector.water_year)
+                append!(annual_value, gage_collector.value)
+            end
         end
 
         signatures["gage_id"] = gage_id_str
@@ -279,9 +364,33 @@ function main()
     # Zero-gage guard
     if isempty(all_results)
         println("WARNING: Zero gages qualified. Writing empty output.")
+        if save_annual
+            println("  Annual values parquet skipped (zero gages).")
+        end
         CSV.write(joinpath(OUTPUT_DIR, "$(OUTPUT_PREFIX)_signatures.csv"),
                   DataFrame(gage_id=String[]))
         return 0
+    end
+
+    # Phase 4b: Write annual values parquet (before metadata merge, so a
+    # metadata failure can't lose it). Long format, deterministically sorted.
+    if save_annual
+        println("\nPhase 4b: Writing annual values parquet...")
+        t0 = time()
+        annual_df = DataFrame(
+            gage_id = annual_gage_id,
+            signature = annual_signature,
+            water_year = annual_water_year,
+            value = annual_value
+        )
+        sort!(annual_df, [:gage_id, :signature, :water_year])
+        annual_path = joinpath(OUTPUT_DIR, "$(OUTPUT_PREFIX)_signatures_annual.parquet")
+        Parquet2.writefile(annual_path, annual_df; compression_codec=:zstd)
+        t1 = time()
+        timing["phases"]["write_annual_values"] = t1 - t0
+        timing["n_annual_rows"] = nrow(annual_df)
+        println("  Saved $(nrow(annual_df)) rows ($(length(unique(annual_df.signature))) signatures) to $annual_path")
+        println("  Size: $(round(filesize(annual_path)/1e6, digits=1)) MB, took $(round(t1-t0, digits=2))s")
     end
 
     # Phase 5: Merge metadata and compute QA/QC flags

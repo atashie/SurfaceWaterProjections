@@ -614,7 +614,12 @@ EXPECTED_SIGNATURE_BASES <- c(
   # Average storage (Peters & Aulenbach 2011)
   "avg_storage",
   # Negative flow days
-  "negative_ann"
+  "negative_ann",
+  # Snow metrics (Daymet SWE; Hatchett 2021 SSM; July 2026, Julia-first)
+  "swe_max", "swe_max_dowy", "snow_cover_days", "snow_on_dowy", "snow_off_dowy",
+  "melt_season_days", "melt_rate", "ssm", "swe_apr1",
+  "melt_before_peak", "melt_before_peak_pct", "melt_before_peak_to_max_swe",
+  "melt_com_dowy", "swe_max_to_ppt"
 )
 
 # Static elasticity column (doesn't follow standard suffix pattern)

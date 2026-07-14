@@ -50,16 +50,22 @@ function main()
 
     # Phase 2: Load and merge climate data (optional)
     has_climate = false
+    has_swe = false
+    climate_cols = [:gage_id, :date, :PPT]
     local climate_grouped
     if isfile(CLIMATE_PATH)
         println("\nPhase 2: Loading climate data...")
-        climate = read_parquet(CLIMATE_PATH)  # auto-normalizes columns
+        climate = read_parquet(CLIMATE_PATH)  # auto-normalizes columns (incl. swe -> SWE)
         climate.gage_id = string.(climate.gage_id)
         climate = climate[in.(climate.gage_id, Ref(test_set)), :]
         climate = add_water_year_columns(climate)
         climate_grouped = groupby(climate, :gage_id)
         has_climate = true
-        println("  Loaded $(nrow(climate)) climate rows")
+        has_swe = "SWE" in names(climate)
+        if has_swe
+            push!(climate_cols, :SWE)
+        end
+        println("  Loaded $(nrow(climate)) climate rows (SWE: $(has_swe ? "yes" : "no"))")
     else
         println("\nPhase 2: Skipping climate data (file not found)")
     end
@@ -91,14 +97,23 @@ function main()
         # Merge climate if available
         if has_climate
             try
-                gage_climate = DataFrame(climate_grouped[(gage_id,)])[:, [:gage_id, :date, :PPT]]
+                gage_climate = DataFrame(climate_grouped[(gage_id,)])[:, climate_cols]
                 gage_data = leftjoin(gage_data, gage_climate, on=[:gage_id, :date])
             catch
                 # Climate data not available for this gage
             end
         end
 
-        sigs = calculate_all_signatures(gage_data, has_climate; gage_id=gage_id)
+        # Snow input: canonical path — preprocess to obtain valid_swe_years and pass
+        # the filtered frame, exercising the same plumbing as the benchmark's
+        # non-legacy path (rest of the harness stays legacy-style)
+        snow_input = nothing
+        if "SWE" in names(gage_data)
+            pp_snow = preprocess_daily_data(gage_data)
+            snow_input = pp_snow.data[in.(pp_snow.data.water_year, Ref(Set(pp_snow.valid_swe_years))), :]
+        end
+
+        sigs = calculate_all_signatures(gage_data, has_climate; gage_id=gage_id, snow_data=snow_input)
         sigs["gage_id"] = gage_id
 
         n_cols = length(sigs) - 1  # exclude gage_id
@@ -170,6 +185,38 @@ function main()
         elseif !isempty(vals)
             println("  [FAIL] BFI_Eckhardt_mean out of range")
             all_ok = false
+        end
+    end
+
+    # Check 3b: Snow signatures if SWE available (presence + sane ranges)
+    if has_swe
+        snow_bases = ["swe_max", "swe_max_dowy", "snow_cover_days", "snow_on_dowy",
+                      "snow_off_dowy", "melt_season_days", "melt_rate", "ssm",
+                      "swe_apr1", "melt_before_peak", "melt_before_peak_pct",
+                      "melt_before_peak_to_max_swe", "melt_com_dowy", "swe_max_to_ppt"]
+        n_missing_snow = count(b -> !("$(b)_mean" in all_keys), snow_bases)
+        if n_missing_snow == 0
+            println("  [PASS] Snow signatures: all 14 bases present")
+        else
+            println("  [FAIL] Snow signatures: $n_missing_snow of 14 bases missing from output")
+            all_ok = false
+        end
+        snow_ranges = [("swe_max_mean", 0.0, 5000.0), ("ssm_mean", -1.0, 1.0),
+                       ("snow_cover_days_mean", 0.0, 366.0),
+                       ("swe_max_dowy_mean", 1.0, 366.0),
+                       ("snow_off_dowy_mean", 1.0, 367.0)]
+        for (sig, lo, hi) in snow_ranges
+            if sig in all_keys
+                vals = [r[sig] for r in results if haskey(r, sig) && !ismissing(r[sig]) && !(r[sig] isa Number && isnan(r[sig]))]
+                if isempty(vals)
+                    println("  [WARN] $sig: all values NA (no snowy gage in test set?)")
+                elseif all(v -> lo <= v <= hi, vals)
+                    println("  [PASS] $sig range check ($lo-$hi), $(length(vals)) non-NA")
+                else
+                    println("  [FAIL] $sig out of range [$lo, $hi]")
+                    all_ok = false
+                end
+            end
         end
     end
 

@@ -42,12 +42,16 @@ include("runoff_ratios.jl")
 include("elasticity.jl")
 include("qp_seasonality.jl")
 include("storage.jl")
+include("snow.jl")
 include("qa_qc.jl")
 include("metadata.jl")
 include("signatures.jl")
 
 # Export stats functions
 export generate_stats, theil_sen_slope, mann_kendall_test
+
+# Export annual-values collector (opt-in per-year signature values export)
+export AnnualCollector
 
 # Export changepoint detection
 export detect_changepoint, pettitt_test, segment_differential_metrics
@@ -75,6 +79,9 @@ export calculate_streamflow_elasticity
 export calculate_qp_seasonality
 export calculate_average_storage
 
+# Export snow signatures (SWE-dependent; opt-in via snow_data)
+export calculate_snow_metrics
+
 # Export QA/QC functions
 export compute_qa_flags, get_flag_columns
 
@@ -88,6 +95,7 @@ export CFG_MIN_NUM_YEARS, CFG_MIN_FRAC_GOOD_DATA, CFG_MIN_Q_VALUE,
        CFG_NA_TREND_MIN_FRACTION, CFG_NA_DECADE_MIN_FRACTION,
        CFG_START_WATER_YEAR, CFG_MIN_QUALIFYING_DATA_FRACTION,
        CFG_CHANGEPOINT_ENABLED, CFG_CP_START_WATER_YEAR, CFG_CP_END_WATER_YEAR,
-       CFG_CP_MIN_TOTAL_OBS, CFG_CP_MIN_SEGMENT_OBS
+       CFG_CP_MIN_TOTAL_OBS, CFG_CP_MIN_SEGMENT_OBS,
+       CFG_SAVE_ANNUAL_VALUES
 
 end # module

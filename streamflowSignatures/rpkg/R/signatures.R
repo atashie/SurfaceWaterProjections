@@ -18,6 +18,11 @@
 #'   If provided, used instead of \code{streamflow_data} for climate signatures.
 #' @param include_qa_flags Logical. If TRUE, append 12 QA/QC flag columns from
 #'   \code{compute_qa_flags()} to the output. Default FALSE.
+#' @param area_normalized Logical. Whether Q is area-normalized to mm/day.
+#'   When FALSE (gages with no drainage area — Q left in raw m3/s), all
+#'   Q-to-PPT signatures (runoff ratios, elasticity, Q-P seasonality, storage)
+#'   are skipped because Q and PPT units don't match. Q-only signatures are
+#'   unaffected. Default TRUE.
 #' @return Named list with ~478 (no climate) or ~551 (with climate) elements,
 #'   plus 12 flag columns if \code{include_qa_flags = TRUE}.
 #' @export
@@ -26,7 +31,8 @@ calculate_all_signatures <- function(streamflow_data, has_climate = FALSE,
                                      trend_completeness = NULL,
                                      decade_completeness = NULL,
                                      climate_data = NULL,
-                                     include_qa_flags = FALSE) {
+                                     include_qa_flags = FALSE,
+                                     area_normalized = TRUE) {
   results <- list()
 
   # Season exclusion year counts (per-gage scalar diagnostics)
@@ -105,8 +111,14 @@ calculate_all_signatures <- function(streamflow_data, has_climate = FALSE,
   if (!is.null(out)) results <- c(results, out)
 
   # Climate signatures
+  # Gate: Q-to-PPT signatures are undefined when Q is not area-normalized
+  # (raw m3/s vs PPT in mm — units don't match, so Q/P ratios, dQ/dP, and
+  # cumsum(P - Q) are all meaningless).
+  if (has_climate && !isTRUE(area_normalized)) {
+    message("Skipping Q-to-PPT signatures (area_normalized = FALSE — Q in raw m3/s, PPT in mm)")
+  }
   clim_input <- if (!is.null(climate_data)) climate_data else streamflow_data
-  if (has_climate && "PPT" %in% colnames(clim_input)) {
+  if (has_climate && isTRUE(area_normalized) && "PPT" %in% colnames(clim_input)) {
     # Q-PPT ratios (pass seasonal_flags)
     out <- safe_call(analyze_Q_PPT_relationships, "Q-PPT ratios",
                      clim_input, seasonal_flags = seasonal_flags,

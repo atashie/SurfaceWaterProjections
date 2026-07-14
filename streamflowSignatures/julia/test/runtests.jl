@@ -280,3 +280,8 @@ end
         @test non_nan > 200
     end
 end
+
+include("test_annual_collector.jl")
+include("test_recession_alpha_b1.jl")
+include("test_area_normalized_gate.jl")
+include("test_snow_metrics.jl")

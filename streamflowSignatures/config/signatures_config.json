@@ -43,6 +43,11 @@
       "max_raw_na_per_year_ppt": 30,
       "max_interpolation_gap_ppt": 3,
       "reject_negative_ppt": true
+    },
+    "snow_na_policy": {
+      "max_raw_na_per_year_swe": 30,
+      "max_interpolation_gap_swe": 3,
+      "reject_negative_swe": true
     }
   },
   "water_year": {
@@ -89,6 +94,13 @@
   "storage": {
     "min_years": 10
   },
+  "snow": {
+    "swe_day_threshold_mm": 10.0,
+    "seasonal_spell_min_days": 60,
+    "melt_com_fraction": 0.5,
+    "min_annual_ppt_mm": 10,
+    "comment": "Snow metrics from daily SWE (Daymet swe). Days with SWE < swe_day_threshold_mm are treated as snow-free for ALL snow metrics, magnitudes AND durations (domain decision 2026-07-14). seasonal_spell_min_days follows Hatchett (2021) Hydrology 8(1):32 / Petersky & Harpold (2018). Set swe_day_threshold_mm near 0 to reproduce the paper's literal SWE>0 rule."
+  },
   "qa_qc": {
     "qann_range": [0, 2000],
     "bfi_range": [0, 1],
@@ -106,6 +118,10 @@
     "end_water_year": 2024,
     "min_total_obs": 20,
     "min_segment_obs": 10
+  },
+  "annual_values": {
+    "save": true,
+    "comment": "Write per-year annual signature values (long-format parquet: gage_id, signature, water_year, value) alongside the summary CSV. Absent section => disabled. Julia only; Python/rpkg ports deferred."
   },
   "metadata": {
     "include_human_interference": true,

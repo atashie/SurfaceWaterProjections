@@ -8,6 +8,13 @@ Detailed documentation of all hydrological signatures calculated by this project
 
 Each signature produces **8 statistics** via `generate_stats()`:
 
+> **Per-year annual values** (July 2026): the annual series behind these statistics
+> are also exported as a long-format parquet (`{prefix}_signatures_annual.parquet`:
+> `gage_id, signature, water_year, value`) written by the Julia benchmark alongside
+> the summary CSV. NaN and absent-row are equivalent ("year not computable") — some
+> signatures emit NaN placeholders, others omit the row. See
+> `docs/DEVELOPMENT.md` → Annual Values Export for schema and semantics.
+
 | Suffix | Statistic | Method |
 |--------|-----------|--------|
 | `_senn_slp` | Theil-Sen slope | `zyp::zyp.sen` |
@@ -131,16 +138,28 @@ The parameterized BFI signatures use a recession-derived discrete filter constan
 
 **Function**: `analyze_recession_parameters`
 
-Analyzes recession curve behavior using dQ/dt = a*Q^b relationship.
+Analyzes recession curve behavior using the dQ/dt = -a*Q^b relationship.
+
+**Parameter conventions (July 2026)**: the exponent **b** (and concavity) are estimated
+with FREE power-law fits, but all **alpha** outputs assume a **linear reservoir (b fixed
+at 1)** across all locations and periods: `log(a) = median(log(-dQ/dt) - log(Q))` — no
+regression involved. Rationale: log(a) is the intercept of a regression whose slope is
+b, so free-fit alpha estimates are convolved with b (uncertainty and temporal variation
+in b leak into alpha); fixing b = 1 decouples them. Under the forward-difference
+discretization each b=1 point equals `log(1 - Q_{i+1}/Q_i)`, so per-year
+`log_a_pointcloud` approximates `log(1 - alpha_linear)`. The relation is approximate,
+not a same-sample identity: `alpha_linear` pools pairs from ALL identified events,
+while the point cloud only pools events whose free power-law fit succeeded, and the
+median only commutes exactly with the monotone transform at odd pair counts.
 
 ### Metrics
 
 | Metric | Description |
 |--------|-------------|
-| **log_a_pointcloud** | Recession rate parameter (point cloud method) |
-| **log_a_events** | Recession rate parameter (event-based method) |
-| **b_pointcloud** | Recession exponent (point cloud method) |
-| **b_events** | Recession exponent (event-based method) |
+| **log_a_pointcloud** | Recession rate parameter, b=1 fixed (point cloud method) |
+| **log_a_events** | Recession rate parameter, b=1 fixed (event-based method) |
+| **b_pointcloud** | Recession exponent, free fit (point cloud method) |
+| **b_events** | Recession exponent, free fit (event-based method) |
 | **concavity** | Difference in b between first and second halves of recession |
 | **n_recession_events** | Count of recession events per water year (independent of min_events gate) |
 | **alpha_linear** | Discrete recession constant under linear reservoir (b=1); per-year median of Q_{i+1}/Q_i ratios from point cloud |
@@ -152,7 +171,10 @@ Analyzes recession curve behavior using dQ/dt = a*Q^b relationship.
 | **log_a_seasonality_minimum_last_half** | Seasonal minimum day (last half of record) |
 
 ### Notes
-- Seasonality metrics are single values (exceptions to 8-statistic rule)
+- Seasonality metrics are single values (exceptions to 8-statistic rule); the sinusoid
+  is fit to the per-event **b=1** log_a values (July 2026 — previously per-event
+  free-fit intercepts), so seasonal alpha signals are no longer confounded by seasonal
+  variation in b
 - Documented in `config.R` as `EXPECTED_RECESSION_SEASONALITY`
 - Requires minimum 25 recession events (`RECESSION_MIN_EVENTS`) for all metrics except `n_recession_events`
 - `n_recession_events` is computed independently of the min_events gate (useful for gages with few events)
@@ -380,6 +402,87 @@ Peters, N.E., & Aulenbach, B.T. (2011). Water storage at the Panola Mountain Res
 
 ---
 
+## 12. Snow Metrics
+
+**Function**: `calculate_snow_metrics`
+
+**Requires SWE Data** (Daymet `swe` via the climate parquet; July 2026, Julia only)
+
+Fourteen per-water-year snow metrics computed from daily snow water equivalent.
+ALL metrics operate on a thresholded series `SWE* = (SWE >= 10 mm) ? SWE : 0` —
+days below the threshold are treated as snow-free for durations AND magnitudes
+(domain decision, July 2026). Configuration: `config/signatures_config.json` → `snow`
+(threshold, 60-day seasonal-spell rule, melt center-of-mass fraction, PPT floor).
+
+### Metrics
+
+| Metric | Description | Units | No-snow year |
+|--------|-------------|-------|--------------|
+| **swe_max** | Maximum daily SWE | mm | 0 (valid) |
+| **swe_max_dowy** | Day of water year of the peak (ties → first day) | day | NA |
+| **snow_cover_days** | Days with SWE ≥ threshold | days | 0 (valid) |
+| **snow_on_dowy** | First day of the anchor spell (the continuous spell containing the peak) | day | NA |
+| **snow_off_dowy** | First snow-free day after the anchor spell | day | NA |
+| **melt_season_days** | snow_off_dowy − swe_max_dowy | days | NA |
+| **melt_rate** | swe_max ÷ melt_season_days (net ablation rate between peak and snow-off) | mm/day | NA |
+| **ssm** | Snow seasonality metric: (seasonal − ephemeral days) ÷ total snow days, where seasonal spells last ≥ 60 continuous days | −1…+1 | NA |
+| **swe_apr1** | SWE on calendar April 1 (leap-safe) | mm | 0 (valid) |
+| **melt_before_peak** | Total melt (daily SWE decreases) before the peak day | mm | NA |
+| **melt_before_peak_pct** | melt_before_peak ÷ total water-year melt × 100 | % | NA |
+| **melt_before_peak_to_max_swe** | melt_before_peak ÷ swe_max | – | NA |
+| **melt_com_dowy** | Day cumulative melt reaches 50% of the water-year total | day | NA |
+| **swe_max_to_ppt** | swe_max ÷ water-year total PPT (PPT-qualified years only; > 10 mm floor) | – | 0 (valid) |
+
+### Method
+
+1. Daily SWE for each SWE-valid water year (preprocessor `valid_swe_years` — same
+   per-year NA rules as PPT: >30 raw NAs reject, internal gaps ≤ 3 days linearly
+   interpolated, negative SWE rejects).
+2. Threshold to SWE*; snow days are SWE* > 0; spells are maximal consecutive runs
+   of snow days.
+3. The **anchor spell** is the spell containing the annual max (first-max tie
+   rule). Snow-on/off are **censored (NA)** when the anchor spell touches Oct 1
+   (carryover snowpack predates the water year) or Sep 30 (snowpack persists past
+   it) — a spell spanning the whole year censors both ends.
+4. Melt increments `m_t = max(0, SWE*_{t−1} − SWE*_t)` are attributed to day `t`,
+   within-year only (no attribution across the Sep 30 → Oct 1 boundary). The
+   final melt-out step (crossing below the threshold) attributes the full
+   remaining SWE* to the crossing day.
+5. SSM pools ALL spells in the year (Hatchett 2021, Section 2.2; the 60-day
+   seasonal threshold follows Petersky & Harpold 2018): +1 fully seasonal,
+   −1 fully ephemeral.
+
+### Data Quality & Caveats
+
+- **Source**: Daymet V4 `swe` (kg/m² ≡ mm), calendar 1980–2023, available for
+  ~6,000 USGS gages. **Canadian gages have no Daymet → all snow metrics NA**
+  (same as runoff ratios/elasticity/storage). Daymet SWE is a model product
+  (mass-balance bookkeeping from Daymet's own precipitation/temperature) with
+  documented biases, especially in mountain terrain.
+- The spatial support of the per-gage Daymet series (basin-average vs
+  point/centroid extraction) is not recorded in-repo — treat absolute magnitudes
+  with caution; timing and trend signals are more robust.
+- Daily ΔSWE understates melt when snowfall and melt co-occur within a day.
+- The 10 mm operational threshold intentionally diverges from Hatchett's literal
+  SWE > 0 rule (config-adjustable for sensitivity runs). Magnitudes are censored
+  at the threshold: a year peaking at 8 mm is operationally snow-free
+  (swe_max = 0), and sub-threshold April 1 values report 0.
+- Zero-vs-NA policy: magnitude metrics emit valid zeros (dense series at
+  snow-free gages, like D1_day's near-constant behavior); timing/melt/regime
+  metrics emit NA — the 80% trend-completeness gate (applied; NOT exempt)
+  correctly suppresses trends at marginal-snow gages.
+- WY 1980 and WY 2024 are partial in the Daymet parquet → automatically
+  SWE-invalid (same boundary behavior as the climate signatures).
+- Snow metrics only run on an explicitly provided, SWE-valid-year-filtered frame
+  (`snow_data`); an SWE column in the main gage frame is never used implicitly.
+
+### References
+
+- Hatchett, B.J. (2021). Seasonal and Ephemeral Snowpacks of the Conterminous United States. *Hydrology*, 8(1), 32.
+- Petersky, R., & Harpold, A. (2018). Now you see it, now you don't: a case study of ephemeral snowpacks and soil moisture response in the Great Basin, USA. *Hydrology and Earth System Sciences*, 22, 4891–4906.
+
+---
+
 ## Summary Table
 
 | Category | Function | Requires Climate | Notes |
@@ -397,6 +500,7 @@ Peters, N.E., & Aulenbach, B.T. (2011). Water storage at the Panola Mountain Res
 | Q-P Seasonality | `calculate_qp_seasonality` | Yes | 2 metrics |
 | Average Storage | `calculate_average_storage` | Yes | 1 metric |
 | Negative Flow Days | `calculate_negative_days` | No | 1 metric (negative_ann) |
+| Snow Metrics | `calculate_snow_metrics` | SWE (Daymet) | 14 metrics (July 2026, Julia only) |
 
 ---
 
@@ -455,7 +559,7 @@ From `config/signatures_config.json` → `changepoint` section:
 
 ### Design Decisions
 
-- **Scope**: Applied to ALL signatures producing annual time series — redundancy across ~76 base signatures serves as a pseudo-robustness test
+- **Scope**: Applied to ALL signatures producing annual time series — redundancy across ~76 base signatures (90 from July 2026, with the 14 snow metrics) serves as a pseudo-robustness test
 - **Independence**: Changepoint analysis runs independently of the 80% trend completeness gate
 - **Non-parametric**: No distributional assumptions; robust to outliers
 - **Per-signature, not per-gage**: Each signature gets its own changepoint analysis — different signatures may identify changepoints at different years
@@ -583,6 +687,37 @@ This would replace the fixed BFImax=0.8 with a per-gage value (expected range ~0
 - Reference implementation (`xiejx5/baseflow` Python package) uses ad-hoc cap at BFImax >= 0.9
 
 **References**: Collischonn & Fan (2013), Hydrological Processes 27(18):2614-2622; Zhang et al. (2021), HESS 25:1747.
+
+### Un-Normalized Canadian Gages (`area_normalized = FALSE`)
+
+37 Canadian gages in the signature output have **no drainage area in HYDAT** (neither
+gross nor effective — verified against `Hydat.sqlite3`, July 2026), so their flow is
+in **raw m³/s instead of mm/day** (`area_normalized = FALSE`). Most are not natural
+watersheds: irrigation/diversion canals, dam/powerhouse outflows, and huge-river
+channel splits (St. Lawrence, Mackenzie, Nelson) where drainage area is undefined or
+unpublished. Decision (July 2026): these gages are retained with raw flow — no area
+backfill.
+
+**Q-to-PPT gate (July 2026)**: because Q (m³/s) and PPT (mm) units don't match for
+these gages, ALL Q-to-PPT signatures — runoff ratios (+ `runoff_ratio_high_count`),
+elasticity (+ diagnostics), Q-P seasonality, and `avg_storage` — are **skipped and
+emit NA by design**. `calculate_all_signatures()` takes an `area_normalized`
+argument (all three languages); the benchmark runners set it from the metadata.
+Elasticity and `qp_bimodality` are technically scale-invariant in Q but are gated
+with the rest of the family (mixed-unit inputs are conceptually invalid, and the
+internal PPT thresholds and P − Q terms are not scale-invariant).
+
+**Impact on remaining signatures**: unit-carrying Q-only signatures (Qann/seasonal
+totals, flow percentiles, Q95_Q10, log_a) stay in raw m³/s — incomparable with
+mm/day gages (Qann_mean reaches 3.18M for the St. Lawrence). Dimensionless Q-only
+signatures (BFI, FDC slopes, timing, TQmean, recession b, pulse counts, flashiness)
+remain valid.
+
+**Flag gap**: `flagged_for_qann_range` catches only 27 of the 37; 10 small
+canals/creeks land inside [0, 2000] unflagged. **Filter on `area_normalized == TRUE`
+before cross-gage comparison of unit-carrying signatures.** Details:
+`docs/DEVELOPMENT.md` → Canadian HYDAT → Missing drainage areas; tracked in
+`CHANGELOG.md` → Known Issues.
 
 ### Elasticity 30% Diagnostic (Pending)
 

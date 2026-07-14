@@ -8,6 +8,8 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
 ## [Unreleased]
 
 ### Planned
+- Port annual-values collector, b=1 recession alpha, AND snow metrics to Python and
+  rpkg (after the Julia benchmark re-run validates all three)
 - Add unit tests for core functions
 - Complete `analyze_Q_PPT_relationships()` for raw data pipeline
 - Add ERA5/PRISM data fetching for USGS/HYDAT gages
@@ -15,6 +17,38 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
 - Port data ingestion utilities to Julia (long-term — currently R-only via dataRetrieval/tidyhydat)
 - Generate Julia golden outputs (624 cols, 7,313 gages)
 - BFImax estimation via Collischonn & Fan (2013) backward filter — would give BFI_Eckhardt_param per-gage BFImax instead of fixed 0.8, improving discriminating power (currently range [0.47–0.80] due to BFImax saturation)
+
+### Known Issues (discovered 2026-07-14, Codex review — not yet fixed)
+- **MEDIUM (documented limitation, by design) — 37 Canadian gages in the signature
+  output carry raw m³/s units (`area_normalized = FALSE`)**: HYDAT publishes NO
+  drainage area (neither `DRAINAGE_AREA_GROSS` nor `DRAINAGE_AREA_EFFECT` — verified
+  directly against `Hydat.sqlite3`) for 73 successfully-processed Canadian stations;
+  37 survive the 20-year filter into the Julia canonical output (7,313 gages).
+  Station names show most are not natural watersheds: ~40 irrigation/diversion canals
+  + ditches, ~15 dam/powerhouse outflows, several huge-river channel splits and lake
+  outlets (St. Lawrence, Mackenzie, Nelson, Lake of the Woods); only ~8 look like
+  natural streams. 62/73 are `REGULATED = TRUE`.
+  **DECISION (user, July 2026): keep these gages with raw m³/s flow — NO area
+  backfill** (HydroBasins `UP_AREA` was assessed on 1,383 validation gages: accurate
+  only for main-stem dam outflows, wrong for canals and channel splits, unusable
+  <100 km²). Q-to-PPT signatures are now structurally gated for these gages (see the
+  July 2026 entry below). **Remaining limitation**: unit-carrying Q-only signatures
+  (Q volumes, percentiles, Q95_Q10, log_a) stay in m³/s for these 37 rows —
+  incomparable with mm/day gages (Qann_mean up to 3.18M for the St. Lawrence).
+  **Flag gap**: `flagged_for_qann_range` catches only 27/37 — 10 small canals/creeks
+  land inside [0, 2000] unflagged; downstream users must filter on
+  `area_normalized == TRUE` before any cross-gage comparison of unit-carrying
+  signatures. See docs/DEVELOPMENT.md → Canadian HYDAT → Missing drainage areas.
+- **MEDIUM — seasonal runoff ratios ignore seasonal completeness flags**:
+  `julia/src/runoff_ratios.jl:113-118` looks up flags named
+  `winter_complete/spring_complete/summer_complete/fall_complete`, but the preprocessor
+  emits `win_complete/spr_complete/sum_complete/fal_complete` (`julia/src/io.jl:462`;
+  cf. correct usage in `flow_volumes.jl:136-137`). The existence check at
+  `runoff_ratios.jl:120` silently fails, so seasonal runoff ratios are never NaN'd for
+  incomplete seasons — the guidelines' 80% seasonal completeness rule is not applied to
+  this category. Python and rpkg likely mirror the bug (synced ports — verify). Fix
+  changes outputs → schedule with the next behavior-changing release (Julia first, then
+  ports, benchmark re-run + golden comparison).
 
 ### Guidelines Document TODOs
 <!-- New suggestions from hydrology colleagues will be tracked here -->
@@ -24,6 +58,80 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
 
 ## [July 2026]
 
+### New: Q-to-PPT unit gate for un-normalized gages (Julia + Python + rpkg)
+Gages with no drainage area in HYDAT keep flow in raw m³/s (decision: no backfill).
+`calculate_all_signatures()` gains an `area_normalized = true` kwarg in all three
+languages: when `false`, ALL Q-to-PPT signatures — runoff ratios (+
+`runoff_ratio_high_count`), elasticity (+ diagnostics), Q-P seasonality, and
+`avg_storage` — are skipped, because Q (m³/s) and PPT (mm) units don't match, making
+Q/P, dQ/dP, and cumsum(P − Q) meaningless. Q-only signatures (incl. Q##/D##
+percentiles, recession, BFI) are unaffected. All three benchmark runners look up
+`area_normalized` from the metadata CSV (leading-zero-safe join; only an explicit
+FALSE gates, missing defaults to normalized) and pass it per gage.
+
+- **Intentional output change at the next benchmark**: 16 of the 37 un-normalized
+  gages currently carry mixed-unit climate signatures in the April 2026 golden
+  (e.g. runoff ratios computed from m³/s Q against mm PPT) — those become NA.
+- Elasticity and `qp_bimodality` are technically scale-invariant in Q, but are gated
+  with the rest: mixed-unit inputs are conceptually invalid, and the family's
+  internal PPT thresholds and P − Q terms are not scale-invariant.
+- Tests (all three languages verify: 84 climate keys normally → 0 gated; gated
+  output IDENTICAL to a no-climate run; gate inert when true):
+  `julia/test/test_area_normalized_gate.jl` (also covers the AnnualCollector path),
+  `python/tests/test_area_normalized_gate.py`,
+  `rpkg/tests/testthat/test-area_normalized_gate.R`.
+- **Codex adversarial review (2026-07-14)**: 2 MEDIUM findings, both fixed — (1) the
+  Julia/Python runners hard-failed on metadata files predating the `area_normalized`
+  column (now header-guarded, matching rpkg's existing guard); (2) explicit-FALSE
+  parsing diverged across languages for 0/1-serialized booleans (now harmonized in
+  all three runners: Bool false / numeric 0 / "FALSE"/"0" strings gate; anything
+  else, incl. missing, defaults to normalized). Fix verification surfaced a third
+  latent bug the review missed: the Julia runner's join-id helper was typed
+  `::String` but CSV.jl yields InlineStrings — Phase 2b would have crashed on the
+  production metadata (loosened to `AbstractString`). Runner parsing was then
+  functionally verified in all 3 languages against TRUE/FALSE, 0/1, and
+  missing-column metadata variants, plus the production CSV (16,994 gages parsed,
+  exactly the expected 1,601 gated).
+
+### New: snow metrics signature family (14 metrics, Daymet SWE — Julia)
+Fourteen per-water-year snow metrics from daily SWE, through the standard
+`generate_stats()` path (8 stats + 8 Pettitt fields each → **+224 columns**; 76 → 90
+time-series signatures; annual values exported automatically via the collector). New
+module `julia/src/snow.jl` (`calculate_snow_metrics`); full spec + review record:
+`docs/plans/snow_signatures_plan.md`. Requested by the user with four in-session domain
+decisions (2026-07-14).
+
+- **Metrics**: `swe_max`, `swe_max_dowy`, `snow_cover_days`, `snow_on_dowy`,
+  `snow_off_dowy`, `melt_season_days`, `melt_rate`, `ssm` (Hatchett 2021, Hydrology
+  8(1):32), `swe_apr1`, `melt_before_peak`, `melt_before_peak_pct`,
+  `melt_before_peak_to_max_swe`, `melt_com_dowy`, `swe_max_to_ppt`.
+- **Domain decisions**: SWE ≥ 10 mm day threshold applied to durations AND magnitudes
+  (thresholded series SWE*; sub-threshold years are operationally snow-free);
+  snow-on/off anchored to the spell containing the annual peak (boundary-censored →
+  NaN); melt rate = max SWE ÷ melt-season days; SSM seasonal spells ≥ 60 continuous
+  days. Config: `signatures_config.json` → `snow` + `na_handling.snow_na_policy`.
+- **Plumbing**: Daymet `swe` was previously dropped at the climate join — now
+  normalized (`swe`→`SWE`) and carried through; `preprocess_daily_data()` gained a
+  per-year SWE policy (mirrors PPT: >30 NAs, ≤3-day interpolation, negative rejection)
+  and a new `valid_swe_years` return field. Snow metrics run ONLY on an explicitly
+  passed `snow_data` frame filtered to those years — NO implicit fallback to the gage
+  frame (plan review finding: prevents SWE-invalid years leaking in). Canadian gages
+  (no Daymet) → all snow columns NA.
+- **Known existing-column change (accepted)**: `flagged_for_high_na` counts the 224 new
+  NA fields in its denominator, so some no-SWE gages will flip at the re-run
+  (April 2026 Pettitt precedent; whitelisted + quantified; semantics pinned by test).
+- **Two-round Codex plan review**: initial NO-GO (2 CRITICAL: orchestrator fallback
+  leak; the false "no golden divergence" claim) → 7 findings + 2 delta-round residuals
+  incorporated → GO. Record: plan doc §12.
+- **Tests**: `julia/test/test_snow_metrics.jl` (~330 assertions: exact hand-derived
+  gages — triangle, mid-winter thaw, spell arithmetic, threshold splitting, boundary
+  censoring, tie rule, leap-year April 1, PPT gating incl. legacy runoff-ratio parity,
+  preprocessor `valid_swe_years`, no-fallback + 0-row schema contract, SWE-invalid-year
+  leak regression, collector/zero-warn invariants, QA-flag semantics pin);
+  `smoke_test.jl` now joins SWE and validates snow presence/ranges.
+- Julia only; Python/rpkg ports deferred (three-feature port queue). Benchmark re-run
+  pending — bundled with annual values + b=1 alpha.
+
 ### Docs: data-source inventory
 New `docs/DATA_SOURCES.md` — table of all 11 external data sources (data class /
 project use / provider / original access): USGS NWIS, HYDAT, Caravan, Daymet,
@@ -32,6 +140,68 @@ HydroATLAS/BasinATLAS v10, MODIS MCD15A3H (LAI) and MCD12Q1 (LULC). Also records
 the guidelines Google Doc as a governance input and the deliberately excluded
 boundary cases (planned ERA5/PRISM, S3 mirrors, viz-only CDNs, unused geometry
 backstops).
+
+### Changed: recession alpha now assumes a linear reservoir (b = 1) — Julia
+All alpha outputs (`log_a_pointcloud`, `log_a_events`, the 6 `log_a_seasonality_*`
+scalars) are now computed with the recession exponent **fixed at b = 1** across all
+locations and periods: `log(a) = median(log(-dQ/dt) - log(Q))`, no regression. The
+exponent analyses are unchanged — `b_pointcloud`, `b_events`, and `concavity` keep
+their free power-law fits, as do event identification, the 25-event gate, and
+`alpha_linear` / `recession_alpha_point_cloud_linear_reservoir` (already b=1).
+
+- **Rationale** (domain decision): log(a) is the intercept of a regression whose slope
+  is b, so free-fit alpha estimates are convolved with b — trends/seasonality in alpha
+  partly reflected changes in b. Fixing b = 1 decouples them.
+- Column names unchanged (frozen CSV contract) — methodology change behind existing
+  columns, like the April 2026 recession rewrite. At the next benchmark, log_a columns
+  will diverge from golden intentionally; b/concavity/alpha_linear must not.
+- Consequence: under the forward-difference discretization each b=1 point equals
+  `log(1 − Q_{i+1}/Q_i)`, so per-year `log_a_pointcloud` APPROXIMATES
+  `log(1 − alpha_linear)`. The relation is approximate, not a same-sample identity:
+  `alpha_linear` also includes events whose free power-law fit failed (the point cloud
+  only pools fit-success events), and medians only commute exactly with the monotone
+  transform at odd pair counts.
+- New tests (`julia/test/test_recession_alpha_b1.jl`): exact helper values on a pure
+  exponential; a quadratic-reservoir gage (−dQ = k·Q² exactly) proving b stays 2 under
+  the free fit while alpha matches an independent b=1 recompute (and is far from the
+  old free-fit intercept); linear-reservoir continuity (b=1 gage values unchanged).
+- Julia only; Python/rpkg sync deferred (bundled with the annual-values port).
+  Design note: `docs/plans/recession_alpha_linear_reservoir_plan.md`.
+
+### New: annual values export (per-year signature values, Julia)
+The per-year annualized metric values — previously computed inside every signature
+function and discarded after `generate_stats()` collapsed them into the 8 summary
+statistics — are now saved as one long-format parquet alongside the summary CSV:
+`{prefix}_signatures_annual.parquet` with columns `gage_id, signature, water_year, value`
+(~20M rows expected for 7,313 gages × ~76 signatures, ~170 MB zstd).
+
+- **Mechanism**: opt-in `AnnualCollector` threaded through `calculate_all_signatures()`
+  and all 13 signature functions into `generate_stats()` (mirrors the `changepoint`
+  kwarg plumbing). Collection happens BEFORE min_rows / trend-completeness gating and is
+  read-only w.r.t. the statistics — the summary CSV contract is untouched (verified by a
+  with/without-collector equality test).
+- **Semantics**: the export records the exact series `generate_stats()` consumed. Dense
+  signatures carry NaN placeholder rows ("year qualified, metric not computable");
+  caller-pruned signatures (`qp_bimodality`, `n_recession_events`, flashiness, storage,
+  baseflow, elasticity) omit those rows — absent row ≡ NaN for consumers.
+  `elasticity_rolling` is keyed to the END year of each 11-yr window; `elasticity_annual`
+  to the later year of each consecutive pair.
+- **Config**: `config/signatures_config.json` → `annual_values.save` (shipped `true`;
+  defaults to `false` when the section is absent). Constant `CFG_SAVE_ANNUAL_VALUES`.
+- **Validation**: new tests in `julia/test/test_annual_collector.jl` (stat-identity,
+  zero-warnings, signature coverage, NaN/missing-year guards, no duplicate keys) +
+  `docs/benchmarks/validate_annual_values.py` (recomputes mean/median from the parquet
+  and cross-checks the summary CSV; runs after the next benchmark).
+- **Pre-flight**: Parquet2 pinned (`0.2`, resolved v0.2.27) after a write→read round-trip
+  check (zstd/snappy/uncompressed, NaN-safe, empty-frame-safe; 1M rows = 8.5 MB, 0.2s).
+- **Two Codex reviews**: plan-stage (NO-GO → 5 amendments incorporated pre-implementation)
+  and code-stage (core implementation confirmed correct; 3 harness findings fixed:
+  validator ≥3-non-NaN-rows coverage rule, zero-gage no-op exit, and a deterministic
+  exponential-recession test gage covering the recession + parameterized-BFI collector
+  paths the noisy synthetic gage never exercised). Full records:
+  `docs/plans/annual_values_export_plan.md` §9–§10.
+- Julia only — Python/rpkg ports deferred.
+- **Benchmark re-run pending** — bundled with an upcoming workflow feature.
 
 ## [June 2026]
 

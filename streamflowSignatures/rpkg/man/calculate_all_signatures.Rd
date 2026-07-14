@@ -11,7 +11,8 @@ calculate_all_signatures(
   trend_completeness = NULL,
   decade_completeness = NULL,
   climate_data = NULL,
-  include_qa_flags = FALSE
+  include_qa_flags = FALSE,
+  area_normalized = TRUE
 )
 }
 \arguments{
@@ -36,6 +37,12 @@ If provided, used instead of \code{streamflow_data} for climate signatures.}
 
 \item{include_qa_flags}{Logical. If TRUE, append 12 QA/QC flag columns from
 \code{compute_qa_flags()} to the output. Default FALSE.}
+
+\item{area_normalized}{Logical. Whether Q is area-normalized to mm/day.
+When FALSE (gages with no drainage area — Q left in raw m3/s), all
+Q-to-PPT signatures (runoff ratios, elasticity, Q-P seasonality, storage)
+are skipped because Q and PPT units don't match. Q-only signatures are
+unaffected. Default TRUE.}
 }
 \value{
 Named list with ~478 (no climate) or ~551 (with climate) elements,

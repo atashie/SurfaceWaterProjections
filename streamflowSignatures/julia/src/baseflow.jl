@@ -163,7 +163,8 @@ function analyze_baseflow_indices(
     df::DataFrame;
     trend_completeness::Union{Nothing, Float64}=nothing,
     decade_completeness::Union{Nothing, Float64}=nothing,
-    changepoint::Union{Nothing, NamedTuple}=nothing
+    changepoint::Union{Nothing, NamedTuple}=nothing,
+    collector::Union{Nothing, AnnualCollector}=nothing
 )
     result = Dict{String, Float64}()
     metrics = ["BFI_Eckhardt", "BFI_LyneHollick"]
@@ -239,7 +240,7 @@ function analyze_baseflow_indices(
 
     # No early-return gate here — let generate_stats() handle min_rows internally
     # (matching R/Python, which pass whatever data exists to generate_stats)
-    result = generate_stats(annual_data; value_cols=metrics, trend_completeness=trend_completeness, decade_completeness=decade_completeness, changepoint=changepoint)
+    result = generate_stats(annual_data; value_cols=metrics, trend_completeness=trend_completeness, decade_completeness=decade_completeness, changepoint=changepoint, collector=collector)
 
     return result
 end
@@ -272,7 +273,8 @@ function analyze_baseflow_indices_with_parameters(
     passes::Int=CFG_LYNE_HOLLICK_PASSES,
     trend_completeness::Union{Nothing, Float64}=nothing,
     decade_completeness::Union{Nothing, Float64}=nothing,
-    changepoint::Union{Nothing, NamedTuple}=nothing
+    changepoint::Union{Nothing, NamedTuple}=nothing,
+    collector::Union{Nothing, AnnualCollector}=nothing
 )
     result = Dict{String, Float64}()
     metrics = ["BFI_Eckhardt_param", "BFI_LyneHollick_param"]
@@ -341,7 +343,7 @@ function analyze_baseflow_indices_with_parameters(
     end
 
     result = generate_stats(annual_data; value_cols=metrics,
-        trend_completeness=trend_completeness, decade_completeness=decade_completeness, changepoint=changepoint)
+        trend_completeness=trend_completeness, decade_completeness=decade_completeness, changepoint=changepoint, collector=collector)
 
     return result
 end

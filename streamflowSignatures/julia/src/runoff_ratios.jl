@@ -29,7 +29,7 @@ Returns
 Dict{String, Float64}
     Dictionary of signature statistics (5 metrics × 8 stats = 40 values)
 """
-function analyze_Q_PPT_relationships(df::DataFrame; seasonal_flags::Union{Nothing, DataFrame}=nothing, trend_completeness::Union{Nothing, Float64}=nothing, decade_completeness::Union{Nothing, Float64}=nothing, changepoint::Union{Nothing, NamedTuple}=nothing)
+function analyze_Q_PPT_relationships(df::DataFrame; seasonal_flags::Union{Nothing, DataFrame}=nothing, trend_completeness::Union{Nothing, Float64}=nothing, decade_completeness::Union{Nothing, Float64}=nothing, changepoint::Union{Nothing, NamedTuple}=nothing, collector::Union{Nothing, AnnualCollector}=nothing)
     result = Dict{String, Float64}()
 
     metrics = [
@@ -133,7 +133,7 @@ function analyze_Q_PPT_relationships(df::DataFrame; seasonal_flags::Union{Nothin
 
     # No early-return gate — let generate_stats() handle min_rows internally
     # (matching R/Python, which pass whatever data exists to generate_stats)
-    result = generate_stats(annual_data; value_cols=metrics, trend_completeness=trend_completeness, decade_completeness=decade_completeness, changepoint=changepoint)
+    result = generate_stats(annual_data; value_cols=metrics, trend_completeness=trend_completeness, decade_completeness=decade_completeness, changepoint=changepoint, collector=collector)
 
     # Count years where annual runoff ratio > 2.0 (per-gage scalar diagnostic)
     n_high_rr = count(x -> !isnan(x) && x > 2.0, annual_data.annual_runoff_ratio)

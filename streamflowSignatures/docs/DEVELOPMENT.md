@@ -14,9 +14,10 @@ USGS (dataRetrieval)  ──┐
                         │                       │
 Canadian HYDAT  ────────┘                       ├──> Signature ──> CSV Summary
   (streamflow only)                             │    Extraction     (1264 columns)
-                                                │
-Daymet (climate data)  ──> Parquet Storage ─────┘
-  (PPT, temp, SWE)         (joined at runtime)
+                                                │        │
+Daymet (climate data)  ──> Parquet Storage ─────┘        └──> Annual Values Parquet
+  (PPT, temp, SWE)         (joined at runtime)                (gage_id, signature,
+                                                               water_year, value)
 
 Alternative Pipeline:
 Caravan NetCDF ──────────────> Direct Processing ──> Caravan Output
@@ -49,14 +50,17 @@ preprocess_daily_data()           ◄── Called ONCE per gage, BEFORE all sig
     ├── 4. Interpolation (internal gaps <=3 days, linear, no extrapolation)
     ├── 5. Residual check (boundary NAs → reject year)
     ├── 6. PPT handling (same rules, tracked separately)
+    ├── 7. SWE handling (same rules, tracked separately — July 2026)
     │
     └── Returns: cleaned data, valid_years, valid_climate_years,
-                 seasonal_flags, diagnostics, rejected_years
+                 valid_swe_years, seasonal_flags, diagnostics, rejected_years
     │
     ▼
 Signature functions receive clean data
     ├── Flow volumes, timing, baseflow, recession, etc.
     ├── Climate signatures use valid_climate_years subset
+    ├── Snow signatures use an EXPLICIT snow_data frame filtered to valid_swe_years
+    │   (opt-in — never derived implicitly from an SWE column in the gage frame)
     └── Seasonal signatures respect seasonal_flags (incomplete → NA)
 ```
 
@@ -68,6 +72,46 @@ Signature functions receive clean data
 - `ice_affected_days_total` per-gage output aggregates ice-related NA days from diagnostics
 - Seasonal completeness is computed from RAW observations (pre-interpolation)
 - `generate_stats()` has optional `trend_completeness` / `decade_completeness` params
+
+### Annual Values Export (July 2026, Julia only)
+
+Every signature's per-year annual values — previously discarded after
+`generate_stats()` collapsed them into the 8 statistics — are exported as one
+long-format parquet alongside the summary CSV:
+`docs/benchmarks/{prefix}_signatures_annual.parquet`.
+
+| Column | Type | Notes |
+|---|---|---|
+| `gage_id` | String | Zero-padded original ID (same as summary CSV) |
+| `signature` | String | Signature base name (matches summary column prefixes) |
+| `water_year` | Int32 | Oct 1 – Sep 30. `elasticity_rolling` = END year of the 11-yr window; `elasticity_annual` = later year of the consecutive pair |
+| `value` | Float64 | Annual value; **NaN and absent-row are equivalent** ("not computable that year") |
+
+**Mechanism**: an opt-in `AnnualCollector` (defined in `julia/src/stats.jl`) is
+threaded through `calculate_all_signatures()` and all 13 signature functions into
+`generate_stats()`, which appends the incoming series — exactly as passed, BEFORE
+any min_rows or trend-completeness gating — as long-format triplets. With
+`collector=nothing` (the default) behavior is byte-identical to before; the summary
+CSV contract is untouched.
+
+**Semantics caveat**: the export records the exact series `generate_stats()`
+consumed. Dense signatures (flow volumes, FDC, timing, pulses, runoff ratios,
+recession base metrics) carry NaN placeholder rows; caller-pruned signatures
+(`qp_bimodality`, `n_recession_events`) and sparse-built frames (flashiness,
+storage, baseflow, elasticity) omit non-computable years entirely.
+
+**Config**: `config/signatures_config.json` → `annual_values.save` (repo default
+`true`; absent section → disabled). Julia constant: `CFG_SAVE_ANNUAL_VALUES`.
+
+**Validation**: `julia/test/test_annual_collector.jl` (collector has zero effect on
+stats, zero warnings, signature coverage, NaN/missing-year guards, no duplicate
+keys); `docs/benchmarks/validate_annual_values.py` recomputes mean/median from the
+parquet and cross-checks the summary CSV after each benchmark run.
+
+**Ports**: Python/rpkg deferred — the collector kwarg defaults to nothing, so
+cross-language numerical parity of the summary outputs is unaffected.
+
+Design + Codex review record: `docs/plans/annual_values_export_plan.md`.
 
 ## File Structure
 
@@ -526,6 +570,7 @@ python docs/benchmarks/build_experiment_vs_julia_dashboard.py startIn1993_80pct
 | `docs/benchmarks/compare_python_vs_golden_julia.py` | **PRIMARY** — Python vs Julia golden, 6-tier R² classification |
 | `docs/benchmarks/compare_rpkg_vs_golden_julia.py` | **PRIMARY** — rpkg vs Julia golden, 6-tier R² classification |
 | `docs/benchmarks/build_julia_golden_dashboard.py` | Interactive HTML dashboard: Python or rpkg vs Julia golden |
+| `docs/benchmarks/validate_annual_values.py` | Annual values parquet vs summary CSV consistency check (run after each benchmark) |
 | `docs/benchmarks/compare_three_way.py` | Legacy — Three-way comparison (historical, uses R as baseline) |
 | `docs/benchmarks/compare_rpkg.py` | Legacy — rpkg vs all other implementations |
 | `docs/benchmarks/compare_julia_vs_golden_r.py` | Historical — Julia vs Golden R (Feb 2026) — 6-tier R² classification |
@@ -553,8 +598,80 @@ For implementation details, alignment history, and known divergences, see [`CROS
 ### Canadian HYDAT (via tidyhydat)
 - Parameter: Flow (m3/s)
 - Includes both regulated and unregulated stations (REGULATED flag tracked in metadata)
-- Conversion: m3/s -> mm/day using drainage area
+- Conversion: m3/s -> mm/day using drainage area (`DRAINAGE_AREA_GROSS` from the HYDAT STATIONS table)
 - Interference metadata (RHBN, REGULATED) exported to `metadata/canadian_hydat_interference.csv` for cross-language use
+
+#### Missing drainage areas (`area_normalized = FALSE`)
+
+HYDAT publishes **no drainage area at all** (neither `DRAINAGE_AREA_GROSS` nor
+`DRAINAGE_AREA_EFFECT`) for 1,601 Canadian stations in the Feb 2026 metadata — of
+which **73 are `processing_status == success` gages**, and **37 survive the 20-year
+filter into the Julia canonical signature output**. This was verified directly against
+`Hydat.sqlite3` (July 2026): the ingestion code is correct; the source data simply
+does not exist.
+
+Station names explain why. Of the 73:
+- **~40 irrigation/diversion canals, ditches, and drains** (Alberta/Saskatchewan
+  irrigation districts, Welland Canal diversion) — a canal has no drainage basin, so
+  watershed area is genuinely undefined
+- **~15 dam/powerhouse outflows** (Revelstoke, Arrow Reservoir, Duncan Dam, Kemano,
+  Jenpeg, Ghost Tailrace, Skins Lake Spillway) — a real upstream area exists but WSC
+  does not publish it
+- **Several huge-river channel splits / lake outlets** (St. Lawrence at LaSalle,
+  Mackenzie at Strong Point + East Channel at Inuvik, both Nelson River channels, the
+  three Lake of the Woods outlets) — each channel carries only part of the flow, so
+  the full upstream area would mis-normalize
+- **~8 apparently natural streams** (e.g., Ewart Creek 08NL076, Dash Creek 08MD035,
+  Bridge Creek 08LA027, Cedar Creek 08MH166, Blackstone River 10ED007)
+
+62 of the 73 are `REGULATED = TRUE`.
+
+**DECISION (user, July 2026)**: keep these gages in the product with **raw m³/s
+flow — no area backfill** (see feasibility assessment below for why backfill was
+rejected). Instead, all **Q-to-PPT signatures are structurally gated**:
+`calculate_all_signatures()` in Julia, Python, and rpkg takes an
+`area_normalized = true` argument; when false, runoff ratios (+
+`runoff_ratio_high_count`), elasticity (+ diagnostics), Q-P seasonality, and
+`avg_storage` are skipped entirely — Q (m³/s) and PPT (mm) units don't match, so
+Q/P, dQ/dP, and cumsum(P − Q) are meaningless. Q-only signatures (Q##/D##
+percentiles, recession, BFI, FDC, timing, pulses, flashiness) still run. The three
+benchmark runners read `area_normalized` from the metadata CSV (leading-zero-safe
+join; only an explicit FALSE gates) and pass it per gage. Tests:
+`julia/test/test_area_normalized_gate.jl`, `python/tests/test_area_normalized_gate.py`,
+`rpkg/tests/testthat/test-area_normalized_gate.R`.
+
+**Downstream consequence — mixed units in the signature CSV**: unit-carrying Q-only
+signatures (Qann/seasonal totals, flow percentiles, Q95_Q10, log_a) remain in raw
+m³/s for these 37 rows and are incomparable with the mm/day-based gages. Q-to-PPT
+signatures are NA by design (as of July 2026 — before the gate, 16 of the 37 carried
+mixed-unit runoff ratios/elasticity/storage values; those become NA at the next
+benchmark). `flagged_for_qann_range` catches only 27 of the 37 (the other 10 have
+m³/s totals that happen to land inside [0, 2000]); the `area_normalized` column is
+the only reliable discriminator. **Downstream users should filter on
+`area_normalized == TRUE` before any cross-gage comparison of unit-carrying
+signatures.** Tracked as a Known Issue in [CHANGELOG.md](../CHANGELOG.md).
+
+**HydroBasins backfill feasibility (assessed July 2026)**: `UP_AREA` from the lev12
+outlet basin (`basinAt_NorAm_polys.gpkg`, lookup via the metadata's
+`Downstream_HB_ID`, available for 41/73) was validated against the 1,383 Canadian
+success gages that have BOTH a published HYDAT area and a snapped outlet basin.
+Accuracy is strongly size-dependent: median |rel. error| is 1.3% for basins >10,000
+km², 2.4% for 2,000–10,000, 6.4% for 500–2,000, 22% for 100–500, and **549% for <100
+km²** (lev12 polygon granularity ≈ small-basin size → unusable). Ground-truthing the
+missing gages against neighboring published stations confirms the pattern: main-stem
+dam/reservoir outflows are near-exact (Revelstoke 26,250 vs 26,700 published; Arrow
+36,471 vs 36,500), while channel splits are structurally wrong regardless of snapping
+(Nelson East Channel → 927,013 km², West Channel → 2,957 km²; each carries only part
+of the flow — WSC leaves these blank deliberately) and canals/diversions get the area
+of whatever basin they happen to cross (physically meaningless). HydroATLAS adds
+nothing over HydroBasins here (same lev12 framework, same `UP_AREA`). **Verdict:
+backfill is defensible ONLY for main-stem dam-outflow stations (name-reviewed,
+~10–15 gages); small natural streams should instead take areas from the official ECCC
+MDA_ADP polygons already delineated in the EO geometry layer
+(`watershed_polygons_26jun2026.parquet`, `geom_area_km2`); canals, diversions, and
+channel splits should remain un-normalized (or be excluded from the signature
+product).** Outcome: the user opted to skip backfill entirely and gate the Q-to-PPT
+signatures instead (see DECISION above).
 
 ### Caravan
 - NetCDF format with daily streamflow + climate variables

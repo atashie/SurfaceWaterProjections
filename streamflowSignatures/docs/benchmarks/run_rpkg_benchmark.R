@@ -77,6 +77,35 @@ cat("  Reading metadata...\n")
 metadata <- fread(metadata_path)
 cat("    ", nrow(metadata), "gages in metadata\n")
 
+# Area-normalization lookup (Q-to-PPT gate): gages with no drainage area carry
+# Q in raw m3/s — Q-to-PPT signatures (runoff ratios, elasticity, Q-P
+# seasonality, storage) are skipped for them because Q and PPT units don't
+# match. Keys are leading-zero-stripped for numeric ids (metadata stores USGS
+# ids without leading zeros). Only an explicit FALSE gates; NA defaults TRUE.
+normalize_join_id <- function(id) {
+  id <- as.character(id)
+  is_num <- grepl("^[0-9]+$", id)
+  stripped <- sub("^0+", "", id)
+  ifelse(is_num, ifelse(stripped == "", "0", stripped), id)
+}
+area_norm_lookup <- logical(0)
+if ("area_normalized" %in% names(metadata)) {
+  an <- metadata$area_normalized
+  # Only an explicit false-like value gates (logical FALSE, numeric 0,
+  # "FALSE"/"0" strings — harmonized with the Julia/Python runners); NA
+  # defaults to normalized
+  explicit_false <- if (is.logical(an)) {
+    !is.na(an) & !an
+  } else if (is.numeric(an)) {
+    !is.na(an) & an == 0
+  } else {
+    !is.na(an) & toupper(trimws(as.character(an))) %in% c("FALSE", "0")
+  }
+  area_norm_lookup <- stats::setNames(!explicit_false, normalize_join_id(metadata$gage_id))
+  cat("    Area-normalization lookup:", length(area_norm_lookup), "gages,",
+      sum(!area_norm_lookup), "not normalized (Q-to-PPT signatures will be skipped)\n")
+}
+
 timing$phases$load_data <- as.numeric(difftime(Sys.time(), phase_start, units = "secs"))
 cat("  Data loaded in", round(timing$phases$load_data, 1), "s\n")
 
@@ -120,6 +149,10 @@ for (i in seq_along(all_gages)) {
     gage_data <- streamflow[rows, ]
     gage_data <- add_water_year_columns(gage_data)
 
+    # Q-to-PPT gate: default TRUE when gage absent from lookup
+    gan <- area_norm_lookup[normalize_join_id(gage)]
+    gage_area_normalized <- is.na(gan) || gan
+
     # Merge climate data if available (needed before preprocessing)
     has_climate <- FALSE
     if (gage %in% names(daymet_idx)) {
@@ -147,7 +180,8 @@ for (i in seq_along(all_gages)) {
       gage_filtered <- gage_data[gage_data$water_year %in% filt$qualifying_years, ]
 
       # Calculate all signatures
-      sigs <- calculate_all_signatures(gage_filtered, has_climate = has_climate)
+      sigs <- calculate_all_signatures(gage_filtered, has_climate = has_climate,
+                                       area_normalized = gage_area_normalized)
 
       # Add metadata
       sigs$gage_id <- gage
@@ -176,7 +210,8 @@ for (i in seq_along(all_gages)) {
         seasonal_flags = pp$seasonal_flags,
         trend_completeness = pkg_env$na_trend_min_fraction,
         decade_completeness = pkg_env$na_decade_min_fraction,
-        climate_data = climate_data_subset
+        climate_data = climate_data_subset,
+        area_normalized = gage_area_normalized
       )
 
       # Add metadata

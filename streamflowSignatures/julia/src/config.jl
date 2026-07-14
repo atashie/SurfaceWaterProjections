@@ -119,6 +119,15 @@ const CFG_FLOW_PERCENTILES = collect(_config.flow_volumes.percentiles)
 const CFG_STORAGE_MIN_YEARS = _config.storage.min_years
 
 # =============================================================================
+# Snow Parameters (absent-section defaults match the shipped config)
+# =============================================================================
+const _snow_config = get(_config, "snow", Dict())
+const CFG_SNOW_SWE_THRESHOLD_MM = Float64(get(_snow_config, "swe_day_threshold_mm", 10.0))
+const CFG_SNOW_SEASONAL_MIN_DAYS = Int(get(_snow_config, "seasonal_spell_min_days", 60))
+const CFG_SNOW_MELT_COM_FRACTION = Float64(get(_snow_config, "melt_com_fraction", 0.5))
+const CFG_SNOW_MIN_ANNUAL_PPT_MM = Float64(get(_snow_config, "min_annual_ppt_mm", 10))
+
+# =============================================================================
 # QA/QC Parameters
 # =============================================================================
 const CFG_QAQC_QANN_RANGE = Tuple(_config.qa_qc.qann_range)
@@ -173,6 +182,10 @@ const CFG_NA_SEASON_MONTHS = Dict{String, Vector{Int}}(
 const CFG_NA_MAX_RAW_NA_PPT = Int(get(_na_climate, "max_raw_na_per_year_ppt", 30))
 const CFG_NA_MAX_GAP_PPT = Int(get(_na_climate, "max_interpolation_gap_ppt", 3))
 const CFG_NA_REJECT_NEGATIVE_PPT = get(_na_climate, "reject_negative_ppt", true)
+const _na_snow = get(_na_handling, "snow_na_policy", Dict())
+const CFG_NA_MAX_RAW_NA_SWE = Int(get(_na_snow, "max_raw_na_per_year_swe", 30))
+const CFG_NA_MAX_GAP_SWE = Int(get(_na_snow, "max_interpolation_gap_swe", 3))
+const CFG_NA_REJECT_NEGATIVE_SWE = get(_na_snow, "reject_negative_swe", true)
 
 # Changepoint analysis configuration
 const _cp_config = get(_config, "changepoint", Dict())
@@ -184,6 +197,12 @@ const CFG_CP_MIN_SEGMENT_OBS = Int(get(_cp_config, "min_segment_obs", 10))
 
 # Legacy filtering flag
 const CFG_USE_LEGACY_FILTERING = get(get(_config, "filtering", Dict()), "use_legacy_filtering", true)
+
+# Annual values export (per-year annual signature values, long-format parquet).
+# Default FALSE when the section is absent: config is loaded once at module import,
+# so a permissive fallback would silently enable a large new artifact for old configs.
+const _annual_values = get(_config, "annual_values", Dict())
+const CFG_SAVE_ANNUAL_VALUES = Bool(get(_annual_values, "save", false))
 
 """
     get_config()

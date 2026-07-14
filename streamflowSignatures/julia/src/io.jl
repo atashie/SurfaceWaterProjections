@@ -21,7 +21,7 @@ const TEMPORAL_COLS = ["water_year", "month", "dowy"]
 Read a parquet file into a DataFrame.
 
 If `normalize_columns` is true (default), auto-renames common column variants
-to standard names: Date->date, site_id->gage_id, prcp->PPT.
+to standard names: Date->date, site_id->gage_id, prcp->PPT, swe->SWE.
 """
 function read_parquet(path::String; normalize_columns::Bool=true)
     if !isfile(path)
@@ -38,6 +38,9 @@ function read_parquet(path::String; normalize_columns::Bool=true)
         end
         if "prcp" in names(df) && !("PPT" in names(df))
             rename!(df, :prcp => :PPT)
+        end
+        if "swe" in names(df) && !("SWE" in names(df))
+            rename!(df, :swe => :SWE)
         end
     end
 
@@ -165,11 +168,13 @@ end
 Preprocess daily streamflow data with NA handling, gap interpolation,
 and per-year quality diagnostics.
 
-Accepts a DataFrame with columns: date, Q, water_year, month, dowy (and optional PPT).
+Accepts a DataFrame with columns: date, Q, water_year, month, dowy (and optional
+PPT and/or SWE).
 Returns a NamedTuple with fields:
 - data: DataFrame with cleaned/interpolated daily data
 - valid_years: Vector{Int} of years passing all quality checks
 - valid_climate_years: Vector{Int} of years also passing PPT checks
+- valid_swe_years: Vector{Int} of years also passing SWE checks
 - rejected_years: DataFrame with columns (water_year, reason)
 - seasonal_flags: DataFrame with per-year seasonal completeness flags
 - diagnostics: DataFrame with per-year raw diagnostics
@@ -184,15 +189,20 @@ function preprocess_daily_data(
     max_raw_na_ppt::Int = CFG_NA_MAX_RAW_NA_PPT,
     max_gap_ppt::Int = CFG_NA_MAX_GAP_PPT,
     reject_negative_ppt::Bool = CFG_NA_REJECT_NEGATIVE_PPT,
+    max_raw_na_swe::Int = CFG_NA_MAX_RAW_NA_SWE,
+    max_gap_swe::Int = CFG_NA_MAX_GAP_SWE,
+    reject_negative_swe::Bool = CFG_NA_REJECT_NEGATIVE_SWE,
     constant_sd_enabled::Bool = CFG_NA_CONSTANT_SD_ENABLED,
     constant_sd_min_days::Int = CFG_NA_CONSTANT_SD_MIN_DAYS,
     constant_sd_max_unique::Int = CFG_NA_CONSTANT_SD_MAX_UNIQUE
 )
     has_ppt = "PPT" in names(gage_flow)
+    has_swe = "SWE" in names(gage_flow)
     years = sort(unique(gage_flow.water_year))
 
     valid_years = Int[]
     valid_climate_years = Int[]
+    valid_swe_years = Int[]
     rejected_rows = NamedTuple{(:water_year, :reason), Tuple{Int, String}}[]
     seasonal_rows = NamedTuple{(:water_year, :win_complete, :spr_complete, :sum_complete, :fal_complete), Tuple{Int, Bool, Bool, Bool, Bool}}[]
     diag_rows = NamedTuple{(:water_year, :na_count, :max_na_run, :interpolated_count, :negative_flag, :constant_sd_flag, :na_cause_ice, :na_cause_other), Tuple{Int, Int, Int, Int, Bool, Bool, Int, Int}}[]
@@ -228,7 +238,7 @@ function preprocess_daily_data(
         if eltype(yr_df.date) != Date
             yr_df.date = Date.(yr_df.date)
         end
-        joined = leftjoin(grid, select(yr_df, :date, :Q, (has_ppt ? [:PPT] : Symbol[])...); on=:date)
+        joined = leftjoin(grid, select(yr_df, :date, :Q, (has_ppt ? [:PPT] : Symbol[])..., (has_swe ? [:SWE] : Symbol[])...); on=:date)
         sort!(joined, :dowy)
 
         # Convert Q to Float64 with NaN for missing
@@ -435,10 +445,74 @@ function preprocess_daily_data(
             end
         end
 
+        # --- (f2) Handle SWE if present (mirrors the PPT policy) ---
+        swe_ok = true
+        if has_swe
+            S = Vector{Float64}(undef, nrow(joined))
+            for i in 1:nrow(joined)
+                v = joined[i, :SWE]
+                if ismissing(v) || (v isa Number && isnan(v))
+                    S[i] = NaN
+                else
+                    S[i] = Float64(v)
+                end
+            end
+
+            swe_na_count = count(isnan, S)
+            if swe_na_count > max_raw_na_swe
+                swe_ok = false
+            end
+
+            if reject_negative_swe && any(s -> !isnan(s) && s < 0.0, S)
+                swe_ok = false
+            end
+
+            if swe_ok
+                # Interpolate SWE gaps (internal, <= max_gap_swe days)
+                i = 1
+                n = length(S)
+                while i <= n
+                    if isnan(S[i])
+                        gap_start = i
+                        gap_end = i
+                        while gap_end < n && isnan(S[gap_end + 1])
+                            gap_end += 1
+                        end
+                        gap_len = gap_end - gap_start + 1
+                        if gap_start > 1 && gap_end < n && gap_len <= max_gap_swe
+                            left_val = S[gap_start - 1]
+                            right_val = S[gap_end + 1]
+                            if !isnan(left_val) && !isnan(right_val)
+                                span = (gap_end + 1) - (gap_start - 1)
+                                for k in gap_start:gap_end
+                                    S[k] = left_val + (right_val - left_val) * (k - (gap_start - 1)) / span
+                                end
+                            end
+                        end
+                        i = gap_end + 1
+                    else
+                        i += 1
+                    end
+                end
+
+                swe_residual = count(isnan, S)
+                if swe_residual > 0
+                    swe_ok = false
+                end
+            end
+
+            if swe_ok
+                joined[!, :SWE] = S
+            end
+        end
+
         push!(cleaned_dfs, joined)
         push!(valid_years, yr)
         if has_ppt && ppt_ok
             push!(valid_climate_years, yr)
+        end
+        if has_swe && swe_ok
+            push!(valid_swe_years, yr)
         end
     end
 
@@ -447,6 +521,9 @@ function preprocess_daily_data(
         out_data = DataFrame(date=Date[], Q=Float64[], water_year=Int[], month=Int[], dowy=Int[])
         if has_ppt
             out_data[!, :PPT] = Float64[]
+        end
+        if has_swe
+            out_data[!, :SWE] = Float64[]
         end
     else
         out_data = vcat(cleaned_dfs...)
@@ -474,6 +551,7 @@ function preprocess_daily_data(
         data = out_data,
         valid_years = valid_years,
         valid_climate_years = valid_climate_years,
+        valid_swe_years = valid_swe_years,
         rejected_years = rejected_df,
         seasonal_flags = seasonal_df,
         diagnostics = diagnostics_df

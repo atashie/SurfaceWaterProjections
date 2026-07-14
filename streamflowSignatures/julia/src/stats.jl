@@ -219,6 +219,74 @@ end
 
 
 """
+    AnnualCollector()
+
+Opt-in accumulator for per-year annual signature values in long format.
+
+When passed to `generate_stats()` via the `collector` keyword, the exact annual
+series handed to `generate_stats()` is appended as (signature, water_year, value)
+triplets — before any min_rows or trend-completeness gating — so the collected
+rows are exactly what the summary statistics were computed from. Collection is
+read-only with respect to the statistics.
+
+One instance is used per gage; the benchmark runner drains it into a global
+long-format table tagged with gage_id.
+"""
+mutable struct AnnualCollector
+    signature::Vector{String}
+    water_year::Vector{Int32}
+    value::Vector{Float64}
+end
+
+AnnualCollector() = AnnualCollector(String[], Int32[], Float64[])
+
+
+"""
+    _collect_annual!(collector, df, value_cols, year_col)
+
+Append the annual series exactly as passed to `generate_stats()` (long format).
+Rows whose year is `missing` or non-finite are skipped (they cannot be keyed);
+`missing` values become NaN. NaN values are kept — they record "year present,
+metric not computable".
+"""
+function _collect_annual!(
+    collector::AnnualCollector,
+    df::DataFrame,
+    value_cols::Vector{String},
+    year_col::Union{String, Symbol}
+)
+    years_raw = df[!, year_col]
+    n = length(years_raw)
+
+    # Pre-compute keyable years; skip missing / non-finite (Int32(round(NaN)) would throw)
+    keyed = Vector{Int32}(undef, n)
+    keep = falses(n)
+    @inbounds for i in 1:n
+        y = years_raw[i]
+        y === missing && continue
+        yf = Float64(y)
+        isfinite(yf) || continue
+        keyed[i] = Int32(round(yf))
+        keep[i] = true
+    end
+
+    df_names = names(df)
+    for col in value_cols
+        col in df_names || continue
+        vals = df[!, col]
+        @inbounds for i in 1:n
+            keep[i] || continue
+            v = vals[i]
+            push!(collector.signature, col)
+            push!(collector.water_year, keyed[i])
+            push!(collector.value, v === missing ? NaN : Float64(v))
+        end
+    end
+    return nothing
+end
+
+
+"""
     generate_stats(df::DataFrame; value_cols=nothing, year_col="water_year", min_rows=3) -> Dict
 
 Generate 8 summary statistics for each metric column.
@@ -253,20 +321,30 @@ function generate_stats(
     min_rows::Int = 3,
     trend_completeness::Union{Nothing, Float64} = nothing,
     decade_completeness::Union{Nothing, Float64} = nothing,
-    changepoint::Union{Nothing, NamedTuple} = nothing
+    changepoint::Union{Nothing, NamedTuple} = nothing,
+    collector::Union{Nothing, AnnualCollector} = nothing
 )
     result = Dict{String, Float64}()
 
+    # Resolve value columns once, against the unsorted input df (previously this
+    # identical predicate was duplicated in both branches below; eltypes are
+    # unaffected by sorting, so hoisting preserves semantics exactly)
+    if value_cols === nothing
+        value_cols = String[name for name in names(df)
+                            if eltype(df[!, name]) <: Real &&
+                               String(name) != String(year_col)]
+    else
+        value_cols = String.(value_cols)
+    end
+
+    # Opt-in annual-values collection: capture the series exactly as passed,
+    # BEFORE any gating below. Read-only with respect to the statistics.
+    if collector !== nothing
+        _collect_annual!(collector, df, value_cols, year_col)
+    end
+
     if nrow(df) < min_rows
-        # Determine columns to fill with NaN
-        if value_cols === nothing
-            cols_to_fill = [name for name in names(df)
-                           if eltype(df[!, name]) <: Real &&
-                              String(name) != String(year_col)]
-        else
-            cols_to_fill = String.(value_cols)
-        end
-        for col in cols_to_fill
+        for col in value_cols
             for suffix in STAT_SUFFIXES
                 result["$(col)$(suffix)"] = NaN
             end
@@ -284,17 +362,6 @@ function generate_stats(
 
     # Get year values as numeric
     years = Float64.(df_sorted[!, year_col])
-
-    # Determine columns to process
-    if value_cols === nothing
-        # All numeric columns except year
-        numeric_cols = [name for name in names(df_sorted)
-                       if eltype(df_sorted[!, name]) <: Real &&
-                          String(name) != String(year_col)]
-        value_cols = String.(numeric_cols)
-    else
-        value_cols = String.(value_cols)
-    end
 
     for col in value_cols
         if !(col in names(df_sorted))

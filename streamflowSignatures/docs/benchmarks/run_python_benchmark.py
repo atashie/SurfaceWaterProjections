@@ -120,6 +120,38 @@ def main():
         print(f"  Climate file not found, skipping climate signatures")
         timing["phases"]["load_climate"] = 0
 
+    # Phase 2b: Area-normalization lookup (Q-to-PPT gate).
+    # Gages with no drainage area (HYDAT gap -- canals, dam outflows, channel
+    # splits) carry Q in raw m3/s; Q-to-PPT signatures are skipped for them
+    # because Q and PPT units don't match. Keys are leading-zero-stripped for
+    # numeric ids (metadata stores USGS ids without leading zeros).
+    def _normalize_join_id(gid):
+        gid = str(gid)
+        if gid.isdigit():
+            return gid.lstrip("0") or "0"
+        return gid
+
+    area_norm_lookup = {}
+    if METADATA_PATH.exists():
+        # Callable usecols tolerates metadata files that predate the column
+        _meta_an = pd.read_csv(
+            METADATA_PATH, usecols=lambda c: c in ("gage_id", "area_normalized"))
+        if {"gage_id", "area_normalized"} <= set(_meta_an.columns):
+            for _gid, _an in zip(_meta_an["gage_id"], _meta_an["area_normalized"]):
+                # Only an explicit false-like value gates (bool False, numeric 0,
+                # "FALSE"/"0" strings — harmonized with the Julia/rpkg runners);
+                # missing defaults to normalized
+                if isinstance(_an, str):
+                    explicit_false = _an.strip().upper() in ("FALSE", "0")
+                else:
+                    explicit_false = pd.notna(_an) and float(_an) == 0.0
+                area_norm_lookup[_normalize_join_id(_gid)] = not explicit_false
+            _n_unnorm = sum(1 for v in area_norm_lookup.values() if not v)
+            print(f"  Area-normalization lookup: {len(area_norm_lookup)} gages, "
+                  f"{_n_unnorm} not normalized (Q-to-PPT signatures will be skipped for these)")
+        else:
+            print("  Metadata has no area_normalized column -- assuming all gages area-normalized")
+
     # Phase 3: Per-year quality filtering
     use_legacy = USE_LEGACY_FILTERING
     print(f"\nPhase 3: Per-year quality filtering (legacy={use_legacy})...")
@@ -180,12 +212,14 @@ def main():
             print(f"  [{i+1}/{n_gages}] Processing... ({rate:.1f} gages/s, ETA: {eta/60:.1f} min)")
 
         qual_years = gage_qualifying_years.get(gage_id, [])
+        gage_area_normalized = area_norm_lookup.get(_normalize_join_id(gage_id), True)
 
         if use_legacy:
             # Legacy path: raw data + per-year filter
             if qual_years:
                 gage_data = gage_data[gage_data["water_year"].isin(qual_years)]
-            signatures = calculate_all_signatures(gage_data, has_climate)
+            signatures = calculate_all_signatures(gage_data, has_climate,
+                                                  area_normalized=gage_area_normalized)
         else:
             # New path: use preprocessed data with seasonal flags + trend completeness
             pp = preprocess_cache[gage_id]
@@ -204,6 +238,7 @@ def main():
                 trend_completeness=NA_TREND_MIN_FRACTION,
                 decade_completeness=NA_DECADE_MIN_FRACTION,
                 climate_data=climate_data,
+                area_normalized=gage_area_normalized,
             )
 
         signatures["gage_id"] = gage_id

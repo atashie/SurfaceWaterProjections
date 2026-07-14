@@ -2,6 +2,14 @@
 Recession analysis signatures.
 
 Power-law recession curve fitting and seasonality analysis.
+
+Parameter conventions (July 2026): the recession exponent b and concavity are
+estimated with FREE power-law fits (dQ/dt = -a*Q^b), but all alpha outputs
+(log_a_pointcloud, log_a_events, log_a seasonality, alpha_linear, and the
+recession_alpha scalar) assume a LINEAR reservoir (b fixed at 1) across all
+locations and periods. Rationale: log(a) is the intercept of a regression whose
+slope is b, so free-fit alpha estimates are convolved with b; fixing b = 1
+decouples them.
 """
 
 # Configuration loaded from config.jl (CFG_RECESSION_MIN_LENGTH, CFG_RECESSION_MIN_EVENTS)
@@ -168,6 +176,37 @@ end
 
 
 """
+    event_log_a_b1(Q_event::Vector) -> Float64
+
+Per-event recession rate parameter log(a) under a fixed linear-reservoir
+assumption (b = 1): with -dQ/dt = a*Q, log(a) = log(-dQ/dt) - log(Q), so the
+event value is the median of that quantity over the event's valid pairs.
+
+Fixing b = 1 removes the slope-intercept convolution of the free power-law fit
+(log(a) is the intercept of a regression whose slope is b, so free-fit alpha
+estimates absorb any variation in b). b itself is still reported from the free
+fit — see fit_recession_power_law.
+
+Conventions match the power-law fitting path: first day removed (storm peak),
+pairs require Q > 0 and -dQ > 0, natural log. Returns NaN if no valid pairs.
+"""
+function event_log_a_b1(Q_event::AbstractVector{<:Real})
+    if length(Q_event) < 3
+        return NaN
+    end
+    Q_work = Q_event[2:end]        # Remove first day (storm peak)
+    dQdt = -diff(Q_work)
+    Q_mid = Q_work[1:end-1]        # Q at start of each interval
+
+    valid_mask = (Q_mid .> 0) .& (dQdt .> 0) .& .!isnan.(Q_mid) .& .!isnan.(dQdt)
+    if !any(valid_mask)
+        return NaN
+    end
+    return median(log.(dQdt[valid_mask]) .- log.(Q_mid[valid_mask]))
+end
+
+
+"""
     fit_recession_seasonality(log_a_values::Vector, dowy_values::Vector) -> Dict
 
 Fit sinusoidal seasonality model to recession parameter.
@@ -234,10 +273,11 @@ end
 Calculate recession curve signature trends.
 
 Calculates metrics:
-- log_a_pointcloud, log_a_events: Recession rate parameter
-- b_pointcloud, b_events: Recession exponent
-- concavity: Difference in b between recession halves
-- log_a_seasonality_*: Sinusoidal seasonality parameters
+- log_a_pointcloud, log_a_events: Recession rate parameter under a FIXED
+  linear-reservoir assumption (b = 1): log(a) = median(log(-dQ/dt) - log(Q))
+- b_pointcloud, b_events: Recession exponent (free power-law fit)
+- concavity: Difference in b between recession halves (free fits)
+- log_a_seasonality_*: Sinusoidal seasonality of the per-event b=1 log_a values
 
 Parameters
 ----------
@@ -251,7 +291,7 @@ Returns
 Dict{String, Float64}
     Dictionary of signature statistics
 """
-function analyze_recession_parameters(df::DataFrame; min_events::Int=CFG_RECESSION_MIN_EVENTS, trend_completeness::Union{Nothing, Float64}=nothing, decade_completeness::Union{Nothing, Float64}=nothing, changepoint::Union{Nothing, NamedTuple}=nothing)
+function analyze_recession_parameters(df::DataFrame; min_events::Int=CFG_RECESSION_MIN_EVENTS, trend_completeness::Union{Nothing, Float64}=nothing, decade_completeness::Union{Nothing, Float64}=nothing, changepoint::Union{Nothing, NamedTuple}=nothing, collector::Union{Nothing, AnnualCollector}=nothing)
     result = Dict{String, Float64}()
 
     # Define all expected output keys
@@ -336,11 +376,10 @@ function analyze_recession_parameters(df::DataFrame; min_events::Int=CFG_RECESSI
             continue
         end
 
-        year_log_a = Float64[]
-        year_b = Float64[]
+        year_log_a = Float64[]     # per-event log_a under fixed b = 1 (linear reservoir)
+        year_b = Float64[]         # per-event b from the free power-law fit
         year_concavity = Float64[]
         year_alpha_linear = Float64[]
-        successful_events_Q = Vector{Vector{Float64}}()  # Store Q data for log_a recalc
 
         # Collect point cloud data for this year (like R/Python)
         year_pc_Q = Float64[]
@@ -350,8 +389,16 @@ function analyze_recession_parameters(df::DataFrame; min_events::Int=CFG_RECESSI
             Q_event = Q_clean[start_idx:end_idx]
             dowy_mid = dowy_clean[div(start_idx + end_idx, 2)]
 
-            # Per-event fitting with remove_first_day=true (matching R/Python)
+            # Per-event FREE power-law fit (remove_first_day=true) — used for b only.
+            # Fit success also gates event acceptance (unchanged event counts).
             log_a, b = fit_recession_power_law(Q_event; remove_first_day=true)
+
+            # Per-event alpha under fixed b = 1 (linear reservoir). log(a) is the
+            # intercept of the free fit and is convolved with its slope b; fixing
+            # b = 1 across all locations and periods decouples the two. Same
+            # valid-pair definition as the free fit, so non-NaN whenever the fit
+            # succeeds.
+            log_a_b1 = event_log_a_b1(Q_event)
 
             # Compute discrete recession constant alpha = Q_{i+1}/Q_i (b=1 linear reservoir)
             # INDEPENDENT of power-law fit — depends only on raw Q pairs
@@ -370,10 +417,9 @@ function analyze_recession_parameters(df::DataFrame; min_events::Int=CFG_RECESSI
             end
 
             if !isnan(log_a) && !isnan(b)
-                push!(year_log_a, log_a)
+                push!(year_log_a, log_a_b1)
                 push!(year_b, b)
-                push!(successful_events_Q, copy(Q_event))
-                push!(all_log_a, log_a)
+                push!(all_log_a, log_a_b1)
                 push!(all_b, b)
                 push!(all_dowy, dowy_mid)
                 push!(all_event_years, yr)
@@ -420,6 +466,12 @@ function analyze_recession_parameters(df::DataFrame; min_events::Int=CFG_RECESSI
             log_Q = log.(year_pc_Q)
             log_dQdt = log.(year_pc_dQdt)
 
+            # log_a under fixed b = 1 (linear reservoir): log(a) = log(-dQ/dt) - log(Q).
+            # No regression is involved, so this needs no singularity gate and is
+            # independent of the free b fit below.
+            annual_data[yr_idx, :log_a_pointcloud] = median(log_dQdt .- log_Q)
+
+            # b from the FREE point-cloud fit (unchanged).
             # Skip near-singular data (matching R's lm() QR rank check)
             # R's tolerance is .Machine$double.eps^0.5 ≈ 1.49e-8
             if var(log_Q) >= 1e-8
@@ -427,34 +479,17 @@ function analyze_recession_parameters(df::DataFrame; min_events::Int=CFG_RECESSI
                 b_pc, _ = ols_slope_intercept(log_Q, log_dQdt)
 
                 if !isnan(b_pc)
-                    log_a_values_pc = log_dQdt .- b_pc .* log_Q
-                    log_a_pc = median(log_a_values_pc)
-
-                    annual_data[yr_idx, :log_a_pointcloud] = log_a_pc
                     annual_data[yr_idx, :b_pointcloud] = b_pc
                 end
             end
         end
 
-        # Event-based metrics
+        # Event-based metrics. log_a_events uses the per-event fixed-b=1 values
+        # (year_log_a) — the previous median-b recalculation is gone: alpha is
+        # decoupled from b by assuming a linear reservoir everywhere.
         if !isempty(year_b)
-            # Recalculate log_a_events using median_b (matching R)
-            median_b_val = median(year_b)
-            log_a_events_recalc = Float64[]
-            for Q_ev in successful_events_Q
-                if length(Q_ev) > 1
-                    Q_subset = Q_ev[2:end]  # Remove first day
-                    dQ_subset = -diff(Q_ev[2:end])
-                    Q_for_calc = Q_subset[1:end-1]
-                    valid_mask = (Q_for_calc .> 0) .& (dQ_subset .> 0)
-                    if any(valid_mask)
-                        log_a_vals = log.(dQ_subset[valid_mask]) .- median_b_val .* log.(Q_for_calc[valid_mask])
-                        push!(log_a_events_recalc, median(log_a_vals))
-                    end
-                end
-            end
-
-            annual_data[yr_idx, :log_a_events] = isempty(log_a_events_recalc) ? NaN : median(log_a_events_recalc)
+            year_log_a_valid = filter(!isnan, year_log_a)
+            annual_data[yr_idx, :log_a_events] = isempty(year_log_a_valid) ? NaN : median(year_log_a_valid)
             annual_data[yr_idx, :b_events] = median(year_b)
             annual_data[yr_idx, :concavity] = isempty(year_concavity) ? NaN : mean(year_concavity)
         end
@@ -465,7 +500,7 @@ function analyze_recession_parameters(df::DataFrame; min_events::Int=CFG_RECESSI
     events_df = annual_data[.!isnan.(annual_data.n_recession_events), [:water_year, :n_recession_events]]
     if nrow(events_df) >= 3
         merge!(result, generate_stats(events_df; value_cols=["n_recession_events"],
-            trend_completeness=trend_completeness, decade_completeness=decade_completeness, changepoint=changepoint))
+            trend_completeness=trend_completeness, decade_completeness=decade_completeness, changepoint=changepoint, collector=collector))
     else
         merge!(result, empty_stats("n_recession_events"))
     end
@@ -494,7 +529,7 @@ function analyze_recession_parameters(df::DataFrame; min_events::Int=CFG_RECESSI
     if nrow(annual_data) >= 3
         for m in base_metrics
             if m in names(annual_data)
-                stats = generate_stats(annual_data; value_cols=[m], trend_completeness=trend_completeness, decade_completeness=decade_completeness, changepoint=changepoint)
+                stats = generate_stats(annual_data; value_cols=[m], trend_completeness=trend_completeness, decade_completeness=decade_completeness, changepoint=changepoint, collector=collector)
                 merge!(result, stats)
             else
                 merge!(result, empty_stats(m))
