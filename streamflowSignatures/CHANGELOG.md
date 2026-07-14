@@ -22,6 +22,17 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
 
 ---
 
+## [July 2026]
+
+### Docs: data-source inventory
+New `docs/DATA_SOURCES.md` — table of all 11 external data sources (data class /
+project use / provider / original access): USGS NWIS, HYDAT, Caravan, Daymet,
+GAGES-II boundaries + attribute tables, ECCC MDA_ADP basin polygons, HydroBASINS,
+HydroATLAS/BasinATLAS v10, MODIS MCD15A3H (LAI) and MCD12Q1 (LULC). Also records
+the guidelines Google Doc as a governance input and the deliberately excluded
+boundary cases (planned ERA5/PRISM, S3 mirrors, viz-only CDNs, unused geometry
+backstops).
+
 ## [June 2026]
 
 ### New: per-watershed MODIS Earth Observation products (LAI + LULC, non-signature)
