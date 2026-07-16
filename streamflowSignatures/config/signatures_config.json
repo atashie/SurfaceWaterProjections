@@ -119,6 +119,10 @@
     "min_total_obs": 20,
     "min_segment_obs": 10
   },
+  "stats_floor": {
+    "min_values_for_stats": 20,
+    "comment": "Minimum non-NA annual values a metric needs before ANY of its 8 statistics (and changepoint fields) are computed; below the floor all are NaN. Applied via the orchestrator to every family EXCEPT recession and elasticity (inherently sparse - same exemption as trend_completeness). Added July 2026 after 4-point Theil-Sen slopes surfaced for clustered snow-timing years (e.g. gage 07292500, snow_on_dowy non-NA only 1982-1985). Absent section => no floor (legacy behavior)."
+  },
   "annual_values": {
     "save": true,
     "comment": "Write per-year annual signature values (long-format parquet: gage_id, signature, water_year, value) alongside the summary CSV. Absent section => disabled. Julia only; Python/rpkg ports deferred."

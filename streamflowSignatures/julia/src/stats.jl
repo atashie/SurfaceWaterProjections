@@ -308,6 +308,10 @@ year_col : String
     Name of year column (default: "water_year")
 min_rows : Int
     Minimum rows required for statistics
+min_values_for_stats : Int or nothing
+    Optional floor (July 2026): a metric with fewer non-NaN annual values than this
+    emits NaN for all 8 statistics and changepoint fields. Applied by the
+    orchestrator to all families except recession and elasticity.
 
 Returns
 -------
@@ -322,7 +326,8 @@ function generate_stats(
     trend_completeness::Union{Nothing, Float64} = nothing,
     decade_completeness::Union{Nothing, Float64} = nothing,
     changepoint::Union{Nothing, NamedTuple} = nothing,
-    collector::Union{Nothing, AnnualCollector} = nothing
+    collector::Union{Nothing, AnnualCollector} = nothing,
+    min_values_for_stats::Union{Nothing, Int} = nothing
 )
     result = Dict{String, Float64}()
 
@@ -377,7 +382,12 @@ function generate_stats(
         valid_values = values[valid_mask]
         valid_years = years[valid_mask]
 
-        if length(valid_values) < min_rows
+        # Stats floor (July 2026): with min_values_for_stats set, a metric below the
+        # floor emits NaN for ALL 8 statistics AND the changepoint fields — a 4-point
+        # clustered series must not carry a Theil-Sen slope. Collection into the
+        # annual-values collector happened above, BEFORE this gate (export contract).
+        if length(valid_values) < min_rows ||
+           (min_values_for_stats !== nothing && length(valid_values) < min_values_for_stats)
             # Set all stats to NaN
             for suffix in STAT_SUFFIXES
                 result["$(col)$(suffix)"] = NaN

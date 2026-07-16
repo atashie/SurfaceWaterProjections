@@ -110,7 +110,7 @@ function calculate_snow_metrics(
     df::DataFrame;
     valid_climate_years::Union{Nothing, Vector{Int}}=nothing,
     trend_completeness::Union{Nothing, Float64}=nothing,
-    decade_completeness::Union{Nothing, Float64}=nothing,
+    decade_completeness::Union{Nothing, Float64}=nothing, min_values_for_stats::Union{Nothing, Int}=nothing,
     changepoint::Union{Nothing, NamedTuple}=nothing,
     collector::Union{Nothing, AnnualCollector}=nothing
 )
@@ -126,7 +126,7 @@ function calculate_snow_metrics(
         end
         merge!(result, generate_stats(empty_annual; value_cols=SNOW_METRICS,
                                       trend_completeness=trend_completeness,
-                                      decade_completeness=decade_completeness,
+                                      decade_completeness=decade_completeness, min_values_for_stats=min_values_for_stats,
                                       changepoint=changepoint, collector=collector))
         return result
     end
@@ -258,7 +258,7 @@ function calculate_snow_metrics(
 
     stats = generate_stats(annual_data; value_cols=SNOW_METRICS,
                            trend_completeness=trend_completeness,
-                           decade_completeness=decade_completeness,
+                           decade_completeness=decade_completeness, min_values_for_stats=min_values_for_stats,
                            changepoint=changepoint, collector=collector)
     merge!(result, stats)
     return result

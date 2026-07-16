@@ -454,9 +454,11 @@ days below the threshold are treated as snow-free for durations AND magnitudes
 
 ### Data Quality & Caveats
 
-- **Source**: Daymet V4 `swe` (kg/m² ≡ mm), calendar 1980–2023, available for
-  ~6,000 USGS gages. **Canadian gages have no Daymet → all snow metrics NA**
-  (same as runoff ratios/elasticity/storage). Daymet SWE is a model product
+- **Source**: Daymet V4 `swe` (kg/m² ≡ mm), calendar 1980–2023. **CORRECTION
+  (July 2026 rerun finding): the Daymet parquet covers Canadian gages too** —
+  e.g. the WY1980+ run has snow values for 5,622 gages (4,533 US + 1,089
+  Canadian); earlier "US-only Daymet" claims were wrong. Gages without Daymet
+  rows (any nationality) get all-NA snow metrics. Daymet SWE is a model product
   (mass-balance bookkeeping from Daymet's own precipitation/temperature) with
   documented biases, especially in mountain terrain.
 - The spatial support of the per-gage Daymet series (basin-average vs

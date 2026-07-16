@@ -17,10 +17,13 @@ using JSON
 using Logging
 
 # Configuration
-const STREAMFLOW_PATH = raw"D:\processedOuts_feb2026\combined_streamflow_data_09feb2026.parquet"
-const CLIMATE_PATH = raw"D:\processedOuts_feb2026\daymet_1980_2023.parquet"
-const METADATA_PATH = raw"D:\processedOuts_feb2026\combined_watershed_metadata_09feb2026.csv"
-const OUTPUT_DIR = @__DIR__
+const STREAMFLOW_PATH = get(ENV, "STREAMFLOW_DATA_PATH",
+    raw"D:\processedOuts_feb2026\combined_streamflow_data_09feb2026.parquet")
+const CLIMATE_PATH = get(ENV, "STREAMFLOW_CLIMATE_PATH",
+    raw"D:\processedOuts_feb2026\daymet_1980_2023.parquet")
+const METADATA_PATH = get(ENV, "STREAMFLOW_METADATA_PATH",
+    raw"D:\processedOuts_feb2026\combined_watershed_metadata_09feb2026.csv")
+const OUTPUT_DIR = get(ENV, "STREAMFLOW_OUTPUT_DIR", @__DIR__)
 const OUTPUT_PREFIX = get(ENV, "STREAMFLOW_OUTPUT_PREFIX", "julia")
 
 function main()
@@ -33,6 +36,10 @@ function main()
     local min_qualifying_frac = let
         v = get(ENV, "STREAMFLOW_MIN_QUALIFYING_DATA_FRACTION", "")
         v != "" ? parse(Float64, v) : nothing
+    end
+    local end_water_year = let
+        v = get(ENV, "STREAMFLOW_END_WATER_YEAR", "")
+        v != "" ? parse(Int, v) : nothing
     end
 
     println("=" ^ 70)
@@ -54,7 +61,9 @@ function main()
     println("Config: MIN_NUM_YEARS=$(CFG_MIN_NUM_YEARS), MIN_FRAC_GOOD_DATA=$(CFG_MIN_FRAC_GOOD_DATA), MIN_Q_VALUE=$(CFG_MIN_Q_VALUE), MIN_DAYS_ABOVE=$(CFG_MIN_DAYS_ABOVE_THRESHOLD)")
     println("Changepoint: enabled=$(CFG_CHANGEPOINT_ENABLED), WY=$(CFG_CP_START_WATER_YEAR)-$(CFG_CP_END_WATER_YEAR), min_obs=$(CFG_CP_MIN_TOTAL_OBS), min_seg=$(CFG_CP_MIN_SEGMENT_OBS)")
     println("Annual values: save=$(CFG_SAVE_ANNUAL_VALUES)")
-    println("Experiment: OUTPUT_PREFIX=$(OUTPUT_PREFIX), START_WY=$(start_water_year), MIN_QUAL_FRAC=$(min_qualifying_frac)")
+    println("Stats floor: min_values_for_stats=$(CFG_MIN_VALUES_FOR_STATS) (recession/elasticity exempt)")
+    println("Experiment: OUTPUT_PREFIX=$(OUTPUT_PREFIX), START_WY=$(start_water_year), END_WY=$(end_water_year), MIN_QUAL_FRAC=$(min_qualifying_frac)")
+    println("Output dir: $(OUTPUT_DIR)")
     println()
 
     timing = Dict{String, Any}(
@@ -94,6 +103,12 @@ function main()
     local climate
     if isfile(CLIMATE_PATH)
         climate = read_parquet(CLIMATE_PATH)  # auto-normalizes columns (incl. swe -> SWE)
+
+        # Memory: keep only the columns this runner uses BEFORE the water-year copy —
+        # the full 8-column ~98M-row frame OOMs on 16 GB machines (result-identical:
+        # the dropped columns are never read by any signature path in this runner)
+        climate_keep = intersect(["gage_id", "date", "PPT", "SWE"], names(climate))
+        select!(climate, climate_keep)
 
         # Add water year columns if needed
         if !("water_year" in names(climate))
@@ -200,27 +215,32 @@ function main()
 
             result = preprocess_daily_data(gage_df)
 
-            # Apply start-water-year filter if configured
-            if start_water_year !== nothing
-                wy_mask_data = result.data.water_year .>= start_water_year
-                wy_mask_sf = result.seasonal_flags.water_year .>= start_water_year
-                wy_mask_diag = result.diagnostics.water_year .>= start_water_year
+            # Apply water-year window filter if configured (start and/or end)
+            if start_water_year !== nothing || end_water_year !== nothing
+                wy_lo = start_water_year === nothing ? typemin(Int) : start_water_year
+                wy_hi = end_water_year === nothing ? typemax(Int) : end_water_year
+                wy_mask_data = (result.data.water_year .>= wy_lo) .& (result.data.water_year .<= wy_hi)
+                wy_mask_sf = (result.seasonal_flags.water_year .>= wy_lo) .& (result.seasonal_flags.water_year .<= wy_hi)
+                wy_mask_diag = (result.diagnostics.water_year .>= wy_lo) .& (result.diagnostics.water_year .<= wy_hi)
                 result = (
                     data = result.data[wy_mask_data, :],
-                    valid_years = filter(yr -> yr >= start_water_year, result.valid_years),
-                    valid_climate_years = filter(yr -> yr >= start_water_year, result.valid_climate_years),
-                    valid_swe_years = filter(yr -> yr >= start_water_year, result.valid_swe_years),
+                    valid_years = filter(yr -> wy_lo <= yr <= wy_hi, result.valid_years),
+                    valid_climate_years = filter(yr -> wy_lo <= yr <= wy_hi, result.valid_climate_years),
+                    valid_swe_years = filter(yr -> wy_lo <= yr <= wy_hi, result.valid_swe_years),
                     rejected_years = result.rejected_years,
                     seasonal_flags = result.seasonal_flags[wy_mask_sf, :],
                     diagnostics = result.diagnostics[wy_mask_diag, :],
                 )
             end
 
-            # Apply min qualifying data fraction filter if configured
+            # Apply min qualifying data fraction filter if configured.
+            # Denominator = per-gage possible years within the [start, end] window:
+            # window start .. the gage's last in-window year (window-capped).
             if min_qualifying_frac !== nothing
                 all_wy = unique(gage_df.water_year)
                 start_yr = start_water_year !== nothing ? start_water_year : minimum(all_wy)
-                wy_in_range = filter(yr -> yr >= start_yr, all_wy)
+                end_yr = end_water_year !== nothing ? end_water_year : typemax(Int)
+                wy_in_range = filter(yr -> start_yr <= yr <= end_yr, all_wy)
                 if !isempty(wy_in_range)
                     max_wy = maximum(wy_in_range)
                     total_possible = max_wy - start_yr + 1
@@ -243,6 +263,21 @@ function main()
 
     t1 = time()
     timing["phases"]["filter_gages"] = t1 - t0
+
+    # Memory: the non-legacy Phase 4 consumes ONLY preprocess_cache — release the
+    # raw frames + groupings (several GB) before per-gage processing. Verified:
+    # grouped_streamflow / grouped_climate / streamflow / climate are referenced
+    # past this point only in the legacy branch. (Added 2026-07-15 after the WY1980
+    # run thrashed at 20.8 GB commit on the 16 GB machine.)
+    if !use_legacy
+        grouped_streamflow = nothing
+        grouped_climate = nothing
+        streamflow = DataFrame()
+        if has_climate
+            climate = DataFrame()
+        end
+        GC.gc()
+    end
 
     # Phase 4: Process signatures
     n_gages = length(qualifying_entries)
@@ -289,7 +324,9 @@ function main()
             end
 
             # Legacy snow input: explicit and unfiltered (deprecated compat mode —
-            # legacy has no valid_swe_years concept, mirroring its climate handling)
+            # legacy has no valid_swe_years concept, mirroring its climate handling).
+            # NOTE: the stats floor (min_values_for_stats), like trend_completeness,
+            # is intentionally NOT applied on this deprecated legacy path.
             legacy_snow = "SWE" in names(gage_data) ? gage_data : nothing
 
             signatures = calculate_all_signatures(gage_data, has_climate; gage_id=gage_id_str, changepoint=cp_config, collector=gage_collector, area_normalized=gage_area_normalized, snow_data=legacy_snow)
@@ -323,6 +360,7 @@ function main()
                 seasonal_flags=pp.seasonal_flags,
                 trend_completeness=CFG_NA_TREND_MIN_FRACTION,
                 decade_completeness=CFG_NA_DECADE_MIN_FRACTION,
+                min_values_for_stats=CFG_MIN_VALUES_FOR_STATS,
                 climate_data=climate_data,
                 snow_data=snow_data,
                 snow_climate_years=pp.valid_climate_years,
@@ -352,6 +390,12 @@ function main()
         if !use_legacy && haskey(preprocess_cache, orig_gage_id)
             pp_diag = preprocess_cache[orig_gage_id].diagnostics
             signatures["ice_affected_days_total"] = Float64(sum(pp_diag.na_cause_ice))
+        end
+
+        # Memory: this gage's cached preprocess frames are no longer needed —
+        # evict so the cache shrinks as Phase 4 progresses
+        if !use_legacy
+            delete!(preprocess_cache, orig_gage_id)
         end
 
         push!(all_results, signatures)

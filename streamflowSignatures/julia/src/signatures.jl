@@ -20,6 +20,10 @@ so that a failure in one does not prevent others from being calculated.
   frame is valid and yields the full NaN-stat snow key set.
 - `snow_climate_years::Union{Nothing, Vector{Int}}`: PPT-qualified years for
   `swe_max_to_ppt` (pass `preprocess_daily_data`'s `valid_climate_years`).
+- `min_values_for_stats::Union{Nothing, Int}`: stats floor (July 2026) — metrics
+  with fewer non-NaN annual values emit NaN for all 8 statistics + changepoint
+  fields. NOT applied to recession/elasticity (inherently sparse; same exemption
+  as trend_completeness).
 - `area_normalized::Bool`: Whether Q is area-normalized to mm/day. When `false`
   (gages with no drainage area — Q left in raw m³/s), all Q-to-PPT signatures
   (runoff ratios, elasticity, Q-P seasonality, storage) are skipped because Q and
@@ -34,6 +38,7 @@ function calculate_all_signatures(
     seasonal_flags::Union{Nothing, DataFrame}=nothing,
     trend_completeness::Union{Nothing, Float64}=nothing,
     decade_completeness::Union{Nothing, Float64}=nothing,
+    min_values_for_stats::Union{Nothing, Int}=nothing,
     climate_data::Union{Nothing, DataFrame}=nothing,
     snow_data::Union{Nothing, DataFrame}=nothing,
     snow_climate_years::Union{Nothing, Vector{Int}}=nothing,
@@ -58,6 +63,8 @@ function calculate_all_signatures(
 
     tc = trend_completeness
     dc = decade_completeness
+    mv = min_values_for_stats  # stats floor — NOT passed to recession/elasticity
+                               # (inherently sparse; same exemption as tc/dc)
     cp = changepoint
     coll = collector
 
@@ -65,31 +72,31 @@ function calculate_all_signatures(
     # produce one value per year. Skip for inherently sparse signatures
     # (recession is event-based, elasticity uses rolling windows).
     try
-        merge!(results, calculate_flow_vols_by_year(gage_data; seasonal_flags=seasonal_flags, trend_completeness=tc, decade_completeness=dc, changepoint=cp, collector=coll))
+        merge!(results, calculate_flow_vols_by_year(gage_data; seasonal_flags=seasonal_flags, trend_completeness=tc, decade_completeness=dc, min_values_for_stats=mv, changepoint=cp, collector=coll))
     catch e
         @warn "calculate_flow_vols_by_year failed for gage $gage_id" exception=(e, catch_backtrace())
     end
 
     try
-        merge!(results, analyze_flashiness_trends(gage_data; trend_completeness=tc, decade_completeness=dc, changepoint=cp, collector=coll))
+        merge!(results, analyze_flashiness_trends(gage_data; trend_completeness=tc, decade_completeness=dc, min_values_for_stats=mv, changepoint=cp, collector=coll))
     catch e
         @warn "analyze_flashiness_trends failed for gage $gage_id" exception=(e, catch_backtrace())
     end
 
     try
-        merge!(results, analyze_flow_timing_trends(gage_data; trend_completeness=tc, decade_completeness=dc, changepoint=cp, collector=coll))
+        merge!(results, analyze_flow_timing_trends(gage_data; trend_completeness=tc, decade_completeness=dc, min_values_for_stats=mv, changepoint=cp, collector=coll))
     catch e
         @warn "analyze_flow_timing_trends failed for gage $gage_id" exception=(e, catch_backtrace())
     end
 
     try
-        merge!(results, analyze_fdc_trends(gage_data; trend_completeness=tc, decade_completeness=dc, changepoint=cp, collector=coll))
+        merge!(results, analyze_fdc_trends(gage_data; trend_completeness=tc, decade_completeness=dc, min_values_for_stats=mv, changepoint=cp, collector=coll))
     catch e
         @warn "analyze_fdc_trends failed for gage $gage_id" exception=(e, catch_backtrace())
     end
 
     try
-        merge!(results, analyze_baseflow_indices(gage_data; trend_completeness=tc, decade_completeness=dc, changepoint=cp, collector=coll))
+        merge!(results, analyze_baseflow_indices(gage_data; trend_completeness=tc, decade_completeness=dc, min_values_for_stats=mv, changepoint=cp, collector=coll))
     catch e
         @warn "analyze_baseflow_indices failed for gage $gage_id" exception=(e, catch_backtrace())
     end
@@ -109,19 +116,19 @@ function calculate_all_signatures(
     # Uses trend completeness (same as fixed-parameter BFI)
     try
         merge!(results, analyze_baseflow_indices_with_parameters(gage_data, recession_alpha;
-            trend_completeness=tc, decade_completeness=dc, changepoint=cp, collector=coll))
+            trend_completeness=tc, decade_completeness=dc, min_values_for_stats=mv, changepoint=cp, collector=coll))
     catch e
         @warn "analyze_baseflow_indices_with_parameters failed for gage $gage_id" exception=(e, catch_backtrace())
     end
 
     try
-        merge!(results, calculate_pulse_metrics(gage_data; trend_completeness=tc, decade_completeness=dc, changepoint=cp, collector=coll))
+        merge!(results, calculate_pulse_metrics(gage_data; trend_completeness=tc, decade_completeness=dc, min_values_for_stats=mv, changepoint=cp, collector=coll))
     catch e
         @warn "calculate_pulse_metrics failed for gage $gage_id" exception=(e, catch_backtrace())
     end
 
     try
-        merge!(results, calculate_negative_days(gage_data; trend_completeness=tc, decade_completeness=dc, changepoint=cp, collector=coll))
+        merge!(results, calculate_negative_days(gage_data; trend_completeness=tc, decade_completeness=dc, min_values_for_stats=mv, changepoint=cp, collector=coll))
     catch e
         @warn "calculate_negative_days failed for gage $gage_id" exception=(e, catch_backtrace())
     end
@@ -137,7 +144,7 @@ function calculate_all_signatures(
         cdata = climate_data !== nothing ? climate_data : gage_data
         if "PPT" in names(cdata)
             try
-                merge!(results, analyze_Q_PPT_relationships(cdata; seasonal_flags=seasonal_flags, trend_completeness=tc, decade_completeness=dc, changepoint=cp, collector=coll))
+                merge!(results, analyze_Q_PPT_relationships(cdata; seasonal_flags=seasonal_flags, trend_completeness=tc, decade_completeness=dc, min_values_for_stats=mv, changepoint=cp, collector=coll))
             catch e
                 @warn "analyze_Q_PPT_relationships failed for gage $gage_id" exception=(e, catch_backtrace())
             end
@@ -150,13 +157,13 @@ function calculate_all_signatures(
             end
 
             try
-                merge!(results, calculate_qp_seasonality(cdata; trend_completeness=tc, decade_completeness=dc, changepoint=cp, collector=coll))
+                merge!(results, calculate_qp_seasonality(cdata; trend_completeness=tc, decade_completeness=dc, min_values_for_stats=mv, changepoint=cp, collector=coll))
             catch e
                 @warn "calculate_qp_seasonality failed for gage $gage_id" exception=(e, catch_backtrace())
             end
 
             try
-                merge!(results, calculate_average_storage(cdata; trend_completeness=tc, decade_completeness=dc, changepoint=cp, collector=coll))
+                merge!(results, calculate_average_storage(cdata; trend_completeness=tc, decade_completeness=dc, min_values_for_stats=mv, changepoint=cp, collector=coll))
             catch e
                 @warn "calculate_average_storage failed for gage $gage_id" exception=(e, catch_backtrace())
             end
@@ -171,7 +178,7 @@ function calculate_all_signatures(
         try
             merge!(results, calculate_snow_metrics(snow_data;
                 valid_climate_years=snow_climate_years,
-                trend_completeness=tc, decade_completeness=dc,
+                trend_completeness=tc, decade_completeness=dc, min_values_for_stats=mv,
                 changepoint=cp, collector=coll))
         catch e
             @warn "calculate_snow_metrics failed for gage $gage_id" exception=(e, catch_backtrace())

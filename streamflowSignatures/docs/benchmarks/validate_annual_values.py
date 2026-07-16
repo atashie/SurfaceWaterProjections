@@ -64,7 +64,17 @@ def main():
                         help="Path to the summary signatures CSV (overrides --prefix)")
     parser.add_argument("--max-report", type=int, default=25,
                         help="Max mismatches to print per category")
+    parser.add_argument("--floor", type=int, default=None,
+                        help="stats floor (min_values_for_stats): non-exempt "
+                             "signatures with fewer non-NaN annual values are "
+                             "EXPECTED to have NaN statistics")
+    parser.add_argument("--floor-exempt", default=("log_a_pointcloud,log_a_events,"
+                        "b_pointcloud,b_events,concavity,n_recession_events,"
+                        "alpha_linear,elasticity_rolling,elasticity_annual"),
+                        help="comma-separated signature bases exempt from --floor "
+                             "(default: recession + elasticity families)")
     args = parser.parse_args()
+    floor_exempt = set(s for s in args.floor_exempt.split(",") if s)
 
     annual_path = args.annual or os.path.join(SCRIPT_DIR, f"{args.prefix}_signatures_annual.parquet")
     summary_path = args.summary or os.path.join(SCRIPT_DIR, f"{args.prefix}_signatures.csv")
@@ -130,8 +140,10 @@ def main():
         records.append(sub)
     summary_long = pd.concat(records, ignore_index=True)
 
+    # Named indicator: itertuples() renames a leading-underscore "_merge" column to a
+    # positional field, so row._merge would raise AttributeError.
     merged = summary_long.merge(grouped, on=["gage_id", "signature"], how="outer",
-                                indicator=True)
+                                indicator="merge_side")
 
     n_checked = 0
     mismatch_value = []     # rule 1 violations
@@ -140,8 +152,8 @@ def main():
     coverage_miss = []      # summary non-NaN mean but no parquet rows
 
     for row in merged.itertuples(index=False):
-        in_summary = row._merge in ("both", "left_only")
-        in_annual = row._merge in ("both", "right_only")
+        in_summary = row.merge_side in ("both", "left_only")
+        in_annual = row.merge_side in ("both", "right_only")
         s_mean = row.summary_mean if in_summary else np.nan
         has_rows = in_annual
         n_nonnan = int(row.n_nonnan) if has_rows and pd.notna(row.n_nonnan) else 0
@@ -150,12 +162,18 @@ def main():
             orphan_rows.append((row.gage_id, row.signature))
             continue
 
+        # Effective minimum for THIS signature: the stats floor raises the bar for
+        # non-exempt signatures (recession/elasticity keep the plain MIN_ROWS)
+        eff_min = MIN_ROWS
+        if args.floor is not None and row.signature not in floor_exempt:
+            eff_min = max(MIN_ROWS, args.floor)
+
         if pd.notna(s_mean):
             n_checked += 1
-            # generate_stats only computes a mean from >= MIN_ROWS non-NaN
+            # generate_stats only computes a mean from >= eff_min non-NaN
             # values, all of which the collector captured — so anything less
-            # here is missing rows, even if the surviving values average right.
-            if not has_rows or n_nonnan < MIN_ROWS:
+            # here is missing rows (or an unmasked/unfloored statistic).
+            if not has_rows or n_nonnan < eff_min:
                 coverage_miss.append((row.gage_id, row.signature))
             else:
                 ok_mean = np.isclose(row.recomputed_mean, s_mean, rtol=RTOL, atol=ATOL)
@@ -167,18 +185,20 @@ def main():
                                            row.recomputed_median))
         else:
             # Summary mean is NaN
-            if has_rows and n_nonnan >= MIN_ROWS:
+            if has_rows and n_nonnan >= eff_min:
                 inconsistent_nan.append((row.gage_id, row.signature, n_nonnan))
-            # else: rules 2 & 3 — consistent
+            # else: rules 2 & 3 — consistent (incl. floor-gated series)
 
     print()
     print("=" * 70)
     print("VALIDATION RESULTS")
     print("=" * 70)
-    print(f"(gage, signature) pairs with non-NaN summary mean: {n_checked}")
+    floor_note = (f" [stats floor {args.floor}, {len(floor_exempt)} exempt bases]"
+                  if args.floor is not None else "")
+    print(f"(gage, signature) pairs with non-NaN summary mean: {n_checked}{floor_note}")
     print(f"Value mismatches (rule 1): {len(mismatch_value)}")
-    print(f"NaN-summary-but->={MIN_ROWS}-values (rule 4): {len(inconsistent_nan)}")
-    print(f"Coverage misses (non-NaN mean, <{MIN_ROWS} non-NaN annual rows): {len(coverage_miss)}")
+    print(f"NaN-summary-but->=min-values (rule 4): {len(inconsistent_nan)}")
+    print(f"Coverage misses (non-NaN mean, < min non-NaN annual rows): {len(coverage_miss)}")
     print(f"Orphan parquet groups (unknown to summary): {len(orphan_rows)}")
     print(f"Duplicate keys: {dups}")
 

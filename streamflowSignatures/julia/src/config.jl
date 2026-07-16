@@ -198,6 +198,16 @@ const CFG_CP_MIN_SEGMENT_OBS = Int(get(_cp_config, "min_segment_obs", 10))
 # Legacy filtering flag
 const CFG_USE_LEGACY_FILTERING = get(get(_config, "filtering", Dict()), "use_legacy_filtering", true)
 
+# Stats floor (July 2026): minimum non-NA annual values a metric needs before ANY
+# of its 8 statistics (+ changepoint fields) are computed. `nothing` when the
+# section is absent => no floor (legacy behavior). Exemptions (recession,
+# elasticity) are enforced at the orchestration layer, like trend_completeness.
+const _stats_floor = get(_config, "stats_floor", Dict())
+const CFG_MIN_VALUES_FOR_STATS = let
+    v = get(_stats_floor, "min_values_for_stats", nothing)
+    v === nothing ? nothing : Int(v)
+end
+
 # Annual values export (per-year annual signature values, long-format parquet).
 # Default FALSE when the section is absent: config is loaded once at module import,
 # so a permissive fallback would silently enable a large new artifact for old configs.

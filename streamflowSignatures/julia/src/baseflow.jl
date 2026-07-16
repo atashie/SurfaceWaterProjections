@@ -162,7 +162,7 @@ Dict{String, Float64}
 function analyze_baseflow_indices(
     df::DataFrame;
     trend_completeness::Union{Nothing, Float64}=nothing,
-    decade_completeness::Union{Nothing, Float64}=nothing,
+    decade_completeness::Union{Nothing, Float64}=nothing, min_values_for_stats::Union{Nothing, Int}=nothing,
     changepoint::Union{Nothing, NamedTuple}=nothing,
     collector::Union{Nothing, AnnualCollector}=nothing
 )
@@ -240,7 +240,7 @@ function analyze_baseflow_indices(
 
     # No early-return gate here — let generate_stats() handle min_rows internally
     # (matching R/Python, which pass whatever data exists to generate_stats)
-    result = generate_stats(annual_data; value_cols=metrics, trend_completeness=trend_completeness, decade_completeness=decade_completeness, changepoint=changepoint, collector=collector)
+    result = generate_stats(annual_data; value_cols=metrics, trend_completeness=trend_completeness, decade_completeness=decade_completeness, min_values_for_stats=min_values_for_stats, changepoint=changepoint, collector=collector)
 
     return result
 end
@@ -272,7 +272,7 @@ function analyze_baseflow_indices_with_parameters(
     BFImax::Float64=CFG_ECKHARDT_BFIMAX,
     passes::Int=CFG_LYNE_HOLLICK_PASSES,
     trend_completeness::Union{Nothing, Float64}=nothing,
-    decade_completeness::Union{Nothing, Float64}=nothing,
+    decade_completeness::Union{Nothing, Float64}=nothing, min_values_for_stats::Union{Nothing, Int}=nothing,
     changepoint::Union{Nothing, NamedTuple}=nothing,
     collector::Union{Nothing, AnnualCollector}=nothing
 )
@@ -343,7 +343,7 @@ function analyze_baseflow_indices_with_parameters(
     end
 
     result = generate_stats(annual_data; value_cols=metrics,
-        trend_completeness=trend_completeness, decade_completeness=decade_completeness, changepoint=changepoint, collector=collector)
+        trend_completeness=trend_completeness, decade_completeness=decade_completeness, min_values_for_stats=min_values_for_stats, changepoint=changepoint, collector=collector)
 
     return result
 end

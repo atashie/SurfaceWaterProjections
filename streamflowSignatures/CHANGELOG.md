@@ -58,6 +58,50 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
 
 ## [July 2026]
 
+### New: stats floor — min 20 annual values before ANY statistics (Julia)
+`min_values_for_stats = 20` (config `stats_floor`): a metric with fewer non-NA annual
+values emits NaN for ALL 8 statistics AND its Pettitt fields. Requested by the user
+after gage 07292500's `snow_on_dowy` carried a Theil-Sen slope built on 4 clustered
+years (1982–85) — the 80% trend gate measures the metric's OWN year span (4/4 = 100%),
+the decade check skips spans <10, and `generate_stats` admitted ≥3 values. The floor
+harmonizes with Pettitt's existing `min_total_obs=20`. **Recession and elasticity are
+exempt** (inherently sparse — same exemption as trend_completeness; enforced at the
+orchestration layer: the kwarg is never passed to them). Collector/annual-parquet
+export is unaffected (collection precedes gating). Threaded through `generate_stats`
++ orchestrator + all non-exempt signature functions; absent config section = no floor.
+Tests: `julia/test/test_stats_floor.jl` (98 assertions incl. the 07292500-shaped
+regression and exemption pins). Codex review: NO-GO (2 findings: post-hoc mask left QA
+flags stale → new `refresh_qa_flags.jl` recomputes all 12 via canonical
+`compute_qa_flags`; legacy-path scope documented) → delta-verified GO. Post-hoc
+tooling for already-delivered CSVs: `docs/benchmarks/apply_stats_floor_mask.py` (+
+floor-aware `validate_annual_values.py --floor/--floor-exempt`). Ports deferred
+(four-feature queue).
+
+### New: production rerun harness + validation tooling + signature explorer
+Supporting the July production reruns (WY1993+/60% and WY1980+/60%, both validated
+9-gates-PASS with Codex results-review GO; plan + full execution log:
+`docs/plans/production_rerun_1993_2022_60pct_plan.md`):
+- **Benchmark runner**: ENV overrides for output dir (`STREAMFLOW_OUTPUT_DIR`) and
+  input paths (`STREAMFLOW_DATA_PATH/_CLIMATE_PATH/_METADATA_PATH`); end-water-year
+  window support (`STREAMFLOW_END_WATER_YEAR`, non-legacy path); memory patches for
+  the 16 GB machine (climate frame trimmed to used columns before the water-year
+  copy; raw frames released after Phase 3; per-gage preprocess-cache eviction) after
+  the WY1980 run thrashed at 20.8 GB commit. Production wrappers
+  `run_julia_benchmark_prod_{1993,1980}_60pct.jl`.
+- **Repo-resident validation** (after on-drive copies were lost to a flash-drive
+  rollback): `validate_production_run.py` (window/columns/snow/parquet/year-count/
+  floor gates), `audit_qualification.jl` (independent window+fraction inclusion
+  audit), floor-aware `validate_annual_values.py` (+ fixed a latent itertuples
+  `_merge` crash found on its first real-data run).
+- **Signature explorer** `build_signature_explorer.py`: self-contained Leaflet map of
+  any run's CSV — 90 bases × 8 stats + scalars via two pickers, robust p5–p95 color
+  scaling, viridis-colored distribution histogram, per-gage click panel, and annual
+  time-series plots (Sen trend line + Pettitt marker) lazily loaded from
+  per-signature sidecar files built from the annual parquet.
+- **Finding — Daymet covers Canadian gages** (~1,100 Canadian gages carry snow
+  values); earlier "US-only Daymet" doc claims corrected in SIGNATURES.md §12 and the
+  claude-skill.
+
 ### New: Q-to-PPT unit gate for un-normalized gages (Julia + Python + rpkg)
 Gages with no drainage area in HYDAT keep flow in raw m³/s (decision: no backfill).
 `calculate_all_signatures()` gains an `area_normalized = true` kwarg in all three

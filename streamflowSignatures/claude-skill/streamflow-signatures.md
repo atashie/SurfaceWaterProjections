@@ -70,7 +70,11 @@ Interpretation keys:
 - `ssm` ∈ [−1, +1]: +1 fully seasonal (≥ 60-day spells), −1 fully ephemeral
   (Hatchett 2021, Hydrology 8(1):32).
 - Magnitude metrics emit valid ZEROS at snow-free gages; timing/melt metrics emit
-  NaN there. Canadian gages are all-NA (no Daymet coverage).
+  NaN there. Daymet covers Canadian gages too (July 2026 correction — ~1,100
+  Canadian gages carry snow values); only gages without Daymet rows are all-NA.
+- Trend/stat NaNs with values visible in the annual parquet usually mean the
+  20-value stats floor (July 2026): metrics with <20 non-NA annual values report
+  NaN for ALL 8 statistics (recession/elasticity exempt).
 - Daymet SWE is modeled, not observed — prefer timing/trend signals over absolute
   magnitudes, especially in mountain terrain.
 

@@ -59,7 +59,7 @@ Returns
 Dict{String, Float64}
     Dictionary with flashinessRB statistics (8 values)
 """
-function analyze_flashiness_trends(df::DataFrame; trend_completeness::Union{Nothing, Float64}=nothing, decade_completeness::Union{Nothing, Float64}=nothing, changepoint::Union{Nothing, NamedTuple}=nothing, collector::Union{Nothing, AnnualCollector}=nothing)
+function analyze_flashiness_trends(df::DataFrame; trend_completeness::Union{Nothing, Float64}=nothing, decade_completeness::Union{Nothing, Float64}=nothing, min_values_for_stats::Union{Nothing, Int}=nothing, changepoint::Union{Nothing, NamedTuple}=nothing, collector::Union{Nothing, AnnualCollector}=nothing)
     # Column validation
     valid, missing_cols = validate_columns(df, ["Q", "water_year", "dowy"])
     if !valid
@@ -101,5 +101,5 @@ function analyze_flashiness_trends(df::DataFrame; trend_completeness::Union{Noth
         return empty_stats("flashinessRB")
     end
 
-    return generate_stats(annual_data; value_cols=["flashinessRB"], trend_completeness=trend_completeness, decade_completeness=decade_completeness, changepoint=changepoint, collector=collector)
+    return generate_stats(annual_data; value_cols=["flashinessRB"], trend_completeness=trend_completeness, decade_completeness=decade_completeness, min_values_for_stats=min_values_for_stats, changepoint=changepoint, collector=collector)
 end
