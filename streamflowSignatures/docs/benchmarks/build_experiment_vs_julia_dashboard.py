@@ -54,6 +54,12 @@ SIGNATURE_GROUPS = {
 STATS = ["_mean", "_median", "_senn_slp", "_linear_slp",
          "_spearman_rho", "_spearman_pval", "_mk_rho", "_mk_pval"]
 
+# SCOPE NOTE (2026-07-22, Codex finding): the four season_excluded_years_* entries
+# below are DASHBOARD-ONLY targets — compare_experiment_vs_julia.py treats them as
+# metadata and excludes them from its compared-column summary/tiers. They are
+# window-dependent per-gage diagnostic counters (an uncapped-vs-capped window
+# comparison shifts them uniformly by ±1 per partial trailing year), kept here so
+# they remain visually reviewable but deliberately outside the signature tiers.
 SINGLE_VALUE_SIGS = [
     "elasticity_static",
     "runoff_ratio_high_count",
@@ -692,12 +698,19 @@ def main():
     parser.add_argument("experiment_name", help="Name of the experiment (e.g., startIn1993)")
     parser.add_argument("--baseline", default=None, help="Path to baseline CSV")
     parser.add_argument("--experiment", default=None, help="Path to experiment CSV")
+    parser.add_argument("--output-dir", default=None,
+                        help="Directory for the dashboard HTML. Default: the experiment "
+                             "CSV's folder when --experiment is given, else docs/benchmarks "
+                             "(legacy). Convention (July 2026): ALL experiment artifacts "
+                             "live in the experiment's own folder.")
     args = parser.parse_args()
 
     name = args.experiment_name
     baseline_path = args.baseline or os.path.join(SCRIPT_DIR, "julia_signatures.csv")
     experiment_path = args.experiment or os.path.join(SCRIPT_DIR, f"{name}_signatures.csv")
-    output_html = os.path.join(SCRIPT_DIR, f"{name}_vs_julia_dashboard.html")
+    out_dir = args.output_dir or (
+        os.path.dirname(os.path.abspath(experiment_path)) if args.experiment else SCRIPT_DIR)
+    output_html = os.path.join(out_dir, f"{name}_vs_julia_dashboard.html")
 
     if not os.path.isfile(baseline_path):
         print(f"ERROR: Baseline not found: {baseline_path}")

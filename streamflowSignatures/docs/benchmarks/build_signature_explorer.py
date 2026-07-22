@@ -28,11 +28,22 @@ import numpy as np
 import pandas as pd
 
 STAT_SUFFIXES = ["_mean", "_median", "_senn_slp", "_linear_slp",
-                 "_spearman_rho", "_spearman_pval", "_mk_rho", "_mk_pval"]
+                 "_spearman_rho", "_spearman_pval", "_mk_rho", "_mk_pval",
+                 "_pettitt_cp_year", "_pettitt_pval", "_pettitt_pre_mean",
+                 "_pettitt_post_mean", "_pettitt_delta_mean", "_pettitt_pct_change",
+                 "_pettitt_pre_mk_pval", "_pettitt_post_mk_pval"]
 STAT_LABELS = {"_mean": "Mean", "_median": "Median", "_senn_slp": "Theil-Sen slope",
                "_linear_slp": "Linear slope", "_spearman_rho": "Spearman rho",
                "_spearman_pval": "Spearman p-value", "_mk_rho": "Mann-Kendall tau",
-               "_mk_pval": "Mann-Kendall p-value"}
+               "_mk_pval": "Mann-Kendall p-value",
+               "_pettitt_cp_year": "Pettitt changepoint year",
+               "_pettitt_pval": "Pettitt p-value",
+               "_pettitt_pre_mean": "Pettitt pre-CP mean",
+               "_pettitt_post_mean": "Pettitt post-CP mean",
+               "_pettitt_delta_mean": "Pettitt delta mean (post-pre)",
+               "_pettitt_pct_change": "Pettitt % change",
+               "_pettitt_pre_mk_pval": "Pettitt pre-CP MK p-value",
+               "_pettitt_post_mk_pval": "Pettitt post-CP MK p-value"}
 # Documented per-gage scalar signatures (no 8-stat suffixes)
 SCALARS = ["elasticity_static", "recession_alpha_point_cloud_linear_reservoir",
            "log_a_seasonality_amplitude_all", "log_a_seasonality_amplitude_first_half",

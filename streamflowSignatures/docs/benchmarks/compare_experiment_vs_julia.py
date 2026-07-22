@@ -27,6 +27,13 @@ PROJECT_ROOT = SCRIPT_DIR.parent.parent
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
+# SCOPE NOTE (2026-07-22, Codex finding): the four season_excluded_years_* per-gage
+# diagnostics below are treated as METADATA here (excluded from the compared-column
+# summary and tiers), but build_experiment_vs_julia_dashboard.py DOES visualize them
+# as single-value targets — so the dashboard's target count exceeds this script's
+# compared-column count by 4. Deliberate: they are window-dependent diagnostic
+# counters, not signatures (an uncapped-vs-capped window comparison shifts them
+# uniformly by ±1 per partial trailing year), and would distort signature tiers.
 META_COLS = {
     "gage_id", "gage_id_metadata", "latitude", "longitude", "basin_area",
     "basin_area_km2", "gage_type", "num_water_years", "start_year", "end_year",
@@ -185,13 +192,20 @@ def main():
     parser.add_argument("experiment_name", help="Name of the experiment (e.g., startIn1993)")
     parser.add_argument("--baseline", default=None, help="Path to baseline CSV")
     parser.add_argument("--experiment", default=None, help="Path to experiment CSV")
+    parser.add_argument("--output-dir", default=None,
+                        help="Directory for the comparison CSV + summary MD. Default: the "
+                             "experiment CSV's folder when --experiment is given, else "
+                             "docs/benchmarks (legacy). Convention (July 2026): ALL "
+                             "experiment artifacts live in the experiment's own folder.")
     args = parser.parse_args()
 
     name = args.experiment_name
     baseline_path = Path(args.baseline) if args.baseline else SCRIPT_DIR / "julia_signatures.csv"
     experiment_path = Path(args.experiment) if args.experiment else SCRIPT_DIR / f"{name}_signatures.csv"
-    output_csv = SCRIPT_DIR / f"{name}_vs_julia_comparison.csv"
-    output_md = SCRIPT_DIR / f"{name}_vs_julia_summary.md"
+    out_dir = Path(args.output_dir) if args.output_dir else (
+        experiment_path.parent if args.experiment else SCRIPT_DIR)
+    output_csv = out_dir / f"{name}_vs_julia_comparison.csv"
+    output_md = out_dir / f"{name}_vs_julia_summary.md"
 
     print("=" * 80)
     print(f"EXPERIMENT '{name}' vs JULIA BASELINE")

@@ -8,22 +8,15 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
 ## [Unreleased]
 
 ### Planned
-- **Standard output #1 — production rerun WY 1993–2025 @ 60% qualifying fraction**
-  (user decision 2026-07-21, reconciling with HISSS manuscript §2.2.2 which states
-  1993–2025). Replaces the WY 1993–2022 window of the 14 Jul run as the standard
-  product. Same harness as `docs/plans/production_rerun_1993_2022_60pct_plan.md`
-  (ENV overrides; set `STREAMFLOW_END_WATER_YEAR=2025`); author a fresh plan doc +
-  Codex review at execution time. Notes: the Feb 2026 streamflow parquet fully
-  covers WY 2025 (Oct 2024–Sep 2025); Daymet ends calendar 2023, so WY 2024–2025
-  are Q-only years (climate/snow signatures unaffected by the window extension);
-  the new 60% trend gate (below) is in effect, so trend columns will populate for
-  more gages than the 14 Jul outputs.
 - **Standard output #2 — "entire period of record": production rerun
   WY 1980–2025 @ 60%** (user, 2026-07-22: the two standard timeframes are
-  1993–2025 and entire-record, the latter operationalized as 1980–2025 for now;
-  same notes as above). Both standard runs carry the 60% overall trend gate, the
+  1993–2025 [#1 — EXECUTED 2026-07-22, see July 2026 entry] and entire-record,
+  operationalized as 1980–2025 for now). Carries the 60% overall trend gate, the
   80% decade gates (confirmed 2026-07-22), and the snow record-anchored decade
-  gate.
+  gate. Same harness: wrapper with `STREAMFLOW_START_WATER_YEAR=1980`,
+  `STREAMFLOW_END_WATER_YEAR=2025`; fresh plan doc + gates + Codex results
+  review at execution. Notes: Daymet ends calendar 2023, so WY 2024–2025 are
+  Q-only years; 16 GB machine — the runner's memory patches apply.
 - Port annual-values collector, b=1 recession alpha, AND snow metrics to Python and
   rpkg (after the Julia benchmark re-run validates all three)
 - Add unit tests for core functions
@@ -147,6 +140,11 @@ first pass (manuscript §refs; direction of fix in brackets):
   window (user-directed end cap; see
   `docs/plans/production_rerun_1993_2022_60pct_plan.md`). [Flag for authors —
   or confirm a future 1993–2025 run is intended.]
+  **[CORRECTION + RESOLVED 2026-07-22]**: the July 14 run was actually
+  WY ≥ 1993 UNCAPPED — its plan's §10 execution record superseded the 1993–2022
+  title (this log's original claim mis-read the plan). Moot either way: the
+  **WY 1993–2025 standard run executed 2026-07-22 (Codex results-review GO)**,
+  so the manuscript's "1993-2025" wording is now accurate as written.
 - **§2.1.2 says flow was normalized "by watershed area as defined in the
   watershed boundary shapefile"** — implementation normalizes by the published
   drainage areas (GAGES-II metadata for USGS; HYDAT STATIONS
@@ -220,6 +218,59 @@ first pass (manuscript §refs; direction of fix in brackets):
 ---
 
 ## [July 2026]
+
+### New: STANDARD OUTPUT #1 — production run WY 1993–2025 @ 60% (2026-07-22, Codex results-review GO)
+First of the two standard products (user decision; HISSS manuscript §2.2.2).
+**First production exercise of the `STREAMFLOW_END_WATER_YEAR` end cap** — the
+July 14 run was WY ≥ 1993 UNCAPPED (correcting the 2026-07-21 reconciliation-log
+claim of a 1993–2022 cap). Wrapper
+`docs/benchmarks/run_julia_benchmark_prod_1993_2025_60pct.jl`; plan + full gate
+log: `docs/plans/production_run_1993_2025_60pct_plan.md`. Outputs:
+`D:/processedOuts_22jul2026/streamflow_1993_2025_60pct_22jul2026_{signatures.csv,
+signatures_annual.parquet, timing.json}`.
+
+- **27.6 min, 6,678 gages × 1,488 columns; annual parquet 16.89M rows / 90
+  signatures.** Gage set = July's 6,579 + 99: the cap bounds the qualifying
+  denominator at 33 (partial-WY2026 parquet rows inflated uncapped denominators),
+  so inclusion can only grow — all 99 verified at exactly 20/33 = 0.606.
+- First run carrying the **60% overall trend gate** (gained 45 / lost 0 trend
+  gages vs April on shared gages, all in the [0.60, 0.80) completeness band) and
+  the **snow record-anchored decade gate** (876 snow_on_dowy / 645 melt_com_dowy
+  gages trend-suppressed with means + Pettitt intact; exempt swe_max only 333).
+- **Gates all PASS/attributed**: independent end-cap window audit
+  (`audit_qualification.jl`, extended with an end-year arg) PASS on stratified
+  edge gages; annual-values consistency PASS (545,266 pairs, 0 mismatches, 0
+  floor violations, 0 dup keys); production gates 6/7 with the strict
+  column-equality "FAIL" fully attributed (reference = April pre-Pettitt/pre-snow
+  experiment; delta = exactly 608 Pettitt + 224 snow columns — the July products
+  were lost to the flash-drive rollback, so April is the only surviving
+  reference). Codex results review **GO** with 2 attributed MINORs (32-of-37
+  un-normalized gages qualify under this window — the 37 count is full-record;
+  2 gages lost BFI_Eckhardt mean/median to the 20-value stats floor at 17
+  annual values). Dense shared means/medians EXACT vs April (max abs diff 0.0).
+- **QA/QC dashboards** (same day, all in the run folder): signature explorer
+  (rebuilt with the Statistic picker extended 8 → **16 stats** — the 8 Pettitt
+  fields added to `build_signature_explorer.py`, so all 1,456
+  signature-statistic combinations are reviewable); primary QA comparison vs the
+  same-window April experiment (597/619 Perfect at min R² 1.0000, all 22
+  divergent columns in the comparator's signature scope = the intentional b=1
+  log_a family, 0 NA mismatches); window-sensitivity comparison vs the April
+  full-record canonical.
+- **Codex dashboard/results review (initial NO-GO → resolved, GO to commit)**:
+  (MAJOR) the comparison DASHBOARD visualizes 4 `season_excluded_years_*`
+  diagnostics the comparator excludes as metadata — their divergence vs April
+  verified benign (uniformly −1 at 5,038 gages: the uncapped April run counted
+  phantom partial-WY2026 seasons as excluded; the capped run correctly doesn't),
+  and the scope difference is now documented in both tools' source. (MINORs
+  fixed) both comparison scripts gained `--output-dir` defaulting to the
+  experiment CSV's folder (one-folder convention now self-enforcing);
+  `audit_qualification.jl` edge-sample slices clamped (`first(v, n)`); `temp/`
+  gitignored. Explorer HTML size (64.6 MB) noted as a watch item.
+- **NEW CONVENTION (user)**: all outputs of an experiment — run artifacts,
+  explorer + sidecars, comparison dashboards/CSVs/summaries — live together in
+  the experiment's own unique folder (this run: `D:/processedOuts_22jul2026`);
+  `docs/benchmarks/` keeps only tools + long-lived reference CSVs. Recorded in
+  CLAUDE.md → Critical Constraints.
 
 ### New: record-anchored decade gate for threshold-dependent snow metrics (Julia, 2026-07-22)
 The 10 timing/melt/regime snow metrics (`swe_max_dowy`, `snow_on_dowy`,

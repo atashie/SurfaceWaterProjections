@@ -56,3 +56,6 @@ __pycache__/
 
 # Julia artifacts
 julia/Manifest.toml
+
+# Scratch/data staging (user-local, never committed)
+temp/

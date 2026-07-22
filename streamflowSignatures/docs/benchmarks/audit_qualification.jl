@@ -1,18 +1,20 @@
 # Independent qualification audit for a production benchmark run (gate 9).
 # Repo-resident successor of the (drive-lost) per-run audit scripts, July 2026.
 #
-# Reimplements the benchmark's window/fraction inclusion math (start >= START_YEAR,
-# no end cap, frac >= MIN_FRAC of possible in-window years, >= MIN_YEARS valid years)
-# from preprocess_daily_data outputs — NOT via the benchmark's code path — for a
-# stratified sample of edge gages (near-threshold included, early-ending,
-# late-starting, and excluded-by-filter), and cross-checks the run's actual
-# include/exclude decisions and per-gage year columns.
+# Reimplements the benchmark's window/fraction inclusion math (START_YEAR <= wy <=
+# END_YEAR (optional cap, July 2026), frac >= MIN_FRAC of possible in-window years,
+# >= MIN_YEARS valid years) from preprocess_daily_data outputs — NOT via the
+# benchmark's code path — for a stratified sample of edge gages (near-threshold
+# included, early-ending, late-starting, and excluded-by-filter), and cross-checks
+# the run's actual include/exclude decisions and per-gage year columns.
 #
 # Usage:
 #   julia audit_qualification.jl <run_signatures.csv> <reference_superset.csv> \
-#         <start_year> [streamflow_parquet] [min_years] [min_frac]
+#         <start_year> [streamflow_parquet] [min_years] [min_frac] [end_year]
 # The reference superset (any run/file whose gage list is a superset, e.g. a
-# broader-window run) supplies candidate EXCLUDED gages.
+# broader-window run) supplies candidate EXCLUDED gages. end_year (7th arg, added
+# 2026-07-22 for the WY 1993-2025 standard run) caps both the valid-year window and
+# the possible-years denominator, mirroring run_julia_benchmark.jl; omitted = no cap.
 
 using Pkg
 Pkg.activate(joinpath(@__DIR__, "..", "..", "julia"))
@@ -26,6 +28,7 @@ const SF = length(ARGS) >= 4 ? ARGS[4] :
     raw"D:\processedOuts_feb2026\combined_streamflow_data_09feb2026.parquet"
 const MIN_YEARS = length(ARGS) >= 5 ? parse(Int, ARGS[5]) : 20
 const MIN_FRAC = length(ARGS) >= 6 ? parse(Float64, ARGS[6]) : 0.60
+const END_YEAR = length(ARGS) >= 7 ? parse(Int, ARGS[7]) : typemax(Int)
 
 prod = CSV.read(PROD, DataFrame;
                 select=["gage_id", "num_water_years", "start_water_year", "end_water_year"],
@@ -36,9 +39,9 @@ dropped = sort(collect(setdiff(Set(ref.gage_id), prod_set)))
 
 psort = sort(prod, :num_water_years)
 edge_included = vcat(
-    psort.gage_id[1:min(4, nrow(psort))],                                # near the year floor
-    psort.gage_id[psort.end_water_year .< maximum(psort.end_water_year)][1:3],  # early-ending
-    psort.gage_id[psort.start_water_year .> START_YEAR][1:3],            # late-starting
+    first(psort.gage_id, 4),                                                     # near the year floor
+    first(psort.gage_id[psort.end_water_year .< maximum(psort.end_water_year)], 3),  # early-ending
+    first(psort.gage_id[psort.start_water_year .> START_YEAR], 3),               # late-starting
 )
 edge_excluded = dropped[1:min(4, length(dropped))]
 sample_ids = unique(vcat(edge_included, edge_excluded))
@@ -61,8 +64,8 @@ for g in sample_ids
     end
     pp = preprocess_daily_data(gdf)
     # --- independent reimplementation of the inclusion rule ---
-    valid_win = [y for y in pp.valid_years if y >= START_YEAR]
-    raw_in_range = [y for y in unique(gdf.water_year) if y >= START_YEAR]
+    valid_win = [y for y in pp.valid_years if START_YEAR <= y <= END_YEAR]
+    raw_in_range = [y for y in unique(gdf.water_year) if START_YEAR <= y <= END_YEAR]
     total_possible = isempty(raw_in_range) ? 0 : maximum(raw_in_range) - START_YEAR + 1
     frac = total_possible == 0 ? 0.0 : length(valid_win) / total_possible
     decide = (total_possible > 0) && (frac >= MIN_FRAC) && (length(valid_win) >= MIN_YEARS)
