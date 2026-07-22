@@ -115,7 +115,8 @@ All year qualification is handled centrally by `preprocess_daily_data()` (single
 - **Year rejection**: >30 raw NAs, >3-day gaps, negative Q, boundary NAs
 - **Interpolation**: Internal gaps ≤3 days filled by linear interpolation
 - **Climate years**: Separate `valid_climate_years` set (same rules applied to PPT)
-- **Trend completeness**: ≥80% non-NA annual values and ≥80% in first/last decade for trend stats
+- **Trend completeness**: ≥60% non-NA annual values overall (lowered from 80% in July 2026) and ≥80% in first/last decade for trend stats
+- **Snow record-anchored decade gate** (July 2026): the 10 threshold-dependent snow metrics (timing/melt/regime) also require ≥ decade_min_fraction of the SWE-valid years in the record's first AND last decade to be snowy/computable, else their 6 trend stats are NaN (mean/median + Pettitt survive). Linked to the same decade knob as the streamflow gate; anchored to the SWE record, not the metric's own span
 - **Seasonal completeness**: Seasons with <80% raw observations flagged → seasonal metrics set to NA
 - **No per-signature min_days**: Preprocessor is the only year filter (no additional gates in signature functions)
 

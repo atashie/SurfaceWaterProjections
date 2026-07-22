@@ -312,6 +312,10 @@ min_values_for_stats : Int or nothing
     Optional floor (July 2026): a metric with fewer non-NaN annual values than this
     emits NaN for all 8 statistics and changepoint fields. Applied by the
     orchestrator to all families except recession and elasticity.
+force_skip_trends : Set{String} or nothing
+    Columns whose 6 trend statistics are forced to NaN regardless of their own
+    completeness (mean/median and changepoint fields still computed). Used by
+    caller-computed gates, e.g. the snow record-anchored decade gate (July 2026).
 
 Returns
 -------
@@ -327,7 +331,8 @@ function generate_stats(
     decade_completeness::Union{Nothing, Float64} = nothing,
     changepoint::Union{Nothing, NamedTuple} = nothing,
     collector::Union{Nothing, AnnualCollector} = nothing,
-    min_values_for_stats::Union{Nothing, Int} = nothing
+    min_values_for_stats::Union{Nothing, Int} = nothing,
+    force_skip_trends::Union{Nothing, Set{String}} = nothing
 )
     result = Dict{String, Float64}()
 
@@ -405,7 +410,15 @@ function generate_stats(
         # Uses the metric's own non-NA year range for decade boundaries,
         # so climate signatures use climate years and recession uses recession years.
         compute_trends = true
-        if trend_completeness !== nothing
+
+        # Externally-forced trend skip (July 2026): caller-computed gates (e.g. the
+        # snow record-anchored decade gate) suppress the 6 trend stats through the
+        # SAME path as trend_completeness — mean/median and changepoint unaffected.
+        if force_skip_trends !== nothing && col in force_skip_trends
+            compute_trends = false
+        end
+
+        if compute_trends && trend_completeness !== nothing
             tc_frac = trend_completeness
             metric_yr_min = Int(minimum(valid_years))
             metric_yr_max = Int(maximum(valid_years))
@@ -440,22 +453,23 @@ function generate_stats(
                 end
             end
 
-            if !compute_trends
-                # Insufficient coverage: set 6 trend stats to NaN, still compute mean/median
-                result["$(col)_senn_slp"] = NaN
-                result["$(col)_linear_slp"] = NaN
-                result["$(col)_spearman_rho"] = NaN
-                result["$(col)_spearman_pval"] = NaN
-                result["$(col)_mk_rho"] = NaN
-                result["$(col)_mk_pval"] = NaN
-                result["$(col)_mean"] = mean(valid_values)
-                result["$(col)_median"] = length(valid_values) > 0 ? median(valid_values) : NaN
-                # Changepoint analysis still runs (independent of trend completeness)
-                if changepoint !== nothing
-                    _run_changepoint_block!(result, col, valid_years, valid_values, changepoint)
-                end
-                continue
+        end
+
+        if !compute_trends
+            # Insufficient coverage or forced skip: set 6 trend stats to NaN, still
+            # compute mean/median. Changepoint runs independently of trend gating.
+            result["$(col)_senn_slp"] = NaN
+            result["$(col)_linear_slp"] = NaN
+            result["$(col)_spearman_rho"] = NaN
+            result["$(col)_spearman_pval"] = NaN
+            result["$(col)_mk_rho"] = NaN
+            result["$(col)_mk_pval"] = NaN
+            result["$(col)_mean"] = mean(valid_values)
+            result["$(col)_median"] = length(valid_values) > 0 ? median(valid_values) : NaN
+            if changepoint !== nothing
+                _run_changepoint_block!(result, col, valid_years, valid_values, changepoint)
             end
+            continue
         end
 
         if compute_trends

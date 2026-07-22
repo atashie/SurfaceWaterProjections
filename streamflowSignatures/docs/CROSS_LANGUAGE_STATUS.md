@@ -209,7 +209,7 @@ All languages use centralized per-year quality filtering via `preprocess_daily_d
 4. Negative Q rejection: config-driven (`reject_negative_flow: false` by default)
 5. Constant-SD: QA flag only, not a rejection criterion
 6. Min 20 qualifying water years per gage
-7. Trend completeness: ≥80% non-NA annual values required for trend stats (slopes, p-values); mean/median always computed. Recession and elasticity exempted.
+7. Trend completeness: ≥60% non-NA annual values overall (lowered from 80% in July 2026) + ≥80% in first/last decade required for trend stats (slopes, p-values); mean/median always computed. Recession and elasticity exempted.
 
 Config constants are imported from shared `config/signatures_config.json` instead of hardcoded. Legacy filtering (`use_legacy_filtering: true`) preserves the old 95%-non-NA-days rule.
 

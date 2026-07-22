@@ -45,6 +45,24 @@ const SNOW_METRICS = [
     "swe_max_to_ppt"
 ]
 
+# Threshold-dependent metrics (NaN for operationally snow-free years) gated by the
+# record-anchored decade gate (July 2026): a trend requires computable values in
+# >= decade_completeness of the SWE-valid years in BOTH the first and last decade
+# of the gage's SWE record. Magnitude metrics (valid zeros) are NOT gated — their
+# dense series carry the snow-decline signal legitimately.
+const SNOW_RECORD_GATED_METRICS = [
+    "swe_max_dowy",
+    "snow_on_dowy",
+    "snow_off_dowy",
+    "melt_season_days",
+    "melt_rate",
+    "ssm",
+    "melt_before_peak",
+    "melt_before_peak_pct",
+    "melt_before_peak_to_max_swe",
+    "melt_com_dowy"
+]
+
 
 """
     snow_spells(mask::AbstractVector{Bool}) -> Vector{UnitRange{Int}}
@@ -256,10 +274,51 @@ function calculate_snow_metrics(
         end
     end
 
+    # Record-anchored decade gate (July 2026, user decision 2026-07-22): anchored to
+    # the SWE-valid, grid-complete years (swe_max non-NaN — dense incl. zeros), NOT
+    # the metric's own span, so clustered snowy years cannot slip through. The
+    # threshold is the SAME decade_completeness the streamflow gate uses (linked
+    # knob). Denominators count anchor years in each window — a year with no SWE
+    # data must not count against snow presence. Record span < 10 -> gate skipped.
+    force_skip = nothing
+    if CFG_SNOW_RECORD_DECADE_GATE && decade_completeness !== nothing
+        anchor_mask = .!isnan.(annual_data.swe_max)
+        anchor_years = Int.(annual_data.water_year[anchor_mask])
+        if !isempty(anchor_years)
+            rec_min, rec_max = extrema(anchor_years)
+            if rec_max - rec_min + 1 >= 10
+                windows = ((rec_min, rec_min + 9), (rec_max - 9, rec_max))
+                skip = Set{String}()
+                for m in SNOW_RECORD_GATED_METRICS
+                    vals = annual_data[!, Symbol(m)]
+                    for (lo, hi) in windows
+                        den = 0
+                        num = 0
+                        for i in 1:nrow(annual_data)
+                            anchor_mask[i] || continue
+                            yr = Int(annual_data.water_year[i])
+                            (lo <= yr <= hi) || continue
+                            den += 1
+                            isnan(vals[i]) || (num += 1)
+                        end
+                        if den > 0 && (num / den) < decade_completeness
+                            push!(skip, m)
+                            break
+                        end
+                    end
+                end
+                if !isempty(skip)
+                    force_skip = skip
+                end
+            end
+        end
+    end
+
     stats = generate_stats(annual_data; value_cols=SNOW_METRICS,
                            trend_completeness=trend_completeness,
                            decade_completeness=decade_completeness, min_values_for_stats=min_values_for_stats,
-                           changepoint=changepoint, collector=collector)
+                           changepoint=changepoint, collector=collector,
+                           force_skip_trends=force_skip)
     merge!(result, stats)
     return result
 end

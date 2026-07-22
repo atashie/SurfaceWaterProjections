@@ -24,8 +24,9 @@
       "max_unique_values": 1
     },
     "trend_completeness": {
-      "min_fraction": 0.80,
-      "decade_min_fraction": 0.80
+      "min_fraction": 0.60,
+      "decade_min_fraction": 0.80,
+      "comment": "min_fraction lowered 0.80 -> 0.60 July 2026 per updated guidelines doc + HISSS manuscript 2.2.3 (overall series gate 60%; first/last-decade gates stay 80%). Language-side fallbacks remain 0.80 (legacy behavior when this section is absent)."
     },
     "seasonal_completeness": {
       "min_fraction": 0.80,

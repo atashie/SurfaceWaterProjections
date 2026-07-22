@@ -121,18 +121,23 @@ This project provides identical signature calculations in Julia (canonical), Pyt
 - **@docs/SIGNATURES.md** - Detailed signature documentation (11 categories)
 - **@CHANGELOG.md** - Current work, roadmap (historical: `docs/CHANGELOG_ARCHIVE.md`)
 - **@docs/SIGNATURE_GUIDELINES.md** - Collaborative guidelines from hydrology colleagues (auto-synced)
+- **@docs/MANUSCRIPT_DRAFT.md** - HISSS manuscript draft snapshot (auto-synced; reconciliation review)
 - **@EO_data_processing/README.md** - Earth Observation (MODIS LULC & LAI) per-watershed ingestion and processing
 
-## Session-Start Workflow: Guidelines Sync
+## Session-Start Workflow: Document Sync & Reconciliation
 
-The guidelines document is a core design feature: domain experts write plain-English signature definitions and QA/QC requirements, and those are translated into code. **At the start of each session**, sync the collaborative guidelines document:
+Two collaborative Google Docs govern this project and are synced **at the start of each session**. Fetch technique for both: WebFetch paraphrases through a small model, so for faithful sync/diffing download the published page's raw HTML (curl) and extract the text from the `<div id="contents">` block.
+
+### A. Signature Guidelines (ground truth for methodology)
+
+The guidelines document is a core design feature: domain experts write plain-English signature definitions and QA/QC requirements, and those are translated into code. The current doc (created July 2026) supplanted the previous version at the same publish URL.
 
 1. **Fetch fresh content** from the Google Doc:
    ```
    URL: https://docs.google.com/document/d/e/2PACX-1vQnt7OCPm19vnWF4yynXL9JTzTvq9CrGoEaDv7yFSngLoFsypiWsx6fZLKWwaO5YQ/pub
    ```
 
-2. **Save to `docs/SIGNATURE_GUIDELINES.md`** (overwrite previous content)
+2. **Save to `docs/SIGNATURE_GUIDELINES.md`** (overwrite previous content; update the `Last synced` date in the header)
 
 3. **Compare with previous version** to identify changes:
    - New signature definitions or requirements
@@ -152,6 +157,26 @@ The guidelines document is a core design feature: domain experts write plain-Eng
    - Port to Python and rpkg
    - Mark todo complete
 
+### B. Manuscript Draft (HISSS paper — reconciliation review)
+
+The first manuscript leveraging this workflow (Scientific Data, "HISSS", submission target Nov 9 2026) describes the methods implemented here. Its claims must stay consistent with both the code and the repo documentation.
+
+1. **Fetch fresh content** from the Google Doc:
+   ```
+   URL: https://docs.google.com/document/d/e/2PACX-1vS7j4FRp7SEwlXoBUVA8NA7cj_I0XzyS0u58r3bl8SOz4BfpZPrdPJge4RMcFocnX8Gnllkc1M-CTJ3/pub
+   ```
+
+2. **Compare with the saved snapshot** `docs/MANUSCRIPT_DRAFT.md` (diff the extracted text against the snapshot body below its header). If unchanged, report "manuscript unchanged" and stop here.
+
+3. **If edited**: overwrite the snapshot (update `Last synced`), then run a **reconciliation review** of every changed methods claim in three directions:
+   - **Manuscript vs code** — is the described method correctly and precisely implemented (Julia canonical `julia/src/` + `config/signatures_config.json`)?
+   - **Manuscript vs repo docs** — is it correctly and precisely documented (`docs/SIGNATURES.md`, `docs/DEVELOPMENT.md`, `docs/SIGNATURE_GUIDELINES.md`)?
+   - **Direction of fix** — if the code/docs are right and the manuscript is wrong, the fix belongs in the Google Doc (flag for the user to relay to co-authors — the doc cannot be edited from here); if the manuscript states the agreed methodology and the code/docs lag, it becomes an implementation TODO.
+
+4. **Log all resulting updates (implemented and planned)** in `CHANGELOG.md` under `[Unreleased]` → `### Manuscript Reconciliation Log`, as dated entries. Move entries to the dated release section once resolved.
+
+5. **Present findings to user** with the discrepancies grouped by direction of fix.
+
 ## Changelog Maintenance
 
 **CHANGELOG.md must be kept updated consistently:**
@@ -161,6 +186,7 @@ The guidelines document is a core design feature: domain experts write plain-Eng
 3. **Use date-based versioning** - Format: `[Month Year]` (e.g., `[March 2026]`)
 4. **Severity labels** - Use HIGH/MEDIUM/LOW for bug fixes
 5. **New suggestions** - Add under `[Unreleased]` → `### Guidelines Document TODOs`
+6. **Manuscript reconciliation** - Log implemented and planned updates from manuscript syncs under `[Unreleased]` → `### Manuscript Reconciliation Log` (dated entries)
 
 ## Claude Skill Maintenance
 

@@ -4898,7 +4898,8 @@ process_signatures_from_parquet <- function(
       })
 
       # Auto-read trend/decade completeness from config JSON when caller passes NULL
-      # (matches Python/Julia behavior which always pass 0.80)
+      # (matches Python/Julia behavior, which pass the config-derived values —
+      # 0.60 overall / 0.80 decades since July 2026)
       if (!use_legacy && is.null(trend_completeness) && !is.null(na_handling_config)) {
         tc <- na_handling_config$trend_completeness
         if (!is.null(tc)) {

@@ -8,6 +8,22 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
 ## [Unreleased]
 
 ### Planned
+- **Standard output #1 — production rerun WY 1993–2025 @ 60% qualifying fraction**
+  (user decision 2026-07-21, reconciling with HISSS manuscript §2.2.2 which states
+  1993–2025). Replaces the WY 1993–2022 window of the 14 Jul run as the standard
+  product. Same harness as `docs/plans/production_rerun_1993_2022_60pct_plan.md`
+  (ENV overrides; set `STREAMFLOW_END_WATER_YEAR=2025`); author a fresh plan doc +
+  Codex review at execution time. Notes: the Feb 2026 streamflow parquet fully
+  covers WY 2025 (Oct 2024–Sep 2025); Daymet ends calendar 2023, so WY 2024–2025
+  are Q-only years (climate/snow signatures unaffected by the window extension);
+  the new 60% trend gate (below) is in effect, so trend columns will populate for
+  more gages than the 14 Jul outputs.
+- **Standard output #2 — "entire period of record": production rerun
+  WY 1980–2025 @ 60%** (user, 2026-07-22: the two standard timeframes are
+  1993–2025 and entire-record, the latter operationalized as 1980–2025 for now;
+  same notes as above). Both standard runs carry the 60% overall trend gate, the
+  80% decade gates (confirmed 2026-07-22), and the snow record-anchored decade
+  gate.
 - Port annual-values collector, b=1 recession alpha, AND snow metrics to Python and
   rpkg (after the Julia benchmark re-run validates all three)
 - Add unit tests for core functions
@@ -19,6 +35,16 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
 - BFImax estimation via Collischonn & Fan (2013) backward filter — would give BFI_Eckhardt_param per-gage BFImax instead of fixed 0.8, improving discriminating power (currently range [0.47–0.80] due to BFImax saturation)
 
 ### Known Issues (discovered 2026-07-14, Codex review — not yet fixed)
+- **LOW (legacy shim only, discovered 2026-07-21) — 6 pre-existing failures in the
+  legacy R NA-handling test suite** (`R/tests/test_na_handling.R`, run per its
+  documented usage after sourcing `config.R` + `R/helperFunctions.R`): grid
+  normalization ("Missing date rows filled"), "3-day gap: year accepted",
+  constant-SD flag, and raw/residual NA diagnostic counts. Verified present at
+  HEAD before the 2026-07-21 trend-gate work (which only touched — and fixed —
+  the vacuous trend-completeness case). Indicates drift between the deprecated
+  `R/helperFunctions.R` shim and the evolved test expectations; rpkg is the
+  active R implementation and its testthat suite is unaffected. Triage when the
+  legacy shim is next touched, or retire the legacy suite with it.
 - **MEDIUM (documented limitation, by design) — 37 Canadian gages in the signature
   output carry raw m³/s units (`area_normalized = FALSE`)**: HYDAT publishes NO
   drainage area (neither `DRAINAGE_AREA_GROSS` nor `DRAINAGE_AREA_EFFECT` — verified
@@ -54,9 +80,232 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
 <!-- New suggestions from hydrology colleagues will be tracked here -->
 <!-- Format: - [ ] Description (source: section name in guidelines doc) -->
 
+Synced 2026-07-21 — first doc revision since 2026-04-15. Behavior-changing items:
+
+- [x] **Trend completeness gate: overall series 80% → 60%** (source: NA Handling) —
+  **IMPLEMENTED 2026-07-21** (see July 2026 entry below). Config-only change picked
+  up by all languages; takes numerical effect at the next benchmark/production run.
+- [x] **Decade gate 60% vs 80% — RESOLVED (user, 2026-07-22): 80% first/last
+  decade + 60% overall CONFIRMED.** Matches the shipped config
+  (`decade_min_fraction: 0.80`, `min_fraction: 0.60`), the guidelines doc, and
+  manuscript §2.2.3 — no code change needed. The linked snow record-anchored
+  gate therefore also runs at 0.80 decades.
+- [ ] **Recession fit-quality flag: R² < 0.8** (source: analyze_recession_parameters).
+  "To control the quality of fitted parameters, calculate recession fits and create a
+  flag for any R2 < 0.8." Not currently implemented. Needs design: per-event vs
+  per-gage flag, and note that b=1 alpha fits are medians (no regression R²) — the
+  free-fit b regressions are the natural target. Clarify scope with domain experts.
+- [ ] **avg_storage omitted from major analyses (4/23/26)** (source:
+  calculate_average_storage). Doc header now says "OMITTING VARIABLE FROM MAJOR
+  ANALYSES"; extensive redesign notes added (3 options incl. GLEAM ET water balance;
+  Erin's dormant-season recession storage method needing PET, dormant-season
+  definition, initial-storage assumption; open questions on snow). Decide: gate/flag
+  `avg_storage` in outputs vs leave computed + documented as excluded downstream.
+- [ ] **NA-handling wording conflict — item (i) "flag not remove"** (source: NA
+  Handling). New sentence: "Items i, iii, and iv are set in the config to flag (not
+  remove) by default." Items iii (negative Q) and iv (constant SD) match the current
+  config-driven flag-only behavior, but item i (>3 consecutive days of NAs) currently
+  REJECTS the year in `preprocess_daily_data()` (not config-toggleable). Clarify with
+  domain experts whether item i should become a config-driven flag.
+
+Documentation-only / already-implemented items from this sync (no action):
+- FDC glossary section added (FDCall/FDC90th/FDCmid — already implemented).
+- Recession b free-fit + a via b=1 linear aquifer now in the doc — matches the July
+  2026 Julia implementation.
+- Q-P seasonality: "backward-looking" 30-day rolling window confirmed — matches the
+  implementation (trailing window `[end-29, end]`, mid-window month attribution);
+  new caveat that the rolling approach may differ from Wrede et al. (2015).
+- Elasticity: annual (t1−t0) second calculation marked "achieved as of 4/16"; the
+  <30%-missing counterfactual marked "added as documentation not filter" — resolves
+  the previously-pending 30% diagnostic item as documentation-only.
+- Runoff ratio NA rule now states the implemented thresholds (annual PPT < 10mm,
+  seasonal < 1mm → NA).
+- Flow volume glossary corrected to "total" (was "mean") streamflow — matches
+  implementation; flow-timing "labeled as julian" fix-note removed (resolved).
+
+### Manuscript Reconciliation Log
+
+Session-start reconciliation of the HISSS manuscript draft (Scientific Data,
+submission target Nov 9 2026) against code + repo docs. Snapshot:
+`docs/MANUSCRIPT_DRAFT.md`; workflow: CLAUDE.md → Session-Start Workflow → B.
+
+**2026-07-21 — baseline established + initial reconciliation pass.** Snapshot
+created and the manuscript added to the session-start review. Findings from the
+first pass (manuscript §refs; direction of fix in brackets):
+
+- **§2.2.3 asserts the 60% overall trend gate** — consistent with the July
+  guidelines doc, but code still enforces 80% (`trend_completeness.min_fraction`).
+  [Fix in code — same item as Guidelines TODO #1 above; the manuscript and
+  guidelines agree, the code lags.]
+- **§2.2.3 repeats "items i, iii, and iv … flag (not remove) by default"** —
+  item i (>3 consecutive NA days) currently REJECTS the year in the preprocessor,
+  not config-toggleable. [Clarify with domain experts — same as Guidelines TODO
+  #4; whichever way it resolves, manuscript, guidelines, and code must end up
+  aligned.]
+- **§2.2.2 says statistics were computed for "a subset from 1993-2025
+  wateryears"** — the July 2026 production run used an explicit WY 1993–2022
+  window (user-directed end cap; see
+  `docs/plans/production_rerun_1993_2022_60pct_plan.md`). [Flag for authors —
+  or confirm a future 1993–2025 run is intended.]
+- **§2.1.2 says flow was normalized "by watershed area as defined in the
+  watershed boundary shapefile"** — implementation normalizes by the published
+  drainage areas (GAGES-II metadata for USGS; HYDAT STATIONS
+  `DRAINAGE_AREA_GROSS` for Canada), not shapefile polygon areas; and 37
+  Canadian gages carry raw m³/s (`area_normalized = FALSE`, no published area).
+  [Flag for authors — wording fix + the un-normalized-gage caveat belongs in
+  Usage Notes/limitations.]
+- **§2.2.2 metric-family list** duplicates "baseflow" and omits runoff ratios,
+  Q-P seasonality, snow metrics, and pulse/timing details; stats list ("slope,
+  Spearman's Rho, p-value, mean and median") omits the second slope (linear),
+  Mann-Kendall tau/p-value, and the Pettitt changepoint fields. [Flag for
+  authors — incomplete enumeration of the delivered columns.]
+- **§2.1.3 says Daymet was aggregated to 6,041 basins** via gdptools/agg_gen —
+  repo docs record ~6,087 sites in `daymet_1980_2023.parquet`, and the July
+  rerun found snow values for 5,622 gages (4,533 US + 1,089 Canadian). [Verify
+  counts with authors — the gdptools aggregation is the co-authors' upstream
+  step, not in this repo.]
+- **§1 describes the dataset as "at the HUC-8 scale"** — products are per-gage
+  watersheds (GAGES-II / ECCC polygons + HydroBasins fallback), not HUC-8
+  units. [Flag for authors.]
+- Placeholders to watch on future syncs: methods summary paragraph, input-data
+  table, §2.2.1 (empty), "n=xx", metadata file "(name)".
+
+**2026-07-21 — user decisions on the initial findings.**
+
+- **§2.2.3 (60% trend gate) → code updated.** `trend_completeness.min_fraction`
+  0.80 → 0.60 implemented same day (see July 2026 entry). Manuscript, guidelines,
+  and code now agree; takes numerical effect at the next run.
+- **§2.2.2 (1993–2025 window) → outputs will catch up to the manuscript.** Two
+  "standard" products planned: WY 1993–2025 @ 60% (first), WY 1980–2025 @ 60%
+  (second, later) — see Planned. No manuscript edit needed for the window; §2.2.2
+  should ultimately describe both standard outputs once they exist.
+- **§2.1.2 (area normalization wording) → manuscript edit** (code is correct).
+- Remaining findings → manuscript edits, queued below for Arik to apply in the
+  Google Doc after this documentation pass + Codex review.
+
+**Manuscript edits queued (to be applied in the Google Doc by Arik):**
+
+1. **§2.1.2** — replace "normalized volumetric measurements by watershed area as
+   defined in the watershed boundary shapefile (Sect. 2.1.1)" with the actual
+   method: normalization uses agency-published drainage areas (GAGES-II metadata
+   for USGS gages; HYDAT STATIONS `DRAINAGE_AREA_GROSS` for Canadian gages), not
+   polygon areas from the boundary shapefiles. Add (here or in Usage Notes): 37
+   Canadian gages have no published drainage area and are retained in raw m³/s
+   with `area_normalized = FALSE`; their Q-to-PPT signatures are structurally NA,
+   and downstream users must filter on `area_normalized == TRUE` before
+   cross-gage comparison of unit-carrying signatures.
+2. **§2.2.2** — fix the metric-family list: "baseflow" appears twice; runoff
+   ratios, Q-P seasonality, and snow metrics are missing (and storage is
+   intentionally omitted per the 4/23/26 guidelines decision — worth stating).
+3. **§2.2.2** — complete the statistics list: per metric the output is 8
+   statistics (Theil-Sen slope, linear-regression slope, Spearman's rho +
+   p-value, Mann-Kendall tau + p-value, mean, median) plus 8 Pettitt changepoint
+   fields — not just "slope, Spearman's Rho, p-value, mean and median".
+4. **§2.2.2** — once the standard runs exist, describe the two standard output
+   windows (user, 2026-07-22): WY 1993–2025, and "entire period of record"
+   operationalized as WY 1980–2025 — both @ 60% qualifying fraction. The current
+   sentence ("full period of record and a subset from 1993-2025") is close but
+   should state the 1980 start of the entire-record product explicitly.
+5. **§2.1.3** — verify "6,041 basins": the Daymet parquet used by this pipeline
+   carries ~6,087 sites (repo docs); reconcile which count the gdptools
+   aggregation produced.
+6. **§1** — "at the HUC-8 scale" should be "at the gaged-watershed scale"
+   (GAGES-II / WSC basin polygons, HydroBasins fallback), not HUC-8 units.
+7. **§2.2.3** — "Items i, iii, and iv are set in the config to flag (not remove)
+   by default" is accurate for iii (negative Q) and iv (constant SD) but NOT for
+   i (>3 consecutive NA days), which unconditionally rejects the year in the
+   preprocessor. Pending the domain-expert clarification (Guidelines TODO above),
+   either the sentence drops item i or the code makes item i config-driven.
+
 ---
 
 ## [July 2026]
+
+### New: record-anchored decade gate for threshold-dependent snow metrics (Julia, 2026-07-22)
+The 10 timing/melt/regime snow metrics (`swe_max_dowy`, `snow_on_dowy`,
+`snow_off_dowy`, `melt_season_days`, `melt_rate`, `ssm`, `melt_before_peak` +
+`_pct` + `_to_max_swe`, `melt_com_dowy`) now additionally require ≥
+`decade_min_fraction` of the SWE-valid years in BOTH the first and last decade of
+the gage's SWE record to be computable (snowy) before trend statistics are
+computed. Requested by the user (2026-07-22) with four in-session decisions:
+threshold **LINKED to the streamflow decade gate** (same
+`na_handling.trend_completeness.decade_min_fraction` knob — no new constant, one
+config line governs both); anchored to the **SWE-valid record** (rows where
+`swe_max` is non-NaN — dense incl. zeros), not the metric's own span; scope =
+the 10 threshold-dependent metrics only (the 4 magnitude metrics emit valid zeros
+whose dense series legitimately carry snow decline); failure NaNs the **6 trend
+stats only** (mean/median + Pettitt fields survive, matching streamflow trend-gate
+semantics). Motivation: the own-span trend gate and the 20-value stats floor both
+pass a gage whose snowy years are clustered (e.g. snow present 1981–2000, absent
+2001–2010 → own span 100% complete), yielding trends conditioned on snow-present
+years. Mechanism: new opt-in `force_skip_trends` kwarg on `generate_stats()`
+reusing the existing skip-trends path; `calculate_snow_metrics()` computes the
+gate and passes failing metrics. Denominators count SWE-valid years per window
+(missing Daymet years don't count against snow presence); record span < 10 →
+gate skipped; config flag `snow.record_anchored_decade_gate` (shipped `true`;
+absent → disabled); collector/annual parquet unaffected (collection precedes
+gating). Tests: `julia/test/test_snow_record_decade_gate.jl` (96 assertions:
+kwarg mechanics, vanishing/appearing snow, valid-year-denominator pin at the
+dc=0.7 separation point, linked-threshold, short-record skip, collector
+invariance, magnitude exemption); full suite green (1,302). Plan:
+`docs/plans/2026-07-22-snow-record-anchored-decade-gate.md`. Julia only (snow
+metrics are Julia-only; gate ports with the queued snow port — note rpkg's
+bundled config has no `snow` section yet, so nothing to mirror there). Output
+impact at next benchmark: gated gages flip 6 trend stats → NaN per gated metric;
+`flagged_for_high_na` denominators shift (accepted precedent).
+**Codex adversarial review (2026-07-22): GO** — no CRITICAL/MAJOR. Confirmed the
+`stats.jl` restructure is byte-identical legacy behavior across the full branch
+matrix (collector/min_rows/stats-floor/trend-gate/changepoint ordering), the
+anchor-set and window arithmetic (incl. span-exactly-10 and `7/10 < 0.7 ==
+false` boundary), the linked-knob production path (config → benchmark →
+orchestrator → snow gate), the denominator-separation test's validity, and docs
+consistency. One MINOR fixed: stale rpkg-mirror step in the plan doc (marked as
+executed no-op).
+
+### Changed: trend-completeness overall gate lowered 80% → 60% (all languages, 2026-07-21)
+`config/signatures_config.json` (and rpkg's bundled copy `rpkg/inst/config/`) →
+`trend_completeness.min_fraction` 0.80 → 0.60; `decade_min_fraction` stays 0.80.
+Source: the July 2026 guidelines doc revision AND HISSS manuscript §2.2.3, which
+both state "at least 60% of the entire annual streamflow metric time series must be
+complete" (first/last-decade requirements remain 80%). Config-only change: Julia
+(`CFG_NA_TREND_MIN_FRACTION`), Python (`NA_TREND_MIN_FRACTION`), rpkg
+(`pkg_env$na_trend_min_fraction`), and legacy R (`NA_TREND_MIN_FRACTION`) all read
+the JSON at load — verified loaded values 0.60/0.80 in Julia and Python. Language-side
+fallbacks stay 0.80 (legacy behavior when the config section is absent, matching the
+stats-floor convention). Effect: trend statistics (slopes, correlations, p-values)
+populate for gages with 60–80% complete annual series that were previously NaN'd;
+mean/median/Pettitt fields and the recession/elasticity exemptions are unaffected.
+Takes numerical effect at the next benchmark; the planned WY 1993–2025 and
+WY 1980–2025 standard runs (see Planned) include it. Docs updated: SIGNATURES.md,
+CROSS_LANGUAGE_STATUS.md, claude-skill.
+
+**Codex adversarial review (2026-07-21)**: confirmed config pickup in all four
+consumers, the safety of the added JSON `comment` key, and every Manuscript
+Reconciliation Log claim (gap rejection unconditional vs config-driven negative-Q/
+constant-SD flags; drainage-area normalization; gate affects trend stats only;
+recession/elasticity exemption). Two fixes from its findings, both verified by
+execution: (1) the legacy R trend-completeness test's "70% complete" case was
+VACUOUS — it used 9 trailing NAs, but completeness is measured over the metric's
+own non-NA year span, so the case could never trigger (pre-existing test bug,
+its assert fails when run; rewritten as an internal-gap 66.7% case that does
+trigger); (2) stale comment in `R/helperFunctions.R` claiming Python/Julia
+"always pass 0.80" (they pass config-derived values). Julia mechanism tests that
+pass explicit 0.8 thresholds (`test_changepoint.jl`, `test_snow_metrics.jl`) are
+intentionally parameterized and unchanged. Also verified by execution: legacy R
+loads 0.60/0.80 from the shared JSON.
+
+Second (full) Codex review pass: no CRITICAL; 2 MAJOR fixed — the two non-archive
+plan docs (`production_rerun_1993_2022_60pct_plan.md`, `snow_signatures_plan.md`)
+still described the 80% gate as current and could mislead future reruns; both now
+carry dated update notes (historical statements preserved as accurate for the runs
+as executed). Notes from its MINOR findings: an **already-installed rpkg build
+stays at 0.80 until reinstalled** — the package loads its bundled
+`inst/config/signatures_config.json` via `system.file()`, so reinstall rpkg before
+any future rpkg benchmark; historical 80% mentions in DEVELOPMENT.md /
+CROSS_LANGUAGE_STATUS.md comparison tables are intentionally unchanged (they
+describe April 2026 runs). Rerun of the legacy R NA-handling test suite: the
+rewritten trend-completeness cases all PASS; 6 unrelated pre-existing failures
+surfaced (see Known Issues).
 
 ### New: stats floor — min 20 annual values before ANY statistics (Julia)
 `min_values_for_stats = 20` (config `stats_floor`): a metric with fewer non-NA annual

@@ -451,6 +451,21 @@ days below the threshold are treated as snow-free for durations AND magnitudes
 5. SSM pools ALL spells in the year (Hatchett 2021, Section 2.2; the 60-day
    seasonal threshold follows Petersky & Harpold 2018): +1 fully seasonal,
    −1 fully ephemeral.
+6. **Record-anchored decade gate** (July 2026): the 10 timing/melt/regime metrics
+   (all except `swe_max`, `snow_cover_days`, `swe_apr1`, `swe_max_to_ppt`)
+   additionally require ≥ `decade_min_fraction` (the SAME
+   `na_handling.trend_completeness` knob the streamflow decade gate uses — linked
+   by design; 0.80 as shipped) of the SWE-valid years in BOTH the first and last
+   decade of the gage's SWE record to be computable (snowy). Failing metrics have
+   their 6 trend statistics set to NaN; mean/median and Pettitt fields are still
+   computed. Anchored to the SWE record — NOT the metric's own non-NA span — so a
+   gage whose snow disappears (or appears) mid-record cannot carry a trend
+   conditioned only on its snow-present years (the clustered-years hole that the
+   own-span gate and the 20-value stats floor leave open). Denominators count
+   SWE-valid years in each window, so missing Daymet years don't count against
+   snow presence; records spanning < 10 years skip the gate. Magnitude metrics
+   are exempt: their dense zero-including series carry the snow-decline signal
+   legitimately. Config: `snow.record_anchored_decade_gate` (absent → disabled).
 
 ### Data Quality & Caveats
 
@@ -471,8 +486,10 @@ days below the threshold are treated as snow-free for durations AND magnitudes
   (swe_max = 0), and sub-threshold April 1 values report 0.
 - Zero-vs-NA policy: magnitude metrics emit valid zeros (dense series at
   snow-free gages, like D1_day's near-constant behavior); timing/melt/regime
-  metrics emit NA — the 80% trend-completeness gate (applied; NOT exempt)
-  correctly suppresses trends at marginal-snow gages.
+  metrics emit NA — the trend-completeness gate (applied; NOT exempt)
+  suppresses trends at marginal-snow gages, and the record-anchored decade gate
+  (Method step 6) additionally suppresses trends where snowy years are absent
+  from the first or last decade of the SWE record.
 - WY 1980 and WY 2024 are partial in the Daymet parquet → automatically
   SWE-invalid (same boundary behavior as the climate signatures).
 - Snow metrics only run on an explicitly provided, SWE-valid-year-filtered frame
@@ -562,7 +579,7 @@ From `config/signatures_config.json` → `changepoint` section:
 ### Design Decisions
 
 - **Scope**: Applied to ALL signatures producing annual time series — redundancy across ~76 base signatures (90 from July 2026, with the 14 snow metrics) serves as a pseudo-robustness test
-- **Independence**: Changepoint analysis runs independently of the 80% trend completeness gate
+- **Independence**: Changepoint analysis runs independently of the trend completeness gate
 - **Non-parametric**: No distributional assumptions; robust to outliers
 - **Per-signature, not per-gage**: Each signature gets its own changepoint analysis — different signatures may identify changepoints at different years
 
@@ -630,7 +647,7 @@ Missing data is now handled centrally by `preprocess_daily_data()`, called once 
 4. **Seasonal completeness**: Computed from raw (pre-interpolation) observation counts. Seasons below 80% completeness are flagged; affected seasonal metrics are set to NA
 5. **Climate NA policy**: PPT/SWE/temp have their own NA limits, tracked separately. A year can be valid for Q-only signatures but invalid for Q-PPT signatures.
 6. **Constant-SD flag**: Detects months with a single unique non-zero Q value (sensor flatline). This is a QA flag, not a rejection criterion.
-7. **Trend completeness**: `generate_stats()` optionally requires >=80% non-NA annual metrics and >=80% in first/last decade before computing trend statistics. Short series (<10 years) skip the decade check.
+7. **Trend completeness**: `generate_stats()` optionally requires >=60% non-NA annual metrics overall (lowered from 80% in July 2026 per updated guidelines) and >=80% in first/last decade before computing trend statistics. Short series (<10 years) skip the decade check.
 
 **Configuration**: `config/signatures_config.json` → `na_handling` section. `use_legacy_filtering: true` preserves the old 95%-non-NA-days rule.
 
@@ -638,7 +655,7 @@ Missing data is now handled centrally by `preprocess_daily_data()`, called once 
 
 ### Trend Completeness Exemptions
 
-The 80% trend completeness gate (requiring >=80% non-NA annual values and >=80% in first/last decades) is **not applied** to two signature categories:
+The trend completeness gate (requiring >=60% non-NA annual values overall — lowered from 80% in July 2026 — and >=80% in first/last decades) is **not applied** to two signature categories:
 
 - **Recession**: Event-based and inherently sparse. Many years may have no recession events, so annual value counts naturally fall well below 80%. Applying the gate would eliminate most gages.
 - **Elasticity**: Rolling-window method produces N-10 values from N input years, inherently falling below the 80% threshold relative to the full record length.

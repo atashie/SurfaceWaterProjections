@@ -126,6 +126,12 @@ const CFG_SNOW_SWE_THRESHOLD_MM = Float64(get(_snow_config, "swe_day_threshold_m
 const CFG_SNOW_SEASONAL_MIN_DAYS = Int(get(_snow_config, "seasonal_spell_min_days", 60))
 const CFG_SNOW_MELT_COM_FRACTION = Float64(get(_snow_config, "melt_com_fraction", 0.5))
 const CFG_SNOW_MIN_ANNUAL_PPT_MM = Float64(get(_snow_config, "min_annual_ppt_mm", 10))
+# Record-anchored decade gate (July 2026): threshold-dependent snow metrics need
+# >= decade_completeness of the SWE-valid years in the record's first AND last
+# decade to be computable (snowy) before trend stats are computed. NOTE: shipped
+# config = true; absent key => disabled (legacy). Threshold is the SAME
+# decade_min_fraction knob the streamflow gate uses (linked by design).
+const CFG_SNOW_RECORD_DECADE_GATE = Bool(get(_snow_config, "record_anchored_decade_gate", false))
 
 # =============================================================================
 # QA/QC Parameters

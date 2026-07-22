@@ -1,7 +1,7 @@
 # Summary Documentation for Streamflow Signatures (in helperFunctions.R)
 
 > **Auto-synced from**: [Google Doc](https://docs.google.com/document/d/e/2PACX-1vQnt7OCPm19vnWF4yynXL9JTzTvq9CrGoEaDv7yFSngLoFsypiWsx6fZLKWwaO5YQ/pub)
-> **Last synced**: 2026-04-15
+> **Last synced**: 2026-07-21
 
 github repo [here](https://github.com) or [here](https://github.com)
 
@@ -12,11 +12,11 @@ Summary data audit sheet [here](https://docs.google.com)
 - Do not replace NAs with zeros; streamflow that is zero is okay
 - NAs can be for various reasons, we need to use the USGS codes that describe what creates those NAs (e.g. Ice affected, etc.) for each site that has ice effected days we need a total count of the number of days that are ice affected
 - If there is up to 3 days of continuous missing streamflow data, interpolate between the points; tell us if there is a data driven answer to the number of days that would not create problems for trend analysis
-- From USGS data release: remove years with (i) more than 3 consecutive days of NAs, (ii) gaps of more than 30 days in a year, (iii) negative values, (iv) constant monthly standard deviations during periods of non-zero streamflow indicative of data errors
+- From USGS data release: remove years with (i) more than 3 consecutive days of NAs, (ii) gaps of more than 30 days in a year, (iii) negative values, (iv) constant monthly standard deviations during periods of non-zero streamflow indicative of data errors. Items i, iii, and iv are set in the config to flag (not remove) by default.
 - Flag years with constant monthly standard deviations during periods of non-zero streamflow indicative highly controlled discharges.
 - Negative_ann: Calculate the number of days with negative values per gage per year
 - Flow_reversals_ann: Count number of flow reversals annually: changes in flow direction exceeding 2% of current flow.
-- For a trend to be calculated, at least 80% of the entire annual streamflow metric time series must be complete, at least 80% of the first decade must be complete, and at least 80% of the last decade of all trend periods
+- For a trend to be calculated, at least 60% of the entire annual streamflow metric time series must be complete, at least 80% of the first decade must be complete, and at least 80% of the last decade of all trend periods
 - For any seasonal or annual metrics the period must have at least 80% of the data.
 - Seasonal periods are defined as:
   - Winter: December-February
@@ -29,17 +29,23 @@ Summary data audit sheet [here](https://docs.google.com)
 
 ### Flow Volume Metrics
 
-- Qann: Annual mean streamflow.
-- Qwin: Winter mean streamflow.
-- Qspr: Spring mean streamflow.
-- Qsum: Summer mean streamflow.
-- Qfal: Fall mean streamflow.
+- Qann: Annual total streamflow.
+- Qwin: Winter total streamflow.
+- Qspr: Spring total streamflow.
+- Qsum: Summer total streamflow.
+- Qfal: Fall total streamflow.
 - Qxx: Flow percentiles (e.g., Q10, Q50, Q90).
 
 ### Baseflow Metrics
 
 - BFI_Eckhardt: Baseflow index calculated using the Eckhardt filter.
 - BFI_LyneHollick: Baseflow index calculated using the Lyne-Hollick filter.
+
+### Flow Duration Curve (FDC) Metrics
+
+- FDCall: Slope of the annual flow duration curve across the full range of exceedance probabilities.
+- FDC90th: Slope of the annual flow duration curve over the low-flow tail (exceedance probability >= 0.90).
+- FDCmid: Slope of the annual flow duration curve over the midsegment (exceedance probability 0.20-0.80).
 
 ### Recession Metrics
 
@@ -69,7 +75,6 @@ Summary data audit sheet [here](https://docs.google.com)
 - Dxx_day: water year day when cumulative flow reaches a given percentile (e.g., D10, D50, D90).
 - D25_to_D75: Days between 25% and 75% cumulative flow.
 - Dmax: water year day of maximum flow.
-- Need to fix: currently water year day is calculated correctly, but labeled as julian
 
 ### Storage Metric
 
@@ -78,7 +83,7 @@ Summary data audit sheet [here](https://docs.google.com)
 ### Elasticity Metrics:
 
 - elasticity_static: Overall catchment elasticity - median of annual elasticity values. Measures how sensitively streamflow responds to precipitation changes. Values ~1.0 indicate proportional response; >1 indicates amplified response.
-- elasticity: Rolling window (11-year) elasticity values, used to detect trends in catchment sensitivity over time.
+- elasticity_rolling: Rolling window (11-year) elasticity values, used to detect trends in catchment sensitivity over time.
 
 ### Runoff Ratio Metrics:
 
@@ -145,7 +150,7 @@ Summary data audit sheet [here](https://docs.google.com)
 - linear interpolation of streamflow for data gaps less than 3days;
 - Years with data gaps >3 days are rejected by the centralized preprocessor, so baseflow filters never encounter gaps in valid years. No filter restart or gap counting is needed.
 - Default parameters for Eckhardt filter: BFImax = 0.8, a = 0.98.
-- Once this has been run, make sure each day of the baseflow timeseries is equal to or less than the daily streamflow
+- Once this has been run, make sure each day of the baseflow time series is equal to or less than the daily streamflow
 - BFI must be between 0 and 1
 
 ### analyze_baseflow_incidies_with_parameters()
@@ -161,10 +166,12 @@ Summary data audit sheet [here](https://docs.google.com)
 **Requirements and Decisions:**
 - Recession events are defined as periods of at least 5 consecutive days with monotonic decreases in flow (Q) and its derivative (|dQ/dt|).
 - Recession events are identified as the longest contiguous windows where both Q and |dQ/dt| are monotonically decreasing, with a minimum length of 5 days. The first day of each event is removed during power law fitting (standard practice — storm peak influence).
-- Splits recession events temporally (first vs. second half) for concavity analysis.
+- Split recession events temporally (first vs. second half) for concavity analysis.
 - Fits sinusoidal models to analyze seasonal variation in log(a).
 - Count the number of recession events in each year
-- Need information on how the code is conducting point cloud analysis and the equations for how it is calculating b
+- b is determined using the line of best fit to the log-log plot of −dq̂/dt versus q̂.
+- a is determined by setting b = 1 (linear aquifer) and using the line of best fit to the log-log plot of −dq̂/dt versus q̂.
+- To control the quality of fitted parameters, calculate recession fits and create a flag for any R2 < 0.8
 
 ### analyze_flashiness()
 
@@ -202,7 +209,7 @@ Summary data audit sheet [here](https://docs.google.com)
 - Precipitation (PPT) data must be available alongside streamflow (Q).
 - Same QAQC procedures for Q should apply to NAs (missing data) in precipitation; zero is okay in precipitation data
 - Calculates separate runoff ratios for annual and seasonal periods (winter, spring, summer, fall).
-- Cases where precipitation is zero the ratio should be NA
+- Cases where annual PPT < 10mm or seasonal PPT < 1mm the ratio is set to NA
 - Runoff_ratio_high: flag runoff ratios that are greater than two
 
 ### calculate_streamflow_elasticity() (Kendra and Deni)
@@ -219,18 +226,18 @@ Summary data audit sheet [here](https://docs.google.com)
 - Minimum of 15 years of valid data required for elasticity calculation.
 - Flag years with annual precipitation <10mm and exclude from analysis.
 - Calculates both static elasticity (median of all annual values) and rolling window elasticity (11-year window by default).
-- Annual elasticity formula: E = (dQ/dP) / (Q_mean/P_mean), where dQ = Q_year - Q_mean and dP = P_year - P_mean. This is like an anomaly direction, while the approach from the paper is accounting for anomaly (lets create a second calculation to do that)
+- Annual elasticity formula: E = (dQ/dP) / (Q_mean/P_mean), where dQ = Q_year - Q_mean and dP = P_year - P_mean. This is like an anomaly direction, while the approach from the paper is accounting for anomaly (lets create a second calculation to do that) — achieved as of 4/16
 - Distance from average v.s. Accounting for antecedent conditions
 - Values ~1.0 indicate proportional response; values >1 indicate amplified streamflow response to precipitation changes.
 - From Sawicz 2011 slightly different interpretation from above based on dq= t1-t0 :  A value of 1 indicates that a 1 % precipitation change leads to a 1 % change in streamflow. A value greater or less than 1 would, respectively, define the catchment as being elastic, i.e., sensitive to change of precipitation, or inelastic, i.e., insensitive to a change of precipitation.
 - to go forward with the additional calculation of using the previous years precip/Q then you would need to pass the minimum data requirements for both years (consecutive years)
 - Year qualification handled by centralized preprocessor (config).
-- Count the number of years each site doesn't have sufficient data within a year, and what the number of excluded years would be if the value was <30% data missing
-- Output: Returns 'elasticity_static' (single value) plus the 8 standard statistics; 'elasticity_rolling' (one value per 11 year windows); 'elasticity_annual' plus the 8 standard stats
+- Count the number of years each site doesn't have sufficient data within a year, and what the number of excluded years would be if the value was <30% data missing — added as documentation not filter
+- Output: Returns 'elasticity_static' (single value) plus the 8 standard metric statistics (mean, median, linear trend, theil sen, p value); 'elasticity_rolling' (one value per 11 year windows); 'elasticity_annual' plus the 8 standard stats
 
 ### calculate_qp_seasonality()
 
-**Purpose:** Quantifies the seasonality in the relationship between cumulative streamflow (Q) and cumulative precipitation (P). Based on Wrede et al. (2015).
+**Purpose:** Quantifies the seasonality in the relationship between cumulative streamflow (Q) and cumulative precipitation (P). Based on Wrede et al. (2015), however rolling window approach described below may differ from original publication.
 
 **Q-P Seasonality Metric Definitions**
 - qp_slope_sd: Standard deviation of monthly cumulative Q-P slopes. Higher values indicate stronger seasonal variation in the streamflow-precipitation relationship.
@@ -239,25 +246,45 @@ Summary data audit sheet [here](https://docs.google.com)
 **Requirements and Decisions:**
 - Requires daily streamflow (Q), precipitation (PPT), month, and day-of-water-year (dowy) columns.
 - Year qualification handled by centralized preprocessor (config).
-- Calculates 30-day rolling slope of cumulative Q vs cumulative P for each water year.
-- Aggregates slopes to 12 monthly mean values per year.
+- Calculates 30-day rolling slope (backward-looking) of cumulative Q vs cumulative P for each water year.
+- Aggregates rolling slopes to 12 monthly mean values per year.
 - Two metrics are calculated per year:
   - qp_slope_sd: Standard deviation of the 12 monthly slopes (higher values = more seasonal variation).
-  - qp_bimodality: Bimodality coefficient = (skewness² + 1) / kurtosis. Values >0.555 suggest bimodal/seasonal patterns.
+  - qp_bimodality: Bimodality coefficient = (skewness² + 1) / kurtosis. Values >0.555 suggest bimodal/seasonal patterns across all water years.
 
-### calculate_average_storage()
+### calculate_average_storage() — OMITTING VARIABLE FROM MAJOR ANALYSES 4/23/26
+
+**NOTES From 4/16:** 1) we see 3 options here, go with metric as is (low interpretability/maybe not that useful), 2) create water balance w/ ET data from independent source (GLEAM; 0.1 degree res.), 3) edit metric below but need to define the nitty gritty of dormant season, considering snow.
+- "Annual Water Balance" approach would use actual ET, daily precip (liquid + solid), and runoff
+- Caveat: Negative values would have to be considered and dealt with
 
 **Purpose:** Estimates mean annual catchment storage using a simplified water balance approach. Based on Peters & Aulenbach (2011). Note: current implementation does not account for AET
 
 **Storage Metric Definition:** avg_storage: Mean annual catchment storage (mm) derived from water balance.
 
 **Requirements and Decisions:**
-- Requires daily streamflow (Q), precipitation (PPT), and day-of-water-year (dowy) columns.
+- Requires daily streamflow (Q), precipitation (PPT), and evapotranspiration (PET) and day-of-water-year (dowy) columns.
 - Year qualification handled by centralized preprocessor (config).
+- Need to define dormant season
+- Need to have parameter for initial storage?
+- Annual storage can't be greater than annual precipitation
 - Daily water balance: dS = P - Q (evapotranspiration is not estimated).
 - Cumulative storage: S = cumsum(dS) for each water year.
 - [account for aet losses??!!??]
 - Units: millimeters (mm).
+
+**Notes from Erin:** storage defined by the range of change in cumulative catchment storage that begins during dormant season streamflow recession
+- Change in storage is simple WB: P-R-E
+- E is calculated as PET
+- Calculated as daily time step
+- Storage for storage-discharge relation derived using WB equation added to an initial estimate of storage
+- Storage was only estimated for baseflow/recession days (defined as days having no precip on the day/for X days)
+- Although storage-discharge relation was developed using only recession days, Annual storage from WB was tracked continuously during dormant season, when ET was at minimum
+- Had to make assumption about initial storage for each dormant season (assumption was that baseflow is increased single-valued function of storage described by exponential function between storage and Q)
+- If we want storage (not change in storage) need to add P to an intiial estimate of storage and substract PET and runoff → what is this initial value of storage for all catchments?
+- Questions: 1) how would snow be factored into this?
+- 2) is the cumulative storage estimated only during dormant season/baseflow?
+- 3) how do we estimate the initial storage value to get to a storage estimate (rather than just a delta storage estimate)
 
 ## Part 2: utility functions
 

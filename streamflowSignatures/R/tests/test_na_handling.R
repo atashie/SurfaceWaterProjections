@@ -278,17 +278,22 @@ result_80 <- generate_stats(test_trend_data, value_cols = "metric",
 assert(!is.na(result_80$metric_senn_slp),
        "80% complete: trends computed")
 
-# Test: 70% complete series → trends set to NA, mean/median still computed
-test_trend_70 <- data.frame(
+# Test: 66.7% complete series (internal gap) → trends set to NA, mean/median still
+# computed. NOTE: completeness is measured over the metric's OWN non-NA year span
+# (first to last valid year), so trailing/leading NAs cannot reduce it — the gap must
+# be internal. (Previous version of this case used 9 trailing NAs and was vacuous:
+# span 2000-2020 gave 21/21 = 100%.) Thresholds are passed explicitly to test the
+# mechanism; the production default is config-driven (0.60 overall since July 2026).
+test_trend_67 <- data.frame(
   water_year = 2000:2029,
-  metric = c(runif(21, 1, 10), rep(NA, 9))  # 21/30 = 70%
+  metric = c(runif(10, 1, 10), rep(NA, 10), runif(10, 1, 10))  # 20/30 = 66.7% over span
 )
-result_70 <- generate_stats(test_trend_70, value_cols = "metric",
+result_67 <- generate_stats(test_trend_67, value_cols = "metric",
                             year_col = "water_year",
                             trend_completeness = 0.80, decade_completeness = 0.80)
-assert(is.na(result_70$metric_senn_slp), "70% complete: trends set to NA")
-assert(!is.na(result_70$metric_mean), "70% complete: mean still computed")
-assert(!is.na(result_70$metric_median), "70% complete: median still computed")
+assert(is.na(result_67$metric_senn_slp), "66.7% complete (internal gap): trends set to NA")
+assert(!is.na(result_67$metric_mean), "66.7% complete: mean still computed")
+assert(!is.na(result_67$metric_median), "66.7% complete: median still computed")
 
 # Test: first decade only 50% complete → trends NA
 test_first_decade <- data.frame(

@@ -21,7 +21,7 @@ from 1993 to 2022 wy, not 1993 to present wy."
 | Item | Setting | Basis |
 |---|---|---|
 | Water-year window | **WY 1993–2022 inclusive** | User correction. Historical note for the record: the April 2026 JULIA experiment `startIn1993_60pct` ran "WY1993 to gage max" (no end cap — verified from its summary report); the 1993–2022 window matches the older R-era run (`streamflow_signatures_full_1993-to-2022-min-20yrs.csv`). The new run uses the explicit 1993–2022 window as directed. |
-| "60% completion" | `min_qualifying_data_fraction = 0.60` — the gage-INCLUSION rule from the April experiment: ≥60% of the gage's possible water years within the window must pass year qualification | Matches the `startIn1993_60pct` experiment the user references; "(not 80%)" contrasts with the `_80pct` sibling. The per-metric 80% TREND-completeness gate (`na_handling.trend_completeness`) is a different knob and stays at 0.80, matching the previous 60% run. |
+| "60% completion" | `min_qualifying_data_fraction = 0.60` — the gage-INCLUSION rule from the April experiment: ≥60% of the gage's possible water years within the window must pass year qualification | Matches the `startIn1993_60pct` experiment the user references; "(not 80%)" contrasts with the `_80pct` sibling. The per-metric 80% TREND-completeness gate (`na_handling.trend_completeness`) is a different knob and stays at 0.80, matching the previous 60% run. [UPDATE 2026-07-21: `min_fraction` has since been lowered to 0.60 (July guidelines revision; see CHANGELOG July 2026) — accurate for this run as executed; future reruns inherit 0.60 from config.] |
 | Minimum years | `CFG_MIN_NUM_YEARS = 20` unchanged | Same as the previous run. Note the interplay: 30 possible years (1993–2022) × 60% = 18, so the 20-year floor (66.7%) is the binding constraint for full-window gages; the 60% rule additionally binds gages whose records end before 2022 (per-gage denominator = gage's max in-window year − 1993 + 1). Identical semantics to April, window-capped. |
 | Feature set | The full uncommitted working tree: annual-values export (parquet), b=1 recession alpha, snow metrics (14), area-normalized gate | All four are user-approved July work; tests green (1,108 assertions), all Codex-GO. |
 | Explicitly NOT included | Runoff-ratio seasonal-flag bug fix (CHANGELOG Known Issues) | User has not opted in; outputs will carry the documented bug, same as every prior run. |
@@ -200,6 +200,9 @@ contention corrupted timings in past concurrent runs).
 - Python/rpkg ports (three-feature queue, post-validation).
 - Trend-completeness gate change (stays 0.80 — flagged in §1 in case the user meant
   this knob by "60% completion"; one-line change if so).
+  [UPDATE 2026-07-21: `min_fraction` HAS since been lowered to 0.60 (July guidelines
+  revision + HISSS manuscript §2.2.3; see CHANGELOG July 2026). Accurate for the
+  July 14 run as executed; future reruns inherit 0.60 from config.]
 - Runoff-ratio seasonal-flag fix.
 
 ## 9. Codex review record (2026-07-14)

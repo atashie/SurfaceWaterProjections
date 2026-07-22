@@ -93,8 +93,9 @@ Notes:
 - Zero-vs-NaN policy: magnitude metrics (1, 3, 9, 14) emit **valid zeros** for
   operationally snow-free years → dense series at snow-free gages (constant-zero trends,
   same behavior class as D1_day); timing/melt/regime metrics (2, 4–8, 10–13) emit NaN →
-  the existing 80% trend-completeness gate (NOT exempted) correctly suppresses trends at
-  marginal-snow gages.
+  the existing trend-completeness gate (NOT exempted; 80% overall at time of writing —
+  lowered to 60% on 2026-07-21 per revised guidelines, decade gates remain 80%) correctly
+  suppresses trends at marginal-snow gages.
 - Daily SWE differencing understates melt when snowfall and melt co-occur within a day —
   inherent to the product; documented as a limitation.
 

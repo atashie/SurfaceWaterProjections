@@ -26,8 +26,9 @@
       "max_unique_values": 1
     },
     "trend_completeness": {
-      "min_fraction": 0.80,
-      "decade_min_fraction": 0.80
+      "min_fraction": 0.60,
+      "decade_min_fraction": 0.80,
+      "comment": "min_fraction lowered 0.80 -> 0.60 July 2026 per updated guidelines doc + HISSS manuscript 2.2.3 (overall series gate 60%; first/last-decade gates stay 80%). Language-side fallbacks remain 0.80 (legacy behavior when this section is absent)."
     },
     "seasonal_completeness": {
       "min_fraction": 0.80,
@@ -99,7 +100,8 @@
     "seasonal_spell_min_days": 60,
     "melt_com_fraction": 0.5,
     "min_annual_ppt_mm": 10,
-    "comment": "Snow metrics from daily SWE (Daymet swe). Days with SWE < swe_day_threshold_mm are treated as snow-free for ALL snow metrics, magnitudes AND durations (domain decision 2026-07-14). seasonal_spell_min_days follows Hatchett (2021) Hydrology 8(1):32 / Petersky & Harpold (2018). Set swe_day_threshold_mm near 0 to reproduce the paper's literal SWE>0 rule."
+    "record_anchored_decade_gate": true,
+    "comment": "Snow metrics from daily SWE (Daymet swe). Days with SWE < swe_day_threshold_mm are treated as snow-free for ALL snow metrics, magnitudes AND durations (domain decision 2026-07-14). seasonal_spell_min_days follows Hatchett (2021) Hydrology 8(1):32 / Petersky & Harpold (2018). Set swe_day_threshold_mm near 0 to reproduce the paper's literal SWE>0 rule. record_anchored_decade_gate (July 2026): the 10 threshold-dependent snow metrics require >= decade_min_fraction (na_handling.trend_completeness — LINKED to the streamflow decade gate) of the SWE-valid years in BOTH the first and last decade of the gage's SWE record to be computable (snowy) before trend statistics are computed; on failure the 6 trend stats are NaN (mean/median + Pettitt still computed); absent key => disabled."
   },
   "qa_qc": {
     "qann_range": [0, 2000],
