@@ -8,15 +8,6 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
 ## [Unreleased]
 
 ### Planned
-- **Standard output #2 — "entire period of record": production rerun
-  WY 1980–2025 @ 60%** (user, 2026-07-22: the two standard timeframes are
-  1993–2025 [#1 — EXECUTED 2026-07-22, see July 2026 entry] and entire-record,
-  operationalized as 1980–2025 for now). Carries the 60% overall trend gate, the
-  80% decade gates (confirmed 2026-07-22), and the snow record-anchored decade
-  gate. Same harness: wrapper with `STREAMFLOW_START_WATER_YEAR=1980`,
-  `STREAMFLOW_END_WATER_YEAR=2025`; fresh plan doc + gates + Codex results
-  review at execution. Notes: Daymet ends calendar 2023, so WY 2024–2025 are
-  Q-only years; 16 GB machine — the runner's memory patches apply.
 - Port annual-values collector, b=1 recession alpha, AND snow metrics to Python and
   rpkg (after the Julia benchmark re-run validates all three)
 - Add unit tests for core functions
@@ -218,6 +209,40 @@ first pass (manuscript §refs; direction of fix in brackets):
 ---
 
 ## [July 2026]
+
+### New: STANDARD OUTPUT #2 — "entire period of record" WY 1980–2025 @ 60% (2026-07-22, Codex results-review GO, zero findings)
+Second standard product (user decision: entire record, operationalized as
+WY 1980–2025). Wrapper `docs/benchmarks/run_julia_benchmark_prod_1980_2025_60pct.jl`;
+plan + full gate log: `docs/plans/production_run_1980_2025_60pct_plan.md`. Outputs
+(own experiment folder per the one-folder convention):
+`D:/processedOuts_1980_2025_22jul2026/streamflow_1980_2025_60pct_22jul2026_*` +
+signature explorer (61.6 MB, 1,456 mapped variables) + comparison dashboard/CSV/
+summary vs the April full canonical (written into the run folder via the new
+`--output-dir` defaults).
+
+- **25.1 min, 6,250 gages × 1,488 columns; annual parquet 21.82M rows.** All
+  gates PASS/attributed: column delta vs canonical = exactly the 224 snow
+  columns; all 6,250 gages ⊆ the canonical 7,313; independent end-cap audit
+  PASS (both denominator regimes verified — gage-capped for early-ending,
+  1980-anchored 46-year for late starters); annual values 525,329 pairs with 0
+  mismatches/0 dup keys; QA flags clean (0 percentile/timing/seasonal-sum
+  violations).
+- **Cleanest cross-validation to date**: vs the April FULL canonical,
+  1,189/1,227 columns Perfect at min R² = 1.0000 in every non-recession
+  category INCLUDING Pettitt fields; all 38 divergent columns are the
+  intentional b=1 log_a family (0 NA mismatches). Root cause of the
+  cleanliness: the source parquet begins at 1980, so the canonical's uncapped
+  window ≈ this run's window — run #2 is effectively the canonical analysis,
+  properly capped + fraction-filtered + July features.
+- **Run #1 ↔ #2 relationship** (by design of the window-start-anchored 60%
+  denominator): 5,771 shared gages; 479 only-in-#2 (1980–1992 starts whose
+  records ended before #1's window); 907 only-in-#1 (late starters at
+  0.435–0.587 < 0.60 over the 46-year anchor — every one verified). Neither
+  standard is a subset of the other. `area_normalized = FALSE`: 28 rows here /
+  32 in #1 / 37 full-record (window-dependent).
+- Codex results review: **GO with zero findings**; all probes confirmed
+  independently (incl. the `season_excluded_years_*` −1-only pattern at 4,404
+  gages vs the uncapped canonical).
 
 ### New: STANDARD OUTPUT #1 — production run WY 1993–2025 @ 60% (2026-07-22, Codex results-review GO)
 First of the two standard products (user decision; HISSS manuscript §2.2.2).
