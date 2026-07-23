@@ -78,6 +78,33 @@ Interpretation keys:
 - Daymet SWE is modeled, not observed — prefer timing/trend signals over absolute
   magnitudes, especially in mountain terrain.
 
+### The Two Standard Output Products (July 2026)
+
+Two production windows are the project's standard products (both @ 60% qualifying
+fraction, 20-year floor, one self-contained folder each):
+- **#1 WY 1993–2025** (6,678 gages) — recent-era coverage.
+- **#2 WY 1980–2025** "entire period of record" (6,250 gages) — long-established
+  gages.
+
+Interpretation keys:
+- **Neither is a subset of the other**: 5,771 gages shared; 907 only in #1 (late
+  starters — the 60% fraction is anchored at the WINDOW start, so e.g. 25 valid
+  years / 46 possible = 0.54 fails the 1980 window while 25/33 = 0.76 passes the
+  1993 window); 479 only in #2 (1980s records that ended before accumulating 20
+  years inside 1993+). The longer window has FEWER gages because a longer window
+  demands a longer record (60% × 46 ≈ 28 years vs the 20-year floor binding in
+  #1).
+- **Annual values are mutually consistent** (verified 2026-07-23): for shared
+  gages, #2's annual parquet contains every (gage, signature, year) row of #1's,
+  and overlap-year values are bit-identical for all within-year-computable
+  signatures (flow volumes/percentiles, timing, BFI, FDC, flashiness, runoff
+  ratios, snow).
+- **Record-dependent signatures legitimately differ between the windows even in
+  shared years**: `*_all` pulse metrics (period-of-record percentile
+  thresholds), elasticity (record-mean Q̄/P̄ normalization), and the
+  recession-parameterized BFIs (whole-record alpha). Never mix these across
+  window products.
+
 ## Interpreting Results
 
 ### Trend Statistics

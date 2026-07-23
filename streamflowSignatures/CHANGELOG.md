@@ -243,6 +243,15 @@ summary vs the April full canonical (written into the run folder via the new
 - Codex results review: **GO with zero findings**; all probes confirmed
   independently (incl. the `season_excluded_years_*` −1-only pattern at 4,404
   gages vs the uncapped canonical).
+- **Cross-product consistency verified (2026-07-23)**: run #1's annual parquet
+  is contained in run #2's for all 5,771 shared gages (0 missing rows; the
+  1.39M absent rows are exactly the 907 run-#1-only gages), with overlap-year
+  values bit-identical for within-year-computable signatures. Record-dependent
+  signatures (`*_all` pulses, elasticity, parameterized BFI) differ between
+  windows by design — do not mix them across products. Interpretation guidance
+  added to the claude-skill ("The Two Standard Output Products"), incl. why the
+  longer window has fewer gages (window-start-anchored 60% denominator: 60% ×
+  46 ≈ 28-year effective floor vs the 20-year floor binding in #1).
 
 ### New: STANDARD OUTPUT #1 — production run WY 1993–2025 @ 60% (2026-07-22, Codex results-review GO)
 First of the two standard products (user decision; HISSS manuscript §2.2.2).

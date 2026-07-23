@@ -95,3 +95,15 @@ record", operationalized as WY 1980–2025. Companion to standard run #1
   ∈ [−1, 1] exact; explorer integrity (6,250 gages, 90 sidecars, 1980–2025).
 - **VERDICT: standard output #2 DECLARED** —
   `D:/processedOuts_1980_2025_22jul2026/streamflow_1980_2025_60pct_22jul2026_*`.
+- **2026-07-23 — cross-product annual-data consistency check (user request)**:
+  verified run #1's annual parquet is CONTAINED in run #2's for shared gages —
+  of run #1's 16,890,066 rows, the 1,394,200 absent from run #2 belong exactly
+  and exclusively to the 907 run-#1-only gages (0 missing rows across all 5,771
+  shared gages). Overlap-year VALUES are bit-identical for within-year-computable
+  signatures (sampled Qann, Q50, D50_day, BFI_Eckhardt, flashinessRB,
+  snow_on_dowy, annual_runoff_ratio: 0 differences over ~1.2M keys);
+  record-dependent signatures differ by design (`n_high_pulses_all` 50,348
+  differing years — period-of-record thresholds; `elasticity_annual` 150,885 —
+  record-mean normalization; `BFI_Eckhardt_param` 154,411 — whole-record alpha).
+  Interpretation guidance added to the claude-skill ("The Two Standard Output
+  Products").
