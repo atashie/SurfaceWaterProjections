@@ -210,6 +210,43 @@ first pass (manuscript §refs; direction of fix in brackets):
 
 ## [July 2026]
 
+### New: per-watershed Annual NLCD product (CONUS land cover + impervious, non-signature)
+A CONUS-only US companion to the continental MODIS LULC product, built on **USGS/MRLC Annual NLCD
+Collection 1 (C1V2, 30 m, 1985–2025)**: per-watershed annual land-cover % (16 classes) + basin-mean
+fractional impervious surface for **6,119 CONUS gages × 41 years = 250,879 rows**, joining to the
+signatures by leading-zero-safe `gage_id`/`canon_id`. Python (metadata/ingestion — like HydroATLAS
+and the MODIS EO layers, not a cross-language signature). New modules under `EO_data_processing/`;
+full design + review record: [EO_data_processing/README_NLCD.md](EO_data_processing/README_NLCD.md).
+
+- **Source/access** — Annual NLCD COGs on `s3://usgs-landcover` (us-west-2, requester-pays); native
+  CRS is **WGS84-Albers (no EPSG code — read from `src.crs`, not the legacy EPSG:5070)**; fill=250.
+  Source mosaics staged once to `s3://…/streamflow/temp_lulc_conus/` (82 files, 93.4 GB, us-east-2
+  in-region; **temporary — delete after QA**). Fractional-impervious carries a documented
+  out-of-range/underflow bug — guarded by a [0,100] clip (0 occurrences in C1V2).
+- **Pipeline** (`eo_processing/nlcd_pipeline.py`) — per-year-parallel download→extract→delete
+  (scratch on `/tmp`, NOT the 2.6 GB home volume), coverage-weighted exactextract (basins reprojected
+  to the granule CRS; never resample categorical); publish-integrity gates (per-year validation,
+  atomic writes, final table written only if every requested year passes, else nonzero exit — no
+  silent partial publish). ~10 h for 41 yr on 4 cores. Class %s sum to exactly 100 on covered rows.
+- **Finalize** (`eo_processing/nlcd_finalize.py`) — drops the 45 out-of-footprint **Alaska** gages
+  (never published as real zeros) to a traceable exclusion CSV + all-gage QA companion; separate
+  documented QA flags (`geom_low_confidence`/`low_pixel_support`/`partial_coverage`/`low_confidence`);
+  provenance (`nlcd_collection=C1V2`, `valid_area_km2`, metadata JSON); data dictionary with
+  model-noise / annual-update-seam / developed-vs-impervious-non-additive caveats. **S3 upload
+  opt-in (`--upload`), held for QA.**
+- **QA/QC explorer** (`viz/build_nlcd_explorer.py` → `nlcd_explorer.html`, 12.6 MB) — self-contained
+  Leaflet map, 6,119 points × 32 variables; click a gage → stacked-area composition 1985–2025 +
+  dashed impervious line, 2024–25 update-seam shaded; smoothed endpoint-diff deltas (labeled),
+  `annual_volatility`/`shrub_grass_swap` artifact views, partial-coverage badges, excluded-45
+  disclosure, normalized Shannon.
+- **Codex adversarial reviews** — pipeline (FIX-FIRST → all publish-integrity blockers fixed) and
+  results+plans (GO-with-fixes → all reconciled). Validation: dev%↔impervious% corr 0.963; documented
+  shrub↔grass annual artifact confirmed (−0.71 swap correlation, 77–90 pp single-year swings).
+- **Known gotcha (this SageMaker box):** `/home/sagemaker-user` has only ~2.6 GB free — heavy temp
+  I/O must go to `/tmp`; the pipeline stages downloads there via `--scratch` + a disk preflight.
+- Python only (CONUS/US); complements — does not replace — the continental MODIS LULC. **Remaining:
+  human QA → S3 publish → delete `temp_lulc_conus/`.**
+
 ### New: STANDARD OUTPUT #2 — "entire period of record" WY 1980–2025 @ 60% (2026-07-22, Codex results-review GO, zero findings)
 Second standard product (user decision: entire record, operationalized as
 WY 1980–2025). Wrapper `docs/benchmarks/run_julia_benchmark_prod_1980_2025_60pct.jl`;

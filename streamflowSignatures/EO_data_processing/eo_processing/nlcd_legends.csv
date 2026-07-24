@@ -1,0 +1,17 @@
+code,class_name,output_column,hex_color
+11,OpenWater,nlcd_c11_pct,#466b9f
+12,PerennialIceSnow,nlcd_c12_pct,#d1def8
+21,DevelopedOpenSpace,nlcd_c21_pct,#dec5c5
+22,DevelopedLowIntensity,nlcd_c22_pct,#d99282
+23,DevelopedMediumIntensity,nlcd_c23_pct,#eb0000
+24,DevelopedHighIntensity,nlcd_c24_pct,#ab0000
+31,BarrenLand,nlcd_c31_pct,#b3ac9f
+41,DeciduousForest,nlcd_c41_pct,#68ab5f
+42,EvergreenForest,nlcd_c42_pct,#1c5f2c
+43,MixedForest,nlcd_c43_pct,#b5c58f
+52,ShrubScrub,nlcd_c52_pct,#ccb879
+71,GrasslandHerbaceous,nlcd_c71_pct,#dfdfc2
+81,PastureHay,nlcd_c81_pct,#dcd939
+82,CultivatedCrops,nlcd_c82_pct,#ab6c28
+90,WoodyWetlands,nlcd_c90_pct,#b8d9eb
+95,EmergentHerbaceousWetlands,nlcd_c95_pct,#6c9fb8

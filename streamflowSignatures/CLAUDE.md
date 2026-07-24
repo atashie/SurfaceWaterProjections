@@ -132,6 +132,7 @@ This project provides identical signature calculations in Julia (canonical), Pyt
 - **@docs/SIGNATURE_GUIDELINES.md** - Collaborative guidelines from hydrology colleagues (auto-synced)
 - **@docs/MANUSCRIPT_DRAFT.md** - HISSS manuscript draft snapshot (auto-synced; reconciliation review)
 - **@EO_data_processing/README.md** - Earth Observation (MODIS LULC & LAI) per-watershed ingestion and processing
+- **@EO_data_processing/README_NLCD.md** - Per-watershed Annual NLCD (CONUS land cover + impervious, 30m, 1985-2025) — MODIS LULC sibling product
 
 ## Session-Start Workflow: Document Sync & Reconciliation
 

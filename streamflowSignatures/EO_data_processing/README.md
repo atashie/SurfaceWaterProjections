@@ -10,6 +10,11 @@ This is a **metadata / ingestion product** (like the HydroATLAS watershed metada
 to Julia/R. See "Implementation language" below for why this one is **Python** rather
 than R.
 
+> **Sibling product:** a CONUS-only, higher-resolution **Annual NLCD** land-cover + fractional
+> impervious product (USGS/MRLC, 30 m, 1985–2025) is built by the same routine, adapted — see
+> [`README_NLCD.md`](README_NLCD.md) (`eo_processing/nlcd_pipeline.py`, `nlcd_finalize.py`,
+> `viz/build_nlcd_explorer.py`). It complements this continental MODIS LULC (500 m, N. America).
+
 > **Status (30 Jun 2026)**: ALL THREE DATA LAYERS DONE + on S3 — geometry (7,964 watersheds),
 > LAI (monthly, 270-month panel; **`good_coverage_frac` QA column added → `..._30jun2026.parquet`**),
 > and LULC (annual, 24-yr, Codex-GO). **BOTH QA/QC explorers built + on S3**:
