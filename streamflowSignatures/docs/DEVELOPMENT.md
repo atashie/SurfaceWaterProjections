@@ -61,6 +61,8 @@ Signature functions receive clean data
     ├── Climate signatures use valid_climate_years subset
     ├── Snow signatures use an EXPLICIT snow_data frame filtered to valid_swe_years
     │   (opt-in — never derived implicitly from an SWE column in the gage frame)
+    ├── Drought signatures smooth Q within contiguous date runs (never across a
+    │   rejected-year gap) before thresholding — July 2026, Julia only
     └── Seasonal signatures respect seasonal_flags (incomplete → NA)
 ```
 
@@ -88,7 +90,7 @@ long-format parquet alongside the summary CSV:
 | `value` | Float64 | Annual value; **NaN and absent-row are equivalent** ("not computable that year") |
 
 **Mechanism**: an opt-in `AnnualCollector` (defined in `julia/src/stats.jl`) is
-threaded through `calculate_all_signatures()` and all 13 signature functions into
+threaded through `calculate_all_signatures()` and all 14 signature functions into
 `generate_stats()`, which appends the incoming series — exactly as passed, BEFORE
 any min_rows or trend-completeness gating — as long-format triplets. With
 `collector=nothing` (the default) behavior is byte-identical to before; the summary
@@ -252,6 +254,51 @@ Rscript run_full_processing.R
 
 **Prerequisites:** Data paths are configured in `config/signatures_config.json` and `config.R`.
 
+### Run a Config-Variant Experiment (⚠️ precompilation gotcha)
+
+`STREAMFLOW_CONFIG` points the Julia package at an alternative
+`signatures_config.json`, but **on its own it does nothing to an already-precompiled
+package**. Every `CFG_*` constant in `julia/src/config.jl` is evaluated when the module is
+PRECOMPILED, and Julia does not invalidate the precompile cache when an environment
+variable changes — so the run silently uses the *previous* config. Verified 2026-07-28: a
+benchmark launched with a drought-disabled config produced an output byte-identical in
+size to the drought-enabled run, all 165 drought columns still present.
+
+Force a recompile so the new config is read. **`touch` is NOT enough** — Julia validates
+the cache by file *content*, so an mtime-only change is ignored (verified 2026-07-28: a
+`touch` + `STREAMFLOW_CONFIG` run still produced all the drought columns). Delete the
+package's compiled cache instead:
+
+```bash
+rm -rf ~/.julia/compiled/v1.12/StreamflowSignatures       # adjust the version dir
+STREAMFLOW_CONFIG=/path/to/variant_config.json \
+  julia --project=julia docs/benchmarks/run_julia_benchmark.jl
+```
+
+(An actual source edit also invalidates it, and `julia --compiled-modules=no` works but
+makes every run much slower.) **Verify the variant took effect before trusting the
+result** — the cheap probe is:
+
+```bash
+STREAMFLOW_CONFIG=/path/to/variant_config.json \
+  julia --project=julia -e 'using StreamflowSignatures; println(CFG_DROUGHT_ENABLED)'
+```
+
+Note the cache then holds the VARIANT build: purge it again afterwards, or subsequent
+"normal" runs silently keep using the variant config.
+
+**Audit of past config-variant results (2026-07-28)**: no previously recorded result is
+invalidated by this discovery. The July 2026 60 % trend-gate change has empirical output
+evidence that the gate took effect (gained 45 / lost 0 trend gages), and the snow gates
+involved source-file changes, which do invalidate the cache. But **any future or
+historical experiment that relied only on switching `STREAMFLOW_CONFIG`** — without a
+cache purge, a source-content change, a config probe, or an observed expected delta — is
+untrustworthy and should be re-run. The durable fix would be to read config values at
+runtime rather than into module constants. This is the same
+hazard that led the benchmark runner to read `STREAMFLOW_START_WATER_YEAR`,
+`STREAMFLOW_END_WATER_YEAR`, and `STREAMFLOW_MIN_QUALIFYING_DATA_FRACTION` at *runtime*
+inside `main()` instead of from module constants.
+
 ### Validate Output Quality
 
 After processing, run QA/QC validation:
@@ -397,11 +444,28 @@ once loaded). For a lighter file, trim the variable list in `assemble_explorer.R
 
 4. **Register the signature** in `config/signatures_config.json` and `config.R` (for R tests):
    - Add base name to `EXPECTED_SIGNATURE_BASES` in `config.R`
+   - Per-gage scalars (not 8-stat) need their own `EXPECTED_*` constant in `config.R`,
+     wired into `validate_output_schema()`
+   - `EXPECTED_DENSE_SIGNATURES` in `julia/test/test_annual_collector.jl` — this asserts
+     **set equality** of the collected annual series, so a new dense signature fails the
+     suite until it is listed there
+   - The signature-count gate in `docs/benchmarks/validate_production_run.py`
+     (`ann.signature.nunique() == N`)
+   - The **expected total summary-column count** in the docs — count the 8 stat + 8
+     Pettitt fields per base AND any non-8-stat scalars
 
-5. **Run Julia benchmark** (~27 min) to validate:
+5. **Run the unit suite, then the Julia benchmark** (~27 min) to validate:
    ```bash
+   julia --project=julia julia/test/runtests.jl
    julia docs/benchmarks/run_julia_benchmark.jl
    ```
+
+6. **Prove additivity against the previous canonical run** — every pre-existing column
+   unchanged (only `flagged_for_high_na` should shift; its denominator counts all
+   fields), and the new columns fully populated. The orchestrator catches per-signature
+   exceptions, so a failure on some production gage shows up as silently missing columns
+   that a green unit suite will not reveal. Smoke checks should require new values to be
+   FINITE, not merely present as keys.
 
 6. **Port to Python and rpkg**:
    - Python: Add function in the appropriate `python/streamflow_signatures/` module, call from `signatures.py`

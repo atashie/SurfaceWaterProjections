@@ -502,6 +502,146 @@ days below the threshold are treated as snow-free for durations AND magnitudes
 
 ---
 
+## 13. Streamflow Drought
+
+**Function**: `calculate_drought_metrics` (July 2026, Julia only)
+
+Per-water-year drought duration and deficit against **fixed** percentile thresholds,
+following Adelsperger et al. (in review). Ten metrics: two measures × five severity
+levels. Configuration: `config/signatures_config.json` → `drought`.
+
+### Metrics
+
+| Metric | Description | Units |
+|--------|-------------|-------|
+| **drought_duration_fixed_p{2,5,10,20,30}** | Days in the water year with 7-day-smoothed Q below the threshold | days |
+| **drought_deficit_fixed_p{2,5,10,20,30}** | Sum of flow departures below the threshold, `Σ (Q_thr − Q_smooth)` | mm |
+
+### Diagnostics
+
+| Metric | Description |
+|--------|-------------|
+| **drought_threshold_fixed_p{2,5,10,20,30}** | The threshold value itself (mm/day, per-gage scalar) — makes the thresholds auditable and identifies gages whose low-level threshold is exactly 0 |
+
+### Severity levels
+
+Thresholds are **magnitude (non-exceedance) percentiles**, matching the paper and this
+document's `Q{n}` columns: the 10 % flow is the flow *exceeded* 90 % of the time. The
+five levels mirror the operational U.S. Drought Monitor classes:
+
+| Level | Percentile | USDM analogue |
+|---|---|---|
+| `p30` | 30 % | D0 — abnormally dry |
+| `p20` | 20 % | D1 — moderate |
+| `p10` | 10 % | D2 — severe |
+| `p5` | 5 % | D3 — extreme |
+| `p2` | 2 % | D4 — exceptional |
+
+### Method
+
+1. **7-day centered smoothing** of daily Q, applied to the *continuous* date-indexed
+   series so the Oct 1 boundary creates no artificial discontinuity. The window is
+   applied within maximal runs of consecutive dates and never averages across a
+   temporal gap (rejected years, duplicate or missing dates all break a run); it
+   shrinks at run edges, and a day whose in-run window holds fewer than
+   `smoothing_min_valid_days` (4) values is NaN. Because the preprocessor supplies
+   complete daily grids for qualifying years, only runs shorter than the minimum
+   produce NaN in practice.
+2. **Thresholds** are percentiles of the smoothed values pooled over the whole record
+   (the paper's *fixed* method), computed with the **unbiased Weibull plotting
+   position** `p_i = i/(n+1)` — Hyndman & Fan definition 6, i.e.
+   `quantile(x, p; alpha=0, beta=0)`. This deliberately differs from the type-7
+   (linear-interpolation) default used elsewhere in this project, and the two diverge
+   most in exactly the low tail these thresholds occupy. A probability below the
+   smallest plotting position `1/(n+1)` is not interpolable and yields NaN rather than
+   silently clamping to the record minimum (unreachable for the fixed method, whose
+   pool holds ~7,000–17,000 values; retained as a defensive invariant).
+3. **Per water year and level**: count days with `Q_smooth < Q_thr` (strict), and sum
+   `Q_thr − Q_smooth` over those days. Gages with fewer than
+   `min_years_for_threshold` (10) qualifying years produce NaN for all drought metrics.
+
+### Interpretation
+
+- Rising `deficit` with flat `duration` = droughts deepening but not lengthening;
+  the reverse = longer but shallower droughts.
+- The five levels are a severity ladder, not independent measurements — duration and
+  deficit are non-decreasing in the level by construction and strongly correlated
+  across levels. Prefer one or two levels for headline analysis.
+- **`drought_duration_fixed_p10` is largely redundant with the existing pulse metrics.**
+  Measured over the full WY 1993–2025 benchmark (200,834 gage-years): it correlates with
+  `n_low_pulses_all × dur_low_pulses_all` at r = 0.979 (ρ = 0.971), and — the test that
+  matters for trend work — *within* a gage the two annual series track each other at
+  median r = 0.994 (p10 of the distribution 0.971), disagreeing by a median of 11.7 % of
+  the gage's own interannual SD. The other four levels are measurably distinct
+  (r = 0.712 / 0.902 / 0.846 / 0.731 for p2 / p5 / p20 / p30 against the same pulse pair),
+  so only p10 collapses onto the existing signal. Redundancy is an aggregate statement:
+  32.5 % of gage-years agree exactly and the maximum disagreement is 318 days. On
+  intermittent gages the two measures agree exactly in 99.87 % of gage-years (13 of 9,652
+  differ, max 8 days).
+  The genuinely new content of this family is (a) **`drought_deficit_*`**, the only
+  magnitude-weighted low-flow measure in the output — it separates a long shallow drought
+  from a short severe one — and (b) the **four non-p10 levels**, since the pulse metrics
+  use a single 10th-percentile threshold. Prefer those for new analysis, and do not
+  present `drought_duration_fixed_p10` and the pulse pair as independent evidence for the
+  same conclusion.
+  **`drought_duration_fixed_p10` is retained deliberately** (user decision, July 2026):
+  cross-family redundancy is not grounds for removal — the same quantity computed by two
+  documented methods has independent value, and the drought family stays internally
+  complete across all five USDM rungs rather than carrying a hole at D2.
+- **Weak internal consistency check** (not a correctness proof): because a level-`p`
+  threshold is a percentile *of the same series it is then counted against*,
+  `drought_duration_fixed_p10_mean` averages ≈36.5 days/year (`p × 365.25`) across a
+  large gage sample. This is largely circular — it would also hold if the threshold and
+  the comparison both used the wrong series (raw instead of smoothed), and switching
+  plotting position moves it by only a few observations. It catches gross mismatches
+  (e.g. a raw-flow threshold compared against smoothed flow) and nothing subtler. It can
+  also legitimately fall short of `p × 365.25` on tied/intermittent records, where the
+  strict `<` excludes a mass of equal values at the threshold.
+
+### Data Quality & Caveats
+
+- **Record-dependent**: thresholds are computed from the run's own window (matching the
+  paper's per-analysis-period thresholds), so values are comparable *within* a product
+  but **must not be compared across** the WY 1993–2025 and WY 1980–2025 standard
+  products — same caveat as `*_all` pulses, elasticity, and the parameterized BFI.
+- **Water year vs the paper's climate year**: the source aggregates over climate years
+  (Apr 1 – Mar 31) so the summer–autumn low-flow season is not split. This
+  implementation uses the water year (Oct 1 – Sep 30) for consistency with every other
+  signature and with the annual-values parquet key, so a drought peaking in September
+  and persisting into October is **split across two annual values**. Day-level
+  indicators — and therefore record totals — are identical under either grouping; the
+  annual series and its trend statistics are not.
+- **The paper's variable (day-of-year) threshold method is not implemented.** Its
+  per-day sample is one value per year, so at 20–46 years of record the low levels are
+  estimated with very large sampling uncertainty, and the 2 % level falls below the
+  smallest Weibull plotting position `1/(n+1)` entirely (2 % would need ≥49 years, 5 %
+  ≥19). Standard type-6 behaviour there is to clamp to the sample minimum; this project
+  instead refuses to extrapolate (`below_plotting_range_policy: "na"`), which is a
+  deliberate estimability policy layered on top of type 6, not part of type 6 itself.
+  So the variable method is *too uncertain under that policy*, not mathematically
+  impossible.
+- **Units**: `drought_deficit_*` is mm only where Q is area-normalized; for the
+  `area_normalized = FALSE` gages it carries m³/s·day and is not cross-gage comparable.
+  The duration metrics are scale-invariant (the threshold is a percentile of the same
+  series) and valid everywhere.
+- **Zeros are values, not gaps**: a year with no sub-threshold days reports 0, and the
+  dense zero-including series legitimately carries the drought signal. No snow-style
+  record-anchored trend gate is applied.
+- **Intermittent gages**: where >~70 % of days are zero flow the low-level thresholds
+  are exactly 0, and the strict `<` comparison then reports 0 duration and 0 deficit
+  for every year. Use `drought_threshold_fixed_p{n}` to identify these gages rather
+  than reading the zeros as "no drought".
+- Trend completeness and the 20-value stats floor both apply (this family is **not**
+  exempt).
+
+### References
+
+- Adelsperger, S., et al. (in review). A novel severity-based approach for assessing streamflow drought characteristics and drivers.
+- Laaha, G., et al. (2017). Unbiased plotting positions for low-flow frequency analysis.
+- U.S. Drought Monitor percentile classes: https://droughtmonitor.unl.edu
+
+---
+
 ## Summary Table
 
 | Category | Function | Requires Climate | Notes |
@@ -520,6 +660,7 @@ days below the threshold are treated as snow-free for durations AND magnitudes
 | Average Storage | `calculate_average_storage` | Yes | 1 metric |
 | Negative Flow Days | `calculate_negative_days` | No | 1 metric (negative_ann) |
 | Snow Metrics | `calculate_snow_metrics` | SWE (Daymet) | 14 metrics (July 2026, Julia only) |
+| Streamflow Drought | `calculate_drought_metrics` | No | 10 metrics (2 measures × 5 severity levels) + 5 threshold scalars (July 2026, Julia only) |
 
 ---
 
@@ -578,7 +719,7 @@ From `config/signatures_config.json` → `changepoint` section:
 
 ### Design Decisions
 
-- **Scope**: Applied to ALL signatures producing annual time series — redundancy across ~76 base signatures (90 from July 2026, with the 14 snow metrics) serves as a pseudo-robustness test
+- **Scope**: Applied to ALL signatures producing annual time series — redundancy across ~76 base signatures (100 from July 2026: + 14 snow metrics + 10 drought metrics) serves as a pseudo-robustness test
 - **Independence**: Changepoint analysis runs independently of the trend completeness gate
 - **Non-parametric**: No distributional assumptions; robust to outliers
 - **Per-signature, not per-gage**: Each signature gets its own changepoint analysis — different signatures may identify changepoints at different years

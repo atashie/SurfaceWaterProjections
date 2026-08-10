@@ -78,6 +78,60 @@ Interpretation keys:
 - Daymet SWE is modeled, not observed — prefer timing/trend signals over absolute
   magnitudes, especially in mountain terrain.
 
+### Streamflow Drought Metrics (July 2026)
+
+Ten per-water-year metrics (`calculate_drought_metrics`, Julia only) after
+Adelsperger et al. (in review): `drought_duration_fixed_p{2,5,10,20,30}` (days below
+threshold) and `drought_deficit_fixed_p{2,5,10,20,30}` (summed departures below
+threshold, mm), plus five `drought_threshold_fixed_p{n}` per-gage scalars holding the
+threshold values (mm/day). Interpretation keys:
+- The five levels are **magnitude (non-exceedance) percentiles** of the 7-day-smoothed
+  flow distribution, mirroring the U.S. Drought Monitor ladder: p30≈D0, p20≈D1,
+  p10≈D2, p5≈D3, p2≈D4. The 10 % flow is the flow *exceeded* 90 % of the time —
+  same convention as the `Q{n}` columns, opposite to how drought papers label
+  exceedance thresholds.
+- They are a **severity ladder, not independent measurements**: duration and deficit
+  are non-decreasing in the level by construction and strongly correlated across
+  levels. Pick one or two levels for headline analysis rather than treating all five
+  as evidence.
+- **Duration vs deficit**: rising deficit with flat duration = droughts deepening but
+  not lengthening; the reverse = longer but shallower. Deficit is the only
+  magnitude-weighted low-flow measure in the output.
+- **`drought_duration_fixed_p10` is largely redundant with the existing low-pulse
+  columns** — measured over 200,834 gage-years: r = 0.979 against
+  `n_low_pulses_all × dur_low_pulses_all`, and within a gage the annual series track at
+  median r = 0.994 (disagreement ≈ 12 % of the interannual SD), so don't present the two
+  as independent evidence. The other four levels ARE distinct (r = 0.71–0.90 against the
+  same pulse pair). The family's new content is `drought_deficit_*` (no counterpart
+  anywhere) and the four non-p10 severity levels — the pulse metrics exist only at the
+  10th percentile. **p10 is kept deliberately** (user decision, July 2026: don't prune a
+  metric merely because a neighbouring family overlaps it, and keep the severity ladder
+  complete) — so treat the overlap as a documentation caveat, not a defect.
+- **Zeros are real values**: a year with no sub-threshold day reports 0, and that
+  dense zero-including series is what carries the drought trend. Do not read 0 as
+  missing.
+- **Intermittent gages**: where most days are zero flow the low-level thresholds are
+  exactly 0, and the strict `<` comparison then gives 0 duration/deficit in every
+  year. Check `drought_threshold_fixed_p{n}` before interpreting those zeros.
+- **Record-dependent** (thresholds come from the run's own window) — see the standard
+  products section below; never compare drought values across the two windows.
+- `drought_deficit_*` is unit-carrying (mm only where `area_normalized = TRUE`); the
+  durations are scale-invariant and valid everywhere.
+- **Two documented deviations from the source paper**: only the FIXED (whole-record)
+  thresholds are implemented — the paper's variable day-of-year thresholds draw on one
+  value per calendar day per year, so at 20–46 years the low levels carry very large
+  sampling uncertainty and 2 % falls below the smallest plotting position `1/(n+1)`
+  altogether (needs ≥ 49 years), which this project declines to extrapolate through —
+  and aggregation is by WATER year, not the paper's climate year (Apr–Mar), so a
+  drought peaking in September and running into October is split across two annual
+  values.
+- Weak sanity anchor: a level-`p` threshold sits below ~`p` % of all days by
+  construction, so `drought_duration_fixed_p10_mean` averages ≈36.5 days/year. Treat a
+  large departure as a prompt to investigate, not proof of a bug — and note the check is
+  near-circular (the threshold is a percentile of the very series it is counted
+  against), so passing it does NOT confirm the smoothing or plotting position.
+  Intermittent gages legitimately fall short of it.
+
 ### The Two Standard Output Products (July 2026)
 
 Two production windows are the project's standard products (both @ 60% qualifying
@@ -101,9 +155,9 @@ Interpretation keys:
   ratios, snow).
 - **Record-dependent signatures legitimately differ between the windows even in
   shared years**: `*_all` pulse metrics (period-of-record percentile
-  thresholds), elasticity (record-mean Q̄/P̄ normalization), and the
-  recession-parameterized BFIs (whole-record alpha). Never mix these across
-  window products.
+  thresholds), elasticity (record-mean Q̄/P̄ normalization), the
+  recession-parameterized BFIs (whole-record alpha), and the drought metrics
+  (whole-record percentile thresholds). Never mix these across window products.
 
 ## Interpreting Results
 

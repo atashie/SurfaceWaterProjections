@@ -12,7 +12,7 @@ using DataFrames
 
 
 """
-    load_gages_ii_interference(gages_dir::String=CFG_GAGES_II_DIR) -> DataFrame
+    load_gages_ii_interference(gages_dir::String=gages_ii_dir()) -> DataFrame
 
 Load GAGES-II human interference metadata.
 
@@ -26,7 +26,7 @@ Returns
 DataFrame
     GAGES-II interference columns for USGS gages
 """
-function load_gages_ii_interference(gages_dir::String=CFG_GAGES_II_DIR)
+function load_gages_ii_interference(gages_dir::String=gages_ii_dir())
     if isnothing(gages_dir) || gages_dir == ""
         @warn "GAGES-II directory not configured"
         return DataFrame(

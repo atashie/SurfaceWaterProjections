@@ -619,7 +619,14 @@ EXPECTED_SIGNATURE_BASES <- c(
   "swe_max", "swe_max_dowy", "snow_cover_days", "snow_on_dowy", "snow_off_dowy",
   "melt_season_days", "melt_rate", "ssm", "swe_apr1",
   "melt_before_peak", "melt_before_peak_pct", "melt_before_peak_to_max_swe",
-  "melt_com_dowy", "swe_max_to_ppt"
+  "melt_com_dowy", "swe_max_to_ppt",
+  # Streamflow drought (Adelsperger et al., in review; July 2026, Julia-first).
+  # Fixed whole-record MAGNITUDE percentile thresholds (2/5/10/20/30 == USDM D4..D0)
+  # on the 7-day smoothed series, via the unbiased Weibull plotting position.
+  "drought_duration_fixed_p2", "drought_duration_fixed_p5", "drought_duration_fixed_p10",
+  "drought_duration_fixed_p20", "drought_duration_fixed_p30",
+  "drought_deficit_fixed_p2", "drought_deficit_fixed_p5", "drought_deficit_fixed_p10",
+  "drought_deficit_fixed_p20", "drought_deficit_fixed_p30"
 )
 
 # Static elasticity column (doesn't follow standard suffix pattern)
@@ -646,6 +653,14 @@ EXPECTED_SEASON_EXCLUDED_YEARS <- c(
 
 # Recession-derived alpha for parameterized BFI (per-gage scalar, not 8-stat pattern)
 EXPECTED_RECESSION_ALPHA_SCALAR <- "recession_alpha_point_cloud_linear_reservoir"
+
+# Drought threshold values in mm/day (per-gage scalars, not 8-stat pattern) — the
+# fixed percentile thresholds behind the drought duration/deficit metrics
+EXPECTED_DROUGHT_THRESHOLDS <- c(
+  "drought_threshold_fixed_p2", "drought_threshold_fixed_p5",
+  "drought_threshold_fixed_p10", "drought_threshold_fixed_p20",
+  "drought_threshold_fixed_p30"
+)
 
 # Validate output CSV schema
 validate_output_schema <- function(output_df, strict = FALSE, context = NULL) {
@@ -676,7 +691,8 @@ validate_output_schema <- function(output_df, strict = FALSE, context = NULL) {
   # Add non-standard columns (don't follow 8-stat suffix pattern)
   expected_sig_cols <- c(expected_sig_cols, EXPECTED_RECESSION_SEASONALITY,
                          EXPECTED_RUNOFF_RATIO_HIGH, EXPECTED_ELASTICITY_DIAGNOSTICS,
-                         EXPECTED_SEASON_EXCLUDED_YEARS, EXPECTED_RECESSION_ALPHA_SCALAR)
+                         EXPECTED_SEASON_EXCLUDED_YEARS, EXPECTED_RECESSION_ALPHA_SCALAR,
+                         EXPECTED_DROUGHT_THRESHOLDS)
 
   present_sig_cols <- intersect(expected_sig_cols, names(output_df))
   missing_sig_cols <- setdiff(expected_sig_cols, names(output_df))

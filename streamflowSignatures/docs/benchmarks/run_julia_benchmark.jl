@@ -15,6 +15,7 @@ using Parquet2
 using Dates
 using JSON
 using Logging
+using SHA
 
 # Configuration
 const STREAMFLOW_PATH = get(ENV, "STREAMFLOW_DATA_PATH",
@@ -622,6 +623,52 @@ function main()
     timing["n_signature_columns"] = ncol(results_df) - n_meta - n_flags
     timing["n_metadata_columns"] = n_meta
     timing["n_qaqc_flags"] = n_flags
+
+    # --- Provenance (added 2026-07-28, Codex MAJOR-4) --------------------------------
+    # Counts and timings alone cannot reconstruct a run: record the resolved inputs, the
+    # config actually loaded (SHA-256 — it is small), the source revision, the Julia
+    # version, and the experiment ENV overrides. Multi-GB inputs record size+mtime rather
+    # than a hash by default; set STREAMFLOW_HASH_INPUTS=1 to hash them too (slow).
+    timing["provenance"] = let
+        hash_big = get(ENV, "STREAMFLOW_HASH_INPUTS", "") == "1"
+        function file_info(path)
+            isfile(path) || return Dict("path" => path, "exists" => false)
+            info = Dict{String, Any}("path" => abspath(path), "exists" => true,
+                                     "bytes" => filesize(path),
+                                     "mtime" => Dates.format(Dates.unix2datetime(mtime(path)),
+                                                             "yyyy-mm-ddTHH:MM:SS"))
+            if hash_big || filesize(path) < 50_000_000
+                info["sha256"] = bytes2hex(SHA.sha256(read(path)))
+            end
+            return info
+        end
+        config_file = get(ENV, "STREAMFLOW_CONFIG",
+                          joinpath(@__DIR__, "..", "..", "config", "signatures_config.json"))
+        git_rev = try
+            strip(read(`git -C $(@__DIR__) rev-parse HEAD`, String))
+        catch
+            "unavailable"
+        end
+        git_dirty = try
+            !isempty(strip(read(`git -C $(@__DIR__) status --porcelain`, String)))
+        catch
+            nothing
+        end
+        Dict{String, Any}(
+            "streamflow" => file_info(STREAMFLOW_PATH),
+            "climate" => file_info(CLIMATE_PATH),
+            "metadata" => file_info(METADATA_PATH),
+            "config" => file_info(config_file),
+            "git_revision" => git_rev,
+            "git_working_tree_dirty" => git_dirty,
+            "julia_version" => string(VERSION),
+            "hostname" => gethostname(),
+            "env_overrides" => Dict(k => get(ENV, k, nothing) for k in
+                ["STREAMFLOW_START_WATER_YEAR", "STREAMFLOW_END_WATER_YEAR",
+                 "STREAMFLOW_MIN_QUALIFYING_DATA_FRACTION", "STREAMFLOW_CONFIG",
+                 "STREAMFLOW_GAGES_II_DIR", "STREAMFLOW_OUTPUT_PREFIX"] if haskey(ENV, k)),
+        )
+    end
 
     # Save timing
     timing_path = joinpath(OUTPUT_DIR, "$(OUTPUT_PREFIX)_timing.json")

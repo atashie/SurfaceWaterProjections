@@ -52,6 +52,12 @@ const EXPECTED_DENSE_SIGNATURES = [
     "qp_slope_sd", "qp_bimodality",
     # Storage
     "avg_storage",
+    # Streamflow drought (10): dense — a drought-free year is a valid 0, and the
+    # 25-year synthetic gage clears the 10-year threshold floor
+    "drought_duration_fixed_p2", "drought_duration_fixed_p5", "drought_duration_fixed_p10",
+    "drought_duration_fixed_p20", "drought_duration_fixed_p30",
+    "drought_deficit_fixed_p2", "drought_deficit_fixed_p5", "drought_deficit_fixed_p10",
+    "drought_deficit_fixed_p20", "drought_deficit_fixed_p30",
 ]
 
 function collector_synthetic_gage(n_years=25; seed=42)

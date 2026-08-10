@@ -103,6 +103,17 @@
     "record_anchored_decade_gate": true,
     "comment": "Snow metrics from daily SWE (Daymet swe). Days with SWE < swe_day_threshold_mm are treated as snow-free for ALL snow metrics, magnitudes AND durations (domain decision 2026-07-14). seasonal_spell_min_days follows Hatchett (2021) Hydrology 8(1):32 / Petersky & Harpold (2018). Set swe_day_threshold_mm near 0 to reproduce the paper's literal SWE>0 rule. record_anchored_decade_gate (July 2026): the 10 threshold-dependent snow metrics require >= decade_min_fraction (na_handling.trend_completeness — LINKED to the streamflow decade gate) of the SWE-valid years in BOTH the first and last decade of the gage's SWE record to be computable (snowy) before trend statistics are computed; on failure the 6 trend stats are NaN (mean/median + Pettitt still computed); absent key => disabled."
   },
+  "drought": {
+    "smoothing_window_days": 7,
+    "smoothing_alignment": "center",
+    "smoothing_min_valid_days": 4,
+    "threshold_method": "fixed",
+    "threshold_percentiles": [2, 5, 10, 20, 30],
+    "plotting_position": "weibull",
+    "below_plotting_range_policy": "na",
+    "min_years_for_threshold": 10,
+    "comment": "Streamflow drought duration/deficit after Adelsperger et al. (in review), 'A novel severity-based approach for assessing streamflow drought characteristics and drivers'. threshold_percentiles are MAGNITUDE (non-exceedance) percentiles of the 7-day-smoothed flow distribution -- 10 = the flow exceeded 90% of the time -- matching the paper and this repo's Q{n} convention; USDM analogy 30/20/10/5/2 = D0/D1/D2/D3/D4. Thresholds are FIXED (whole record, per run window => record-dependent, matching the paper's per-analysis-period thresholds) and computed with the unbiased Weibull plotting position i/(n+1) (Hyndman-Fan definition 6), NOT the Type-7 default used elsewhere in this repo. The paper's variable day-of-year method is intentionally NOT implemented (user decision 2026-07-27: with one value per calendar day per year, the low levels are very uncertain at 20-46 years and 2% falls below the smallest plotting position 1/(n+1) entirely; below_plotting_range_policy='na' declines to extrapolate there, which is a project policy layered on type 6, not type-6 behaviour - type 6 would clamp to the sample minimum). Aggregation is by WATER year, deviating from the paper's climate year (Apr-Mar). Absent section => family disabled (no drought columns)."
+  },
   "qa_qc": {
     "qann_range": [0, 2000],
     "bfi_range": [0, 1],

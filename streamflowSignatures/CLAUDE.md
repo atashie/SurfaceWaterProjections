@@ -120,9 +120,28 @@ This project provides identical signature calculations in Julia (canonical), Pyt
 1. Create function in appropriate `julia/src/*.jl` module returning annual values
 2. Call `generate_stats()` to produce 8 statistics
 3. Register in `julia/src/signatures.jl` orchestration function
-4. Add base name to `EXPECTED_SIGNATURE_BASES` in `config.R`
-5. Run Julia benchmark (`docs/benchmarks/run_julia_benchmark.jl`, ~27 min) to verify
-6. Port to Python (`python/streamflow_signatures/`) and rpkg (`rpkg/R/`)
+4. Add base name to `EXPECTED_SIGNATURE_BASES` in `config.R` (per-gage scalars that
+   don't follow the 8-stat pattern need their own `EXPECTED_*` constant, wired into
+   `validate_output_schema`)
+5. **Register in the test/validation registries** — easy to miss, and each one fails
+   loudly only after the fact:
+   - `EXPECTED_DENSE_SIGNATURES` in `julia/test/test_annual_collector.jl` — asserts
+     **set equality** of collected annual series, so any new dense signature fails it
+     until listed
+   - the signature-count gate in `docs/benchmarks/validate_production_run.py`
+     (`ann.signature.nunique() == N`)
+   - the **expected total summary-column count** in the docs — count both the
+     8-stat + 8-Pettitt fields AND any non-8-stat scalars (getting this wrong is easy:
+     the drought family shipped documented as +160 when it is +165)
+6. Run the Julia unit suite (`julia --project=julia julia/test/runtests.jl`), then the
+   benchmark (`docs/benchmarks/run_julia_benchmark.jl`, ~27 min) to verify
+7. **Prove additivity, don't assume it** — diff the benchmark output against the previous
+   canonical run: every pre-existing column must be unchanged (only `flagged_for_high_na`
+   is expected to shift, since its denominator counts all fields), AND the new columns
+   must be populated. The orchestrator's per-signature `try/catch` turns an unexpected
+   failure into silently missing columns, so a green unit suite proves nothing here.
+   Smoke tests should assert new values are FINITE, not merely that the keys exist.
+8. Port to Python (`python/streamflow_signatures/`) and rpkg (`rpkg/R/`)
 
 ## References
 

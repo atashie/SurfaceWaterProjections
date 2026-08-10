@@ -10,6 +10,21 @@ using JSON3
 # Find config file relative to this module
 const _CONFIG_DIR = joinpath(@__DIR__, "..", "..", "config")
 const _DEFAULT_CONFIG_FILE = joinpath(_CONFIG_DIR, "signatures_config.json")
+
+# ⚠️ CACHING GOTCHA (verified 2026-07-28): every `CFG_*` constant below is evaluated when
+# this module is PRECOMPILED, and Julia does NOT invalidate the precompile cache when an
+# ENV var changes. So setting `STREAMFLOW_CONFIG` (or editing the JSON) has NO EFFECT on
+# an already-precompiled package — a config-variant experiment can silently run with the
+# previous config. Symptom: output identical to the prior run despite a changed config.
+# To make a config change take effect the cache must be invalidated by CONTENT — `touch`
+# alone does NOT work (verified 2026-07-28). Delete the compiled cache:
+#     rm -rf ~/.julia/compiled/v1.12/StreamflowSignatures
+# then run, and verify with:
+#     julia --project=julia -e 'using StreamflowSignatures; println(CFG_DROUGHT_ENABLED)'
+# (`julia --compiled-modules=no` also works but is much slower). The cache then holds the
+# VARIANT build, so purge it again afterwards. This is also why the benchmark runner
+# reads STREAMFLOW_START_WATER_YEAR / _END_WATER_YEAR / _MIN_QUALIFYING_DATA_FRACTION at
+# RUNTIME inside main() rather than from constants here.
 const _CONFIG_FILE = get(ENV, "STREAMFLOW_CONFIG", _DEFAULT_CONFIG_FILE)
 
 function load_config()
@@ -134,6 +149,72 @@ const CFG_SNOW_MIN_ANNUAL_PPT_MM = Float64(get(_snow_config, "min_annual_ppt_mm"
 const CFG_SNOW_RECORD_DECADE_GATE = Bool(get(_snow_config, "record_anchored_decade_gate", false))
 
 # =============================================================================
+# Drought Parameters (Adelsperger et al., in review)
+#
+# Fixed (whole-record) percentile thresholds on the 7-day-smoothed flow series.
+# Percentiles are MAGNITUDE (non-exceedance) levels — 10 == the flow exceeded 90%
+# of the time — consistent with the paper and this repo's Q{n} columns.
+# Absent section => family disabled (no drought columns emitted).
+# =============================================================================
+const _drought_config = get(_config, "drought", Dict())
+const CFG_DROUGHT_ENABLED = !isempty(_drought_config)
+const CFG_DROUGHT_SMOOTH_WINDOW = Int(get(_drought_config, "smoothing_window_days", 7))
+const CFG_DROUGHT_SMOOTH_ALIGNMENT = String(get(_drought_config, "smoothing_alignment", "center"))
+const CFG_DROUGHT_SMOOTH_MIN_VALID = Int(get(_drought_config, "smoothing_min_valid_days", 4))
+const CFG_DROUGHT_THRESHOLD_METHOD = String(get(_drought_config, "threshold_method", "fixed"))
+const CFG_DROUGHT_PERCENTILES = Int.(collect(get(_drought_config, "threshold_percentiles", [2, 5, 10, 20, 30])))
+const CFG_DROUGHT_PLOTTING_POSITION = String(get(_drought_config, "plotting_position", "weibull"))
+const CFG_DROUGHT_BELOW_RANGE_POLICY = String(get(_drought_config, "below_plotting_range_policy", "na"))
+const CFG_DROUGHT_MIN_YEARS = Int(get(_drought_config, "min_years_for_threshold", 10))
+
+# Fail fast on unimplemented options rather than silently falling back — a config
+# asking for a method we do not implement must not quietly produce columns computed
+# by a different one.
+if CFG_DROUGHT_ENABLED
+    if CFG_DROUGHT_THRESHOLD_METHOD != "fixed"
+        error("Unsupported drought.threshold_method='$(CFG_DROUGHT_THRESHOLD_METHOD)': only \"fixed\" is implemented. " *
+              "The paper's variable day-of-year method is intentionally out of scope " *
+              "(docs/plans/2026-07-27-drought-signatures-plan.md §2.5).")
+    end
+    if CFG_DROUGHT_PLOTTING_POSITION != "weibull"
+        error("Unsupported drought.plotting_position='$(CFG_DROUGHT_PLOTTING_POSITION)': only \"weibull\" (i/(n+1), Hyndman-Fan definition 6) is implemented.")
+    end
+    if !(CFG_DROUGHT_SMOOTH_ALIGNMENT in ("center", "trailing"))
+        error("Unsupported drought.smoothing_alignment='$(CFG_DROUGHT_SMOOTH_ALIGNMENT)': expected \"center\" or \"trailing\".")
+    end
+    if !(CFG_DROUGHT_BELOW_RANGE_POLICY in ("na", "clamp"))
+        error("Unsupported drought.below_plotting_range_policy='$(CFG_DROUGHT_BELOW_RANGE_POLICY)': expected \"na\" or \"clamp\".")
+    end
+    # Numeric sanity — a nonsensical value here would silently produce a plausible but
+    # wrong metric (e.g. an EVEN "centered" window is asymmetric: (w-1)÷2 each side
+    # spans w-1 days, not w).
+    if CFG_DROUGHT_SMOOTH_WINDOW < 1
+        error("drought.smoothing_window_days must be >= 1, got $(CFG_DROUGHT_SMOOTH_WINDOW).")
+    end
+    if CFG_DROUGHT_SMOOTH_ALIGNMENT == "center" && iseven(CFG_DROUGHT_SMOOTH_WINDOW)
+        error("drought.smoothing_window_days must be ODD for alignment=\"center\" (an even window cannot be centered), got $(CFG_DROUGHT_SMOOTH_WINDOW).")
+    end
+    if !(1 <= CFG_DROUGHT_SMOOTH_MIN_VALID <= CFG_DROUGHT_SMOOTH_WINDOW)
+        error("drought.smoothing_min_valid_days must satisfy 1 <= min_valid <= smoothing_window_days, got $(CFG_DROUGHT_SMOOTH_MIN_VALID) with window $(CFG_DROUGHT_SMOOTH_WINDOW).")
+    end
+    if isempty(CFG_DROUGHT_PERCENTILES)
+        error("drought.threshold_percentiles must be non-empty.")
+    end
+    if any(p -> !(0 < p < 100), CFG_DROUGHT_PERCENTILES)
+        error("drought.threshold_percentiles must all lie strictly inside (0, 100), got $(CFG_DROUGHT_PERCENTILES).")
+    end
+    if length(unique(CFG_DROUGHT_PERCENTILES)) != length(CFG_DROUGHT_PERCENTILES)
+        error("drought.threshold_percentiles must be unique, got $(CFG_DROUGHT_PERCENTILES).")
+    end
+    if !issorted(CFG_DROUGHT_PERCENTILES)
+        error("drought.threshold_percentiles must be ascending (column order and the level-monotonicity checks depend on it), got $(CFG_DROUGHT_PERCENTILES).")
+    end
+    if CFG_DROUGHT_MIN_YEARS < 1
+        error("drought.min_years_for_threshold must be >= 1, got $(CFG_DROUGHT_MIN_YEARS).")
+    end
+end
+
+# =============================================================================
 # QA/QC Parameters
 # =============================================================================
 const CFG_QAQC_QANN_RANGE = Tuple(_config.qa_qc.qann_range)
@@ -150,7 +231,26 @@ const CFG_QAQC_MAX_NA_FRACTION = _config.qa_qc.max_na_fraction
 # Metadata Parameters
 # =============================================================================
 const CFG_INCLUDE_HUMAN_INTERFERENCE = _config.metadata.include_human_interference
-const CFG_GAGES_II_DIR = _config.metadata.gages_ii_dir
+
+"""
+    gages_ii_dir() -> String
+
+GAGES-II metadata directory, resolved **at call time** from
+`STREAMFLOW_GAGES_II_DIR`, falling back to `metadata.gages_ii_dir` in the config.
+
+⚠️ This is a FUNCTION, not a `const`, deliberately. An ENV-derived constant is baked in
+at precompile time (see the caching note at the top of this file), so a wrapper that sets
+`ENV["STREAMFLOW_GAGES_II_DIR"]` at runtime would be silently ignored and the 11
+human-interference columns would vanish from the output with only a warning. That
+happened twice on 2026-07-28 before this was made a runtime lookup.
+"""
+gages_ii_dir() = let env_val = get(ENV, "STREAMFLOW_GAGES_II_DIR", "")
+    env_val != "" ? env_val : String(_config.metadata.gages_ii_dir)
+end
+
+# Back-compat constant (JSON value only — does NOT see a runtime ENV override).
+# Prefer `gages_ii_dir()`.
+const CFG_GAGES_II_DIR = String(_config.metadata.gages_ii_dir)
 const CFG_HYDAT_PATH = _config.metadata.hydat_path
 const CFG_INTERFERENCE_COLUMNS = collect(_config.metadata.interference_columns)
 

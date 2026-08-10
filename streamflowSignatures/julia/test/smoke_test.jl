@@ -13,8 +13,13 @@ using DataFrames
 using Dates
 
 # ── Configuration ──────────────────────────────────────────────────────────────
-const STREAMFLOW_PATH = raw"D:\processedOuts_feb2026\combined_streamflow_data_09feb2026.parquet"
-const CLIMATE_PATH = raw"D:\processedOuts_feb2026\daymet_1980_2023.parquet"
+# Paths default to the Windows data drive but are ENV-overridable, using the SAME
+# variable names as docs/benchmarks/run_julia_benchmark.jl, so the smoke test can run
+# wherever the feb2026 inputs are mounted (e.g. STREAMFLOW_DATA_PATH=/Volumes/...).
+const STREAMFLOW_PATH = get(ENV, "STREAMFLOW_DATA_PATH",
+    raw"D:\processedOuts_feb2026\combined_streamflow_data_09feb2026.parquet")
+const CLIMATE_PATH = get(ENV, "STREAMFLOW_CLIMATE_PATH",
+    raw"D:\processedOuts_feb2026\daymet_1980_2023.parquet")
 
 # 10 hardcoded test gages (same as Python smoke test)
 const TEST_GAGES = [
@@ -217,6 +222,76 @@ function main()
                     all_ok = false
                 end
             end
+        end
+    end
+
+    # Check 3c: Drought signatures (presence + ranges + level monotonicity)
+    if CFG_DROUGHT_ENABLED
+        levels = CFG_DROUGHT_PERCENTILES
+        drought_bases = vcat(["drought_duration_fixed_p$(p)" for p in levels],
+                             ["drought_deficit_fixed_p$(p)" for p in levels])
+        n_missing_drought = count(b -> !("$(b)_mean" in all_keys), drought_bases)
+        if n_missing_drought == 0
+            println("  [PASS] Drought signatures: all $(length(drought_bases)) bases present")
+        else
+            println("  [FAIL] Drought signatures: $n_missing_drought of $(length(drought_bases)) bases missing")
+            all_ok = false
+        end
+
+        finite_vals(sig) = [r[sig] for r in results
+                            if haskey(r, sig) && !ismissing(r[sig]) &&
+                               !(r[sig] isa Number && isnan(r[sig]))]
+
+        # These gages all carry 45+ water years, so every drought value MUST be finite:
+        # an all-NA column is a failure, not a warning (a NaN sweep would otherwise
+        # sail through the range and monotonicity checks below).
+        n_gages = length(results)
+        for p in levels
+            for (sig, lo, hi) in (("drought_duration_fixed_p$(p)_mean", 0.0, 366.0),
+                                  ("drought_deficit_fixed_p$(p)_mean", 0.0, Inf),
+                                  ("drought_threshold_fixed_p$(p)", 0.0, Inf))
+                if !(sig in all_keys)
+                    println("  [FAIL] $sig missing from output")
+                    all_ok = false
+                    continue
+                end
+                vals = finite_vals(sig)
+                if length(vals) < n_gages
+                    println("  [FAIL] $sig: only $(length(vals))/$n_gages finite " *
+                            "(these gages have 45+ years — expected all finite)")
+                    all_ok = false
+                elseif all(v -> lo <= v <= hi, vals)
+                    println("  [PASS] $sig range check, $(length(vals))/$n_gages finite")
+                else
+                    println("  [FAIL] $sig out of range [$lo, $hi]")
+                    all_ok = false
+                end
+            end
+        end
+
+        # Duration, deficit, and the thresholds themselves must be non-decreasing in
+        # the percentile level for every gage (structural invariant). An incomplete
+        # sequence FAILS — silently skipping it would make the check vacuous.
+        mono_ok = true
+        for r in results
+            for prefix in ("drought_duration_fixed_p", "drought_deficit_fixed_p",
+                           "drought_threshold_fixed_p")
+                suffix = prefix == "drought_threshold_fixed_p" ? "" : "_mean"
+                seq = Float64[]
+                for p in levels
+                    k = "$(prefix)$(p)$(suffix)"
+                    haskey(r, k) && r[k] isa Number && !isnan(r[k]) && push!(seq, Float64(r[k]))
+                end
+                if length(seq) != length(levels) || !issorted(seq)
+                    mono_ok = false
+                end
+            end
+        end
+        if mono_ok
+            println("  [PASS] Drought metrics non-decreasing across percentile levels")
+        else
+            println("  [FAIL] Drought metrics not monotone (or incomplete) across levels")
+            all_ok = false
         end
     end
 

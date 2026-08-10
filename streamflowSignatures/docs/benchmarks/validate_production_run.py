@@ -88,7 +88,8 @@ def main():
     ann = pd.read_parquet(args.annual)
     with open(args.timing) as f:
         tj = json.load(f)
-    g4 = (len(ann) == tj.get("n_annual_rows") and ann.signature.nunique() == 90
+    # 100 = 90 (July 2026: 76 base + 14 snow) + 10 drought (2 metrics x 5 levels)
+    g4 = (len(ann) == tj.get("n_annual_rows") and ann.signature.nunique() == 100
           and ann.water_year.min() >= args.start_year
           and ann.water_year.max() <= args.end_year
           and set(ann.gage_id.unique()) <= set(prod.gage_id)

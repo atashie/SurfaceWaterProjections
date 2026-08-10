@@ -8,8 +8,13 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
 ## [Unreleased]
 
 ### Planned
-- Port annual-values collector, b=1 recession alpha, AND snow metrics to Python and
-  rpkg (after the Julia benchmark re-run validates all three)
+- Run `smoke_test.jl` (10-gage subset) for the drought family on a machine with the
+  `D:\processedOuts_feb2026\` inputs — the unit suite is green, the smoke test is not
+  yet exercised
+- Port annual-values collector, b=1 recession alpha, snow metrics, AND drought metrics
+  to Python and rpkg (after the Julia benchmark re-run validates all four)
+- Regenerate both standard products (WY 1993–2025 and WY 1980–2025 @ 60 %) to carry the
+  drought family — decide whether to batch with the ports
 - Add unit tests for core functions
 - Complete `analyze_Q_PPT_relationships()` for raw data pipeline
 - Add ERA5/PRISM data fetching for USGS/HYDAT gages
@@ -19,6 +24,20 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
 - BFImax estimation via Collischonn & Fan (2013) backward filter — would give BFI_Eckhardt_param per-gage BFImax instead of fixed 0.8, improving discriminating power (currently range [0.47–0.80] due to BFImax saturation)
 
 ### Known Issues (discovered 2026-07-14, Codex review — not yet fixed)
+- **LOW (raw/legacy path only, discovered 2026-07-27 by the drought smoke run) —
+  `calculate_negative_days` crashes on `missing` Q and silently drops its 8 columns.**
+  `julia/src/pulses.jl:323` applies `:Q => (q -> sum(x -> !isnan(x) && x < 0, q))`
+  straight to a `Union{Missing,Float64}` column; `!isnan(missing)` is `missing`, so
+  `missing && …` throws `TypeError: non-boolean (Missing) used in boolean context`. The
+  orchestrator's per-signature `try/catch` turns this into a warning, so the gage just
+  loses all 8 `negative_ann` columns (smoke gage 01073000 emitted 808 signature columns
+  vs 816 for the other nine). Every other signature routes Q through `coalesce_q`; this
+  one does not. **Production output is unaffected** while `use_legacy_filtering: false`,
+  because `preprocess_daily_data()` emits Float64 Q with NaN rather than `missing` — it
+  only bites callers passing raw frames (smoke test, direct API use). Fix is one line
+  (`coalesce_q(df.Q)` before the group-by, matching the rest of the codebase); left
+  unapplied because it is outside the drought work's scope. Python/rpkg ports likely
+  mirror the pattern — verify when touched.
 - **LOW (legacy shim only, discovered 2026-07-21) — 6 pre-existing failures in the
   legacy R NA-handling test suite** (`R/tests/test_na_handling.R`, run per its
   documented usage after sourcing `config.R` + `R/helperFunctions.R`): grid
@@ -205,10 +224,196 @@ first pass (manuscript §refs; direction of fix in brackets):
    i (>3 consecutive NA days), which unconditionally rejects the year in the
    preprocessor. Pending the domain-expert clarification (Guidelines TODO above),
    either the sentence drops item i or the code makes item i config-driven.
+8. **§2.2.2 (new, 2026-07-27)** — add the **streamflow drought** family to the
+   metric-family list: duration + deficit at five fixed percentile thresholds
+   (2/5/10/20/30 %, U.S. Drought Monitor D4–D0), computed on 7-day-smoothed flow
+   with the unbiased Weibull plotting position, citing Adelsperger et al. (in
+   review) and Laaha et al. (2017). Two deviations from the source method must be
+   stated: only the FIXED (whole-record) thresholds are implemented (the variable
+   day-of-year thresholds are too uncertain at the low levels with 20–46 years of
+   record, 2 % falling below the smallest plotting position outright), and aggregation
+   is by WATER year rather than the paper's climate year
+   (Apr–Mar), so droughts crossing Oct 1 are split across two annual values. Also
+   worth a Usage Notes line: drought values are record-dependent (thresholds come
+   from each product's own window) and `drought_deficit_*` is unit-carrying.
 
 ---
 
 ## [July 2026]
+
+### New: streamflow drought signature family (10 metrics, Adelsperger et al. — Julia)
+Per-water-year **drought duration** (days below threshold) and **drought deficit**
+(summed departures below threshold, mm) at five fixed severity levels — 2/5/10/20/30 %
+magnitude percentiles, mirroring the operational U.S. Drought Monitor D4→D0 ladder —
+through the standard `generate_stats()` path (8 stats + 8 Pettitt fields each = 160
+columns, plus 5 per-gage `drought_threshold_fixed_p{n}` scalar diagnostics →
+**+165 columns, 1,488 → 1,653**; 90 → 100 time-series signature bases in the annual
+parquet, where the scalars do not appear; annual values exported via the collector).
+New module `julia/src/drought.jl` (`calculate_drought_metrics`); full spec + decision
+record: `docs/plans/2026-07-27-drought-signatures-plan.md`. Requested by the user
+(2026-07-27) from Adelsperger et al. (in review), "A novel severity-based approach for
+assessing streamflow drought characteristics and drivers", with four in-session scope
+decisions.
+
+- **Method**: 7-day **centered** smoothing of daily Q applied to the CONTINUOUS
+  date-indexed series (no artificial Oct 1 discontinuity), within maximal runs of
+  consecutive dates so the window never averages across a rejected-year gap (shrinking
+  at run edges; < 4 valid days → NaN). Thresholds are whole-record percentiles of the
+  smoothed values via the **unbiased Weibull plotting position** `i/(n+1)`
+  (Hyndman-Fan definition 6 = `quantile(x, p; alpha=0, beta=0)`) — deliberately NOT the
+  type-7 default used elsewhere, which differs most in exactly this low tail.
+  Comparison is strict (`<`); ≥ 10 qualifying years required for a threshold.
+- **Scope decisions (user, 2026-07-27)**: **fixed thresholds only** — the paper's
+  variable day-of-year method is NOT implemented because its per-day sample is one value
+  per year, so at 20–46 years of record the low levels carry very large sampling
+  uncertainty and the 2 % level falls below the smallest Weibull plotting position
+  `1/(n+1)` outright (2 % needs ≥ 49 years, 5 % needs ≥ 19); type 6 would clamp to the
+  sample minimum there, and this project's `below_plotting_range_policy: "na"` refuses to
+  — an estimability policy layered on type 6, not a property of it; all five levels;
+  **water-year** aggregation (documented deviation from the paper's Apr–Mar climate
+  year, which splits droughts crossing Oct 1 — day-level indicators and record totals
+  are identical either way, annual series and trends are not); NaN rather than
+  clamp-to-minimum below the plotting range (unreachable for the fixed method, kept as
+  a defensive invariant); explicit `_fixed_` infix in column names so a future variable
+  method can be added non-breakingly.
+- **Record-dependent**: thresholds come from the run's own window, matching the paper's
+  per-analysis-period thresholds — so drought values join `*_all` pulses, elasticity,
+  and the parameterized BFI on the "valid within a product, never compared across the
+  WY 1993–2025 and WY 1980–2025 products" list. `drought_deficit_*` is also
+  unit-carrying (mm only where `area_normalized = TRUE`); the durations are
+  scale-invariant and valid everywhere.
+- **Gates**: trend completeness and the 20-value stats floor both apply (NOT exempt).
+  No snow-style record-anchored gate is needed — a drought-free year emits a valid 0,
+  which is precisely the signal a trend should see. **NO existing column changes at all**:
+  `flagged_for_high_na` was expected to shift (its denominator counts all signature
+  fields — the April 2026 Pettitt / July 2026 snow precedent), but direct per-gage
+  recomputation found **zero crossings** (1,224 flagged before and after). Do not
+  generalize this to other windows — the closest gage sits only ~6.1e-5 from the 30 %
+  threshold, so the outcome is window-specific.
+- **Tests**: `julia/test/test_drought_metrics.jl` — hand-derived Weibull quantiles and
+  the below-plotting-range guard; exact smoothing values incl. the never-blend-across-a-
+  gap and duplicate-date cases; and two record invariants that pin the threshold
+  definition AND the day → water-year attribution simultaneously (summed duration ==
+  count of pooled values below the threshold == `floor((n+1)p)` for a distinct-valued
+  sample; summed deficit == the pooled departure sum). Plus level monotonicity, wet-year
+  valid zeros, the intermittent zero-threshold/strict-`<` case, threshold and stats
+  floors, schema/collector/zero-warning contracts, and orchestrator + annual-export
+  wiring. `smoke_test.jl` gained presence, range, and monotonicity checks.
+- **Suite green**: `julia/test/runtests.jl` → **2,042 assertions, 0 failures** (drought
+  file: 670). Julia 1.12.6 was installed locally (juliaup) to run it. The expectations
+  had first been derived against a purpose-built pure-Python mirror of `drought.jl`;
+  the Julia run then confirmed them. **One real registration gap the suite caught**:
+  `EXPECTED_DENSE_SIGNATURES` in `test_annual_collector.jl` pins the exact set of dense
+  annual series and must list every new dense signature — the 10 drought bases were
+  added (that test asserts set EQUALITY, so a new family fails it until registered; now
+  called out in the CLAUDE.md / DEVELOPMENT.md "Adding New Signatures" checklists).
+- **Smoke test PASSED on real data** (10 gages × 45–46 WYs, feb2026 inputs): all 10
+  bases present, ranges valid, level monotonicity holds. Mean durations came out at
+  7.296 / 36.499 / 109.542 d/yr for p2 / p10 / p30 against the `p × 365.25` construction
+  target of 7.30 / 36.52 / 109.58 — a **weak, near-circular consistency check** (the
+  threshold is a percentile of the series it is then counted against), NOT a proof that
+  the smoothing or plotting position is right; it catches gross mismatches only.
+  `smoke_test.jl` gained ENV path overrides (`STREAMFLOW_DATA_PATH` /
+  `STREAMFLOW_CLIMATE_PATH`, the same names the benchmark runner already uses) so it can
+  run wherever the inputs are mounted instead of only the Windows `D:\` drive.
+- **Codex adversarial review (2026-07-27, codex-cli 0.145.0, read-only): GO-WITH-FIXES.**
+  No CRITICAL; 6 MAJOR + 5 MINOR, all resolved — full table in the plan doc §16. The
+  substantive ones: (MAJOR-1) the tests' record invariant proved **conservation, not
+  attribution** — a uniform water-year shift would have passed it, so a hand-derived
+  boundary fixture (a low-flow block straddling Sep 30 → Oct 1 splitting exactly 6 days /
+  27.0 mm into WY 2000 and 7 days / 36.0 mm into WY 2001) plus an independent per-year
+  recompute were added; (MAJOR-2) the `p × 365.25` check is near-circular and its
+  description as "threshold correctness confirmed" was withdrawn; (MAJOR-3) the
+  redundancy ratio was statistically invalid (`mean(n) × mean(d) ≠ mean(n × d)`) and the
+  non-redundancy claim is withdrawn pending an annual-series comparison at benchmark
+  scale; (MAJOR-5) the column count was wrong — **+165 → 1,653**, not +160 → 1,648;
+  (MAJOR-6) "unresolvable" overstated the variable-threshold problem. Two code fixes:
+  rows with unparseable dates are no longer smoothed with their neighbours, and numeric
+  config values (even "centered" windows, `min_valid > window`, out-of-range or unsorted
+  percentiles) now fail fast. Post-fix suite: **2,700 assertions, 0 failures** (drought
+  670 → 1,328).
+- **Benchmark run (2026-07-28, WY 1993–2025 @ 60 %, thumbdrive inputs on the M1):**
+  6.05 min, **6,678 gages × 1,653 columns**, annual parquet 18,898,406 rows / 100
+  signatures. Gage set identical to standard product #1, confirming the family changes
+  no gage qualification. Outputs in their own folder per the one-folder convention:
+  `/Volumes/Untitled/processedOuts_drought_28jul2026/` (wrapper
+  `docs/benchmarks/run_julia_benchmark_drought_1993_2025_60pct.jl`).
+- **REDUNDANCY MEASURED — `drought_duration_fixed_p10` is largely redundant** with the
+  existing pulse pair (new tool `docs/benchmarks/analyze_drought_redundancy.jl`, run on
+  the ANNUAL series, where `n × mean-duration` reconstructs that year's sub-threshold day
+  count — mathematically exact, subject to floating representation). Over 200,834
+  gage-years: **r = 0.979**, ρ = 0.971; and judged against the interannual signal rather
+  than the series mean (the quantity a trend consumes), **within-gage median r = 0.994**
+  (p10 0.971) with disagreement ≈ **11.7 % of each gage's own duration SD** (p90 25.3 %).
+  Only p10 collapses: the other four levels measure at r = 0.712 / 0.902 / 0.846 / 0.731
+  (p2/p5/p20/p30) against the same pulse pair. Redundancy is an aggregate statement —
+  32.5 % of gage-years agree exactly, max disagreement 318 days; on intermittent gages
+  99.87 % agree exactly (13 of 9,652 differ, max 8 days). The family's non-redundant
+  content is therefore (a) `drought_deficit_*`, the only magnitude-weighted low-flow
+  measure in the output, and (b) the four non-p10 severity levels. SIGNATURES.md and the
+  claude-skill steer users accordingly. **DECISION (user, 2026-07-28): `drought_duration_
+  fixed_p10` is KEPT** — cross-family redundancy is not grounds for removal (err toward
+  abundance; the same quantity via two documented methods has independent value, and the
+  severity ladder stays complete at all five USDM rungs). The overlap is a documentation
+  caveat, not a defect: don't present it and the pulse pair as independent evidence.
+- **✅ ADDITIVITY GATE: PASS** (closes Codex MAJOR-4). The rigorous test is a same-machine,
+  same-Julia baseline with the drought family disabled (config copy without the `drought`
+  section via `STREAMFLOW_CONFIG`), diffed with EXACT equality against the drought-enabled
+  run: 165 columns added (expected 165), no column dropped, gage sets identical, **all
+  1,487 shared columns bitwise unchanged**, every added column populated. A
+  **cross-machine** diff against the delivered product #1 canNOT serve as this gate: 431
+  columns differ as pure FP noise (≤ 3.2e-06) and 66 differ materially on 1–38 of 6,678
+  rows — all of them discretely FP-sensitive statistics (`TQmean*`, where one flipped day
+  is 100/365 = 0.274 pp; `FDC90th*`, OLS on `log10(Q + 1e-10)` in the near-zero tail,
+  already documented here as FP-fragile; and rank/p-value/Pettitt fields where a tie
+  flips). None attributable to the drought family.
+- **New validation tooling**: `docs/benchmarks/check_additivity.jl` — proves a run ADDED
+  columns without changing pre-existing ones (column set, gage set, per-gage value
+  identity with NaN==NaN, added-column population, `--allow-shift`, `--expect-added`,
+  and a `--tol` mode for cross-machine comparisons). Required by the new CLAUDE.md /
+  DEVELOPMENT.md checklist step.
+- **Fixed (HIGH, config plumbing): GAGES-II directory is now resolved at RUNTIME, not
+  precompile time.** Symptom: a benchmark silently emits 1,642 instead of 1,653 columns,
+  dropping the 11 GAGES-II/HYDAT human-interference columns with only a warning, because
+  `metadata.gages_ii_dir` still points at the Windows `D:/gagesMetadata`. First fix
+  attempt added an ENV-derived **constant** `CFG_GAGES_II_DIR` — which does not work: a
+  const is baked at precompile time, so a wrapper setting
+  `ENV["STREAMFLOW_GAGES_II_DIR"]` at runtime is silently ignored (the same
+  precompilation trap documented in `julia/src/config.jl` and DEVELOPMENT.md; it bit
+  three times in one day). Now a **function** `gages_ii_dir()` reads ENV at call time and
+  is the default argument of `load_gages_ii_interference`; `CFG_GAGES_II_DIR` remains as
+  the JSON-only value for compatibility. Verified by probe: in a session where the ENV var
+  is set, the constant still returns `D:/gagesMetadata` while the accessor returns the
+  mounted path. **Lesson: any ENV override consumed through a `const` is unreliable** —
+  this is why the runner already re-reads the window/fraction ENV vars at runtime.
+- **Codex review #2 — RESULTS/ANALYSES (2026-07-28): GO-WITH-FIXES, product approved for
+  promotion** once the doc errors were corrected; all 4 MAJOR + 7 MINOR resolved (table in
+  plan §17). Codex independently re-verified the config equivalence, gage sets, and **all
+  16,890,066 shared annual values** (zero mismatches). The findings that mattered:
+  (MAJOR-1) my claim of "exactly zero disagreement on intermittent gage-years" was
+  **FALSE** — r = 0.981 alongside ρ = 0.492 cannot coexist with identical series; the true
+  figure is 99.87 % exact-equal, 13 of 9,652 differing, max 8 days, and the analysis script
+  now reports exact-equal %, nonzero count and MAX |diff| so quantiles can't hide it again;
+  (MAJOR-2) the redundancy argument scaled a median difference against the series *mean*
+  when a trend consumes interannual variation — re-measured within-gage (median r 0.994,
+  RMSE/SD 0.117), conclusion survives; (MAJOR-3) `check_additivity.jl`'s population gate
+  passed a column with ONE finite value of 6,678, so it could not detect the failure mode
+  it existed for — now `--min-finite-frac` (default 0.5) with a by-suffix breakdown, re-run
+  at 0.75 = PASS; (MAJOR-4) runs lacked provenance.
+- **New: provenance block in the benchmark timing JSON** (`run_julia_benchmark.jl`) —
+  resolved paths + size/mtime for every input, SHA-256 for files < 50 MB (config,
+  metadata; `STREAMFLOW_HASH_INPUTS=1` also hashes the multi-GB parquets), git revision +
+  dirty flag, Julia version, hostname, and the experiment ENV overrides. Additive to the
+  timing JSON only — no signature output changes. **The 28 Jul product predates it**; a
+  6-min re-run would capture it.
+- Also documented from this round: `flagged_for_high_na` stability is window-specific (the
+  closest gage sits 6.1e-5 from the 30 % threshold — do not generalize); the ~20 % NaN rate
+  in some drought columns is two separate mechanisms (495 gages / 7.4 % lose trend stats to
+  the completeness gate — the *same* set that loses `Qann_senn_slp`, so not drought-specific
+  — plus ~300 losing rank stats to constant series); and an audit confirming no past
+  config-variant result is invalidated by the precompilation gotcha (DEVELOPMENT.md).
+- Julia only; Python/rpkg ports deferred (now a four-feature port queue).
+  `validate_production_run.py` signature-count gate updated 90 → 100.
 
 ### New: per-watershed Annual NLCD product (CONUS land cover + impervious, non-signature)
 A CONUS-only US companion to the continental MODIS LULC product, built on **USGS/MRLC Annual NLCD

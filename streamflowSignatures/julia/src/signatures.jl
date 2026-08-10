@@ -127,6 +127,18 @@ function calculate_all_signatures(
         @warn "calculate_pulse_metrics failed for gage $gage_id" exception=(e, catch_backtrace())
     end
 
+    # Drought (Adelsperger et al., in review): fixed percentile thresholds on the
+    # 7-day smoothed series. Dense annual series with meaningful zeros, so the trend
+    # gates and the stats floor apply normally (NOT exempt). Config-gated: an absent
+    # `drought` section emits no drought columns.
+    if CFG_DROUGHT_ENABLED
+        try
+            merge!(results, calculate_drought_metrics(gage_data; trend_completeness=tc, decade_completeness=dc, min_values_for_stats=mv, changepoint=cp, collector=coll))
+        catch e
+            @warn "calculate_drought_metrics failed for gage $gage_id" exception=(e, catch_backtrace())
+        end
+    end
+
     try
         merge!(results, calculate_negative_days(gage_data; trend_completeness=tc, decade_completeness=dc, min_values_for_stats=mv, changepoint=cp, collector=coll))
     catch e
