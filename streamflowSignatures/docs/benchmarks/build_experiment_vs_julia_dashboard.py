@@ -49,6 +49,16 @@ SIGNATURE_GROUPS = {
     "Elasticity": ["elasticity_rolling", "elasticity_annual"],
     "Q-P Seasonality": ["qp_slope_sd", "qp_bimodality"],
     "Storage": ["avg_storage"],
+    # Snow (July 2026) and Streamflow Drought (July 2026) were absent from this list
+    # until 2026-08-10, so dashboards built before then silently omitted both
+    # families — only signatures named here become selectable targets.
+    "Snow": ["swe_max", "swe_max_dowy", "snow_cover_days", "snow_on_dowy",
+             "snow_off_dowy", "melt_season_days", "melt_rate", "ssm", "swe_apr1",
+             "melt_before_peak", "melt_before_peak_pct",
+             "melt_before_peak_to_max_swe", "melt_com_dowy", "swe_max_to_ppt"],
+    "Streamflow Drought": [f"drought_{m}_fixed_p{p}"
+                           for m in ("duration", "deficit")
+                           for p in (2, 5, 10, 20, 30)],
 }
 
 STATS = ["_mean", "_median", "_senn_slp", "_linear_slp",
@@ -76,6 +86,13 @@ SINGLE_VALUE_SIGS = [
     "season_excluded_years_spring",
     "season_excluded_years_summer",
     "season_excluded_years_fall",
+    # drought family thresholds (per-gage scalars, July 2026). Unlike the
+    # season_excluded_years_* entries above these ARE in the comparator's scope.
+    "drought_threshold_fixed_p2",
+    "drought_threshold_fixed_p5",
+    "drought_threshold_fixed_p10",
+    "drought_threshold_fixed_p20",
+    "drought_threshold_fixed_p30",
 ]
 
 

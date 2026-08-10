@@ -299,6 +299,24 @@ hazard that led the benchmark runner to read `STREAMFLOW_START_WATER_YEAR`,
 `STREAMFLOW_END_WATER_YEAR`, and `STREAMFLOW_MIN_QUALIFYING_DATA_FRACTION` at *runtime*
 inside `main()` instead of from module constants.
 
+### Verify input integrity before a production run
+
+The inputs live on an **exFAT** thumbdrive and can be silently truncated: on 2026-08-10
+`daymet_1980_2023.parquet` was found at 1,261,436,928 bytes instead of 4,125,630,653 —
+**with an unchanged mtime**, so only the byte count betrayed it (Julia then failed at
+Phase 2 with `invalid parquet: final bytes … expect "PAR1"`). Check sizes against the
+`provenance` block of the most recent timing JSON, and check that each parquet still ends
+in its magic bytes, before committing to a long run:
+
+```bash
+for f in combined_streamflow_data_09feb2026.parquet daymet_1980_2023.parquet; do
+  p=/Volumes/Untitled/processedOuts_feb2026/$f
+  echo "$f  $(stat -f%z "$p")  footer=$(tail -c 4 "$p")"
+done
+```
+
+This is what the provenance block (July 2026) exists for — record it on every run.
+
 ### Validate Output Quality
 
 After processing, run QA/QC validation:
@@ -647,6 +665,10 @@ python docs/benchmarks/build_experiment_vs_julia_dashboard.py startIn1993_80pct
 | `docs/benchmarks/run_julia_benchmark_startIn1993.jl` | Experiment: WY >= 1993 wrapper |
 | `docs/benchmarks/run_julia_benchmark_startIn1993_60pct.jl` | Experiment: WY >= 1993 + 60% qualifying fraction wrapper |
 | `docs/benchmarks/run_julia_benchmark_startIn1993_80pct.jl` | Experiment: WY >= 1993 + 80% qualifying fraction wrapper |
+| `docs/benchmarks/run_julia_benchmark_drought_1993_2025_60pct.jl` | **STANDARD PRODUCT #1** wrapper — WY 1993-2025 @ 60% with the drought family (promoted 2026-08-10) |
+| `docs/benchmarks/run_julia_benchmark_prod_1980_2025_60pct_drought.jl` | Standard product #2 wrapper with drought — written 2026-08-10, **not yet run** (blocked on the truncated climate parquet) |
+| `docs/benchmarks/check_additivity.jl` | Proves a run ADDED columns without changing pre-existing ones (column/gage set, per-gage value identity, population gate) |
+| `docs/benchmarks/analyze_drought_redundancy.jl` | Measures drought-duration overlap with the pulse metrics on the annual series |
 | `docs/benchmarks/comparison_report.md` | Generated comparison report |
 | `docs/benchmarks/julia_vs_golden_r_summary.md` | Generated Julia vs Golden R detailed report |
 

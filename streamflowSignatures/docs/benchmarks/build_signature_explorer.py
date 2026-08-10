@@ -52,11 +52,19 @@ SCALARS = ["elasticity_static", "recession_alpha_point_cloud_linear_reservoir",
            "runoff_ratio_high_count", "elasticity_years_total", "elasticity_years_low_ppt",
            "ice_affected_days_total", "season_excluded_years_winter",
            "season_excluded_years_spring", "season_excluded_years_summer",
-           "season_excluded_years_fall"]
+           "season_excluded_years_fall",
+           # drought family thresholds (per-gage scalars, July 2026)
+           "drought_threshold_fixed_p2", "drought_threshold_fixed_p5",
+           "drought_threshold_fixed_p10", "drought_threshold_fixed_p20",
+           "drought_threshold_fixed_p30"]
 
 
 def category_of(base):
     b = base.lower()
+    # drought first: `dur_*`/`d*` rules below would otherwise not match, but the
+    # explicit rule keeps the family together regardless of future renames
+    if b.startswith("drought_"):
+        return "Streamflow drought"
     if b.startswith(("swe_", "snow_", "melt_")) or b == "ssm":
         return "Snow"
     if b.startswith("q") and (b[1:].replace("_q10", "").replace("95_q10", "").isdigit()

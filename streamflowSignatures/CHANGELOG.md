@@ -8,13 +8,14 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
 ## [Unreleased]
 
 ### Planned
-- Run `smoke_test.jl` (10-gage subset) for the drought family on a machine with the
-  `D:\processedOuts_feb2026\` inputs — the unit suite is green, the smoke test is not
-  yet exercised
+- **BLOCKED — regenerate standard product #2 (WY 1980–2025 @ 60 %) to carry the drought
+  family.** Wrapper is written and committed
+  (`docs/benchmarks/run_julia_benchmark_prod_1980_2025_60pct_drought.jl`); the run fails
+  in Phase 2 because the climate input is truncated on the drive (see Known Issues).
+  Re-run it once `daymet_1980_2023.parquet` is restored — product #1 was promoted with
+  drought on 2026-08-10, so the two standards are asymmetric until this lands.
 - Port annual-values collector, b=1 recession alpha, snow metrics, AND drought metrics
   to Python and rpkg (after the Julia benchmark re-run validates all four)
-- Regenerate both standard products (WY 1993–2025 and WY 1980–2025 @ 60 %) to carry the
-  drought family — decide whether to batch with the ports
 - Add unit tests for core functions
 - Complete `analyze_Q_PPT_relationships()` for raw data pipeline
 - Add ERA5/PRISM data fetching for USGS/HYDAT gages
@@ -24,6 +25,26 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
 - BFImax estimation via Collischonn & Fan (2013) backward filter — would give BFI_Eckhardt_param per-gage BFImax instead of fixed 0.8, improving discriminating power (currently range [0.47–0.80] due to BFImax saturation)
 
 ### Known Issues (discovered 2026-07-14, Codex review — not yet fixed)
+- **BLOCKING (data integrity, discovered 2026-08-10) — the climate input
+  `daymet_1980_2023.parquet` is TRUNCATED on the thumbdrive.** The file is
+  **1,261,436,928 bytes** with no `PAR1` footer, against the **4,125,630,653 bytes**
+  recorded in the 28 Jul drought run's own provenance block — with an unchanged mtime
+  (`2026-07-16T14:43:10`), so nothing in the filesystem metadata signals the loss. Julia
+  fails at Phase 2 with `ArgumentError: invalid parquet: final bytes are "@…", expect
+  "PAR1"`. **No other copy exists on the drive** (no Daymet ZIP, no annual CSVs, no
+  second parquet) and none is present locally. Consequence: **no run that needs
+  precipitation or SWE can be reproduced** — this blocks standard product #2's drought
+  regeneration and any future re-run of #1. The streamflow parquet
+  (899,935,349 bytes) and metadata CSV (2,164,196 bytes) are intact: sizes match
+  provenance and both have valid footers. Recovery options, in order of preference:
+  (1) another copy (S3 `s3://climate-ai-data-science-shiny-app-data/streamflow/`,
+  another machine, or the original Windows `D:` drive); (2) rebuild from the Daymet ZIP
+  of 44 annual CSVs via `convert_daymet_zip_to_parquet()`; (3) re-download from ORNL
+  DAAC and re-run the co-authors' gdptools basin aggregation. The drive is **exFAT**
+  (`/dev/disk4s1`, and carries a `FOUND.000` from an earlier fsck), which is a plausible
+  cause — the delivered products living on it should be checksummed and backed up.
+  **This is the first thing the July 2026 provenance block caught**: without the
+  recorded input sizes the truncation would have looked like an unexplained Julia error.
 - **LOW (raw/legacy path only, discovered 2026-07-27 by the drought smoke run) —
   `calculate_negative_days` crashes on `missing` Q and silently drops its 8 columns.**
   `julia/src/pulses.jl:323` applies `:Q => (q -> sum(x -> !isnan(x) && x < 0, q))`
@@ -236,6 +257,53 @@ first pass (manuscript §refs; direction of fix in brackets):
    (Apr–Mar), so droughts crossing Oct 1 are split across two annual values. Also
    worth a Usage Notes line: drought values are record-dependent (thresholds come
    from each product's own window) and `drought_deficit_*` is unit-carrying.
+
+---
+
+## [August 2026]
+
+### Promoted: STANDARD OUTPUT #1 now carries the drought family (2026-08-10)
+The 28 Jul drought validation run is **promoted to standard product #1**, superseding
+`processedOuts_22jul2026`. Same window (WY 1993–2025 @ 60 %), same config, same 6,678
+gages; the difference is the +165-column streamflow drought family (1,488 → 1,653).
+Delivered folder: `/Volumes/Untitled/processedOuts_drought_28jul2026` (`RUN_NOTES.md`
+carries the full artifact inventory and gate log). The drought family itself was
+committed the same day (`53878be`).
+
+- **Artifacts completed to the standard-product convention** (all in the run's own
+  folder, per the one-folder rule): signature explorer
+  `signature_explorer_1993_2025_60pct_drought.html` (71.8 MB; 1,621 mapped variables =
+  100 bases × 16 stats + 21 scalars) + its `_annual/` sidecar folder (100 files, all 10
+  drought series present); comparison CSV + summary MD + dashboard
+  (`prod_1993_2025_60pct_drought_vs_julia_*`, 84.4 MB) against the superseded 22 Jul
+  product.
+- **Gates**: `validate_production_run.py` **6/7 PASS**, the one FAIL attributed —
+  gate 2 ("column set == reference") fails by construction at 1,653 vs 1,488, and the
+  delta was verified directly as **exactly 165 columns, all `drought_*`, 0 dropped**.
+  `validate_annual_values.py` **PASS** (612,046 pairs, 0 mismatches, 0 coverage misses,
+  0 orphans, 0 dup keys). `audit_qualification.jl` **PASS** on 11 stratified edge gages
+  (near-threshold 20/33 = 0.606 inclusions and 4 exclusions, independent recompute).
+- **Comparison vs the superseded product**: 1,451 shared columns, **1,446 Perfect
+  (R² ≥ 0.999), 5 Good, 0 below 0.99**, min R² 0.9977 (FDC). ⚠ Cross-machine (Windows →
+  M1), so the residual is FP noise in discretely FP-sensitive statistics — this is a
+  sanity check, **not** the additivity proof. The additivity proof remains the
+  same-machine `check_additivity.jl` diff from 28 Jul (all 1,487 shared columns bitwise
+  unchanged).
+- **Tooling gap fixed (affects older dashboards too)**: `SIGNATURE_GROUPS` in
+  `build_experiment_vs_julia_dashboard.py` gated which signatures become selectable
+  targets, and had **never been updated for the snow family** — so every dashboard built
+  before 2026-08-10, including standard product #1's and #2's July dashboards, silently
+  omitted all 14 snow bases. Added **Snow** and **Streamflow Drought** groups + the 5
+  drought threshold scalars to `SINGLE_VALUE_SIGS` (targets 735 → 820).
+  `compare_experiment_vs_julia.py` and `build_signature_explorer.py` categorize
+  generically, so they only needed the two new category labels (drought would otherwise
+  have shown as "Other") and the 5 scalars registered in the explorer's `SCALARS`.
+- **Standard product #2 (WY 1980–2025) NOT regenerated — blocked.** The run was
+  launched the same day and failed in Phase 2: the climate parquet is truncated on the
+  drive (see Known Issues). Wrapper
+  `run_julia_benchmark_prod_1980_2025_60pct_drought.jl` is committed and ready. Until it
+  runs, the two standard products are **asymmetric** — only #1 carries drought — which
+  is now stated in the claude-skill's standard-products section.
 
 ---
 

@@ -132,13 +132,20 @@ threshold values (mm/day). Interpretation keys:
   against), so passing it does NOT confirm the smoothing or plotting position.
   Intermittent gages legitimately fall short of it.
 
-### The Two Standard Output Products (July 2026)
+### The Two Standard Output Products (July 2026; #1 re-promoted Aug 2026)
 
 Two production windows are the project's standard products (both @ 60% qualifying
 fraction, 20-year floor, one self-contained folder each):
-- **#1 WY 1993–2025** (6,678 gages) — recent-era coverage.
-- **#2 WY 1980–2025** "entire period of record" (6,250 gages) — long-established
-  gages.
+- **#1 WY 1993–2025** (6,678 gages, **1,653 columns**) — recent-era coverage.
+  Promoted 2026-08-10 from the 28 Jul drought validation run
+  (`processedOuts_drought_28jul2026`), **superseding the 22 Jul folder**
+  (`processedOuts_22jul2026`, 1,488 columns). Same window, config, and gage set;
+  the only difference is the +165-column streamflow drought family.
+- **#2 WY 1980–2025** "entire period of record" (6,250 gages, **1,488 columns**) —
+  long-established gages. **Does NOT yet carry the drought family** — its
+  regeneration is blocked on a truncated `daymet_1980_2023.parquet` (see
+  CHANGELOG → Known Issues). So the two standards are currently **asymmetric**:
+  any drought analysis must use #1.
 
 Interpretation keys:
 - **Neither is a subset of the other**: 5,771 gages shared; 907 only in #1 (late

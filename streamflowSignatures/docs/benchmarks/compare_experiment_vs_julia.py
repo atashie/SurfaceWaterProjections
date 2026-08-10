@@ -105,6 +105,13 @@ def get_stat_suffix(col):
 
 
 def categorize_metric(base):
+    # Drought and Snow are matched first: both families are newer than the rules
+    # below and would otherwise fall through to "Other" (e.g. b_* would claim
+    # nothing here, but a future rename could collide).
+    if base.startswith("drought_"):
+        return "Streamflow Drought"
+    if base.startswith(("swe_", "snow_", "melt_")) or base == "ssm":
+        return "Snow"
     if base.startswith(("Qann", "Qwin", "Qspr", "Qsum", "Qfal")):
         return "Flow Volumes"
     if base.startswith("Q") and len(base) > 1 and any(c.isdigit() for c in base[1:4]):
