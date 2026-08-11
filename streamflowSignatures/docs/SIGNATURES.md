@@ -492,6 +492,14 @@ days below the threshold are treated as snow-free for durations AND magnitudes
   from the first or last decade of the SWE record.
 - WY 1980 and WY 2024 are partial in the Daymet parquet → automatically
   SWE-invalid (same boundary behavior as the climate signatures).
+- **Daymet uses a 365-day calendar** (confirmed against the source CSVs,
+  August 2026): leap years keep Feb 29 and instead **drop Dec 31**. Every
+  Daymet year is exactly 365 days, so the SWE (and PPT) series carries a
+  one-day hole on Dec 31 of each leap year, which the preprocessor absorbs as
+  an internal gap ≤ 3 days (linearly interpolated). Melt increments are
+  therefore interpolated across that boundary in leap years rather than
+  observed. Longstanding behavior — not introduced by the 2026-08-11 parquet
+  rebuild, which reproduces it faithfully.
 - Snow metrics only run on an explicitly provided, SWE-valid-year-filtered frame
   (`snow_data`); an SWE column in the main gage frame is never used implicitly.
 

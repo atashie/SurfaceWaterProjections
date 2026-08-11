@@ -141,11 +141,17 @@ fraction, 20-year floor, one self-contained folder each):
   (`processedOuts_drought_28jul2026`), **superseding the 22 Jul folder**
   (`processedOuts_22jul2026`, 1,488 columns). Same window, config, and gage set;
   the only difference is the +165-column streamflow drought family.
-- **#2 WY 1980–2025** "entire period of record" (6,250 gages, **1,488 columns**) —
-  long-established gages. **Does NOT yet carry the drought family** — its
-  regeneration is blocked on a truncated `daymet_1980_2023.parquet` (see
-  CHANGELOG → Known Issues). So the two standards are currently **asymmetric**:
-  any drought analysis must use #1.
+- **#2 WY 1980–2025** "entire period of record" (6,250 gages, **1,653 columns**) —
+  long-established gages. Regenerated 2026-08-11 in
+  `processedOuts_1980_2025_11aug2026`, **superseding the 22 Jul folder**
+  (`processedOuts_1980_2025_22jul2026`, 1,488 columns). Both standards now carry
+  the drought family.
+
+Provenance caveat: #1 was built from the original Daymet parquet, #2 from a
+parquet rebuilt out of the annual Daymet CSVs after the original was found
+truncated. A controlled replay showed the rebuild shifts results by ≤ 3.4e-13
+(CHANGELOG → August 2026), so this does not affect interpretation — but the two
+products' `timing.json` provenance blocks record different climate inputs.
 
 Interpretation keys:
 - **Neither is a subset of the other**: 5,771 gages shared; 907 only in #1 (late

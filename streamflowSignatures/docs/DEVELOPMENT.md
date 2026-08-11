@@ -317,6 +317,27 @@ done
 
 This is what the provenance block (July 2026) exists for — record it on every run.
 
+**If the climate parquet is the casualty**, rebuild it from the 44 annual Daymet CSVs
+(no R needed):
+
+```bash
+python docs/benchmarks/convert_daymet_csvs_to_parquet.py \
+  --csv-dir /Volumes/Untitled/daymet_1980_2023 \
+  --out    /Volumes/Untitled/processedOuts_feb2026/daymet_1980_2023_rebuilt_10aug2026.parquet
+```
+
+then prove the rebuilt input before building anything new on it, by re-running a
+delivered product's config against it and diffing:
+
+```bash
+julia --project=julia docs/benchmarks/check_additivity.jl NEW.csv DELIVERED.csv --expect-added 0
+```
+
+The 2026-08-11 rebuild reproduced the WY 1993–2025 product with 0 columns added/dropped,
+an identical gage set, and ≤ 3.4e-13 on 98 of 1,653 columns. Note the source CSVs carry
+**no day column** and Daymet uses a **365-day calendar** (leap years drop Dec 31, not
+Feb 29) — see the converter's docstring and CHANGELOG → August 2026.
+
 ### Validate Output Quality
 
 After processing, run QA/QC validation:
@@ -666,9 +687,10 @@ python docs/benchmarks/build_experiment_vs_julia_dashboard.py startIn1993_80pct
 | `docs/benchmarks/run_julia_benchmark_startIn1993_60pct.jl` | Experiment: WY >= 1993 + 60% qualifying fraction wrapper |
 | `docs/benchmarks/run_julia_benchmark_startIn1993_80pct.jl` | Experiment: WY >= 1993 + 80% qualifying fraction wrapper |
 | `docs/benchmarks/run_julia_benchmark_drought_1993_2025_60pct.jl` | **STANDARD PRODUCT #1** wrapper — WY 1993-2025 @ 60% with the drought family (promoted 2026-08-10) |
-| `docs/benchmarks/run_julia_benchmark_prod_1980_2025_60pct_drought.jl` | Standard product #2 wrapper with drought — written 2026-08-10, **not yet run** (blocked on the truncated climate parquet) |
+| `docs/benchmarks/run_julia_benchmark_prod_1980_2025_60pct_drought.jl` | **STANDARD PRODUCT #2** wrapper — WY 1980-2025 @ 60% with the drought family (run 2026-08-11; defaults to the rebuilt climate parquet) |
 | `docs/benchmarks/check_additivity.jl` | Proves a run ADDED columns without changing pre-existing ones (column/gage set, per-gage value identity, population gate) |
 | `docs/benchmarks/analyze_drought_redundancy.jl` | Measures drought-duration overlap with the pulse metrics on the annual series |
+| `docs/benchmarks/convert_daymet_csvs_to_parquet.py` | Rebuilds `daymet_1980_2023.parquet` from the 44 annual Daymet CSVs (Python equivalent of the R `convert_daymet_zip_to_parquet()`) |
 | `docs/benchmarks/comparison_report.md` | Generated comparison report |
 | `docs/benchmarks/julia_vs_golden_r_summary.md` | Generated Julia vs Golden R detailed report |
 

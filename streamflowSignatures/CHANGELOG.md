@@ -8,14 +8,16 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
 ## [Unreleased]
 
 ### Planned
-- **BLOCKED — regenerate standard product #2 (WY 1980–2025 @ 60 %) to carry the drought
-  family.** Wrapper is written and committed
-  (`docs/benchmarks/run_julia_benchmark_prod_1980_2025_60pct_drought.jl`); the run fails
-  in Phase 2 because the climate input is truncated on the drive (see Known Issues).
-  Re-run it once `daymet_1980_2023.parquet` is restored — product #1 was promoted with
-  drought on 2026-08-10, so the two standards are asymmetric until this lands.
 - Port annual-values collector, b=1 recession alpha, snow metrics, AND drought metrics
   to Python and rpkg (after the Julia benchmark re-run validates all four)
+- Restore a readable copy of the ORIGINAL `daymet_1980_2023.parquet` if one exists
+  elsewhere (S3, another machine, the Windows `D:` drive). Both standard products are now
+  built on the CSV-rebuilt input; an original would let the ≤ 3.4e-13 replay residual be
+  attributed rather than merely bounded, and would let the truncated file be deleted.
+- Consider making `check_additivity.jl` report a cross-machine mode explicitly — its
+  shared-value gate cannot pass across machines because rank statistics flip on last-bit
+  ties (measured 2026-08-11: annual series agree to 5.7e-14 while `FDC90th_spearman_pval`
+  moves 0.81). Today that shows up as a bare FAIL that a reader must interpret.
 - Add unit tests for core functions
 - Complete `analyze_Q_PPT_relationships()` for raw data pipeline
 - Add ERA5/PRISM data fetching for USGS/HYDAT gages
@@ -25,6 +27,16 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
 - BFImax estimation via Collischonn & Fan (2013) backward filter — would give BFI_Eckhardt_param per-gage BFImax instead of fixed 0.8, improving discriminating power (currently range [0.47–0.80] due to BFImax saturation)
 
 ### Known Issues (discovered 2026-07-14, Codex review — not yet fixed)
+- **RESOLVED 2026-08-11 (workaround in place; the corrupt file is still on the drive) —
+  the truncated climate parquet.** The user restored the 44 annual Daymet CSVs to
+  `/Volumes/Untitled/daymet_1980_2023/` (10 GB) and the parquet was rebuilt from them
+  with the new `docs/benchmarks/convert_daymet_csvs_to_parquet.py` →
+  `processedOuts_feb2026/daymet_1980_2023_rebuilt_10aug2026.parquet` (97,757,220 rows ×
+  6,087 sites, 3.76 GB). **The canonical `daymet_1980_2023.parquet` path still holds the
+  truncated file** (left untouched at the user's direction), so runs must point
+  `STREAMFLOW_CLIMATE_PATH` at the rebuilt file — the WY 1980–2025 wrapper now defaults
+  to it. Details of the rebuild, its validation, and the Daymet 365-day calendar finding
+  are in the August 2026 entry below. Original issue, kept for the record:
 - **BLOCKING (data integrity, discovered 2026-08-10) — the climate input
   `daymet_1980_2023.parquet` is TRUNCATED on the thumbdrive.** The file is
   **1,261,436,928 bytes** with no `PAR1` footer, against the **4,125,630,653 bytes**
@@ -262,6 +274,119 @@ first pass (manuscript §refs; direction of fix in brackets):
 
 ## [August 2026]
 
+### Promoted: STANDARD OUTPUT #2 regenerated with the drought family (2026-08-11)
+WY 1980–2025 @ 60 % rebuilt on the recovered climate input, superseding
+`processedOuts_1980_2025_22jul2026`. Delivered folder:
+`/Volumes/Untitled/processedOuts_1980_2025_11aug2026/` (wrapper
+`run_julia_benchmark_prod_1980_2025_60pct_drought.jl`; `RUN_NOTES.md` carries the
+inventory and gate log). **7.78 min, 6,250 gages × 1,653 columns**; annual parquet
+24,366,487 rows / 100 signatures. Both standard products now carry drought, so the
+asymmetry noted in the 2026-08-10 entry is closed.
+
+- **Gates**: `validate_production_run.py` 6/7 with the same mis-applied gate-2 waiver
+  (1,653 vs the 1,488-column July reference; delta verified as exactly +165 `drought_*`,
+  0 dropped). Gage set **identical to the July build** (6,250 = 6,250, 0 either-only,
+  lat/lon match). `validate_annual_values.py` **PASS** — 587,829 pairs, 0 mismatches, 0
+  coverage misses, 0 orphans, 0 duplicate keys. Year counts [20, 46]; stats floor
+  respected; snow 5,635 gages (4,546 US + 1,089 CAN). Comparison vs the July build:
+  **1,447/1,451 Perfect**, 4 Good, min R² 0.9977 (FDC), mean R² 0.999992.
+- **`check_additivity.jl` FAILS its shared-value check against the July build** — 74
+  columns differ materially even at `--tol 1e-6` (worst: `FDC90th_spearman_pval` 0.81,
+  `FDC90th_mk_pval` 0.80, `Qwin_*` rank stats ~0.05), plus 437 within tolerance
+  (≤ 4.67e-06). That comparison confounds **three** changes at once — machine (Windows →
+  M1), climate input (original → rebuilt), and the drought family — and several failing
+  columns are **Q-only**, which no climate change can explain. Rather than assert "it's
+  the machine", the three were **partitioned with controls**:
+
+  | Comparison | What varies | Result |
+  |---|---|---|
+  | #1 replay: M1+original vs M1+rebuilt climate | **input only** | 98 cols, ≤ **3.4e-13**, no rank flips |
+  | #2 vs its drought-disabled twin (same machine, same input) | **drought code only** | all 1,487 shared cols **bitwise** unchanged |
+  | #1: M1+original vs Windows+original | **machine** | **66 cols material**, `FDC90th_spearman_rho` 0.53, `Qwin`/`Qfal` rank stats — *same columns and magnitudes as #2's 74* |
+
+  The machine control uses the ORIGINAL climate input on both sides — no rebuilt parquet
+  anywhere — and reproduces the failure signature. **Mechanism confirmed at the annual
+  level**: comparing the two machines' annual parquets for the failing Q-only bases over
+  200,834 gage-years gives max |diff| **5.68e-14** for `FDC90th` and **1.82e-12** for
+  `Qwin`, with **no rows present on only one side**. The annual series are therefore
+  numerically identical; the divergence appears **only in the rank-based summary
+  statistics**, where a last-bit difference flips a tie and moves Spearman/Mann-Kendall
+  discretely. This is the FP-fragility already documented for `FDC90th` (OLS on
+  `log10(Q + 1e-10)` in the near-zero tail) and for rank/Pettitt fields.
+- **✅ ADDITIVITY GATE: PASS** — rather than infer additivity from the WY 1993–2025 window,
+  a drought-disabled twin of THIS run was produced on this machine with this climate input
+  (`STREAMFLOW_CONFIG` variant with the `drought` section removed; precompile cache purged
+  first and restored afterwards, with the `CFG_DROUGHT_ENABLED` probe confirming
+  `false` before and `true` after — see DEVELOPMENT.md → config-variant gotcha). Diffed
+  with exact equality: **all 1,487 shared columns bitwise unchanged**, gage sets identical
+  (6,250), exactly 165 columns added, every added column populated at ≥ 0.75 finite
+  fraction. `check_additivity.jl` is a same-machine instrument and cannot pass across
+  machines — this is the comparison it was designed for, and product #2 now has the same
+  class of proof product #1 has. Evidence retained beside the product as
+  `validation_additivity_samemachine.txt`.
+
+### Recovered: Daymet climate parquet rebuilt from the annual CSVs (2026-08-11)
+After the canonical `daymet_1980_2023.parquet` was found truncated (Known Issues), the
+user restored the **44 annual Daymet CSVs** (1980–2023, 10 GB) to
+`/Volumes/Untitled/daymet_1980_2023/`, and the parquet was rebuilt from them with a new
+tool, unblocking every climate/SWE-dependent run.
+
+- **New tool `docs/benchmarks/convert_daymet_csvs_to_parquet.py`** — a Python
+  reimplementation of the R `convert_daymet_zip_to_parquet()` (there is no R on this Mac)
+  using the same positional reconstruction. **Not an exact mirror** — it is stricter (R
+  only *warns* on unexpected per-site day counts and never checks per-month counts, input
+  columns, year values, invalid dates, or duplicates; those are fatal here) and it keeps
+  `site_id` as a string where `fread()` may infer numeric. The CSVs carry
+  `site_id, month, year` but **no day column**, so `day` = row order within
+  (site_id, year, month) and `Date` = year-month-day. Reads a DIRECTORY rather than a ZIP
+  and streams year by year because ~98M rows do not fit in 16 GB; each year is sorted by
+  (site_id, Date) and appended, and pyarrow splits by size into **~132 row groups, not one
+  per year**. Row order is not semantically meaningful downstream (the runner groups
+  climate by gage_id and `preprocess_daily_data()` re-sorts onto a normalized daily grid).
+  Output: **97,757,220 rows × 6,087 sites, 4,040,997,608 bytes** — matching the ~98M rows
+  / 6,087 sites the guidelines describe for the original.
+- **`site_id` is read as a STRING and never coerced.** The streamflow parquet keys on
+  zero-padded ids (verified: 6,636 of 8,014 gage ids begin with `0`), so numeric coercion
+  would have silently broken the climate join for most of the domain.
+- **DATA FINDING — Daymet publishes a 365-day calendar.** Verified across all 44 CSVs:
+  leap years keep Feb 29 and instead **drop Dec 31**, so December has 30 rows and every
+  year is exactly 365 rows per site. The positional reconstruction therefore yields
+  Dec 1–30 in leap years and no Dec 31 row at all — a one-day hole in the climate series
+  every leap year, absorbed by the preprocessor as an internal gap ≤ 3 days. This is a
+  property of the source reproduced faithfully, **not new**: the R version wrote the same
+  rows (its `expected_days` check assumed 366 and merely logged a warning). The converter
+  asserts the per-(site, month) day counts under this convention. **That is a structural
+  cardinality check, not a proof of chronology**: it catches a month with the wrong number
+  of rows (a site short a day in February would otherwise shift every subsequent date
+  silently) but **cannot detect a permutation of days *within* a month**. The chronology is
+  corroborated end-to-end instead, by the product replay below — a within-month permutation
+  could not survive that replay.
+- **Validated end-to-end by reproducing a delivered product**, the only check available
+  since the original binary is unreadable: the WY 1993–2025 standard config was re-run
+  against the rebuilt input and diffed with `check_additivity.jl` — **0 columns added, 0
+  dropped, identical 6,678-gage set**, and 98 of 1,653 columns differing by at most
+  **3.4e-13** (≤ 69 of 6,678 rows each; most ≤ 1e-15), all climate/SWE-derived. For scale,
+  that is ~7 orders of magnitude tighter than the cross-machine FP differences this
+  project already accepts between Windows and M1 runs of the same config (≤ 3.2e-06 on
+  431 columns).
+- **Root cause of the residual, and a fixed defect**: the first rebuild used pandas'
+  default CSV float parser, which is ~1 ULP off on ~10 % of these values, and 137 columns
+  drifted up to 3.2e-07. The converter now uses `float_precision="round_trip"`, verified
+  **bit-exact against a correctly-rounded `strtod` parse on 1,200,000 values (0
+  mismatches)**. The remaining 3.4e-13 is **consistent with a last-bit
+  ingestion/serialization difference** — R's `fread` uses a fast parser that is not
+  guaranteed correctly rounded — but that cause is **not established**: the original
+  parquet is unreadable, so it cannot be excluded that the restored CSVs differ from the
+  ones that built it, or that some other ingestion detail (blank/NA handling,
+  serialization) contributes. What IS established is that the rebuilt values are the
+  exactly rounded representation of the restored source CSVs, and that the residual is
+  numerically negligible for product use.
+- **The truncated file is left in place** at the canonical path (user's direction),
+  renamed nothing; runs must set `STREAMFLOW_CLIMATE_PATH` to the rebuilt file. The
+  WY 1980–2025 wrapper defaults to it and the choice is recorded in each run's provenance
+  block, so a future reader can tell which input any product was built from by its
+  recorded size (rebuilt 4,040,997,608 vs original 4,125,630,653).
+
 ### Promoted: STANDARD OUTPUT #1 now carries the drought family (2026-08-10)
 The 28 Jul drought validation run is **promoted to standard product #1**, superseding
 `processedOuts_22jul2026`. Same window (WY 1993–2025 @ 60 %), same config, same 6,678
@@ -277,9 +402,12 @@ committed the same day (`53878be`).
   drought series present); comparison CSV + summary MD + dashboard
   (`prod_1993_2025_60pct_drought_vs_julia_*`, 84.4 MB) against the superseded 22 Jul
   product.
-- **Gates**: `validate_production_run.py` **6/7 PASS**, the one FAIL attributed —
-  gate 2 ("column set == reference") fails by construction at 1,653 vs 1,488, and the
-  delta was verified directly as **exactly 165 columns, all `drought_*`, 0 dropped**.
+- **Gates**: `validate_production_run.py` **6/7**, with gate 2 ("column set == reference")
+  FAILING. That is a **documented waiver, not a PASS**: the validator was handed a
+  reference whose column set was *expected* to differ (1,653 vs 1,488), so the gate is
+  mis-applied here rather than satisfied. What compensates is the direct check — the delta
+  is **exactly 165 columns, all `drought_*`, 0 dropped** — plus the separate same-machine
+  additivity test.
   `validate_annual_values.py` **PASS** (612,046 pairs, 0 mismatches, 0 coverage misses,
   0 orphans, 0 dup keys). `audit_qualification.jl` **PASS** on 11 stratified edge gages
   (near-threshold 20/33 = 0.606 inclusions and 4 exclusions, independent recompute).
@@ -294,7 +422,9 @@ committed the same day (`53878be`).
   targets, and had **never been updated for the snow family** — so every dashboard built
   before 2026-08-10, including standard product #1's and #2's July dashboards, silently
   omitted all 14 snow bases. Added **Snow** and **Streamflow Drought** groups + the 5
-  drought threshold scalars to `SINGLE_VALUE_SIGS` (targets 735 → 820).
+  drought threshold scalars to `SINGLE_VALUE_SIGS` (selectable targets for this
+  comparison 623 → 820: +112 from the 14 snow bases × 8 stats, +80 from the 10 drought
+  bases × 8 stats, +5 drought scalars).
   `compare_experiment_vs_julia.py` and `build_signature_explorer.py` categorize
   generically, so they only needed the two new category labels (drought would otherwise
   have shown as "Other") and the 5 scalars registered in the explorer's `SCALARS`.
