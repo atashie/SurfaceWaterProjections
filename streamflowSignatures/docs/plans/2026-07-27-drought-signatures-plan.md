@@ -800,3 +800,52 @@ water-year attribution test would fail if the mapping were corrupted).
 **Follow-ups deliberately NOT done here** (logged, not silently dropped): making config
 values runtime data rather than precompiled constants; hashing the multi-GB inputs by
 default; expected-eligibility masks per statistic in the additivity checker.
+
+---
+
+## 18. Promotion record (2026-08-10 / 08-11)
+
+The drought family shipped to BOTH standard products; the July 2026 folders are superseded.
+
+| | Standard product #1 | Standard product #2 |
+|---|---|---|
+| Window | WY 1993–2025 @ 60 % | WY 1980–2025 @ 60 % |
+| Folder | `processedOuts_drought_28jul2026` | `processedOuts_1980_2025_11aug2026` |
+| Promoted | 2026-08-10 | 2026-08-11 |
+| Gages × cols | 6,678 × 1,653 | 6,250 × 1,653 |
+| Annual parquet | 18,898,406 rows / 100 sigs | 24,366,487 rows / 100 sigs |
+| Climate input | ORIGINAL daymet parquet | REBUILT from the annual CSVs |
+| Additivity gate | PASS (28 Jul, same-machine, bitwise) | PASS (11 Aug, same-machine, bitwise) |
+| Annual-values validation | PASS (612,046 pairs) | PASS (587,829 pairs) |
+| Comparison vs superseded | 1,446/1,451 Perfect, min R² 0.9977 | 1,447/1,451 Perfect, min R² 0.9977 |
+
+Both folders carry the full standard-product artifact set (explorer + `_annual/` sidecars,
+comparison CSV/summary/dashboard, `validation_gates.txt`, additivity + control reports,
+`RUN_NOTES.md`).
+
+### Codex review of the promotion (2 rounds, read-only, codex-cli 0.145.0)
+
+Round 1: **GO-WITH-FIXES on #1, NO-GO on #2** — 1 CRITICAL, 6 MAJOR, 3 MINOR. The CRITICAL
+rejected "different machine" as an explanation for #2's 74 material shared-column
+differences vs the July build, correctly noting several were **Q-only** metrics no climate
+change could touch. Answered with three controls (input-only ≤ 3.4e-13; drought-only
+bitwise; machine-only reproducing the pattern with the ORIGINAL climate input on both
+sides) plus an annual-level comparison showing the underlying series agree to 5.68e-14.
+
+Round 2 (delta): **GO-WITH-FIXES on both** — "the former NO-GO blocker is cleared".
+It independently reproduced both annual-control numbers to full precision and confirmed the
+drought-disabled twin proves itself by emitting 1,488 columns / 90 annual signatures. It
+found one further overstatement, now corrected: the cross-machine divergence is **not**
+"only rank-based statistics" — 14 of 67 material columns are `TQmean` / Pettitt / `FDC90th`
+fields. The accurate framing is **discretely FP-sensitive** statistics (rank ties flip;
+`TQmean` is a day count so one day = 0.274 pp; the Pettitt changepoint LOCATION jumps;
+`FDC90th` is OLS on `log10(Q + 1e-10)` in the near-zero tail).
+
+### Infrastructure discovered / built during promotion
+
+- `docs/benchmarks/convert_daymet_csvs_to_parquet.py` — rebuilds the climate parquet from
+  the 44 annual CSVs after the canonical one was found truncated. **Daymet uses a 365-day
+  calendar** (leap years drop Dec 31, not Feb 29).
+- `build_experiment_vs_julia_dashboard.py`'s `SIGNATURE_GROUPS` had never included the SNOW
+  family, so every dashboard built before 2026-08-10 silently omitted all 14 snow bases.
+  Fixed (selectable targets 623 → 820).

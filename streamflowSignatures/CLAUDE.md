@@ -62,7 +62,8 @@ This project provides identical signature calculations in Julia (canonical), Pyt
    timing JSON, run log, signature explorer (+ its `_annual/` sidecar folder),
    and every comparison dashboard/CSV/summary generated for that run — belong in
    that experiment's OWN output folder, one unique folder per experiment (e.g.
-   `D:/processedOuts_22jul2026` for the WY 1993–2025 standard run). Do NOT leave
+   `processedOuts_drought_28jul2026` for the current WY 1993–2025 standard
+   product). Do NOT leave
    run-specific artifacts in `docs/benchmarks/` — the repo keeps only the tools
    and the long-lived cross-language reference CSVs (April golden/experiment
    files).
@@ -142,6 +143,27 @@ This project provides identical signature calculations in Julia (canonical), Pyt
    failure into silently missing columns, so a green unit suite proves nothing here.
    Smoke tests should assert new values are FINITE, not merely that the keys exist.
 8. Port to Python (`python/streamflow_signatures/`) and rpkg (`rpkg/R/`)
+
+## Current Standard Products (as of 2026-08-11)
+
+Two delivered products, both @ 60% qualifying fraction, both **1,653 columns** (incl. the
+drought family), each in its own folder with explorer + comparison dashboards + retained
+validation reports:
+
+| # | Window | Folder | Gages | Annual parquet |
+|---|---|---|---|---|
+| 1 | WY 1993–2025 | `processedOuts_drought_28jul2026` | 6,678 | 18,898,406 rows / 100 signatures |
+| 2 | WY 1980–2025 | `processedOuts_1980_2025_11aug2026` | 6,250 | 24,366,487 rows / 100 signatures |
+
+Both supersede the 22 Jul folders (1,488 columns, no drought). **Neither is a subset of the
+other** and **record-dependent signatures (drought thresholds, `*_all` pulses, elasticity,
+parameterized BFI) must never be compared across them.** Every run also writes the
+per-signature annual values parquet alongside the summary CSV — see DEVELOPMENT.md →
+Annual Values Export.
+
+⚠️ **Climate input**: the canonical `daymet_1980_2023.parquet` is TRUNCATED; use
+`daymet_1980_2023_rebuilt_10aug2026.parquet` (product #1 predates the rebuild, product #2
+uses it; difference bounded at ≤ 3.4e-13). See DEVELOPMENT.md → Active Parquet Files.
 
 ## References
 

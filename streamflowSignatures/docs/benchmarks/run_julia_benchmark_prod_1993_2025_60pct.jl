@@ -1,4 +1,10 @@
 """
+⚠️ SUPERSEDED (2026-08-10) — this wrapper produced the 1,488-column standard product #1
+in `D:/processedOuts_22jul2026`, which no longer carries the delivered feature set. The
+current standard product #1 (1,653 columns, incl. the drought family) is built by
+`run_julia_benchmark_drought_1993_2025_60pct.jl`. Kept as the historical record of the
+22 Jul run; the Windows `D:` paths below also predate the macOS/ENV-override setup.
+
 PRODUCTION standard run #1 (22 Jul 2026): WY 1993-2025 (EXPLICIT end cap — first
 production exercise of STREAMFLOW_END_WATER_YEAR) + 60% qualifying fraction. The
 first "standard output" window (user decisions 2026-07-21/22; HISSS manuscript

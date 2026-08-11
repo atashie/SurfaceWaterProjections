@@ -80,7 +80,8 @@ Signature functions receive clean data
 Every signature's per-year annual values — previously discarded after
 `generate_stats()` collapsed them into the 8 statistics — are exported as one
 long-format parquet alongside the summary CSV:
-`docs/benchmarks/{prefix}_signatures_annual.parquet`.
+`{output_dir}/{prefix}_signatures_annual.parquet` — i.e. the run's own experiment folder
+(the one-folder convention, CLAUDE.md Critical Constraint #5), NOT `docs/benchmarks/`.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -792,9 +793,32 @@ signatures instead (see DECISION above).
 
 | File | Location | Created | Description |
 |------|----------|---------|-------------|
-| `combined_streamflow_data_09feb2026.parquet` | `D:/processedOuts_feb2026/` | Feb 2026 | Current streamflow parquet with bug fixes |
-| `combined_watershed_metadata_09feb2026.csv` | `D:/processedOuts_feb2026/` | Feb 2026 | Corresponding metadata |
-| `daymet_1980_2023.parquet` | `D:/processedOuts_feb2026/` | Feb 2026 | Climate data (PPT, temp, SWE) |
+| `combined_streamflow_data_09feb2026.parquet` | `D:/processedOuts_feb2026/` | Feb 2026 | Current streamflow parquet with bug fixes. 111,624,189 rows / 8,014 gages, **858 MiB** (899,935,349 B) |
+| `combined_watershed_metadata_09feb2026.csv` | `D:/processedOuts_feb2026/` | Feb 2026 | Corresponding metadata, 2.1 MiB |
+| **`daymet_1980_2023_rebuilt_10aug2026.parquet`** | `D:/processedOuts_feb2026/` | Aug 2026 | **USE THIS** for climate (PPT, temp, SWE). 97,757,220 rows / 6,087 sites / WY-covering CY 1980–2023, **3.76 GiB** (4,040,997,608 B). Rebuilt from the annual CSVs after the original was truncated — see below |
+| `daymet_1980_2023/` (44 annual CSVs) | `D:/` (drive root) | Jan 2026 | **Source of record** for Daymet: `site_id, month, year, prcp, tmin, tmax, swe, vp, srad`; no day column. 10.08 GiB total, ~235 MB/yr. Rebuild the parquet with `docs/benchmarks/convert_daymet_csvs_to_parquet.py` |
+
+> ⚠️ **`daymet_1980_2023.parquet` (the canonical name) is TRUNCATED and unreadable** —
+> 1,261,436,928 bytes with no `PAR1` footer, against 4,125,630,653 recorded in the 28 Jul
+> run's provenance block (mtime unchanged, so only the byte count reveals it). It is left
+> in place; **set `STREAMFLOW_CLIMATE_PATH` to the `_rebuilt_10aug2026` file** (the
+> WY 1980–2025 wrapper already defaults to it). Standard product #1 was built from the
+> ORIGINAL, #2 from the rebuild; a controlled replay bounds the difference at ≤ 3.4e-13.
+> See CHANGELOG → August 2026.
+
+**Boundary polygons** (source layers, on the same drive):
+
+| Layer | Location | Size |
+|---|---|---|
+| HydroBASINS lev12 polygons (167,665 N. American basins) | `geospatial_derivedData/basinAt_NorAm_polys.gpkg` | 462 MiB |
+| HydroBASINS lev12 centroids | `geospatial_derivedData/basinAt_NorAm_centroids.gpkg` | 131 MiB |
+| Official US basin boundaries (GAGES-II) | `geospatial_derivedData/official_watershed_polygons/gagesII_bnd/` | 138 MiB |
+| Official Canadian basin boundaries (ECCC/WSC MDA_ADP, 11 gpkg) | `geospatial_derivedData/official_watershed_polygons/ca/` | 5.0 MiB |
+| BasinATLAS v10 geodatabase (281 attributes; HydroATLAS metadata source) | `BasinATLAS_Data_v10/` | 6.1 GiB |
+| ⚠️ `unified_watersheds_simplified.gpkg` — **corrupt CSV, not a polygon layer** | `geospatial_derivedData/` | 2.0 MiB (do not use) |
+
+The DERIVED per-gage geometry product (`watershed_polygons_26jun2026.{gpkg,parquet}`,
+~42/36 MB, 7,964 basins) lives on S3, not on this drive — see `EO_data_processing/README.md`.
 
 ### Deprecated Parquet Files (DO NOT USE)
 

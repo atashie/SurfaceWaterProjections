@@ -172,8 +172,15 @@ Julia is the canonical implementation. Python and R are validated ports producin
 | Metric | Julia | Python | rpkg (R port) | R (legacy) |
 |--------|-------|--------|---------------|------------|
 | Approx. processing time (7,313 gages) | ~15 min | ~150 min | ~2-4 hrs | ~1-2 hrs |
-| Signature columns | 624 | 624 | 624 | 551 |
+| Signature columns (April 2026 comparison basis) | 624 | 624 | 624 | 551 |
 | Signature cols with R² >= 0.99 vs Julia | -- | 620/623 (99.5%) | 618/623 (99.2%) | 502/551 (91.1%) |
+
+**Julia has since moved ahead: it now emits 1,653 columns.** The table above is the April 2026
+basis on which the ports were validated and is unchanged for those 624 shared columns. Four
+Julia-only features are pending port to Python and rpkg — the annual-values export, the b=1
+recession alpha, the 14 snow metrics, and the 10 drought metrics (see `CHANGELOG.md` →
+`[Unreleased]` → Planned). Until they land, Python and rpkg reproduce the shared subset, not
+the full delivered product.
 
 All implementations share configuration via `config/signatures_config.json`. The few remaining columns below 0.99 are irreducible library-level differences (Spearman p-value calculations, floating-point precision in near-zero regression). R legacy still uses the old recession algorithm (46 divergent columns).
 
@@ -181,14 +188,36 @@ See [`docs/CROSS_LANGUAGE_STATUS.md`](docs/CROSS_LANGUAGE_STATUS.md) for full al
 
 ## Output Format
 
-The output CSV contains one row per gage with columns:
+Every run writes **two** files: the summary CSV (aggregated statistics) and the annual-values
+parquet (the raw per-year series behind them).
+
+### 1. Summary CSV — one row per gage
 
 | Column Type | Examples | Description |
 |-------------|----------|-------------|
 | Metadata | gage_id, latitude, longitude, basin_area | Gage identification |
 | Record Info | num_water_years, start_water_year, end_water_year | Data coverage |
 | Human Interference | NDAMS_2009, HYDRO_DISTURB_INDX, CLASS, human_interference_class | Watershed disturbance indicators |
-| Signatures | Qann_senn_slp, Qann_linear_slp, Qann_spearman_rho, ... | Signature statistics (8 per metric) |
+| Signatures | Qann_senn_slp, Qann_linear_slp, Qann_spearman_rho, ... | Signature statistics (8 per metric, + 8 Pettitt changepoint fields) |
+| QA/QC flags | flagged_for_qann_range, flagged_for_high_na, ... | 12 automated quality flags |
+
+### 2. Annual values parquet — `{prefix}_signatures_annual.parquet`
+
+The per-year value of every signature, **before** aggregation into trends — long format, so
+you can plot a gage's time series, re-aggregate over your own window, or check a trend:
+
+| Column | Type | Notes |
+|---|---|---|
+| `gage_id` | String | zero-padded; joins the summary CSV |
+| `signature` | String | matches the summary's column prefixes |
+| `water_year` | Int32 | Oct 1 – Sep 30 |
+| `value` | Float64 | NaN and absent-row both mean "not computable that year" |
+
+Covers all 100 time-series signatures (per-gage scalars like `drought_threshold_fixed_p10`
+have no annual series and correctly do not appear). Written to the run's own output folder
+alongside the CSV, and cross-validated against it by
+`docs/benchmarks/validate_annual_values.py`. Details and semantics:
+`docs/DEVELOPMENT.md` → Annual Values Export.
 
 ## Human Interference Metadata
 

@@ -14,6 +14,13 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
   elsewhere (S3, another machine, the Windows `D:` drive). Both standard products are now
   built on the CSV-rebuilt input; an original would let the ≤ 3.4e-13 replay residual be
   attributed rather than merely bounded, and would let the truncated file be deleted.
+- **Harden the annual-values export against a silent skip.** `CFG_SAVE_ANNUAL_VALUES`
+  defaults to **false when the `annual_values` config section is absent**, and it is a
+  `const` baked at precompile time — so a hand-made config variant that drops the section
+  would produce no annual parquet, announced only by a quiet `Annual values: save=false`
+  line in the log header. Both standard products are unaffected (both logged `save=true`
+  and both parquets validate), but the default should arguably be `true`, or the runner
+  should warn loudly. Same hazard class as the `STREAMFLOW_CONFIG` precompilation gotcha.
 - Consider making `check_additivity.jl` report a cross-machine mode explicitly — its
   shared-value gate cannot pass across machines because rank statistics flip on last-bit
   ties (measured 2026-08-11: annual series agree to 5.7e-14 while `FDC90th_spearman_pval`
