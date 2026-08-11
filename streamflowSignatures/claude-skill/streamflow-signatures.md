@@ -161,11 +161,18 @@ Interpretation keys:
   years inside 1993+). The longer window has FEWER gages because a longer window
   demands a longer record (60% × 46 ≈ 28 years vs the 20-year floor binding in
   #1).
-- **Annual values are mutually consistent** (verified 2026-07-23): for shared
-  gages, #2's annual parquet contains every (gage, signature, year) row of #1's,
-  and overlap-year values are bit-identical for all within-year-computable
-  signatures (flow volumes/percentiles, timing, BFI, FDC, flashiness, runoff
-  ratios, snow).
+- **Annual values are mutually consistent** — but note the scope of the check.
+  Verified 2026-07-23 **on the superseded JULY builds** (both produced on the
+  same Windows machine from the original Daymet parquet): for shared gages, #2's
+  annual parquet contained every (gage, signature, year) row of #1's, with
+  overlap-year values **bit-identical** for all within-year-computable signatures
+  (flow volumes/percentiles, timing, BFI, FDC, flashiness, runoff ratios, snow).
+  **That bit-identity has NOT been re-verified for the current products**, which
+  were built on different machines (#1 on the M1, #2 on the M1 but from the
+  rebuilt climate input). Expect containment and agreement to ~1e-13 rather than
+  bit-identity; measured cross-machine effects are confined to discretely
+  FP-sensitive summary statistics (rank stats, TQmean day counts, Pettitt
+  changepoint locations, FDC90th) — see CHANGELOG → August 2026.
 - **Record-dependent signatures legitimately differ between the windows even in
   shared years**: `*_all` pulse metrics (period-of-record percentile
   thresholds), elasticity (record-mean Q̄/P̄ normalization), the

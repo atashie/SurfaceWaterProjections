@@ -302,17 +302,34 @@ asymmetry noted in the 2026-08-10 entry is closed.
   |---|---|---|
   | #1 replay: M1+original vs M1+rebuilt climate | **input only** | 98 cols, ≤ **3.4e-13**, no rank flips |
   | #2 vs its drought-disabled twin (same machine, same input) | **drought code only** | all 1,487 shared cols **bitwise** unchanged |
-  | #1: M1+original vs Windows+original | **machine** | **66 cols material**, `FDC90th_spearman_rho` 0.53, `Qwin`/`Qfal` rank stats — *same columns and magnitudes as #2's 74* |
+  | #1: M1+original vs Windows+original | **machine** | **66 cols material**, `FDC90th_spearman_rho` 0.53, `Qwin`/`Qfal` rank stats — *same signature families and order of magnitude as #2's 74* |
 
-  The machine control uses the ORIGINAL climate input on both sides — no rebuilt parquet
-  anywhere — and reproduces the failure signature. **Mechanism confirmed at the annual
-  level**: comparing the two machines' annual parquets for the failing Q-only bases over
-  200,834 gage-years gives max |diff| **5.68e-14** for `FDC90th` and **1.82e-12** for
-  `Qwin`, with **no rows present on only one side**. The annual series are therefore
-  numerically identical; the divergence appears **only in the rank-based summary
-  statistics**, where a last-bit difference flips a tie and moves Spearman/Mann-Kendall
-  discretely. This is the FP-fragility already documented for `FDC90th` (OLS on
-  `log10(Q + 1e-10)` in the near-zero tail) and for rank/Pettitt fields.
+  The machine control reproduces the failure signature with **no rebuilt parquet on either
+  side**. Two honest limits on that control: it is 66 vs 74 columns and the shared maxima
+  are not equal (`FDC90th_spearman_pval` 0.48 there vs 0.81 in #2), so it accounts for the
+  *pattern*, not for every column one-for-one; and the July Windows run predates the
+  provenance block, so "original climate input on both sides" rests on the run's dated
+  record rather than on machine-readable provenance.
+  **Mechanism, at the annual level**: comparing the two machines' annual parquets for the
+  failing Q-only bases over 200,834 gage-years gives max |diff| **5.68e-14** (`FDC90th`)
+  and **1.82e-12** (`Qwin`), with **no rows present on only one side** and no NaN-pattern
+  mismatches (independently reproduced by Codex to the same digits). The annual series are
+  therefore numerically identical, and every material summary difference sits in a
+  **discretely FP-sensitive** statistic — i.e. one where a last-bit change crosses a
+  threshold rather than perturbing a value:
+  - **rank statistics** (53 of the 67 columns measured this way) — Spearman/Mann-Kendall
+    tau and p-values, where a tie flips;
+  - **`TQmean`** — a COUNT of days above the annual mean, so one flipped day moves the
+    year by 100/365 = 0.274 pp; this propagates to `TQmean_mean` (max 0.149),
+    `_median` (0.137), `_linear_slp` (0.026), `_senn_slp` (0.018);
+  - **Pettitt fields**, where the changepoint LOCATION jumps discretely
+    (`FDC90th_pettitt_cp_year` by 5 years, moving `pct_change` by 26.8);
+  - **`FDC90th`** itself — OLS on `log10(Q + 1e-10)` in the near-zero tail, already
+    documented as FP-fragile.
+  An earlier version of this entry said the divergence appeared "only in rank-based
+  summary statistics". **That was wrong** (Codex delta review, 2026-08-11): 14 of the 67
+  are not rank statistics. The accurate statement is the discreteness one above, which
+  matches the 28 Jul cross-machine finding.
 - **✅ ADDITIVITY GATE: PASS** — rather than infer additivity from the WY 1993–2025 window,
   a drought-disabled twin of THIS run was produced on this machine with this climate input
   (`STREAMFLOW_CONFIG` variant with the `drought` section removed; precompile cache purged
