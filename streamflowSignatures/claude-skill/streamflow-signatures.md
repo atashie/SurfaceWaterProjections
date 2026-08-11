@@ -167,9 +167,10 @@ Interpretation keys:
   annual parquet contained every (gage, signature, year) row of #1's, with
   overlap-year values **bit-identical** for all within-year-computable signatures
   (flow volumes/percentiles, timing, BFI, FDC, flashiness, runoff ratios, snow).
-  **That bit-identity has NOT been re-verified for the current products**, which
-  were built on different machines (#1 on the M1, #2 on the M1 but from the
-  rebuilt climate input). Expect containment and agreement to ~1e-13 rather than
+  **That bit-identity has NOT been re-verified for the current products.** Both
+  were built on the same machine (the M1), but from **different climate inputs** —
+  #1 from the original Daymet parquet, #2 from the CSV-rebuilt one. Expect
+  containment and agreement to ~1e-13 rather than
   bit-identity; measured cross-machine effects are confined to discretely
   FP-sensitive summary statistics (rank stats, TQmean day counts, Pettitt
   changepoint locations, FDC90th) — see CHANGELOG → August 2026.

@@ -157,9 +157,11 @@ validation reports:
 
 Both supersede the 22 Jul folders (1,488 columns, no drought). **Neither is a subset of the
 other** and **record-dependent signatures (drought thresholds, `*_all` pulses, elasticity,
-parameterized BFI) must never be compared across them.** Every run also writes the
-per-signature annual values parquet alongside the summary CSV — see DEVELOPMENT.md →
-Annual Values Export.
+parameterized BFI) must never be compared across them — nor re-aggregated from the annual
+values onto a different window, since their thresholds/record means come from the run's own
+window.** Each Julia run also writes the per-signature annual values parquet alongside the
+summary CSV (when `annual_values.save` is on — the shipped default; not implemented in the
+Python/rpkg ports) — see DEVELOPMENT.md → Annual Values Export.
 
 ⚠️ **Climate input**: the canonical `daymet_1980_2023.parquet` is TRUNCATED; use
 `daymet_1980_2023_rebuilt_10aug2026.parquet` (product #1 predates the rebuild, product #2

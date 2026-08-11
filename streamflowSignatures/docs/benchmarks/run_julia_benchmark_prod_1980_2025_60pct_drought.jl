@@ -30,7 +30,9 @@ get!(ENV, "STREAMFLOW_DATA_PATH",
 # rebuilt from the restored annual CSVs with
 # docs/benchmarks/convert_daymet_csvs_to_parquet.py and validated by reproducing the
 # WY 1993-2025 product (0 columns added/dropped, identical gage set, max |diff| 3.4e-13
-# on 98 of 1,653 columns -- last-bit CSV float parsing, see that script's docstring).
+# on 98 of 1,653 columns). That residual is CONSISTENT WITH a last-bit ingestion/
+# serialization difference but its cause is NOT established -- the original parquet is
+# unreadable, so it cannot be isolated. See that script's docstring.
 get!(ENV, "STREAMFLOW_CLIMATE_PATH",
      joinpath(_DRIVE, "processedOuts_feb2026", "daymet_1980_2023_rebuilt_10aug2026.parquet"))
 get!(ENV, "STREAMFLOW_METADATA_PATH",

@@ -176,11 +176,12 @@ Julia is the canonical implementation. Python and R are validated ports producin
 | Signature cols with R² >= 0.99 vs Julia | -- | 620/623 (99.5%) | 618/623 (99.2%) | 502/551 (91.1%) |
 
 **Julia has since moved ahead: it now emits 1,653 columns.** The table above is the April 2026
-basis on which the ports were validated and is unchanged for those 624 shared columns. Four
-Julia-only features are pending port to Python and rpkg — the annual-values export, the b=1
-recession alpha, the 14 snow metrics, and the 10 drought metrics (see `CHANGELOG.md` →
-`[Unreleased]` → Planned). Until they land, Python and rpkg reproduce the shared subset, not
-the full delivered product.
+basis on which the ports were validated; the R² figures cover the **623 signature columns**
+compared then, and those remain valid for that subset. **Six** Julia-only features are pending
+port to Python and rpkg — Pettitt changepoint fields, the 20-value stats floor, the
+annual-values export, the b=1 recession alpha, the 14 snow metrics, and the 10 drought metrics
+(see `CHANGELOG.md` → `[Unreleased]` → Planned). Until they land, Python and rpkg reproduce
+that April subset, **not** the delivered product.
 
 All implementations share configuration via `config/signatures_config.json`. The few remaining columns below 0.99 are irreducible library-level differences (Spearman p-value calculations, floating-point precision in near-zero regression). R legacy still uses the old recession algorithm (46 divergent columns).
 
@@ -188,8 +189,11 @@ See [`docs/CROSS_LANGUAGE_STATUS.md`](docs/CROSS_LANGUAGE_STATUS.md) for full al
 
 ## Output Format
 
-Every run writes **two** files: the summary CSV (aggregated statistics) and the annual-values
-parquet (the raw per-year series behind them).
+A Julia run writes **two** files: the summary CSV (aggregated statistics) and the
+annual-values parquet (the raw per-year series behind them). The parquet is written when
+`annual_values.save` is enabled in `config/signatures_config.json` (the shipped default);
+it is **skipped** when that flag or the whole section is absent, when zero gages qualify,
+and by the **Python and rpkg ports, which do not implement it yet**.
 
 ### 1. Summary CSV — one row per gage
 
@@ -204,7 +208,7 @@ parquet (the raw per-year series behind them).
 ### 2. Annual values parquet — `{prefix}_signatures_annual.parquet`
 
 The per-year value of every signature, **before** aggregation into trends — long format, so
-you can plot a gage's time series, re-aggregate over your own window, or check a trend:
+you can plot a gage's time series or check a trend:
 
 | Column | Type | Notes |
 |---|---|---|
@@ -218,6 +222,15 @@ have no annual series and correctly do not appear). Written to the run's own out
 alongside the CSV, and cross-validated against it by
 `docs/benchmarks/validate_annual_values.py`. Details and semantics:
 `docs/DEVELOPMENT.md` → Annual Values Export.
+
+> ⚠️ **Do not re-aggregate record-dependent signatures over a different window.** Subsetting
+> the annual values of `drought_*`, the `*_all` pulse metrics, elasticity, or the
+> recession-parameterized BFIs to a shorter span is **not** equivalent to recomputing them
+> for that span: each was computed against thresholds or record means derived from the
+> ORIGINAL run window (whole-record percentiles, period-of-record percentile thresholds,
+> record-mean Q̄/P̄, whole-record recession alpha). Re-run the pipeline for the new window
+> instead. Within-year-computable signatures (flow volumes/percentiles, timing, BFI, FDC,
+> flashiness, runoff ratios, snow) re-aggregate safely.
 
 ## Human Interference Metadata
 

@@ -796,7 +796,7 @@ signatures instead (see DECISION above).
 | `combined_streamflow_data_09feb2026.parquet` | `D:/processedOuts_feb2026/` | Feb 2026 | Current streamflow parquet with bug fixes. 111,624,189 rows / 8,014 gages, **858 MiB** (899,935,349 B) |
 | `combined_watershed_metadata_09feb2026.csv` | `D:/processedOuts_feb2026/` | Feb 2026 | Corresponding metadata, 2.1 MiB |
 | **`daymet_1980_2023_rebuilt_10aug2026.parquet`** | `D:/processedOuts_feb2026/` | Aug 2026 | **USE THIS** for climate (PPT, temp, SWE). 97,757,220 rows / 6,087 sites / WY-covering CY 1980–2023, **3.76 GiB** (4,040,997,608 B). Rebuilt from the annual CSVs after the original was truncated — see below |
-| `daymet_1980_2023/` (44 annual CSVs) | `D:/` (drive root) | Jan 2026 | **Source of record** for Daymet: `site_id, month, year, prcp, tmin, tmax, swe, vp, srad`; no day column. 10.08 GiB total, ~235 MB/yr. Rebuild the parquet with `docs/benchmarks/convert_daymet_csvs_to_parquet.py` |
+| `daymet_1980_2023/` (44 annual CSVs) | `D:/` (drive root) | Jan 2026 | **Source of record** for Daymet: `site_id, month, year, prcp, tmin, tmax, swe, vp, srad`; no day column. 10,825,714,689 B = 10.08 GiB total, ~234.6 MiB/yr. Rebuild the parquet with `docs/benchmarks/convert_daymet_csvs_to_parquet.py` |
 
 > ⚠️ **`daymet_1980_2023.parquet` (the canonical name) is TRUNCATED and unreadable** —
 > 1,261,436,928 bytes with no `PAR1` footer, against 4,125,630,653 recorded in the 28 Jul
@@ -806,16 +806,28 @@ signatures instead (see DECISION above).
 > ORIGINAL, #2 from the rebuild; a controlled replay bounds the difference at ≤ 3.4e-13.
 > See CHANGELOG → August 2026.
 
+> ⚠️ **Provenance limitation on both delivered products.** Each run's `timing.json` records
+> `git_working_tree_dirty = true` (#1 at `b7e8988`, #2 at `0487bbd`) and no patch or
+> source-tree hash was retained, so neither product can be tied byte-for-byte to a
+> reproducible source tree. The multi-GB inputs carry size/mtime but no hash unless
+> `STREAMFLOW_HASH_INPUTS=1`. Product #1 additionally **cannot be rerun at all** — its
+> original climate parquet is the truncated one. **For future standard products: run from a
+> clean tree, or retain the diff, and set `STREAMFLOW_HASH_INPUTS=1`.**
+
 **Boundary polygons** (source layers, on the same drive):
 
 | Layer | Location | Size |
 |---|---|---|
-| HydroBASINS lev12 polygons (167,665 N. American basins) | `geospatial_derivedData/basinAt_NorAm_polys.gpkg` | 462 MiB |
-| HydroBASINS lev12 centroids | `geospatial_derivedData/basinAt_NorAm_centroids.gpkg` | 131 MiB |
-| Official US basin boundaries (GAGES-II) | `geospatial_derivedData/official_watershed_polygons/gagesII_bnd/` | 138 MiB |
-| Official Canadian basin boundaries (ECCC/WSC MDA_ADP, 11 gpkg) | `geospatial_derivedData/official_watershed_polygons/ca/` | 5.0 MiB |
-| BasinATLAS v10 geodatabase (281 attributes; HydroATLAS metadata source) | `BasinATLAS_Data_v10/` | 6.1 GiB |
+| HydroBASINS lev12 polygons (167,665 N. American basins) | `geospatial_derivedData/basinAt_NorAm_polys.gpkg` | 462 MiB (484,356,096 B) |
+| HydroBASINS lev12 centroids (*not* boundaries) | `geospatial_derivedData/basinAt_NorAm_centroids.gpkg` | 131 MiB (136,949,760 B) |
+| Official US basin boundaries (GAGES-II) | `official_watershed_polygons/gagesII_bnd/` | **120 MiB extracted**, plus an 18 MiB ZIP of the same data (138 MiB on disk) |
+| Official Canadian basin boundaries (ECCC/WSC MDA_ADP, 11 gpkg) | `official_watershed_polygons/ca/` | 4.75 MiB apparent (5.0 MiB allocated) |
+| BasinATLAS v10 geodatabase (281 attributes; HydroATLAS metadata source, not boundaries) | `BasinATLAS_Data_v10/` | 6.1 GiB |
 | ⚠️ `unified_watersheds_simplified.gpkg` — **corrupt CSV, not a polygon layer** | `geospatial_derivedData/` | 2.0 MiB (do not use) |
+
+Boundary layers proper (excluding centroids, BasinATLAS attributes, and the redundant ZIP)
+total **≈ 587 MiB**. Folder figures are `du` (exFAT-allocated) and run slightly above the
+summed file bytes — e.g. `gagesII_bnd` is 124.7 MiB apparent vs 138 MiB allocated.
 
 The DERIVED per-gage geometry product (`watershed_polygons_26jun2026.{gpkg,parquet}`,
 ~42/36 MB, 7,964 basins) lives on S3, not on this drive — see `EO_data_processing/README.md`.

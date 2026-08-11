@@ -8,12 +8,24 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
 ## [Unreleased]
 
 ### Planned
-- Port annual-values collector, b=1 recession alpha, snow metrics, AND drought metrics
-  to Python and rpkg (after the Julia benchmark re-run validates all four)
+- Port the Julia-only features to Python and rpkg. As of Aug 2026 that is **six**:
+  Pettitt changepoint fields, the 20-value stats floor, the annual-values collector, the
+  b=1 recession alpha, the 14 snow metrics, and the 10 drought metrics. Python and rpkg
+  currently reproduce the 623-signature-column April subset, not the 1,653-column
+  delivered product.
 - Restore a readable copy of the ORIGINAL `daymet_1980_2023.parquet` if one exists
-  elsewhere (S3, another machine, the Windows `D:` drive). Both standard products are now
-  built on the CSV-rebuilt input; an original would let the ≤ 3.4e-13 replay residual be
-  attributed rather than merely bounded, and would let the truncated file be deleted.
+  elsewhere (S3, another machine, the Windows `D:` drive). **Product #2 is built on the
+  CSV-rebuilt input; product #1 predates the rebuild and used the original** (each run's
+  `timing.json` → `provenance` records which). An original copy would let the ≤ 3.4e-13
+  replay residual be attributed rather than merely bounded, would let the truncated file
+  be deleted, and would make product #1 reproducible at all — today it is not, because its
+  climate input no longer exists in readable form.
+- **Require a clean working tree for a standard-product run** (or retain the diff).
+  Both delivered products recorded `git_working_tree_dirty = true` in their provenance
+  (#1 at `b7e8988`, #2 at `0487bbd`) and no patch or source-tree hash was kept, so neither
+  product can be tied byte-for-byte to a reproducible source tree — the committed code
+  strongly appears to be what ran, but that cannot be *proved* from what was retained.
+  The multi-GB inputs also carry size/mtime but no hash unless `STREAMFLOW_HASH_INPUTS=1`.
 - **Harden the annual-values export against a silent skip.** `CFG_SAVE_ANNUAL_VALUES`
   defaults to **false when the `annual_values` config section is absent**, and it is a
   `const` baked at precompile time — so a hand-made config variant that drops the section
@@ -334,9 +346,13 @@ asymmetry noted in the 2026-08-10 entry is closed.
   - **`FDC90th`** itself — OLS on `log10(Q + 1e-10)` in the near-zero tail, already
     documented as FP-fragile.
   An earlier version of this entry said the divergence appeared "only in rank-based
-  summary statistics". **That was wrong** (Codex delta review, 2026-08-11): 14 of the 67
-  are not rank statistics. The accurate statement is the discreteness one above, which
-  matches the 28 Jul cross-machine finding.
+  summary statistics". **That was wrong** (Codex delta review, 2026-08-11): **14 of the
+  material columns are not rank statistics.** The accurate statement is the discreteness
+  one above, which matches the 28 Jul cross-machine finding. (Column-count convention:
+  `check_additivity.jl` flags **66** material columns — the authoritative figure, retained
+  in `validation_machine_control_from_product1.txt`; an independent recompute using a plain
+  absolute > 1e-6 rule over finite pairs gives 67. The 14 non-rank columns are the same set
+  either way.)
 - **✅ ADDITIVITY GATE: PASS** — rather than infer additivity from the WY 1993–2025 window,
   a drought-disabled twin of THIS run was produced on this machine with this climate input
   (`STREAMFLOW_CONFIG` variant with the `drought` section removed; precompile cache purged

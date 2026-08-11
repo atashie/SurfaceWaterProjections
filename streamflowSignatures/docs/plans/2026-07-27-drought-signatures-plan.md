@@ -819,9 +819,20 @@ The drought family shipped to BOTH standard products; the July 2026 folders are 
 | Annual-values validation | PASS (612,046 pairs) | PASS (587,829 pairs) |
 | Comparison vs superseded | 1,446/1,451 Perfect, min R² 0.9977 | 1,447/1,451 Perfect, min R² 0.9977 |
 
-Both folders carry the full standard-product artifact set (explorer + `_annual/` sidecars,
-comparison CSV/summary/dashboard, `validation_gates.txt`, additivity + control reports,
-`RUN_NOTES.md`).
+Both folders carry the explorer + `_annual/` sidecars, comparison CSV/summary/dashboard,
+`validation_gates.txt`, and `RUN_NOTES.md`.
+
+**Asymmetry in retained additivity evidence (be precise about this):**
+- **#2 retains the actual PASS** — `validation_additivity_samemachine.txt` — and its
+  drought-disabled twin still exists at `/Volumes/Untitled/_1980_nodrought_baseline/`.
+- **#1 does NOT.** Its 28 Jul same-machine additivity PASS survives only as narrative here
+  and in its `RUN_NOTES.md`; the twin was not kept. The file in its folder named
+  `validation_machine_control.txt` is the CROSS-MACHINE comparison and correctly ends in
+  `FAIL` — it is the control that explains the cross-machine differences, **not** an
+  additivity PASS.
+  That PASS **cannot be regenerated**: it was measured against the ORIGINAL climate parquet,
+  which is now truncated and unreadable, so a new twin would differ by the ≤ 3.4e-13
+  rebuild residual rather than bitwise.
 
 ### Codex review of the promotion (2 rounds, read-only, codex-cli 0.145.0)
 
@@ -836,8 +847,9 @@ Round 2 (delta): **GO-WITH-FIXES on both** — "the former NO-GO blocker is clea
 It independently reproduced both annual-control numbers to full precision and confirmed the
 drought-disabled twin proves itself by emitting 1,488 columns / 90 annual signatures. It
 found one further overstatement, now corrected: the cross-machine divergence is **not**
-"only rank-based statistics" — 14 of 67 material columns are `TQmean` / Pettitt / `FDC90th`
-fields. The accurate framing is **discretely FP-sensitive** statistics (rank ties flip;
+"only rank-based statistics" — **14 of the material columns** are `TQmean` / Pettitt /
+`FDC90th` fields (`check_additivity.jl` flags 66 material columns; an independent absolute
+> 1e-6 recompute gives 67, same 14 non-rank members). The accurate framing is **discretely FP-sensitive** statistics (rank ties flip;
 `TQmean` is a day count so one day = 0.274 pp; the Pettitt changepoint LOCATION jumps;
 `FDC90th` is OLS on `log10(Q + 1e-10)` in the near-zero tail).
 
