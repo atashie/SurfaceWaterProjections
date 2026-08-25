@@ -98,7 +98,7 @@ pkg_env <- new.env(parent = emptyenv())
     pkg_env$na_interpolation_method     <- nah$interpolation$method %||% "linear"
     pkg_env$na_internal_only            <- nah$interpolation$internal_only %||% TRUE
     pkg_env$na_max_raw_na_per_year      <- nah$year_rejection$max_raw_na_per_year %||% 30L
-    pkg_env$na_reject_negative_flow     <- nah$year_rejection$reject_negative_flow %||% TRUE
+    pkg_env$na_reject_negative_flow     <- nah$year_rejection$reject_negative_flow %||% FALSE  # fallback aligned with Python/canonical JSON (2026-08-24; was TRUE)
     pkg_env$na_reject_residual_na       <- nah$year_rejection$reject_residual_na %||% TRUE
     pkg_env$na_constant_sd_enabled      <- nah$constant_sd_flag$enabled %||% TRUE
     pkg_env$na_constant_sd_min_days     <- nah$constant_sd_flag$min_nonzero_days_per_month %||% 15L

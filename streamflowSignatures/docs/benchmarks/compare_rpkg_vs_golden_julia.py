@@ -22,11 +22,16 @@ from scipy import stats as sp_stats
 SCRIPT_DIR = Path(__file__).parent
 PROJECT_ROOT = SCRIPT_DIR.parent.parent
 
-GOLDEN_JULIA_PATH = PROJECT_ROOT / "golden-outputs" / "streamflow_signatures_julia_apr2026.csv"
-RPKG_PATH = SCRIPT_DIR / "rpkg_signatures.csv"
-
-OUTPUT_CSV = SCRIPT_DIR / "rpkg_vs_golden_julia_comparison.csv"
-OUTPUT_MD = SCRIPT_DIR / "rpkg_vs_golden_julia_summary.md"
+# Paths overridable via ENV (port campaign, 2026-08-24): COMPARE_REFERENCE_CSV
+# points at any Julia reference run; COMPARE_CANDIDATE_CSV at the port output;
+# COMPARE_OUTPUT_DIR redirects both artifacts (one-folder convention).
+import os
+GOLDEN_JULIA_PATH = Path(os.environ.get("COMPARE_REFERENCE_CSV",
+    str(PROJECT_ROOT / "golden-outputs" / "streamflow_signatures_julia_apr2026.csv")))
+RPKG_PATH = Path(os.environ.get("COMPARE_CANDIDATE_CSV", str(SCRIPT_DIR / "rpkg_signatures.csv")))
+_OUT_DIR = Path(os.environ.get("COMPARE_OUTPUT_DIR", str(SCRIPT_DIR)))
+OUTPUT_CSV = _OUT_DIR / "rpkg_vs_golden_julia_comparison.csv"
+OUTPUT_MD = _OUT_DIR / "rpkg_vs_golden_julia_summary.md"
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
@@ -352,7 +357,7 @@ def generate_summary_report(res, common_norms, jl_only_norms, rp_only_norms,
         f.write("## Input Files\n\n")
         f.write("| Dataset | File | Gages | Columns |\n")
         f.write("|---------|------|-------|---------|\n")
-        f.write(f"| Golden Julia (canonical) | `golden-outputs/streamflow_signatures_julia_apr2026.csv` | {n_jl_total:,} | {len(jl_norm):,} |\n")
+        f.write(f"| Julia reference | `{GOLDEN_JULIA_PATH}` | {n_jl_total:,} | {len(jl_norm):,} |\n")
         f.write(f"| rpkg benchmark | `docs/benchmarks/rpkg_signatures.csv` | {n_rpkg_total:,} | — |\n")
         f.write(f"\n**Common gages**: {n_common_gages:,}\n")
         f.write(f"**Common signature columns**: {len(common_norms):,}\n\n")

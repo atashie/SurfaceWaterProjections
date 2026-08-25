@@ -1,6 +1,6 @@
 test_that("eckhardt_filter produces values between 0 and Q", {
   Q <- c(10, 8, 6, 5, 4, 3, 2, 1.5, 1, 0.8, 0.5, 0.3, 0.2, 0.1, 0.05)
-  bf <- eckhardt_filter(Q)
+  bf <- streamflowsignatures:::eckhardt_filter(Q)
 
   expect_length(bf, length(Q))
   expect_true(all(bf >= 0))
@@ -9,7 +9,7 @@ test_that("eckhardt_filter produces values between 0 and Q", {
 
 test_that("eckhardt_filter handles NA with forward-fill", {
   Q <- c(10, 8, NA, 5, 4)
-  bf <- eckhardt_filter(Q)
+  bf <- streamflowsignatures:::eckhardt_filter(Q)
 
   expect_length(bf, 5)
   expect_false(is.na(bf[3]))  # forward-filled
@@ -18,7 +18,7 @@ test_that("eckhardt_filter handles NA with forward-fill", {
 
 test_that("lyne_hollick_filter produces values between 0 and Q", {
   Q <- c(10, 8, 6, 5, 4, 3, 2, 1.5, 1, 0.8, 0.5, 0.3, 0.2, 0.1, 0.05)
-  bf <- lyne_hollick_filter(Q)
+  bf <- streamflowsignatures:::lyne_hollick_filter(Q)
 
   expect_length(bf, length(Q))
   # Baseflow should be non-negative where Q is valid

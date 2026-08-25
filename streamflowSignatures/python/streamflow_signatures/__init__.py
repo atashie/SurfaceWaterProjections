@@ -17,7 +17,8 @@ from daily streamflow (and optionally climate) data. All signatures produce
 
 __version__ = "0.1.0"
 
-from .stats import generate_stats, theil_sen_slope, mann_kendall_test
+from .stats import generate_stats, theil_sen_slope, mann_kendall_test, empty_stats, STAT_SUFFIXES, CP_SUFFIXES
+from .changepoint import pettitt_test, segment_differential_metrics
 from .io import read_parquet, write_signatures, validate_schema, add_water_year_columns, filter_qualifying_years, preprocess_daily_data
 from .signatures import calculate_all_signatures
 from .flow_volumes import calculate_flow_vols_by_year
@@ -37,6 +38,12 @@ __all__ = [
     "generate_stats",
     "theil_sen_slope",
     "mann_kendall_test",
+    "empty_stats",
+    "STAT_SUFFIXES",
+    "CP_SUFFIXES",
+    # Changepoint (Pettitt)
+    "pettitt_test",
+    "segment_differential_metrics",
     # I/O
     "read_parquet",
     "write_signatures",

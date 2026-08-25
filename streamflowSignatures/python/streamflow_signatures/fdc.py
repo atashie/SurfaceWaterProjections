@@ -16,6 +16,8 @@ def analyze_fdc_trends(
     streamflow_data: pd.DataFrame,
     trend_completeness: Optional[float] = None,
     decade_completeness: Optional[float] = None,
+    min_values_for_stats: Optional[int] = None,
+    changepoint: Optional[dict] = None,
 ) -> Dict[str, float]:
     """
     Calculate Flow Duration Curve slope trends.
@@ -117,7 +119,7 @@ def analyze_fdc_trends(
         value_cols=["slp_all", "slp_90th", "slp_mid"],
         year_col="water_year",
         trend_completeness=trend_completeness,
-        decade_completeness=decade_completeness,
+        decade_completeness=decade_completeness, min_values_for_stats=min_values_for_stats, changepoint=changepoint,
     )
 
     # Rename columns to match expected output

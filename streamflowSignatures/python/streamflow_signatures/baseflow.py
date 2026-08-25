@@ -137,6 +137,8 @@ def analyze_baseflow_indices(
     streamflow_data: pd.DataFrame,
     trend_completeness: Optional[float] = None,
     decade_completeness: Optional[float] = None,
+    min_values_for_stats: Optional[int] = None,
+    changepoint: Optional[dict] = None,
 ) -> Dict[str, float]:
     """
     Calculate baseflow index trends using recursive digital filters.
@@ -219,7 +221,7 @@ def analyze_baseflow_indices(
         value_cols=["BFI_Eckhardt", "BFI_LyneHollick"],
         year_col="water_year",
         trend_completeness=trend_completeness,
-        decade_completeness=decade_completeness,
+        decade_completeness=decade_completeness, min_values_for_stats=min_values_for_stats, changepoint=changepoint,
     )
 
 
@@ -230,6 +232,8 @@ def analyze_baseflow_indices_with_parameters(
     passes: int = LYNE_HOLLICK_PASSES,
     trend_completeness: Optional[float] = None,
     decade_completeness: Optional[float] = None,
+    min_values_for_stats: Optional[int] = None,
+    changepoint: Optional[dict] = None,
 ) -> Dict[str, float]:
     """
     Calculate baseflow indices using recession-derived filter parameters.
@@ -308,5 +312,5 @@ def analyze_baseflow_indices_with_parameters(
         value_cols=metrics,
         year_col="water_year",
         trend_completeness=trend_completeness,
-        decade_completeness=decade_completeness,
+        decade_completeness=decade_completeness, min_values_for_stats=min_values_for_stats, changepoint=changepoint,
     )

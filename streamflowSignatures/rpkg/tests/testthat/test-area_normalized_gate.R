@@ -52,7 +52,10 @@ test_that("gated result is identical to a gage without climate data", {
 
   r_gated <- suppressWarnings(suppressMessages(
     calculate_all_signatures(df, has_climate = TRUE, area_normalized = FALSE)))
-  df_noclimate <- df[, setdiff(names(df), "PPT")]
+  # add_water_year_columns returns a data.table: an expression j needs
+  # with = FALSE to select columns (a bare expression yields the character
+  # vector itself under current data.table — broke this test on 1.16+)
+  df_noclimate <- df[, setdiff(names(df), "PPT"), with = FALSE]
   r_noclimate <- suppressWarnings(suppressMessages(
     calculate_all_signatures(df_noclimate, has_climate = FALSE)))
 

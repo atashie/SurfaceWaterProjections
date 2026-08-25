@@ -212,6 +212,7 @@ def analyze_recession_parameters(
     min_events: int = RECESSION_MIN_EVENTS,
     trend_completeness: Optional[float] = None,
     decade_completeness: Optional[float] = None,
+    changepoint: Optional[dict] = None,
 ) -> Dict[str, float]:
     """
     Calculate recession parameter trends.
@@ -428,7 +429,7 @@ def analyze_recession_parameters(
     if len(events_df) >= 3:
         n_events_stats = generate_stats(
             events_df, value_cols=["n_recession_events"], year_col="water_year",
-            trend_completeness=trend_completeness, decade_completeness=decade_completeness,
+            trend_completeness=trend_completeness, decade_completeness=decade_completeness, changepoint=changepoint,
         )
     else:
         n_events_stats = {}
@@ -459,7 +460,7 @@ def analyze_recession_parameters(
         value_cols=signatures_with_stats,
         year_col="water_year",
         trend_completeness=trend_completeness,
-        decade_completeness=decade_completeness,
+        decade_completeness=decade_completeness, changepoint=changepoint,
     )
 
     # Add n_recession_events stats (computed independently above)

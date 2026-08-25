@@ -7,7 +7,7 @@ parameters as module-level constants for use across all signature modules.
 
 import json
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 # Find config file relative to this module
 _CONFIG_DIR = Path(__file__).parent.parent.parent / "config"
@@ -151,6 +151,24 @@ NA_REJECT_NEGATIVE_PPT = _na_climate.get("reject_negative_ppt", True)
 
 # Legacy filtering flag
 USE_LEGACY_FILTERING = _config.get("filtering", {}).get("use_legacy_filtering", True)
+
+# ==============================================================================
+# STATS FLOOR — None when the section is absent (no floor; legacy behavior).
+# Exemptions (recession, elasticity) are enforced at the orchestration layer.
+# ==============================================================================
+_stats_floor = _config.get("stats_floor", {})
+_mv = _stats_floor.get("min_values_for_stats", None)
+MIN_VALUES_FOR_STATS: Optional[int] = int(_mv) if _mv is not None else None
+
+# ==============================================================================
+# CHANGEPOINT (Pettitt) — fallbacks mirror julia/src/config.jl
+# ==============================================================================
+_cp_config = _config.get("changepoint", {})
+CHANGEPOINT_ENABLED = bool(_cp_config.get("enabled", False))
+CP_START_WATER_YEAR = int(_cp_config.get("start_water_year", 1980))
+CP_END_WATER_YEAR = int(_cp_config.get("end_water_year", 2024))
+CP_MIN_TOTAL_OBS = int(_cp_config.get("min_total_obs", 20))
+CP_MIN_SEGMENT_OBS = int(_cp_config.get("min_segment_obs", 10))
 
 
 def get_config() -> Dict[str, Any]:

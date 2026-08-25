@@ -16,6 +16,8 @@ def analyze_flow_timing_trends(
     streamflow_data: pd.DataFrame,
     trend_completeness: Optional[float] = None,
     decade_completeness: Optional[float] = None,
+    min_values_for_stats: Optional[int] = None,
+    changepoint: Optional[dict] = None,
 ) -> Dict[str, float]:
     """
     Calculate flow timing metrics trends.
@@ -128,5 +130,5 @@ def analyze_flow_timing_trends(
         value_cols=metric_cols,
         year_col="water_year",
         trend_completeness=trend_completeness,
-        decade_completeness=decade_completeness,
+        decade_completeness=decade_completeness, min_values_for_stats=min_values_for_stats, changepoint=changepoint,
     )

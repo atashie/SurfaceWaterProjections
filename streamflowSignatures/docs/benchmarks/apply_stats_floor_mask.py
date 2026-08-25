@@ -46,7 +46,13 @@ def main():
                  .groupby(["gage_id", "signature"]).size())
     wide = counts.unstack(fill_value=0)  # gage x signature non-NaN counts
 
-    df = pd.read_csv(args.csv, dtype={"gage_id": str}, low_memory=False)
+    # round_trip: pandas' default fast float parser is ~1 ulp off on some values
+    # (same defect class the Daymet CSV converter fixed, CHANGELOG Aug 2026) —
+    # without it the rewritten CSV perturbs last bits of unmasked values, which
+    # breaks exact-equality gates built on this tool's output (found 2026-08-24
+    # by the port campaign's Phase-1 gate).
+    df = pd.read_csv(args.csv, dtype={"gage_id": str}, low_memory=False,
+                     float_precision="round_trip")
     backup = os.path.splitext(args.csv)[0] + "_prefloor.csv"
     if not os.path.exists(backup):
         shutil.copy2(args.csv, backup)

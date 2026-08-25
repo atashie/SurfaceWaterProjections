@@ -10,6 +10,67 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
+from .changepoint import pettitt_test, segment_differential_metrics
+
+# Stat suffixes matching the canonical Julia implementation (stats.jl)
+STAT_SUFFIXES = [
+    "_senn_slp", "_linear_slp", "_spearman_rho", "_spearman_pval",
+    "_mk_rho", "_mk_pval", "_mean", "_median",
+]
+
+# Changepoint column suffixes (Pettitt test only)
+CP_SUFFIXES = [
+    "_pettitt_cp_year", "_pettitt_pval", "_pettitt_pre_mean", "_pettitt_post_mean",
+    "_pettitt_delta_mean", "_pettitt_pct_change", "_pettitt_pre_mk_pval", "_pettitt_post_mk_pval",
+]
+
+
+def empty_stats(metric: str) -> Dict[str, float]:
+    """
+    Return a dict with NaN values for all 8 statistics for a metric.
+
+    Mirrors Julia's ``empty_stats`` exactly: 8 stat keys ONLY — no changepoint
+    keys (gages routed through empty-stats branches lack the ``_pettitt_*``
+    keys, which surface as missing/NaN via the runner's union schema, identical
+    to the canonical output).
+    """
+    return {f"{metric}{suffix}": np.nan for suffix in STAT_SUFFIXES}
+
+
+def _run_changepoint_block(
+    results: Dict[str, float],
+    col: str,
+    valid_years: np.ndarray,
+    valid_values: np.ndarray,
+    changepoint: dict,
+) -> None:
+    """Run the Pettitt test + differential metrics; write 8 keys into results.
+
+    Mirrors julia/src/stats.jl `_run_changepoint_block!`: filter to the
+    changepoint analysis window, Pettitt (4 keys), differential metrics (4 keys).
+    """
+    cp_start = changepoint.get("start_year", 1980)
+    cp_end = changepoint.get("end_year", 2024)
+    cp_min_obs = changepoint.get("min_total_obs", 20)
+    cp_min_seg = changepoint.get("min_segment_obs", 10)
+
+    cp_mask = (valid_years >= cp_start) & (valid_years <= cp_end)
+    cp_years = valid_years[cp_mask]
+    cp_vals = valid_values[cp_mask]
+
+    pettitt = pettitt_test(cp_years, cp_vals,
+                           min_total_obs=cp_min_obs, min_segment_obs=cp_min_seg)
+    results[f"{col}_pettitt_cp_year"] = pettitt["cp_year"]
+    results[f"{col}_pettitt_pval"] = pettitt["pval"]
+    results[f"{col}_pettitt_pre_mean"] = pettitt["pre_mean"]
+    results[f"{col}_pettitt_post_mean"] = pettitt["post_mean"]
+
+    pettitt_diff = segment_differential_metrics(cp_years, cp_vals, pettitt["cp_year"])
+    results[f"{col}_pettitt_delta_mean"] = pettitt_diff["delta_mean"]
+    results[f"{col}_pettitt_pct_change"] = pettitt_diff["pct_change"]
+    results[f"{col}_pettitt_pre_mk_pval"] = pettitt_diff["pre_mk_pval"]
+    results[f"{col}_pettitt_post_mk_pval"] = pettitt_diff["post_mk_pval"]
+
 
 def theil_sen_slope(x: np.ndarray, y: np.ndarray) -> float:
     """
@@ -168,6 +229,9 @@ def generate_stats(
     min_rows: int = 3,
     trend_completeness: Optional[float] = None,
     decade_completeness: Optional[float] = None,
+    changepoint: Optional[dict] = None,
+    min_values_for_stats: Optional[int] = None,
+    force_skip_trends: Optional[set] = None,
 ) -> Dict[str, float]:
     """
     Generate 8 standard statistics for each metric column.
@@ -197,6 +261,24 @@ def generate_stats(
         trends being driven by data concentrated in one end of the record.
         Skipped if the year span is < 10 years. If None, no decade check
         is applied.
+    changepoint : dict, optional
+        Changepoint (Pettitt) analysis configuration with keys ``start_year``,
+        ``end_year``, ``min_total_obs``, ``min_segment_obs``. When provided,
+        8 additional ``_pettitt_*`` fields are emitted per metric. Changepoint
+        analysis runs INDEPENDENTLY of the trend-completeness gates (matching
+        Julia): a trend-gated metric still gets its Pettitt fields, while a
+        metric below ``min_rows`` gets NaN Pettitt fields.
+    min_values_for_stats : int, optional
+        Stats floor (July 2026 Julia feature): a metric with fewer non-NaN
+        annual values than this emits NaN for ALL 8 statistics AND its
+        changepoint fields — a 4-point clustered series must not carry a
+        Theil-Sen slope. Recession and elasticity are exempt at the
+        orchestration layer (the kwarg is never passed to them).
+    force_skip_trends : set of str, optional
+        Metric names whose 6 trend statistics are suppressed through the SAME
+        path as trend_completeness — mean/median and changepoint unaffected.
+        Used by caller-computed gates (e.g. the snow record-anchored decade
+        gate).
 
     Returns
     -------
@@ -248,8 +330,12 @@ def generate_stats(
         years = data.loc[mask, year_col].values.astype(float)
         values = data.loc[mask, col].values.astype(float)
 
-        # Check minimum data requirement
-        if len(values) < min_rows:
+        # Check minimum data requirement. The stats floor (min_values_for_stats)
+        # gates through the same branch as min_rows: below the floor, ALL 8
+        # statistics AND the changepoint fields are NaN (matching Julia; the
+        # annual-values collector — Phase 3 — collects BEFORE this gate).
+        if len(values) < min_rows or (
+                min_values_for_stats is not None and len(values) < min_values_for_stats):
             results[f"{col}_senn_slp"] = np.nan
             results[f"{col}_linear_slp"] = np.nan
             results[f"{col}_spearman_rho"] = np.nan
@@ -258,6 +344,9 @@ def generate_stats(
             results[f"{col}_mk_pval"] = np.nan
             results[f"{col}_mean"] = np.nan
             results[f"{col}_median"] = np.nan
+            if changepoint is not None:
+                for cp_suffix in CP_SUFFIXES:
+                    results[f"{col}{cp_suffix}"] = np.nan
             continue
 
         # Trend completeness check: suppress trend stats if data is too sparse.
@@ -265,7 +354,12 @@ def generate_stats(
         # climate signatures use climate years and recession uses recession years.
         suppress_trends = False
 
-        if trend_completeness is not None and len(years) > 0:
+        # Externally-forced trend skip (snow record-anchored decade gate etc.):
+        # suppresses the 6 trend stats; mean/median + changepoint unaffected.
+        if force_skip_trends is not None and col in force_skip_trends:
+            suppress_trends = True
+
+        if not suppress_trends and trend_completeness is not None and len(years) > 0:
             metric_yr_min = float(years.min())
             metric_yr_max = float(years.max())
             metric_span = int(metric_yr_max - metric_yr_min) + 1
@@ -298,7 +392,8 @@ def generate_stats(
                         suppress_trends = True
 
         if suppress_trends:
-            # Set 6 trend stats to NaN, still compute mean/median
+            # Set 6 trend stats to NaN, still compute mean/median.
+            # Changepoint runs INDEPENDENTLY of trend gating (matching Julia).
             results[f"{col}_senn_slp"] = np.nan
             results[f"{col}_linear_slp"] = np.nan
             results[f"{col}_spearman_rho"] = np.nan
@@ -307,6 +402,8 @@ def generate_stats(
             results[f"{col}_mk_pval"] = np.nan
             results[f"{col}_mean"] = np.mean(values)
             results[f"{col}_median"] = np.median(values)
+            if changepoint is not None:
+                _run_changepoint_block(results, col, years, values, changepoint)
             continue
 
         # Calculate Theil-Sen slope
@@ -328,5 +425,9 @@ def generate_stats(
         # Calculate mean and median
         results[f"{col}_mean"] = np.mean(values)
         results[f"{col}_median"] = np.median(values)
+
+        # Changepoint analysis (opt-in)
+        if changepoint is not None:
+            _run_changepoint_block(results, col, years, values, changepoint)
 
     return results

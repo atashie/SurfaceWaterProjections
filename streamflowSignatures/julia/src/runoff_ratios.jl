@@ -110,11 +110,15 @@ function analyze_Q_PPT_relationships(df::DataFrame; seasonal_flags::Union{Nothin
 
     # Apply seasonal completeness flags: set incomplete seasons to NA
     if seasonal_flags !== nothing && nrow(seasonal_flags) > 0
+        # Flag names must match the preprocessor's abbreviated seasonal columns
+        # (win_/spr_/sum_/fal_complete — see io.jl seasonal_rows and the identical
+        # lookup in flow_volumes.jl). Full-name lookups made this block dead code
+        # until 2026-08-24 (CHANGELOG Known Issues).
         ratio_flag_map = Dict(
-            :winter_runoff_ratio => :winter_complete,
-            :spring_runoff_ratio => :spring_complete,
-            :summer_runoff_ratio => :summer_complete,
-            :fall_runoff_ratio => :fall_complete
+            :winter_runoff_ratio => :win_complete,
+            :spring_runoff_ratio => :spr_complete,
+            :summer_runoff_ratio => :sum_complete,
+            :fall_runoff_ratio => :fal_complete
         )
         for (ratio_col, flag_col) in ratio_flag_map
             if String(ratio_col) in names(annual_data) && String(flag_col) in names(seasonal_flags)

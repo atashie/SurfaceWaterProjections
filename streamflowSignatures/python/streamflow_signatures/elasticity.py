@@ -39,6 +39,7 @@ def calculate_streamflow_elasticity(
     min_annual_ppt: float = ELASTICITY_MIN_ANNUAL_PPT,
     trend_completeness: Optional[float] = None,
     decade_completeness: Optional[float] = None,
+    changepoint: Optional[dict] = None,
 ) -> Dict[str, float]:
     """
     Calculate streamflow elasticity trends.
@@ -173,7 +174,7 @@ def calculate_streamflow_elasticity(
                 value_cols=["elasticity_rolling"],
                 year_col="water_year",
                 trend_completeness=trend_completeness,
-                decade_completeness=decade_completeness,
+                decade_completeness=decade_completeness, changepoint=changepoint,
             )
             result.update(rolling_stats)
         else:
@@ -209,7 +210,7 @@ def calculate_streamflow_elasticity(
             value_cols=["elasticity_annual"],
             year_col="water_year",
             trend_completeness=trend_completeness,
-            decade_completeness=decade_completeness,
+            decade_completeness=decade_completeness, changepoint=changepoint,
         )
         result.update(yoy_stats)
     else:

@@ -8,7 +8,7 @@ precipitation relationship. Requires precipitation (PPT) data.
 from typing import Dict, Optional
 import numpy as np
 import pandas as pd
-from .stats import generate_stats
+from .stats import generate_stats, empty_stats
 from .config import (
     QP_SLOPE_WINDOW_DAYS,
     QP_MIN_YEARS,
@@ -21,6 +21,8 @@ def calculate_qp_seasonality(
     min_years: int = QP_MIN_YEARS,
     trend_completeness: Optional[float] = None,
     decade_completeness: Optional[float] = None,
+    min_values_for_stats: Optional[int] = None,
+    changepoint: Optional[dict] = None,
 ) -> Dict[str, float]:
     """
     Calculate Q-P seasonality metrics.
@@ -168,7 +170,7 @@ def calculate_qp_seasonality(
         value_cols=["qp_slope_sd"],
         year_col="water_year",
         trend_completeness=trend_completeness,
-        decade_completeness=decade_completeness,
+        decade_completeness=decade_completeness, min_values_for_stats=min_values_for_stats, changepoint=changepoint,
     )
 
     bi_df = annual_df[~annual_df["qp_bimodality"].isna()]
@@ -178,29 +180,24 @@ def calculate_qp_seasonality(
             value_cols=["qp_bimodality"],
             year_col="water_year",
             trend_completeness=trend_completeness,
-            decade_completeness=decade_completeness,
+            decade_completeness=decade_completeness, min_values_for_stats=min_values_for_stats, changepoint=changepoint,
         )
     else:
         bi_stats = {}
 
-    result = {
-        "qp_slope_sd_senn_slp": sd_stats.get("qp_slope_sd_senn_slp", np.nan),
-        "qp_slope_sd_linear_slp": sd_stats.get("qp_slope_sd_linear_slp", np.nan),
-        "qp_slope_sd_spearman_rho": sd_stats.get("qp_slope_sd_spearman_rho", np.nan),
-        "qp_slope_sd_spearman_pval": sd_stats.get("qp_slope_sd_spearman_pval", np.nan),
-        "qp_slope_sd_mk_rho": sd_stats.get("qp_slope_sd_mk_rho", np.nan),
-        "qp_slope_sd_mk_pval": sd_stats.get("qp_slope_sd_mk_pval", np.nan),
-        "qp_slope_sd_mean": sd_stats.get("qp_slope_sd_mean", np.nan),
-        "qp_slope_sd_median": sd_stats.get("qp_slope_sd_median", np.nan),
-        "qp_bimodality_senn_slp": bi_stats.get("qp_bimodality_senn_slp", np.nan),
-        "qp_bimodality_linear_slp": bi_stats.get("qp_bimodality_linear_slp", np.nan),
-        "qp_bimodality_spearman_rho": bi_stats.get("qp_bimodality_spearman_rho", np.nan),
-        "qp_bimodality_spearman_pval": bi_stats.get("qp_bimodality_spearman_pval", np.nan),
-        "qp_bimodality_mk_rho": bi_stats.get("qp_bimodality_mk_rho", np.nan),
-        "qp_bimodality_mk_pval": bi_stats.get("qp_bimodality_mk_pval", np.nan),
-        "qp_bimodality_mean": bi_stats.get("qp_bimodality_mean", np.nan),
-        "qp_bimodality_median": bi_stats.get("qp_bimodality_median", np.nan),
-    }
+    # Merge the full generate_stats outputs (as Julia does) — the previous
+    # explicit 8-key copies silently DROPPED the changepoint fields (found
+    # 2026-08-24 by the Phase-1 schema gate: qp_slope_sd and qp_bimodality
+    # were 2 of the 3 bases missing their _pettitt_* columns). The empty
+    # bimodality branch emits the 8-stat NaN set only (empty_stats), so its
+    # CP keys surface as missing via the union schema — mirroring Julia's
+    # empty_stats semantics exactly.
+    result = {}
+    result.update(sd_stats)
+    if bi_stats:
+        result.update(bi_stats)
+    else:
+        result.update(empty_stats("qp_bimodality"))
 
     return result
 

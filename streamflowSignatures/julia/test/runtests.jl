@@ -288,3 +288,5 @@ include("test_snow_metrics.jl")
 include("test_stats_floor.jl")
 include("test_snow_record_decade_gate.jl")
 include("test_drought_metrics.jl")
+include("test_changepoint.jl")  # was never wired in — found by Codex review 2026-08-24
+include("test_runoff_ratio_seasonal_mask.jl")

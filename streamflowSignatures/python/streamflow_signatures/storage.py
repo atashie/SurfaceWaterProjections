@@ -17,6 +17,8 @@ def calculate_average_storage(
     min_years: int = STORAGE_MIN_YEARS,
     trend_completeness: Optional[float] = None,
     decade_completeness: Optional[float] = None,
+    min_values_for_stats: Optional[int] = None,
+    changepoint: Optional[dict] = None,
 ) -> Dict[str, float]:
     """
     Calculate average catchment storage trends.
@@ -139,19 +141,14 @@ def calculate_average_storage(
         value_cols=["avg_storage"],
         year_col="water_year",
         trend_completeness=trend_completeness,
-        decade_completeness=decade_completeness,
+        decade_completeness=decade_completeness, min_values_for_stats=min_values_for_stats, changepoint=changepoint,
     )
 
-    return {
-        "avg_storage_senn_slp": stats.get("avg_storage_senn_slp", np.nan),
-        "avg_storage_linear_slp": stats.get("avg_storage_linear_slp", np.nan),
-        "avg_storage_spearman_rho": stats.get("avg_storage_spearman_rho", np.nan),
-        "avg_storage_spearman_pval": stats.get("avg_storage_spearman_pval", np.nan),
-        "avg_storage_mk_rho": stats.get("avg_storage_mk_rho", np.nan),
-        "avg_storage_mk_pval": stats.get("avg_storage_mk_pval", np.nan),
-        "avg_storage_mean": stats.get("avg_storage_mean", np.nan),
-        "avg_storage_median": stats.get("avg_storage_median", np.nan),
-    }
+    # Return the full generate_stats output (merged wholesale, as Julia does):
+    # the previous explicit 8-key copy silently DROPPED the changepoint fields
+    # (found 2026-08-24 by the Phase-1 schema gate: avg_storage was one of 3
+    # bases missing its 8 _pettitt_* columns).
+    return dict(stats)
 
 
 def _empty_result() -> Dict[str, float]:

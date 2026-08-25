@@ -25,7 +25,9 @@ analyze_flashiness_trends <- function(streamflow_data,
     stopifnot(!any(is.na(q_values)))
 
     total_q <- sum(q_values)
-    if (total_q == 0) next
+    # <= 0 matches canonical Julia: zero or NEGATIVE total flow (negative-Q
+    # days retained by default) is non-computable (2026-08-24 alignment fix)
+    if (total_q <= 0) next
 
     rb_index <- sum(abs(diff(q_values))) / total_q
     flashiness_by_year$RB_index[flashiness_by_year$water_year == yr] <- rb_index

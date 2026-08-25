@@ -2,6 +2,7 @@
 High-level convenience function for calculating all streamflow signatures at once.
 """
 
+import logging
 from typing import Optional
 
 import pandas as pd
@@ -18,6 +19,8 @@ from .elasticity import calculate_streamflow_elasticity
 from .qp_seasonality import calculate_qp_seasonality
 from .storage import calculate_average_storage
 
+logger = logging.getLogger(__name__)
+
 
 def calculate_all_signatures(
     gage_data: pd.DataFrame,
@@ -28,11 +31,17 @@ def calculate_all_signatures(
     decade_completeness: Optional[float] = None,
     include_qa_flags: bool = False,
     area_normalized: bool = True,
+    changepoint: Optional[dict] = None,
+    min_values_for_stats: Optional[int] = None,
+    gage_id: Optional[str] = None,
 ) -> dict:
     """Calculate all signatures for a single gage.
 
     Calls each signature function in sequence, catching exceptions per-signature
-    so that a failure in one does not prevent others from being calculated.
+    family so that a failure in one does not prevent others from being
+    calculated. Every caught failure is LOGGED with the gage id and family name
+    (mirroring the Julia orchestrator's @warn) — a silent failure would surface
+    only as mysteriously missing columns for this gage.
 
     Parameters
     ----------
@@ -63,6 +72,18 @@ def calculate_all_signatures(
         drainage area -- Q left in raw m3/s), all Q-to-PPT signatures (runoff
         ratios, elasticity, Q-P seasonality, storage) are skipped because Q and
         PPT units don't match. Q-only signatures are unaffected.
+    changepoint : dict, optional
+        Changepoint (Pettitt) configuration forwarded to every signature
+        family's generate_stats() call — including recession and elasticity
+        (their trend-gate/stats-floor exemptions do NOT extend to changepoint,
+        matching the Julia orchestrator). Keys: start_year, end_year,
+        min_total_obs, min_segment_obs.
+    min_values_for_stats : int, optional
+        Stats floor: metrics with fewer non-NaN annual values emit NaN for all
+        8 statistics + changepoint fields. NOT passed to recession/elasticity
+        (inherently sparse; same exemption as the trend gates).
+    gage_id : str, optional
+        Gage identifier used only for warning context on per-family failures.
 
     Returns
     -------
@@ -71,11 +92,22 @@ def calculate_all_signatures(
         plus 12 boolean flag columns if include_qa_flags is True.
     """
     results = {}
+    gid = gage_id if gage_id is not None else "unknown"
+
+    def run_family(family, func, *args, **kwargs):
+        """Run one signature family; log (never swallow silently) failures."""
+        try:
+            out = func(*args, **kwargs)
+            results.update(out)
+            return out
+        except Exception as e:
+            logger.warning("Gage %s: %s signatures failed: %s: %s",
+                           gid, family, type(e).__name__, e)
+            return None
 
     # Season exclusion year counts (per-gage scalar diagnostics)
     if seasonal_flags is not None and len(seasonal_flags) > 0:
-        import pandas as _pd
-        _sf = _pd.DataFrame(seasonal_flags)
+        _sf = pd.DataFrame(seasonal_flags)
         for season, col in [("winter", "winter_complete"), ("spring", "spring_complete"),
                             ("summer", "summer_complete"), ("fall", "fall_complete")]:
             if col in _sf.columns:
@@ -85,67 +117,41 @@ def calculate_all_signatures(
             else:
                 results[f"season_excluded_years_{season}"] = 0.0
 
-    # Common kwargs for trend completeness
+    # Common kwargs: trend gates + stats floor + changepoint. NOTE the exemption
+    # asymmetry (matching Julia's orchestrator): recession and elasticity are
+    # exempt from the trend gates AND the stats floor (inherently sparse), but
+    # changepoint IS passed to them explicitly below.
     trend_kwargs = dict(
         trend_completeness=trend_completeness,
         decade_completeness=decade_completeness,
+        min_values_for_stats=min_values_for_stats,
+        changepoint=changepoint,
     )
 
     # Non-climate signatures
-    try:
-        results.update(calculate_flow_vols_by_year(
-            gage_data, seasonal_flags=seasonal_flags, **trend_kwargs))
-    except Exception:
-        pass
+    run_family("flow volumes", calculate_flow_vols_by_year,
+               gage_data, seasonal_flags=seasonal_flags, **trend_kwargs)
+    run_family("flashiness", analyze_flashiness_trends, gage_data, **trend_kwargs)
+    run_family("flow timing", analyze_flow_timing_trends, gage_data, **trend_kwargs)
+    run_family("FDC", analyze_fdc_trends, gage_data, **trend_kwargs)
+    run_family("baseflow", analyze_baseflow_indices, gage_data, **trend_kwargs)
 
-    try:
-        results.update(analyze_flashiness_trends(gage_data, **trend_kwargs))
-    except Exception:
-        pass
-
-    try:
-        results.update(analyze_flow_timing_trends(gage_data, **trend_kwargs))
-    except Exception:
-        pass
-
-    try:
-        results.update(analyze_fdc_trends(gage_data, **trend_kwargs))
-    except Exception:
-        pass
-
-    try:
-        results.update(analyze_baseflow_indices(gage_data, **trend_kwargs))
-    except Exception:
-        pass
-
-    # Recession: inherently sparse (event-based), no trend completeness
-    recession_alpha = float('nan')
-    try:
-        recession_results = analyze_recession_parameters(gage_data)
-        # Extract scalar for parameterized BFI before merging
+    # Recession: inherently sparse (event-based), no trend completeness —
+    # changepoint still applies
+    recession_alpha = float("nan")
+    recession_results = run_family("recession", analyze_recession_parameters,
+                                   gage_data, changepoint=changepoint)
+    if recession_results is not None:
         recession_alpha = recession_results.get(
-            "recession_alpha_point_cloud_linear_reservoir", float('nan'))
-        results.update(recession_results)
-    except Exception:
-        pass
+            "recession_alpha_point_cloud_linear_reservoir", float("nan"))
 
-    # Parameterized BFI using recession-derived alpha (requires recession to have run first)
+    # Parameterized BFI using recession-derived alpha (requires recession first).
     # Uses trend completeness (same as fixed-parameter BFI)
-    try:
-        results.update(analyze_baseflow_indices_with_parameters(
-            gage_data, recession_alpha, **trend_kwargs))
-    except Exception:
-        pass
+    run_family("parameterized baseflow", analyze_baseflow_indices_with_parameters,
+               gage_data, recession_alpha, **trend_kwargs)
 
-    try:
-        results.update(calculate_pulse_metrics(gage_data, **trend_kwargs))
-    except Exception:
-        pass
-
-    try:
-        results.update(calculate_negative_days(gage_data, **trend_kwargs))
-    except Exception:
-        pass
+    run_family("pulse metrics", calculate_pulse_metrics, gage_data, **trend_kwargs)
+    run_family("negative days", calculate_negative_days, gage_data, **trend_kwargs)
 
     # Climate-dependent signatures
     # Use climate_data if provided, otherwise fall back to gage_data.
@@ -153,38 +159,22 @@ def calculate_all_signatures(
     # (raw m3/s vs PPT in mm -- units don't match, so Q/P ratios, dQ/dP, and
     # cumsum(P - Q) are all meaningless).
     if has_climate and not area_normalized:
-        import logging as _logging
-        _logging.info(
-            "Skipping Q-to-PPT signatures (area_normalized=False -- "
-            "Q in raw m3/s, PPT in mm)")
+        logger.info(
+            "Gage %s: skipping Q-to-PPT signatures (area_normalized=False -- "
+            "Q in raw m3/s, PPT in mm)", gid)
     climate_df = climate_data if climate_data is not None else gage_data
     if has_climate and area_normalized and "PPT" in climate_df.columns:
-        try:
-            results.update(analyze_Q_PPT_relationships(
-                climate_df, seasonal_flags=seasonal_flags, **trend_kwargs
-            ))
-        except Exception:
-            pass
-
-        # Elasticity: rolling window produces fewer values than years, no trend completeness
-        try:
-            results.update(calculate_streamflow_elasticity(climate_df))
-        except Exception:
-            pass
-
-        try:
-            results.update(calculate_qp_seasonality(climate_df, **trend_kwargs))
-        except Exception:
-            pass
-
-        try:
-            results.update(calculate_average_storage(climate_df, **trend_kwargs))
-        except Exception:
-            pass
+        run_family("runoff ratios", analyze_Q_PPT_relationships,
+                   climate_df, seasonal_flags=seasonal_flags, **trend_kwargs)
+        # Elasticity: rolling window produces fewer values than years, no trend
+        # completeness — changepoint still applies
+        run_family("elasticity", calculate_streamflow_elasticity,
+                   climate_df, changepoint=changepoint)
+        run_family("Q-P seasonality", calculate_qp_seasonality, climate_df, **trend_kwargs)
+        run_family("storage", calculate_average_storage, climate_df, **trend_kwargs)
 
     # QA/QC flags (optional)
     if include_qa_flags:
-        import logging as _logging
         try:
             from .qa_qc import compute_qa_flags, get_flag_columns
             row_df = pd.DataFrame([results])
@@ -194,6 +184,6 @@ def calculate_all_signatures(
                     val = flagged_df[col].iloc[0]
                     results[col] = bool(val) if not pd.isna(val) else False
         except Exception as _e:
-            _logging.warning("QA/QC flags failed: %s", _e)
+            logger.warning("Gage %s: QA/QC flags failed: %s", gid, _e)
 
     return results

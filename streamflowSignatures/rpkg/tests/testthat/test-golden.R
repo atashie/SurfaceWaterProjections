@@ -21,7 +21,7 @@ test_that("config loads correctly on package load", {
   expect_equal(env$recession_min_events, 25)
   expect_equal(env$recession_min_length, 5)
   expect_equal(env$elasticity_window_years, 11)
-  expect_length(env$d_percentiles, 11)
+  expect_length(env$d_percentiles, 13)  # D1..D99, 13 since April 2026 (was 11)
   expect_length(env$stat_suffixes, 8)
 })
 

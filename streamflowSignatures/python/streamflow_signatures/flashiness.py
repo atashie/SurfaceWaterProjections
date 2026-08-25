@@ -15,6 +15,8 @@ def analyze_flashiness_trends(
     streamflow_data: pd.DataFrame,
     trend_completeness: Optional[float] = None,
     decade_completeness: Optional[float] = None,
+    min_values_for_stats: Optional[int] = None,
+    changepoint: Optional[dict] = None,
 ) -> Dict[str, float]:
     """
     Calculate Richards-Baker flashiness index trends.
@@ -73,8 +75,12 @@ def analyze_flashiness_trends(
         # Calculate total flow
         total_q = np.nansum(q_values)
 
-        # Guard against division by zero
-        if total_q == 0:
+        # Non-computable year: zero or NEGATIVE total flow (negative-Q days are
+        # retained by default; a negative denominator is meaningless). `<= 0`
+        # matches canonical Julia — the `== 0` guard let WY totals < 0 produce
+        # values Julia declines (found 2026-08-24 at gage 02244440 WY1999,
+        # total Q = -78.8, via the Phase-1 floor-transition gate).
+        if total_q <= 0:
             results_list.append({"water_year": yr, "RB_index": np.nan})
             continue
 
@@ -92,7 +98,7 @@ def analyze_flashiness_trends(
         value_cols=["RB_index"],
         year_col="water_year",
         trend_completeness=trend_completeness,
-        decade_completeness=decade_completeness,
+        decade_completeness=decade_completeness, min_values_for_stats=min_values_for_stats, changepoint=changepoint,
     )
 
     # Rename columns to match expected output

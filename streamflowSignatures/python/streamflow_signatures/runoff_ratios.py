@@ -19,6 +19,8 @@ def analyze_Q_PPT_relationships(
     min_seasonal_ppt: float = RUNOFF_MIN_SEASONAL_PPT,
     trend_completeness: Optional[float] = None,
     decade_completeness: Optional[float] = None,
+    min_values_for_stats: Optional[int] = None,
+    changepoint: Optional[dict] = None,
 ) -> Dict[str, float]:
     """
     Calculate runoff ratio (Q/P) trends.
@@ -140,7 +142,7 @@ def analyze_Q_PPT_relationships(
         value_cols=metric_cols,
         year_col="water_year",
         trend_completeness=trend_completeness,
-        decade_completeness=decade_completeness,
+        decade_completeness=decade_completeness, min_values_for_stats=min_values_for_stats, changepoint=changepoint,
     )
 
     # Count years where annual runoff ratio > 2.0 (per-gage scalar diagnostic)
