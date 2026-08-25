@@ -416,6 +416,10 @@ R5 EO products in a parallel session, R5 carrying the user's NLCD QA sign-off).
 Remaining before submission: create the 5 member resources on HydroShare (ids → DOI
 strings for manuscript §3), upload + integrity-check, coverage metadata, co-author
 profiles/author order, reviewer private links; publish at acceptance per plan D4.
+**DECIDED (user, 2026-08-25): HydroShare is GROUND TRUTH going forward** — once a
+resource is uploaded and integrity-verified there, the flash drive and Google Drive
+are convenient backups only; on any discrepancy between copies, HydroShare wins.
+This makes the upload-time checksum verification step load-bearing.
 
 ### New: HydroShare Resource 5 (vegetation + land cover) staged + verified (2026-08-25)
 `~/Downloads/Signatures/resource5_eo_products/`: the three EO products staged from the
