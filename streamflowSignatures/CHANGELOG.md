@@ -12,9 +12,23 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
   Pettitt changepoint fields, the 20-value stats floor, the annual-values collector, the
   b=1 recession alpha, the 14 snow metrics, and the 10 drought metrics. Python and rpkg
   currently reproduce the 623-signature-column April subset, not the 1,653-column
-  delivered product.
+  delivered product. **PLANNED 2026-08-24** — full campaign plan (scope decisions,
+  phases, validation gates, gap survey):
+  `docs/plans/2026-08-24-port-julia-features-to-python-rpkg-plan.md`. Elevated in
+  priority by the 2026-08-24 manuscript sync: the draft now claims every signature is
+  computed by the cross-language Julia/Python/R library. **Codex pre-implementation
+  review (2026-08-24): initial NO-GO — 3 CRITICAL (impossible Phase-1/Phase-5 gates;
+  nonexistent Python bounded-memory climate join) + 11 MAJOR (intersection-only
+  comparison tools, self-referential annual validator, weak smoke gates, late R
+  packaging, legacy-path hazard, Pettitt tie determinism, per-gage silent column
+  loss, …); ALL findings incorporated into the revised plan — full table in the plan
+  doc §8. Two incidental Julia-side gaps it surfaced are queued for Phase 0:
+  `test_changepoint.jl` is not wired into `julia/test/runtests.jl`, and the seasonal
+  RR fix will also shift the annual parquet's seasonal runoff-ratio rows.**
 - Restore a readable copy of the ORIGINAL `daymet_1980_2023.parquet` if one exists
-  elsewhere (S3, another machine, the Windows `D:` drive). **Product #2 is built on the
+  elsewhere (**the Google Drive backup** — the Shiny app formerly read this file from
+  S3, so a copy existed there and may have been backed up before S3 access was lost on
+  2026-08-24; else another machine or the Windows `D:` drive). **Product #2 is built on the
   CSV-rebuilt input; product #1 predates the rebuild and used the original** (each run's
   `timing.json` → `provenance` records which). An original copy would let the ≤ 3.4e-13
   replay residual be attributed rather than merely bounded, would let the truncated file
@@ -88,8 +102,11 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
   because `preprocess_daily_data()` emits Float64 Q with NaN rather than `missing` — it
   only bites callers passing raw frames (smoke test, direct API use). Fix is one line
   (`coalesce_q(df.Q)` before the group-by, matching the rest of the codebase); left
-  unapplied because it is outside the drought work's scope. Python/rpkg ports likely
-  mirror the pattern — verify when touched.
+  unapplied because it is outside the drought work's scope. **VERIFIED 2026-08-24: the
+  ports do NOT mirror the pattern** — Python's `(g["Q"] < 0).sum()` is NA-safe by pandas
+  comparison semantics, and rpkg guards explicitly with `!is.na(q)`. One nuance to pin
+  when touched: rpkg's `aggregate` formula interface drops an all-NA water year entirely,
+  where Julia's groupby retains the group — add a parity test with the eventual fix.
 - **LOW (legacy shim only, discovered 2026-07-21) — 6 pre-existing failures in the
   legacy R NA-handling test suite** (`R/tests/test_na_handling.R`, run per its
   documented usage after sourcing `config.R` + `R/helperFunctions.R`): grid
@@ -120,16 +137,23 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
   land inside [0, 2000] unflagged; downstream users must filter on
   `area_normalized == TRUE` before any cross-gage comparison of unit-carrying
   signatures. See docs/DEVELOPMENT.md → Canadian HYDAT → Missing drainage areas.
-- **MEDIUM — seasonal runoff ratios ignore seasonal completeness flags**:
+- **RESOLVED 2026-08-24 (fixed in Julia — see August 2026 entry; verified inert for
+  the delivered WY 1993–2025 product, zero masking events in that window) —
+  seasonal runoff ratios ignored seasonal completeness flags**:
   `julia/src/runoff_ratios.jl:113-118` looks up flags named
   `winter_complete/spring_complete/summer_complete/fall_complete`, but the preprocessor
   emits `win_complete/spr_complete/sum_complete/fal_complete` (`julia/src/io.jl:462`;
   cf. correct usage in `flow_volumes.jl:136-137`). The existence check at
   `runoff_ratios.jl:120` silently fails, so seasonal runoff ratios are never NaN'd for
   incomplete seasons — the guidelines' 80% seasonal completeness rule is not applied to
-  this category. Python and rpkg likely mirror the bug (synced ports — verify). Fix
-  changes outputs → schedule with the next behavior-changing release (Julia first, then
-  ports, benchmark re-run + golden comparison).
+  this category. **VERIFIED 2026-08-24 (port-gap survey): the bug is JULIA-ONLY.**
+  Python (`io.py` emits full names; `runoff_ratios.py:120-123` looks them up) and rpkg
+  (`io.R:418-420` / `runoff_ratios.R:54-57`) are internally consistent — their masking
+  works. Fixing Julia therefore moves it TOWARD the ports. **FIXED same day** as Phase 0
+  of the port campaign (`docs/plans/2026-08-24-port-julia-features-to-python-rpkg-plan.md`),
+  with a regression test and a fresh reference benchmark attributing the delta (zero
+  masking events in the WY 1993–2025 window — full record in the August 2026 entry);
+  delivered standard products are unaffected.
 
 ### Guidelines Document TODOs
 <!-- New suggestions from hydrology colleagues will be tracked here -->
@@ -289,9 +313,384 @@ first pass (manuscript §refs; direction of fix in brackets):
    worth a Usage Notes line: drought values are record-dependent (thresholds come
    from each product's own window) and `drought_deficit_*` is unit-carrying.
 
+**2026-08-24 — major co-author revision synced; second reconciliation pass.** The
+draft was substantially rewritten since 2026-07-21: new §1 framing (related-work
+comparison vs HYSETS/Caravan/CAMELS-SPAT), the §2 methods summary paragraph filled
+in (16,994 candidate gages → 8,014 usable; 111.6M observations), §2.1.1/2.1.2
+rewritten with concrete QA numbers, a new §2.1.4 HydroATLAS paragraph, and §2.2
+restructured. Snapshot overwritten.
+
+*Queued-edit status* (numbers refer to the 2026-07-21 queue above):
+- **APPLIED**: #2 (metric-family list — baseflow deduped, runoff ratios/Q-P
+  seasonality/snow added, storage omission stated), #3 (stats list in §1: both
+  slopes, Spearman + MK, Pettitt — but see the leftover-sentence finding below),
+  #4 (both standard windows with gage counts 6,678 / 6,250), #6 (HUC-8 → gaged
+  watersheds), #7 (flag-not-remove sentence now exactly matches the code: removal
+  = >3-day gap + >30 NAs; flag-only = negative Q + constant SD).
+- **PARTIAL**: #1 (area normalization) — "all but 73 gages" now stated, but the
+  text still points at §2.1.1 (boundary polygons) as the area source; the actual
+  normalization uses agency-published drainage areas (GAGES-II / HYDAT STATIONS),
+  stated nowhere, and the Usage-Notes caveat (filter `area_normalized == TRUE`)
+  is still missing.
+- **OPEN**: #5 (§2.1.3 "6,041 basins" vs repo's ~6,087 sites), #8 (drought family
+  absent — see counts finding below).
+  - **#5 repo-side RESOLVED by direct count (2026-08-24)**: the delivered Daymet
+    parquet contains exactly **6,087** distinct basins (97,757,220 rows; DuckDB
+    `COUNT(DISTINCT site_id)` on the rebuilt file), and all 6,087 match metadata
+    gages. §2.1.3 should say 6,087 unless the gdptools co-authors can explain
+    "6,041" (possibly a stale count from an earlier aggregation run). Also measured
+    for §2.1.3/Usage Notes — Daymet coverage is a strict subset of each gage set:
+    5,965 of the 8,014 compiled gages, **5,517 of product #1's 6,678**, and
+    **5,638 of product #2's 6,250** have Daymet series; climate/snow-dependent
+    signatures are structurally NA for the remainder. (6,250/6,678 are signature-
+    product gage counts and are unrelated to the Daymet aggregation.)
+
+*New findings (direction of fix in brackets):*
+- **§1 + §2 now claim every signature is computed by an open cross-language
+  library (Julia, Python, and R)** — currently FALSE: Python/rpkg reproduce the
+  April 623-signature-column subset (no Pettitt, no stats floor, no annual-values
+  collector, free-fit alpha instead of b=1, no snow, no drought). [Fix in code —
+  this is the six-feature port queue in Planned; port initiative planned
+  2026-08-24. Fallback if the port slips past submission: soften the claim.]
+- **Signature counts predate the drought family**: "106 signatures … 90 annually
+  resolved + 16 per-gage scalars" and "13 categories" describe the 1,488-column
+  pre-drought state; delivered products carry 100 annually resolved + 21 scalars
+  (121) across 14 categories. [Manuscript — same item as queued edit #8.]
+- **§2.1.2 conflates the decade trend gate with gage inclusion**: "calculated
+  signatures for gages only if they … included 80% of the possible WYs in the
+  first and final decade of the window" — the 80%-decade rule is a per-signature
+  TREND gate (§2.2.2 states it correctly), not a gage-inclusion criterion.
+  [Manuscript.]
+- **Leftover duplicate paragraph in §2.2.1**: the old "For the Eckhardt filter,
+  we used both default parameters … including slope, Spearman's Rho, p-value,
+  mean and median" sentence survives right after the new (correct) BFI paragraph
+  and understates the 8 stats + Pettitt. [Manuscript — delete/merge.]
+- **§2.1.1 vs §2.1.3 inconsistency**: §2.1.1 says the 7,964-polygon layer was
+  used "to aggregate gridded climate data and remotely sensed LULC and LAI";
+  §2.1.3 says Daymet was aggregated by the co-authors' gdptools run to 6,041
+  basins (a separate, earlier boundary set). Only LULC/LAI/NLCD use the 7,964
+  layer. [Manuscript.]
+- **Closed**: §2.2.2's trend gates now match the code exactly — 20-value stats
+  floor, 60% overall, 80% first/last decades, recession + elasticity exemptions.
+  The 2026-07-21 60%-gate finding is fully resolved.
+- §2.1.4's aggregation description omits that 91 `_u`/`_p` attributes pass
+  through from the outlet basin (HydroATLAS's own upstream accumulation); only
+  `_s`-only attributes are re-aggregated. [Manuscript nuance — optional.]
+- Minor, to relay: title "a nalyzing"; "indented"→"intended"; "Corack"→"Corak";
+  unclosed paren "(e.g., CAMELS-Chem,"; missing references for McMillan 2021,
+  Hatchett 2021, Petersky & Harpold 2018, Arsenault et al. 2020 (HYSETS),
+  Kratzert et al. 2023 (Caravan), Knoben et al. 2025 (CAMELS-SPAT); §2.1.2's
+  retrieval end "30 September 2025" while the Feb 2026 parquet carries partial
+  WY-2026 rows. [Manuscript.]
+
+**2026-08-24 — drafting support for blank/revised sections (user-directed).**
+§2.1.4 (MODIS land cover/LAI) revised text reviewed against the delivered EO
+products — verified accurate (8 schemes, 102 class columns, LAI algorithm/range),
+minor fixes suggested (percent vs fraction; v061 stated for both products;
+reference-list update to the v061 dataset citations), plus a ready-to-paste Annual
+NLCD paragraph (30 m, 1985–2025, CONUS-only, 6,119 watersheds, impervious surface,
+~280× pixel density vs MODIS). **§3 Data Record drafted in full** around the planned
+five-resource HydroShare structure (DOIs intentionally TBD) — delivered in-session
+for Arik to paste into the Google Doc; structure follows
+`docs/plans/2026-08-24-hydroshare-publication-and-dashboard-plan.md`. New references
+flagged for the list: HYDAT database, MCD12Q1 v061, MCD15A3H v061, Annual NLCD
+Collection 1.
+
 ---
 
 ## [August 2026]
+
+### Milestone: HydroShare COLLECTION created; all five HISSS resources staged + reviewed (2026-08-25)
+The HydroShare collection for the HISSS deposit now exists (verified live in-browser):
+**"Hydrologic Information Signatures and Summary Statistics"** —
+https://www.hydroshare.org/resource/f702201faa5d46069a5ee83ffa4c9768/ — which fixes
+the collection DOI that activates at publication:
+**https://doi.org/10.4211/hs.f702201faa5d46069a5ee83ffa4c9768**. Recorded in the plan
+doc (`docs/plans/2026-08-24-hydroshare-publication-and-dashboard-plan.md`), project
+memory, and appended to all five staged resource READMEs. Staging status: **all five
+resources are deposit-ready** in `~/Downloads/Signatures/resource{1..5}_*/` — deposit
+file names, per-resource READMEs + data dictionaries + abstracts, every document
+Codex-adversarially reviewed with findings fixed (R1–R2 signatures, R4
+geometry+attributes incl. the same-day boundary rebuild in one session; R3 inputs +
+R5 EO products in a parallel session, R5 carrying the user's NLCD QA sign-off).
+Remaining before submission: create the 5 member resources on HydroShare (ids → DOI
+strings for manuscript §3), upload + integrity-check, coverage metadata, co-author
+profiles/author order, reviewer private links; publish at acceptance per plan D4.
+
+### New: HydroShare Resource 5 (vegetation + land cover) staged + verified (2026-08-25)
+`~/Downloads/Signatures/resource5_eo_products/`: the three EO products staged from the
+Drive backup (`~/Downloads/LAI-LULCC/`) under deposit names — `hisss_modis_lai_monthly.parquet`
+(195 MB), `hisss_modis_lulc_annual.parquet` (63 MB), `hisss_nlcd_annual.parquet` (31 MB) +
+the three explorers (`hisss_modis_lai_explorer.html` 47 MB, `hisss_modis_lulc_explorer.html`
+47 MB, `hisss_nlcd_explorer.html` 12 MB) — every copy md5-verified against its backup
+source, and every parquet re-verified against the documented invariants: LAI 2,150,280 =
+7,964 × 270 (2002-07…2024-12) with `good_coverage_frac` + `partial_month` (i.e. the 30 Jun
+final), 0 dup keys, lai_mean ∈ [0.10, 5.80], exactly 17 always-NA urban basins; LULC
+191,136 = 7,964 × 24 (2001–2024), IGBP sums 100 ± 1e-13, 0 dups; NLCD is the **finalized**
+build — 250,879 = 6,119 × 41 (1985–2025), all finalize markers present (`nlcd_collection`
+= C1V2, `valid_area_km2`, 4 QA flags), class sums 100 ± 1.3e-12, impervious 0–68.8 %.
+All three explorers end cleanly (no exFAT-style truncation) and are self-contained except
+the Leaflet CDN. New docs: `hisss_readme_eo.md`, merged `hisss_eo_data_dictionary.csv`
+(173 rows: all 168 columns of the three parquets — incl. a note row for LAI's vestigial
+pandas `__index_level_0__` column, kept for byte-identity — + NLCD's 4 `CAVEAT_*` rows +
+the 5 columns of the exclusions CSV), abstract, and rename-manifest rows. Two backup
+gaps handled: the original `nlcd_out_of_footprint.csv` was not in the Drive backup, so
+`hisss_nlcd_excluded_gages.csv` was **exactly reconstructed** (EO-universe US gages absent
+from the NLCD table = 45 gages, all verified in Alaska, lat 55.2–70.3° N); the MODIS
+granule manifest was also absent — documented in the README as repo-level provenance
+rather than shipped. Coverage measured for the README: MODIS covers 6,599/6,678 of
+product #1's gages and 6,196/6,250 of #2's; NLCD covers 5,419 and 4,998. Deposit choice:
+parquet-only for the data tables (the backup's CSV twins are exact re-serializations;
+the 695 MB LAI CSV in particular is redundant). **User sign-off 2026-08-25 on the full
+R5 staging — including the NLCD human QA via `hisss_nlcd_explorer.html`** (the pass owed
+since 24 Jul; that closes the last NLCD publication gate). R5 is deposit-ready.
+
+### Lost → rebuilding: the watershed geometry product; plus exFAT casualty #3 (2026-08-25)
+`watershed_polygons_26jun2026.{gpkg,parquet}` + `_qa.csv` (the 7,964-basin delivered
+layer) existed **only on S3 and was not captured in the Google Drive backup** — the
+first permanent casualty of the S3 access loss (user-confirmed absent from Drive;
+searched the flash drive exhaustively; SageMaker-side `geometry_7964.gpkg` also
+unreachable). **Rebuild launched same day** from the committed pipeline
+(`EO_data_processing/geometry/`, consolidated into
+`~/Downloads/geometry_rebuild/rebuild_watershed_polygons.py`) with: a **fresh USGS
+GAGES-II download** (204,809,860 B, zip integrity verified — the flash-drive zip is
+**truncated to exactly 18 MiB, exFAT casualty #3**, and its extracted folder is also
+partial at 107 MB vs 1.4 GB real; the repo docs' "18 MiB ZIP" note was recording the
+already-truncated size); **fresh ECCC MDA_ADP** (the server serves a single version,
+Last-Modified 2024-09-05 — slightly newer than the documented June-2024 pin;
+the flash `ca/` copy was always a stub, 7 of 11 files zero-byte); and the flash drive's
+`basinAt_NorAm_polys.gpkg` (verified: 167,665 features, EPSG:4326). The **54-basin
+exclusion** (geometry > 100,000 km² + `05KH009`) was an uncommitted post-step in the
+June delivery and is now implemented explicitly in the rebuild script. Validation
+targets from the June QA record: 7,964 features; gagesii 6,164 / wsc_eccc 1,771 /
+hydrobasins 29; 0 dups/invalid/empty; ~141 full-res-kept basins. **Caveat for R4 and
+the EO products**: LAI/LULC/NLCD were computed on the ORIGINAL geometry; the rebuild
+is expected to be equivalent but not bit-identical (ECCC source version differs), and
+the R4 README will carry explicit rebuild provenance. Separately, the **HydroATLAS
+attributes product was recovered from the Drive backup** (`HydroATLAS/` folder:
+8,014 × 211 + its 211-row dictionary) and is staged + verified into Resource 4.
+
+**Rebuild COMPLETE same day — every recorded June target matched EXACTLY**: 7,964
+features; gagesii 6,164 / wsc_eccc 1,771 / hydrobasins 29; 0 dups/invalid/empty;
+**141 full-res-kept basins (identical to June)**; area QA median 0.0010 with 97.8%
+< 10%; 41.7 MB gpkg. Canadian matching produced 1,823 even on the Sep-2024 ECCC
+version (per-district wanted/got identical in effect), the 31-gage residual resolved
+31/31 outlets (15 by point-in-basin), and the 54-basin exclusion decomposed exactly
+as predicted (52 wsc_eccc + 2 hydrobasins). This also **settles the geometry-source
+question definitively: gagesii == 6,164 == every US gage; all 29 HB fallbacks are
+Canadian** — confirming the manuscript's "100% of US gages from GAGES-II" claim and
+the README_NLCD correction. Set relationship measured: attributes ∩ boundaries =
+7,960; 4 geometry-only (the inclusive-universe extras); 54 attributes-only
+(size-excluded). Staged as `hisss_watershed_boundaries.{gpkg,parquet}` +
+`_qa.csv` in `resource4_geometry_attributes/`; rebuild workspace + script retained
+at `~/Downloads/geometry_rebuild/`.
+
+**Resource 4 docs Codex-reviewed same day: GO-WITH-FIXES (4 MAJOR + 4 MINOR) → all
+fixed → delta review 8/8 RESOLVED + 2 residuals it exposed → fixed per its
+prescribed wording → done.** Substantive catches: the "same committed pipeline"
+provenance claim overstated (the 54-basin exclusion was newly implemented; ECCC
+source is the Sep-2024 serving); "joins to every HISSS table" overstated coverage
+(overlap measured: 7,960 shared / 4 geometry-only / 54 attributes-only); and the
+inherited HydroATLAS dictionary carried two `x?` placeholder rows — resolved against
+the BasinATLAS v10 catalog PDF, which also corrected a wrong unit (`ero_kh_uav` is
+kg/hectare/yr, not kg/m²/yr; `hdi_ix_sav` is index × 1000) — plus 11 ambiguous
+categorical-aggregation rows now stating the actual per-variable method (glc/pnv
+argmax vs SUB_AREA-weighted mode). Codex independently verified all counts (7,964;
+6,164/1,771/29; 141 full-res; 56 low_confidence; 8,014 × 211; dictionary set
+equality; the overlap sets).
+
+### Fixed: SECOND silent exFAT truncation — product #1 explorer restored from the Drive backup (2026-08-25)
+The HydroShare staging review of Resources 1–2 (`~/Downloads/Signatures/`, pulled from
+the Google Drive backup) found the thumbdrive copy of
+`processedOuts_drought_28jul2026/signature_explorer_1993_2025_60pct_drought.html`
+**silently truncated to 30,146,560 bytes** (ends mid-data, no `</html>`) against the
+71,782,193 bytes recorded in RUN_NOTES/CHANGELOG — same failure signature as the
+Daymet parquet on 2026-08-10 (size shrunk, mtime preserved). The Drive-backup copy has
+the full recorded size and a clean ending; the thumbdrive file was **restored from it
+and md5-verified**. Everything else checked bit-identical between the Drive backup and
+the thumbdrive: both products' signatures CSVs, annual parquets, timing JSONs, #2's
+production log, and all 200 explorer sidecar files (md5, file-by-file). The thumbdrive
+has now silently truncated **two** files — treat it as failing; never hold a sole copy
+there. Staging gaps fixed the other direction: RUN_NOTES, validation reports, and
+vs-julia comparison artifacts were absent from the Drive-backup staging folders and
+were copied in from the thumbdrive. Remaining for deposit readiness:
+`signature_categories_260717.csv` is stale (90 pre-drought bases, 0 drought rows),
+deposit renames pending co-author sign-off on the §3 structure, per-resource
+README/dictionary not yet assembled.
+
+### New: HydroShare Resource 3 (harmonized inputs) staged + documented, subagent-reviewed (2026-08-25)
+`~/Downloads/Signatures/resource3_input_data/`: the four input files staged under deposit
+names (`hisss_streamflow_daily.parquet`, `hisss_gage_metadata.csv`,
+`hisss_daymet_basin_daily.parquet`, `hisss_hydat_interference.csv`), each md5-identical
+to its canonical source (thumbdrive sizes + `PAR1` footers verified first). Built
+`hisss_readme_inputs.md`, `hisss_input_data_dictionary.csv` (all 34 columns across the
+4 tables, values profiled from the data), and the resource abstract. **The user caught a
+framing error the docs shipped with**: "1,601 un-normalized Canadian gages" is the
+all-candidates metadata count — only **73** are compiled and present in the streamflow
+table (1,523 of the rest are `no_data`); all three docs corrected to use each count in
+its proper universe. **Codex stalled twice** (hung before creating a session file —
+tell: no new `~/.codex/sessions/.../rollout-*.jsonl` + near-zero CPU; two runs completed
+fine earlier the same morning), so per user direction the adversarial review ran as a
+**Claude subagent** instead: verdict **GO-WITH-FIXES**, 1 CRITICAL + 3 MAJOR + 5 MINOR,
+all fixed. The CRITICAL: **`hisss_gage_metadata.csv` stores US gage ids ZERO-STRIPPED**
+(7,046 seven-char ids; a naive join to the zero-padded parquets matches only 3,118 of
+8,014 gages) — the docs had claimed zero-padded. Resolved by documenting (join recipe +
+warning + corrected dictionary row) rather than re-padding the data, preserving the
+resource's byte-identical-inputs provenance. Other fixes: Daymet coverage is 5,965 of
+8,014 compiled gages (the 6,087 sites include 122 never-compiled candidates); the
+`flag` column's real vocabulary (Canadian rows carry only B/E/A/NULL — no D/R; bare "A"
+is agency-dependent; NULL ≠ "no qualifier" for US rows); ~588k NA-discharge rows exist
+(missing days are NOT solely absent rows); rebuild-provenance wording tightened to the
+CHANGELOG's precise claims; REGULATED has 371 empties; STN_REGULATION table credited;
+1,528 = no-data + insufficient-years; float-typed calendar helpers noted. The reviewer
+empirically verified all counts/extents, the 365-day Daymet calendar across all 267,828
+site-years, and cross-document consistency.
+
+### New: HydroShare deposit docs for Resources 1–2 — README + full data dictionary, Codex-reviewed (2026-08-25)
+Staging (`~/Downloads/Signatures/`) renamed to the deposit convention
+(`hisss_signatures_wy{window}.csv`, `hisss_signatures_annual_*.parquet`,
+`hisss_signature_explorer_*` — explorer HTMLs' internal sidecar-folder references
+patched to the renamed `_annual/` folders; `hisss_rename_manifest.csv` maps old → new).
+Built per-resource `hisss_readme_wy{window}.md` and a generated
+**`hisss_data_dictionary.csv` covering all 1,653 columns** (generator asserts full
+header coverage; per-statistic units derived from per-base units), plus
+`hisss_signature_categories.csv` updated to 100 bases (+10 drought, new "Drought"
+class; unexplained `question` column dropped). **Codex adversarial review
+(codex exec, read-only): NO-GO → all 10 findings fixed → delta review 9/10 RESOLVED,
+1 PARTIAL → fixed → done.** The CRITICAL: docs claimed a Pettitt changepoint year is
+"always reported" — in fact Pettitt fields are NA without ≥ 20 valid values and ≥ 10
+per segment **within the WY 1980–2024 changepoint window** (config
+`changepoint.end_water_year = 2024`), i.e. WY 2025 is excluded from all Pettitt
+fields — a product-level fact now documented in both READMEs and all 800 Pettitt
+dictionary rows. Other MAJORs: snow signatures are NOT suppressed for
+`area_normalized = FALSE` gages (only Q-to-PPT is); flow totals for un-normalized
+gages are m³/s·days (×86,400 → m³), stated for Qann/seasonal totals AND drought
+deficits; "14 categories" claim conflicted with the shipped nine-class exploratory
+grouping. Codex verified counts (6,678/6,250 rows, 1,653 cols, 100×16 + 21 + 12
+schema, parquet row counts vs provenance) and the gate thresholds. Copies of
+dictionary + categories are identical (md5) at staging root and in both resource
+folders.
+
+### Fixed (MEDIUM → resolved): seasonal runoff-ratio completeness masking was dead code in Julia (2026-08-24)
+`julia/src/runoff_ratios.jl` looked up seasonal completeness flags by FULL names
+(`winter_complete`, …) while the preprocessor emits ABBREVIATED names
+(`win_complete`/`spr_complete`/`sum_complete`/`fal_complete`) — the existence check
+failed silently, so the guidelines' 80% seasonal rule was never applied to seasonal
+runoff ratios (Known Issue since 2026-07-14). Fixed to the abbreviated names (the
+same lookup `flow_volumes.jl` always used), Julia-first, as Phase 0 of the port
+campaign. Key facts established on the way:
+- **The bug was JULIA-ONLY** — Python and rpkg emit AND look up full names
+  consistently, so their masking always worked. The fix converges Julia toward the
+  ports (2026-08-24 port-gap survey; contrary to the Known Issue's "ports likely
+  mirror" assumption, now corrected).
+- **New regression test** `julia/test/test_runoff_ratio_seasonal_mask.jl` (32
+  assertions) asserts the mask actually FIRES with preprocessor-shaped flags — the
+  bug survived precisely because no test did. Also wired the previously-orphaned
+  `test_changepoint.jl` into `runtests.jl` (Codex review find: a green suite never
+  ran it). Suite: 2,798 assertions, 0 failures.
+- **The fix is behaviorally INERT for the delivered WY 1993–2025 product**: a
+  fresh same-machine reference run (`processedOuts_portref_24aug2026`, 6,678 ×
+  1,653, 10.9 min) diffed against standard product #1 shows ZERO masking events —
+  no qualifying year in that window has a season under 80% completeness (the
+  preprocessor's >3-day-gap year rejection makes that nearly impossible). The
+  entire observed delta is the documented climate-input residual (product #1
+  predates the daymet rebuild): exactly the replay's 98 columns at 1e-18…6.3e-13,
+  max 2.56e-13 over 729 of 18.9M annual rows, all climate/SWE-derived. Evidence +
+  interpretation retained in the run folder (`RUN_NOTES.md`,
+  `validation_additivity_vs_product1.txt`, `validation_annual_rr_delta.txt`).
+  Delivered products are NOT superseded by the reference run.
+- Windows where seasons CAN fail completeness (other configs, legacy-path users)
+  will see seasonal runoff ratios become NaN where flow volumes already did — the
+  two families are now consistent.
+
+### Port campaign Phase 1 findings (2026-08-24, in progress)
+Phase 1 (Pettitt + stats floor → Python) surfaced four genuine defects, each caught
+by a specific Codex-mandated gate — none would have shown in the old
+intersection-only comparisons:
+- **Fixed (alignment, MEDIUM): Python and rpkg flashiness guarded `total_Q == 0`
+  where canonical Julia guards `<= 0`** — with negative-Q days retained by default,
+  a water year with NEGATIVE total flow produced a negative-denominator R-B value
+  in the ports that Julia declines. Verified: exactly 4 in-window gage-years across
+  3 Florida gages (02236900 ×2, 02244440 WY1999 at −78.8 mm, 02313700). Found by
+  the Phase-1 floor-transition EXACT-equality gate (the extra year pushed the
+  Python count to 20, dodging the stats floor Julia applied at 19). Both ports
+  fixed to `<= 0`.
+- **Fixed: Python `qp_seasonality`/`storage` silently dropped the new changepoint
+  fields** — they rebuilt their return dicts with explicit 8-key copies instead of
+  merging the `generate_stats` output (Julia merges wholesale). Found by the
+  schema gate: exactly 3 bases × 8 = 24 missing `_pettitt_*` columns. Now merged
+  wholesale.
+- **Fixed (tooling): `apply_stats_floor_mask.py` read CSVs with pandas' fast
+  (not correctly-rounded) float parser** — rewriting perturbed last bits of
+  unmasked values (~1 ulp; the same defect class as the Daymet converter fix),
+  which broke exact-equality gates built on its output. Now
+  `float_precision="round_trip"`.
+- **rpkg testthat suite is green against the INSTALLED package (634/634)** after
+  fixing three environment-fragile test defects the `devtools::load_all()` habit
+  had concealed (Codex F8 vindicated): a data.table j-expression column-drop that
+  returned a character vector under current data.table (test-area_normalized_gate),
+  seven unexported-internal calls (`eckhardt_filter` etc. — now `:::`-prefixed),
+  and a stale `d_percentiles` length-11 expectation (13 since April 2026). The R
+  runner also gained `pkg_env <- streamflowsignatures:::pkg_env` (internal, not
+  visible under `library()`).
+Interim gate results (pre-fix run): gage sets identical; Pettitt cp_year exact
+agreement vs the Julia reference **99.995%** excluding the two known b≠1 log_a
+bases (23 single-cell tie flips across rank-sensitive columns, 0 NA-pattern
+mismatches); floor transition exact after the mask-tool fix except the
+flashiness finding above. Full-gate rerun with the fixes in flight.
+
+### Port campaign Phase 0 (2026-08-24, in progress)
+Per `docs/plans/2026-08-24-port-julia-features-to-python-rpkg-plan.md`: Python uv
+env (py3.12, 26 unit tests green); rpkg bundled config synced from canonical (29
+missing keys; `na_reject_negative_flow` fallback aligned to `false`); **both port
+benchmark runners rebuilt** (`run_python_benchmark.py`, `run_rpkg_benchmark.R`):
+Julia-mirrored ENV overrides, runtime WY-window + qualifying-fraction gates
+(semantics copied from the Julia runner), legacy-filtering fail-fast,
+bounded-memory climate handling (column-projected reads, per-gage joins, cache
+eviction — the old Python runner merged the full ~98M-row climate frame wholesale),
+provenance blocks, zero-error exit gate (R). Two more pre-existing schema gaps
+closed at the runner level: rpkg output gains the 11 GAGES-II/HYDAT interference
+columns + `human_interference_class` (previously absent entirely), and Python now
+fills RHBN/REGULATED from `metadata/canadian_hydat_interference.csv` (the "not
+available from Python" comment was stale — the CSV exists for exactly this).
+Still open for rpkg: `na_cause_ice` preprocessor tracking behind
+`ice_affected_days_total` (Phase 1). New acceptance-gate tool
+`docs/benchmarks/check_schema_equality.py` (strict column-set + gage-set equality
+with explicit, logged waivers — the compare_* scripts intersect columns and exit 0
+on missing schemas, so they are diagnostics, not gates).
+
+### Changed: S3 access LOST — Google Drive is now the off-site backup (2026-08-24)
+Access to the project S3 buckets (`climate-ai-data-science-shiny-app-data`, and the
+ClimateAI catalog environment generally) has ended. Most delivered artifacts were backed
+up beforehand to the project Google Drive folder:
+https://drive.google.com/drive/u/0/folders/1DVuq4nC5j_Y01sBaDj9cwjbv7S8sndjj —
+"most", so the backup inventory still needs verifying against the delivery manifests.
+Consequences:
+- Every S3 URL in the docs (EO READMEs, `docs/DEVELOPMENT.md`, `docs/DATA_SOURCES.md`)
+  is now a **historical delivery record**, not a live location — pull from the Drive
+  backup instead.
+- The **NLCD product's pending S3 publish is defunct**: it was awaiting human QA on the
+  SageMaker box when access ended. **Resolved same day — the user confirmed the
+  finalized NLCD product IS in the Drive backup** (no re-run needed; human QA still
+  owed; publication now targets HydroShare). The `temp_lulc_conus/` staging (~93 GB,
+  transient by design) is moot.
+- The Shiny app read its data live from S3 → **non-functional as deployed**.
+- The possible S3 copy of the ORIGINAL `daymet_1980_2023.parquet` (the app read that
+  path) is recoverable only if it made the Drive backup — first check of the
+  publication plan's staging pass (see the amended Planned item above).
+- HydroShare publication planning is unaffected:
+  `docs/plans/2026-08-24-hydroshare-publication-and-dashboard-plan.md`.
+
+### Decided: final dashboard scope + performance bar; app work deferred (user, 2026-08-24)
+The original Shiny app (`streamflowAndClimateVisualizationApp/`) is judged **very low
+performance** — any final published app should be planned as a performant rebuild, not a
+port. Required scope for the final app: (i) streamflow signatures and metrics,
+(ii) annualized values, (iii) raw time series values, and (iv) the per-watershed MODIS
+LAI/LULC and Annual NLCD annual/monthly values and metrics — aggregated tables only,
+**no raw LAI or LULC**. Context: CUAHSI has offered hosting (their shinyApps server can
+outlive the grant; the app must be Shiny; sunset expectations required) — options,
+sunset terms, and sequencing live in the plan doc. **App work is deferred for now**,
+decoupled from the Nov 9 submission track.
 
 ### Promoted: STANDARD OUTPUT #2 regenerated with the drought family (2026-08-11)
 WY 1980–2025 @ 60 % rebuilt on the recovered climate input, superseding

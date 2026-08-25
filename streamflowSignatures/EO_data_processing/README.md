@@ -15,6 +15,14 @@ than R.
 > [`README_NLCD.md`](README_NLCD.md) (`eo_processing/nlcd_pipeline.py`, `nlcd_finalize.py`,
 > `viz/build_nlcd_explorer.py`). It complements this continental MODIS LULC (500 m, N. America).
 
+> **⚠ ACCESS CHANGE (24 Aug 2026)**: the project **no longer has access to the S3 buckets**
+> referenced throughout this README (`climate-ai-data-science-shiny-app-data`, the
+> ClimateAI catalog). Most delivered artifacts were backed up beforehand to the project
+> Google Drive folder
+> (https://drive.google.com/drive/u/0/folders/1DVuq4nC5j_Y01sBaDj9cwjbv7S8sndjj).
+> Treat every S3 URL below as a historical delivery record, and verify the Drive
+> inventory before relying on any file. See CHANGELOG → August 2026.
+
 > **Status (30 Jun 2026)**: ALL THREE DATA LAYERS DONE + on S3 — geometry (7,964 watersheds),
 > LAI (monthly, 270-month panel; **`good_coverage_frac` QA column added → `..._30jun2026.parquet`**),
 > and LULC (annual, 24-yr, Codex-GO). **BOTH QA/QC explorers built + on S3**:

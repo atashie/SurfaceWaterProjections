@@ -9,6 +9,24 @@ This is a **CONUS-only, US** companion to the continental MODIS LULC product
 (`README.md`). It is a **metadata / ingestion product** (like HydroATLAS and the MODIS EO
 layers) — **Python**, not a cross-language signature, not ported to Julia/R.
 
+> **✅ QA COMPLETE + STAGED FOR HYDROSHARE (25 Aug 2026)**: the finalized product was
+> retrieved from the Drive backup, re-verified against every documented invariant
+> (250,879 rows / 6,119 gages / C1V2 / class sums exact), and staged for deposit as
+> HydroShare Resource 5 (`~/Downloads/Signatures/resource5_eo_products/`, deposit names
+> `hisss_nlcd_annual.parquet` etc.). **The human-QA pass via `nlcd_explorer.html` is
+> DONE — user signed off 25 Aug 2026** — closing the last publication gate. Note the
+> original `nlcd_out_of_footprint.csv` was not in the backup; it was exactly
+> reconstructed as `hisss_nlcd_excluded_gages.csv` (45 gages, all verified Alaska).
+> See CHANGELOG → August 2026.
+
+> **⚠ ACCESS CHANGE (24 Aug 2026)**: S3 access is LOST (see `README.md` and CHANGELOG →
+> August 2026). The pending `nlcd_finalize.py --upload` S3 publish is defunct, and the
+> `temp_lulc_conus/` staging (which lived in the lost bucket) is moot. The finalized
+> product **is confirmed saved in the project Google Drive backup** (folder
+> `1DVuq4nC5j_Y01sBaDj9cwjbv7S8sndjj`; user-verified 24 Aug 2026) — retrieve it from
+> there. ~~The human-QA pass via `nlcd_explorer.html` is still owed before publication
+> (now targeting HydroShare, not S3).~~ *(Done 25 Aug — see above.)*
+
 > **Status (24 Jul 2026) — BUILD COMPLETE (local); pending human QA + S3 publish.** Extraction
 > pipeline, finalize, and QA/QC explorer are all built and validated. Finalized CONUS product =
 > **250,879 rows (6,119 gages × 41 yr, 1985–2025)**; 45 Alaska gages excluded. **Remaining:**
@@ -193,7 +211,13 @@ data_out/eo_nlcd/  CSV + parquet + data dictionary  (keyed gage_id, leading-zero
   bbox and NOT by `watershed_geom_source`.** Pilot finding (22 Jul): a CONUS lon/lat box
   (−125..−66.5, 24.5..49.5) wrongly keeps **652 `wsc_eccc` (Canadian) basins** whose centroids
   straddle the southern border, and keying "US" to `gagesii` would drop the ~19 US CONUS
-  HydroBasins-fallback basins. Correct filter: **`gage_type == 'USGS'`** (clean split —
+  HydroBasins-fallback basins. **[Correction 2026-08-24: that "~19 US HB-fallback" claim is
+  inconsistent with the delivered layer's own accounting (README.md §11: sources gagesii
+  6,164 / wsc_eccc 1,771 / hydrobasins 29 vs gage_type USGS 6,164 / Canada 1,800 — gagesii
+  == USGS exactly, and 1,771 + 29 = 1,800, so all 29 HB fallbacks are Canadian). **Settled
+  2026-08-25 by the geometry rebuild** (the June layer was lost with S3; the rebuild matched
+  every recorded target exactly): gagesii = 6,164 = every US gage, all 29 HB fallbacks
+  Canadian. The gage_type filter remains the right choice either way.]** Correct filter: **`gage_type == 'USGS'`** (clean split —
   `gage_type` ∈ {`USGS` 6,164, `Canada` 1,800}) to get US basins including US HydroBasins-
   fallbacks, **then drop AK/HI/PR** — robustly via **valid NLCD coverage** (a basin outside the
   CONUS footprint extracts ~all fill 250 → `valid_coverage_frac ≈ 0`), backstopped by a CONUS

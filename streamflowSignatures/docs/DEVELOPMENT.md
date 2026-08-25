@@ -842,7 +842,9 @@ total **≈ 587 MiB**. Folder figures are `du` (exFAT-allocated) and run slightl
 summed file bytes — e.g. `gagesII_bnd` is 124.7 MiB apparent vs 138 MiB allocated.
 
 The DERIVED per-gage geometry product (`watershed_polygons_26jun2026.{gpkg,parquet}`,
-~42/36 MB, 7,964 basins) lives on S3, not on this drive — see `EO_data_processing/README.md`.
+~42/36 MB, 7,964 basins) was delivered to S3, not this drive — but **S3 access was lost
+on 2026-08-24; retrieve it from the project Google Drive backup instead** (CHANGELOG →
+August 2026) — see `EO_data_processing/README.md`.
 
 ### Deprecated Parquet Files (DO NOT USE)
 

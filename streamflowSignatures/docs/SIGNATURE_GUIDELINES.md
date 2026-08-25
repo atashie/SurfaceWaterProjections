@@ -1,7 +1,7 @@
 # Summary Documentation for Streamflow Signatures (in helperFunctions.R)
 
 > **Auto-synced from**: [Google Doc](https://docs.google.com/document/d/e/2PACX-1vQnt7OCPm19vnWF4yynXL9JTzTvq9CrGoEaDv7yFSngLoFsypiWsx6fZLKWwaO5YQ/pub)
-> **Last synced**: 2026-07-21
+> **Last synced**: 2026-08-24 (content unchanged since 2026-07-21)
 
 github repo [here](https://github.com) or [here](https://github.com)
 

@@ -39,8 +39,10 @@ Boundary cases that are not counted as project data sources, with reasons:
 - **Planned but not yet used**: ERA5/PRISM climate fetching and MODIS ET are on the
   roadmap (`CHANGELOG.md` → `[Unreleased]`) but nothing consumes them today.
 - **Not origins**: the ClimateAI S3 buckets (`climate-ai-data-science-shiny-app-data`,
-  `climateai-geospatial-data`) host derived project outputs and a MODIS mirror —
-  access routes, not providers.
+  `climateai-geospatial-data`) hosted derived project outputs and a MODIS mirror —
+  access routes, not providers. **Access to these buckets was lost on 2026-08-24**;
+  most delivered outputs were backed up to the project Google Drive first (link in
+  CHANGELOG → August 2026).
 - **Viz-only third parties**: Leaflet/Plotly CDN and CARTO basemap tiles used by the
   HTML explorers and dashboards; they render maps but contribute no analysis data.
 - **US geometry backstops never exercised**: USGS NLDI
