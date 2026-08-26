@@ -70,7 +70,14 @@ fi
 # that aborts in that interval leaves a NEW CSV beside the PREVIOUS run's timing
 # JSON (Codex delta 5). Bind them by content: the CSV's own row count must equal
 # the gage count the timing JSON claims.
-csv_rows=$(($(wc -l < "$PORT"_signatures.csv) - 1))
+# Count rows by PARSING the CSV, not with wc -l: a file without a trailing
+# newline undercounts by one, and any quoted field containing a newline
+# overcounts. Reading one column keeps this to a second or two.
+csv_rows=$($PY -c "import pandas as pd,sys;print(len(pd.read_csv(sys.argv[1],usecols=['gage_id'],dtype=str)))" "$PORT"_signatures.csv 2>/dev/null || echo "")
+if [ -z "$csv_rows" ]; then
+  echo "FAIL: could not read ${PREFIX}_signatures.csv to count its rows."
+  exit 2
+fi
 if [ "$csv_rows" -ne "$n_g" ]; then
   echo "FAIL: ${PREFIX}_signatures.csv has $csv_rows data rows but"
   echo "      $(basename "$TIMING") reports n_gages_processed=$n_g."
