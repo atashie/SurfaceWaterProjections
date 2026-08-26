@@ -60,9 +60,18 @@ if [ ! -f "$TIMING" ]; then
 fi
 n_g=$($PY -c "import json,sys;print(json.load(open(sys.argv[1]))['n_gages_processed'])" "$TIMING" 2>/dev/null || true)
 n_c=$($PY -c "import json,sys;print(json.load(open(sys.argv[1])).get('n_columns',''))" "$TIMING" 2>/dev/null || true)
-if [ -z "${n_g:-}" ]; then
-  echo "FAIL: $(basename "$TIMING") is unreadable or lacks n_gages_processed."
-  echo "      Refusing to fall back to an unbound failure gate."
+# Must be a positive integer. A JSON null prints as "None", which is non-empty
+# and would sail past a bare -z test and then break the integer comparison with
+# "integer expression expected" — and with no set -e the script would carry on
+# unbound (Codex delta 6).
+case "${n_g:-}" in
+  "" | *[!0-9]*)
+    echo "FAIL: $(basename "$TIMING") has no usable n_gages_processed"
+    echo "      (got: '${n_g:-<empty>}'). Refusing to run an unbound failure gate."
+    exit 2 ;;
+esac
+if [ "$n_g" -le 0 ]; then
+  echo "FAIL: $(basename "$TIMING") reports n_gages_processed=$n_g."
   exit 2
 fi
 # The CSV and the timing JSON are NOT written atomically together: the runner
@@ -88,6 +97,7 @@ if [ "$csv_rows" -ne "$n_g" ]; then
 fi
 echo "binding: CSV rows ($csv_rows) == timing n_gages_processed ($n_g)"
 EXPECT_ARGS+=(--expect-gages "$n_g")
+case "${n_c:-}" in "" | *[!0-9]*) n_c="" ;; esac
 [ -n "${n_c:-}" ] && EXPECT_ARGS+=(--expect-columns "$n_c")
 echo "binding: timing.json reports n_gages_processed=$n_g n_columns=${n_c:-absent}"
 

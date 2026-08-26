@@ -82,7 +82,16 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
          ~67–75 % of elapsed). Project to `gage_id, Date, Q` and let
          `add_water_year_columns()` derive the rest — the same bounded-memory
          treatment `run_python_benchmark.py` already received.
-      6. **Emit a per-run identifier into BOTH the log header and the timing JSON**
+      6. **Emit a per-run identifier into the log header AND a MANIFEST written
+         last** (all three runners, rpkg first). *Corrected 2026-08-26 after
+         review*: an earlier version of this item proposed the log + timing JSON
+         alone, which does NOT bind either to the CSV — an aborted rerun leaves a
+         new CSV beside an old log and old JSON that still share an identifier, so
+         they would validate each other while describing different artifacts. The
+         identifier must instead live in a manifest written **after every other
+         artifact**, recording the run ID plus each artifact's name and row/column
+         counts; its presence then implies the whole set came from that run.
+         Today a log can be tied to artifacts only by OUTPUT_PREFIX and by counts
          (all three runners, rpkg first). Today a run log can be tied to an artifact
          set only by OUTPUT_PREFIX and by the footer counts, and both describe a
          run's *configuration* and its output *shape* rather than the execution —
