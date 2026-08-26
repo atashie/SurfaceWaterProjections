@@ -61,10 +61,15 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
          populated. That establishes the fallback is unreachable for the bundled
          config; confirm the run actually used it from its provenance block.
       4. **R block-buffers stdout when redirected**, so `run_rpkg_benchmark.R`'s
-         `[i/n]` progress reports are invisible for long stretches while the
-         Kendall C-level warnings (stderr, unbuffered) stream through — during the
-         2026-08-26 run no progress line appeared for over 30 minutes despite
-         steady 100 % CPU, making the run impossible to monitor. Add
+         `[i/n]` progress reports are invisible for long stretches — during the
+         2026-08-26 run no progress line appeared for over 35 minutes despite
+         steady ~100 % CPU and stable memory, making the run impossible to monitor.
+         Note the Kendall `tauk2` IFAULT warnings go to **stdout as well**
+         (verified by capturing the streams separately: 31 on stdout, 0 on stderr
+         for a 3-gage smoke), so they lag in the same buffer and cannot be used as
+         a progress proxy either — the log grows in bursts, and any count read
+         from it is a lower bound. CPU time is the only reliable progress signal
+         until this is fixed. Add
          `flush.console()` after the progress `cat()`. Cosmetic for correctness,
          but it is the difference between an observable run and a black box.
       5. **SWE is merged only inside an `if ("PPT" %in% clim_cols)` branch**
