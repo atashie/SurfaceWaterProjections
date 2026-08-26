@@ -28,6 +28,14 @@ The runners emit a recognizable line per failure:
   rpkg   : "Gage <id>: <family> failed: <msg>"
   Julia  : "<family> failed for gage <id>"   (@warn, message on its own line)
 
+All three patterns were verified empirically (2026-08-26) against real emitted
+output, not just read off the source: Python family failures were induced by
+feeding the orchestrator a malformed frame, and all 8 resulting lines were
+detected. That test also confirmed a real hazard is absent — the Python runner
+never configures logging, but `logging.lastResort` still writes WARNING records
+to stderr, so the messages do reach the log. (Had they not, this gate would
+have reported a clean pass on a blind log.)
+
 NOTE ON R: R defers warnings and truncates at 50 ("There were 50 or more
 warnings"), so a log from a runner that does NOT set `options(warn = 1)` can
 hide failures. This tool FAILS LOUDLY when it sees that truncation banner
