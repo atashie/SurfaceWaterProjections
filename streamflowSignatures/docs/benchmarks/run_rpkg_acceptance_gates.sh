@@ -44,20 +44,21 @@ echo "prefix : $PREFIX"
 echo "log    : $LOG"
 if [ ! -f "$LOG" ]; then echo "MISSING: $LOG"; exit 2; fi
 
-# Prefix equality alone does NOT bind a log to an artifact set: a re-run under the
-# same prefix overwrites the CSV/parquet, so an earlier run's clean log would still
-# satisfy --expect-prefix (Codex delta 3). The runner writes its footer AFTER the
-# CSV, so a log that PREDATES the CSV cannot belong to it.
-if [ -f "$PORT"_signatures.csv ]; then
-  log_mt=$(stat -f%m "$LOG"); csv_mt=$(stat -f%m "$PORT"_signatures.csv)
-  if [ "$log_mt" -lt "$csv_mt" ]; then
-    echo "FAIL: $LOG is OLDER than ${PREFIX}_signatures.csv"
-    echo "      (log $(date -r "$log_mt" '+%F %T') vs csv $(date -r "$csv_mt" '+%F %T'))."
-    echo "      The runner writes its footer after the CSV, so this log cannot be"
-    echo "      the one that produced these artifacts — most likely the prefix was"
-    echo "      re-used by a later run. Supply that run's log."
-    exit 2
-  fi
+# Prefix equality does NOT bind a log to an artifact set: a re-run under the same
+# prefix overwrites the CSV/parquet while an earlier run's clean log still matches
+# the prefix. Timestamps do not fix that either — a stale log can be copied or
+# touched (Codex delta 4), and `stat` flags are not portable. Bind by CONTENT
+# instead: the run's own timing JSON, written beside the CSV by the same run,
+# carries the counts that run printed in its log footer.
+EXPECT_ARGS=()
+TIMING=${PORT}_timing.json
+if [ -f "$TIMING" ]; then
+  n_g=$($PY -c "import json,sys;print(json.load(open(sys.argv[1])).get('n_gages_processed',''))" "$TIMING" 2>/dev/null || true)
+  [ -n "${n_g:-}" ] && EXPECT_ARGS+=(--expect-gages "$n_g")
+  echo "binding: timing.json reports n_gages_processed=${n_g:-unknown}"
+else
+  echo "NOTE: no $(basename "$TIMING") — the failure gate cannot bind this log to"
+  echo "      these artifacts by content, only by prefix."
 fi
 
 fail=0
@@ -95,9 +96,12 @@ run "schema equality (1,653 columns / 6,678 gages)" \
 #    truncation banner. Until run_rpkg_benchmark.R sets options(warn = 1),
 #    expect this gate to report that it cannot substantiate a pass — which is
 #    the correct outcome, not a green light.
+# --require-error-tally is rpkg-specific: only the R runner prints
+# "Gages errored: N". Dry-running this harness against a Python prefix therefore
+# fails this gate by design, not because of a defect.
 run "no swallowed signature-family failures" \
   $PY docs/benchmarks/check_signature_failures.py "$LOG" \
-      --expect-prefix "$PREFIX" --require-error-tally
+      --expect-prefix "$PREFIX" --require-error-tally "${EXPECT_ARGS[@]}"
 
 # 3. Cross-language annual parquet (the sufficient annual check — unlike
 #    validate_annual_values.py, which is self-referential).

@@ -69,10 +69,9 @@ RE_R_TRUNCATED = re.compile(r"There were (\d+|50 or more) warnings")
 
 # A log must PROVE it observed a completed benchmark. Without this, a zero-byte
 # log, a stdout-only capture that dropped stderr, or a log cut off before
-# processing started all contain no failure lines and would "pass" (Codex
-# 2026-08-26 MAJOR). Any ONE of these end-of-run markers, emitted by the three
-# runners on successful completion, is sufficient.
-# The ONLY true end-of-run marker. Earlier drafts accepted mid-run lines such as
+# processing started all contain no failure lines and would "pass".
+#
+# This is the ONLY true end-of-run marker. Earlier drafts accepted mid-run lines such as
 # rpkg's "Signatures processed in" or "Writing annual values parquet", but those
 # all precede output assembly, the metadata merge, and the CSV/timing writes — a
 # log truncated just after one of them would have been certified (Codex delta
@@ -81,6 +80,11 @@ RE_COMPLETE = re.compile(r"BENCHMARK COMPLETE")
 # The rpkg footer reports the per-gage error tally — AFTER "BENCHMARK COMPLETE",
 # so a log truncated between the two lines has a completion marker and no tally.
 RE_ERRORED = re.compile(r"Gages errored:\s*(\d+)")
+# Footer counts. These bind a log to an artifact SET by content rather than by
+# name or timestamp: a stale log from a different run carries that run's numbers,
+# and unlike an mtime they cannot be altered by copying or touching the file.
+RE_N_GAGES = re.compile(r"Gages processed:\s*(\d+)")
+RE_N_COLS = re.compile(r"Total columns:\s*(\d+)")
 # Every runner prints this near the top; it binds a log to the run that produced it.
 RE_PREFIX = re.compile(r"OUTPUT_PREFIX=\s*([^\s,]+)")
 
@@ -93,6 +97,8 @@ def scan(path: Path):
     errored_values: list[int] = []
     tally_after_complete = False
     prefixes: set[str] = set()
+    footer_gages: list[int] = []
+    footer_cols: list[int] = []
     n_lines = 0
     with path.open(errors="replace") as fh:
         for line in fh:
@@ -113,6 +119,12 @@ def scan(path: Path):
             mp = RE_PREFIX.search(line)
             if mp:
                 prefixes.add(mp.group(1))
+            mg = RE_N_GAGES.search(line)
+            if mg:
+                footer_gages.append(int(mg.group(1)))
+            mc = RE_N_COLS.search(line)
+            if mc:
+                footer_cols.append(int(mc.group(1)))
             if RE_R_TRUNCATED.search(line):
                 truncated = True
             m = RE_GAGE_FIRST.search(line)
@@ -123,7 +135,8 @@ def scan(path: Path):
             if m:
                 failures.append((m.group(2), m.group(1).strip()))
     return (failures, truncated, completed, n_lines,
-            errored_values, tally_after_complete, prefixes, n_complete)
+            errored_values, tally_after_complete, prefixes, n_complete,
+            footer_gages, footer_cols)
 
 
 def main() -> int:
@@ -139,6 +152,11 @@ def main() -> int:
                     help="Require the log to record OUTPUT_PREFIX=PREFIX (and only "
                          "that one). Binds the log to the run whose artifacts are "
                          "being gated.")
+    ap.add_argument("--expect-gages", type=int, metavar="N",
+                    help="Require the log's footer to report N processed gages, "
+                         "matching the artifacts under test.")
+    ap.add_argument("--expect-columns", type=int, metavar="N",
+                    help="Require the log's footer to report N total columns.")
     ap.add_argument("--require-error-tally", action="store_true",
                     help="Require a 'Gages errored: N' line after the completion "
                          "marker (rpkg runner). Catches a footer truncated between "
@@ -154,7 +172,7 @@ def main() -> int:
 
     (failures, truncated, completed, n_lines,
      errored_values, tally_after_complete, prefixes,
-     n_complete) = scan(args.log)
+     n_complete, footer_gages, footer_cols) = scan(args.log)
     waived = {f.lower() for f in args.allow_family}
 
     hard = [(g, f) for g, f in failures if f.lower() not in waived]
@@ -163,6 +181,8 @@ def main() -> int:
     print(f"Signature-failure gate: {args.log}")
     print(f"  log lines read                 : {n_lines:,}")
     print(f"  BENCHMARK COMPLETE footer      : {'found' if completed else 'NOT FOUND'}")
+    print(f"  log's footer counts            : "
+          f"gages={footer_gages or 'n/a'} columns={footer_cols or 'n/a'}")
     print(f"  log's OUTPUT_PREFIX            : "
           f"{', '.join(sorted(prefixes)) if prefixes else 'not recorded'}")
     print(f"  runner-reported gage errors    : "
@@ -187,6 +207,21 @@ def main() -> int:
             print(f"\nFAIL: this log records more than one OUTPUT_PREFIX "
                   f"({', '.join(sorted(prefixes))}) — it covers multiple runs, so a "
                   f"clean stretch cannot vouch for the run under test.")
+            return 1
+
+    # Content binding. Name and mtime can both be faked by copying or touching a
+    # file; the counts a run printed in its own footer cannot (Codex delta 4).
+    for label, want, got in (("gages", args.expect_gages, footer_gages),
+                             ("columns", args.expect_columns, footer_cols)):
+        if want is None:
+            continue
+        if not got:
+            print(f"\nFAIL: the log reports no {label} count, so it cannot be shown "
+                  f"to describe the artifacts under test.")
+            return 1
+        if got[-1] != want:
+            print(f"\nFAIL: the log reports {got[-1]} {label} but the artifacts under "
+                  f"test have {want}. This log belongs to a different run.")
             return 1
 
     if any(v > 0 for v in errored_values):
