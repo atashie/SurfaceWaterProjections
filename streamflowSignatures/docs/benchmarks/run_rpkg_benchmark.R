@@ -1,4 +1,9 @@
 #!/usr/bin/env Rscript
+
+# Print warnings as they occur. R defaults to deferring them to the end of
+# the script and truncating at 50, which hides per-gage signature-family
+# failures and leaves check_signature_failures.py unable to certify the log.
+options(warn = 1)
 # ==============================================================================
 # rpkg Benchmark - Streamflow Signatures
 # ==============================================================================
@@ -115,7 +120,15 @@ phase_start <- Sys.time()
 if (!file.exists(parquet_path)) stop("Parquet not found: ", parquet_path)
 
 cat("  Reading streamflow parquet...\n")
-streamflow <- read_parquet(parquet_path)
+# Memory: read ONLY the columns this runner uses. The parquet stores 9
+# (gage_id, Date, Q, year, month, doy, water_year, dowy, flag) but the loop
+# calls add_water_year_columns() right after subsetting, which re-derives
+# water_year/month/dowy from date; flag/doy/year are never read. Loading all
+# 9 for 111.6M rows put ~4 GB of dead weight resident and drove this 16 GB
+# machine into swap (measured 2026-08-26: 163 MB/s page-ins, CPU at 54%).
+streamflow <- data.table::as.data.table(arrow::read_parquet(
+  parquet_path, col_select = c("gage_id", "Date", "Q")))
+data.table::setnames(streamflow, "Date", "date")
 cat("    ", nrow(streamflow), "rows,", length(unique(streamflow$gage_id)), "gages\n")
 
 cat("  Reading Daymet parquet (column-projected)...\n")
@@ -225,7 +238,7 @@ errored <- 0
 error_gages <- character(0)
 
 # Progress tracking
-report_interval <- 500
+report_interval <- 50
 
 for (i in seq_along(all_gages)) {
   gage <- all_gages[i]
