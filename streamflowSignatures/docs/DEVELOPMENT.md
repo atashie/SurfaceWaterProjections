@@ -700,7 +700,11 @@ python docs/benchmarks/build_experiment_vs_julia_dashboard.py startIn1993_80pct
 | `docs/benchmarks/compare_python_vs_golden_julia.py` | **PRIMARY** — Python vs Julia golden, 6-tier R² classification |
 | `docs/benchmarks/compare_rpkg_vs_golden_julia.py` | **PRIMARY** — rpkg vs Julia golden, 6-tier R² classification |
 | `docs/benchmarks/build_julia_golden_dashboard.py` | Interactive HTML dashboard: Python or rpkg vs Julia golden |
-| `docs/benchmarks/validate_annual_values.py` | Annual values parquet vs summary CSV consistency check (run after each benchmark) |
+| `docs/benchmarks/validate_annual_values.py` | Annual values parquet vs summary CSV consistency check (run after each benchmark). **Self-referential** — necessary, not sufficient; pair it with the cross-language gate below |
+| `docs/benchmarks/check_schema_equality.py` | **GATE** — strict column-set + gage-set equality vs a reference, with waivers that must be named on the command line. The `compare_*` scripts intersect columns and exit 0 on a missing family, so they are diagnostics, not gates |
+| `docs/benchmarks/check_annual_parquet_equality.py` | **GATE** — cross-language annual parquet vs the Julia reference: signature set, key set, duplicates and NA patterns exactly; values to a stated tolerance. This is the *sufficient* annual check `validate_annual_values.py` cannot be |
+| `docs/benchmarks/check_signature_failures.py` | **GATE** — scans a run log for the per-gage signature-family exceptions all three orchestrators swallow into warnings (they resurface as ordinary NA in the rectangular CSV, invisible to every column-based check). Refuses to certify an R log ending in the deferred-warning truncation banner |
+| `docs/benchmarks/run_rpkg_acceptance_gates.sh` | Runs the four gates above against an rpkg benchmark in one command |
 | `docs/benchmarks/compare_three_way.py` | Legacy — Three-way comparison (historical, uses R as baseline) |
 | `docs/benchmarks/compare_rpkg.py` | Legacy — rpkg vs all other implementations |
 | `docs/benchmarks/compare_julia_vs_golden_r.py` | Historical — Julia vs Golden R (Feb 2026) — 6-tier R² classification |
