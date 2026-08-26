@@ -115,3 +115,29 @@ test_that("schema contract on empty / missing-column / short records", {
   r3 <- calculate_drought_metrics(mk_dr(function(i, wy) 1 + 0.5*sin(i/30), n_years = 5))
   for (s in THR) expect_true(is.na(r3[[s]]), info = s)
 })
+
+test_that("END-TO-END: drought runs on a preprocess_daily_data() output", {
+  # Regression for 2026-08-26: rpkg's preprocessor renames `date` -> `Date`, so
+  # drought (which checks the Julia/Python lowercase name) silently produced an
+  # all-NA family for every real gage. The other tests in this file build frames
+  # with `date` directly and cannot catch that; this one goes through the actual
+  # pipeline the benchmark runner uses.
+  set.seed(9)
+  dates <- seq(as.Date("1992-10-01"), as.Date("2025-09-30"), by = "day")
+  q <- 2 + 1.5 * sin(2 * pi * as.integer(format(dates, "%j")) / 365) + runif(length(dates)) * 0.2
+  gd <- add_water_year_columns(data.table::data.table(gage_id = "T", date = dates, Q = q))
+  pp <- preprocess_daily_data(gd)
+  expect_gte(length(pp$valid_years), 20)
+
+  r <- calculate_drought_metrics(pp$data, trend_completeness = 0.6,
+                                 decade_completeness = 0.8, min_values_for_stats = 20)
+  expect_false(is.na(r$drought_threshold_fixed_p10))
+  expect_false(is.na(r$drought_duration_fixed_p10_mean))
+  expect_gt(r$drought_duration_fixed_p10_mean, 0)
+
+  # ...and through the orchestrator, the way the runner calls it
+  s <- calculate_all_signatures(pp$data, has_climate = FALSE,
+                                trend_completeness = 0.6, decade_completeness = 0.8,
+                                min_values_for_stats = 20, gage_id = "T")
+  expect_false(is.na(s$drought_duration_fixed_p10_mean))
+})

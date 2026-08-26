@@ -23,23 +23,31 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
   blocking**: it does not justify re-running any benchmark or delaying the port
   campaign (user decision, 2026-08-26); fold it into the next behavior-changing
   Julia release and let it land in the next product regeneration.
-- Port the Julia-only features to Python and rpkg. As of Aug 2026 that is **six**:
-  Pettitt changepoint fields, the 20-value stats floor, the annual-values collector, the
-  b=1 recession alpha, the 14 snow metrics, and the 10 drought metrics. Python and rpkg
-  currently reproduce the 623-signature-column April subset, not the 1,653-column
-  delivered product. **PLANNED 2026-08-24** — full campaign plan (scope decisions,
-  phases, validation gates, gap survey):
-  `docs/plans/2026-08-24-port-julia-features-to-python-rpkg-plan.md`. Elevated in
-  priority by the 2026-08-24 manuscript sync: the draft now claims every signature is
-  computed by the cross-language Julia/Python/R library. **Codex pre-implementation
-  review (2026-08-24): initial NO-GO — 3 CRITICAL (impossible Phase-1/Phase-5 gates;
-  nonexistent Python bounded-memory climate join) + 11 MAJOR (intersection-only
-  comparison tools, self-referential annual validator, weak smoke gates, late R
-  packaging, legacy-path hazard, Pettitt tie determinism, per-gage silent column
-  loss, …); ALL findings incorporated into the revised plan — full table in the plan
-  doc §8. Two incidental Julia-side gaps it surfaced are queued for Phase 0:
-  `test_changepoint.jl` is not wired into `julia/test/runtests.jl`, and the seasonal
-  RR fix will also shift the annual parquet's seasonal runoff-ratio rows.**
+- **Finish the Python/rpkg port campaign — Python DONE + validated, rpkg validation
+  PENDING.** All six formerly Julia-only features (Pettitt changepoint fields, the
+  20-value stats floor, the annual-values collector, the b=1 recession alpha, the 14
+  snow metrics, the 10 drought metrics) are now implemented in BOTH ports; the
+  "623-column April subset" description no longer applies to either. **Python is
+  validated at full scale** against canonical Julia (1,653 columns / 6,678 gages,
+  1,615 of 1,620 shared columns Perfect, zero below 0.99 — August 2026 entry).
+  **rpkg is code-complete and unit-tested (1,008 assertions against the INSTALLED
+  package) but its full-scale benchmark has not yet been gated** — that run is the
+  remaining work, plus these follow-ups:
+    - Add `options(warn = 1)` to `run_rpkg_benchmark.R` so R prints each per-gage
+      family-failure warning immediately instead of deferring and truncating at 50
+      (must be applied between runs — never mid-run). Until then the new
+      `docs/benchmarks/check_signature_failures.py` gate correctly REFUSES to certify
+      an rpkg log that ends in R's truncation banner, and rpkg's assurance rests on
+      the schema + identity-R² + annual-parquet gates instead.
+    - Julia canonical cleanup (non-blocking, no rerun needed): `unique` uses `isequal`,
+      so −0.0 and +0.0 are distinct values; numpy and R use `==`. Cost measured at
+      **1 annual row in 18.9 M**. Julia should switch to `==` semantics when this code
+      is next touched.
+  Campaign plan, phase records, and the full Codex review table:
+  `docs/plans/2026-08-24-port-julia-features-to-python-rpkg-plan.md`. The campaign was
+  elevated in priority by the 2026-08-24 manuscript sync, whose draft claims every
+  signature is computed by the cross-language Julia/Python/R library — a claim that is
+  now true for Python and will be true for rpkg once its benchmark is gated.
 - Restore a readable copy of the ORIGINAL `daymet_1980_2023.parquet` if one exists
   elsewhere (**the Google Drive backup** — the Shiny app formerly read this file from
   S3, so a copy existed there and may have been backed up before S3 access was lost on
@@ -414,6 +422,84 @@ Collection 1.
 ---
 
 ## [August 2026]
+
+### Milestone: PYTHON reaches full feature parity with canonical Julia — VALIDATED at scale (2026-08-26)
+The August port campaign's Python track is complete and gated. Python now produces the
+**same 1,653 columns for the same 6,678 gages** as canonical Julia on the WY 1993–2025
+@ 60 % standard configuration, carrying all six formerly Julia-only features (Pettitt
+changepoint fields, the 20-value stats floor, the annual-values collector + parquet, the
+b=1 recession alpha, 14 snow metrics, 10 drought metrics + 5 scalars).
+
+- **Strict schema gate PASS with no waivers** — identical column set and gage set. Over
+  the 1,620 shared signature columns: **1,615 Perfect (R² ≥ 0.999, 99.7 %)**, 5 Good,
+  and **zero** in any lower tier. Mean R² 0.999988, min 0.997935. The annual parquet
+  matches on the 100-signature set with 0 duplicate keys, **0 NA-pattern mismatches**,
+  and 18,898,405 of 18,898,406 rows shared.
+- **No divergence class remains** — both residuals are characterised rather than merely
+  tolerated. (1) **Pettitt ties**: `cp_year` agrees on 597,505/597,527 cells (99.9963 %);
+  where a rank tie flips the changepoint the segment split moves with it, which accounts
+  for all 5 Good columns (FDC90th, Q90, Qsum) and 267 of 18.2 M annual values, all
+  discrete threshold-crossing metrics. (2) **Signed-zero `unique` semantics**: 1 annual
+  row in 18.9 M — Julia's `unique` uses `isequal` so −0.0 ≠ +0.0, while numpy and R use
+  `==`. Logged as a non-blocking canonical cleanup; **no rerun required** (user decision,
+  2026-08-26).
+- **Mann-Kendall p-value convention settled.** scipy's `kendalltau` selects on TIES, not
+  sample size — exact when untied, asymptotic **without** continuity correction when
+  tied. Julia and R both use the continuity-corrected normal approximation, and
+  `Kendall::MannKendall` reproduces the Julia formula exactly, so **Python was the sole
+  outlier**. Python was moved to the canonical formula (user decision, option C), cutting
+  significance-call disagreement from 0.24 % → 0.0009 % on the main path and 0.45 % →
+  0.0009 % on the Pettitt segments.
+- **rpkg is code-complete and unit-tested (1,008 assertions against the INSTALLED
+  package) but NOT yet validated at scale** — its benchmark is running. Do not cite rpkg
+  parity numbers until that run passes the same three gates.
+
+### Fixed: two wiring defects that unit tests structurally could not catch (2026-08-26)
+Both were in rpkg, both presented as clean warning-only degradation, and both were found
+by running the actual pipeline end to end on real data rather than testing modules in
+isolation:
+
+- **The rpkg benchmark runner did not pass the ported arguments at all** — no
+  `changepoint`, `min_values_for_stats`, `collector`, or `snow_data`, and it discarded
+  SWE at the climate join; rpkg's bundled config carried no `changepoint` or
+  `stats_floor` section whatsoever. A 19-hour run in flight was **killed and discarded**,
+  since it provably could not have produced the ported columns. Runner and config fixed;
+  a 3-gage smoke now confirms the full key set (1,620 signature keys, 800 Pettitt, 224
+  snow, 165 drought, 100-signature collector).
+- **rpkg's drought family returned an all-NA family for every real gage.** rpkg's
+  `preprocess_daily_data()` renames `date` → `Date` internally (io.R) while the ported
+  drought module checks the Julia/Python lowercase name, so the missing-column branch
+  fired behind a warning on every gage. The unit tests could not catch it: they build
+  frames with `date` directly and never traverse the preprocessor → drought path. Fixed
+  to accept either spelling, plus a new end-to-end test that goes through
+  `preprocess_daily_data()` **and** the orchestrator. Post-fix the smoke gives
+  `drought_duration_fixed_p10_mean` = 36.52 days/yr, matching the p × 365.25
+  construction target.
+
+**Verified NOT a defect** on the way: per-gage key-set variation is legitimate and
+canonical. A gage that fails the 25-event recession gate emits 64 fewer keys (the
+Pettitt fields of 8 recession/parameterized-BFI bases) because Julia's own
+`empty_stats` returns the 8 statistics ONLY — no changepoint keys. Python's and rpkg's
+`empty_stats` mirror that exactly, and the writers' union fills NA. A strict per-gage
+key-set equality assertion would therefore false-positive.
+
+### New: `check_signature_failures.py` — gate a run log for swallowed family exceptions (2026-08-26)
+`calculate_all_signatures()` wraps every signature family in a try/catch in all three
+languages, so an exception degrades to a warning and that gage simply loses those
+columns — which reappear as ordinary NA in the rectangular output CSV, indistinguishable
+from a legitimately non-computable value. Neither the unit suites nor the column-set gate
+can see it. The new tool scans a run log for the per-gage failure lines all three runners
+emit and exits nonzero on any unwaived failure (`--allow-family` waives explicitly and
+still reports what was ignored). Validated against the completed Python run (**PASS, 0
+failures**) and synthetic positive controls.
+
+**It also refuses to certify a log that ends in R's deferred-warning truncation banner**
+("There were 50 or more warnings"), because R defers warnings and truncates at 50 — a
+pass cannot be substantiated from such a log. `run_rpkg_benchmark.R` needs
+`options(warn = 1)` so each failure prints immediately; that must be applied **between**
+runs, never mid-run, so it is queued behind the benchmark currently executing (tracked in
+`[Unreleased]` → Planned). Until then rpkg's assurance rests on the schema, identity-R²,
+and annual-parquet gates, which would light up on any family failing systematically.
 
 ### Milestone: HydroShare COLLECTION created; all five HISSS resources staged + reviewed (2026-08-25)
 The HydroShare collection for the HISSS deposit now exists (verified live in-browser):

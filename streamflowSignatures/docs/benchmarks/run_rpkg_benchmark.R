@@ -126,12 +126,12 @@ if (has_daymet) {
   # snow port. Raw names cover pre-/post-normalization variants.
   sch_names <- arrow::open_dataset(daymet_path)$schema$names
   raw_wanted <- c("gage_id", "site_id", "site_no", "date", "Date",
-                  "PPT", "prcp", "PRCP")
+                  "PPT", "prcp", "PRCP", "SWE", "swe")
   sel <- intersect(raw_wanted, sch_names)
   daymet <- data.table::as.data.table(arrow::read_parquet(daymet_path, col_select = sel))
   # Same normalization map as rpkg::read_parquet
   nmap <- c(Date = "date", site_id = "gage_id", prcp = "PPT",
-            site_no = "gage_id", PRCP = "PPT")
+            site_no = "gage_id", PRCP = "PPT", swe = "SWE")
   for (old in names(nmap)) {
     if (old %in% names(daymet) && !nmap[[old]] %in% names(daymet)) {
       data.table::setnames(daymet, old, nmap[[old]])
@@ -200,6 +200,23 @@ if (has_daymet) {
   daymet_idx <- list()
 }
 
+# Changepoint configuration (mirrors the Julia/Python runners)
+cp_config <- NULL
+if (isTRUE(pkg_env$changepoint_enabled)) {
+  cp_config <- list(start_year = pkg_env$cp_start_water_year,
+                    end_year = pkg_env$cp_end_water_year,
+                    min_total_obs = pkg_env$cp_min_total_obs,
+                    min_segment_obs = pkg_env$cp_min_segment_obs)
+}
+save_annual <- isTRUE(pkg_env$save_annual_values)
+cat("Changepoint: enabled=", isTRUE(pkg_env$changepoint_enabled),
+    " WY=", pkg_env$cp_start_water_year, "-", pkg_env$cp_end_water_year, "\n", sep = "")
+cat("Stats floor: min_values_for_stats=",
+    if (is.null(pkg_env$min_values_for_stats)) "NULL" else pkg_env$min_values_for_stats,
+    " (recession/elasticity exempt)\n", sep = "")
+cat("Annual values: save=", save_annual, "\n", sep = "")
+annual_chunks <- list()
+
 results_list <- vector("list", n_gages)
 names(results_list) <- all_gages
 processed <- 0
@@ -230,8 +247,9 @@ for (i in seq_along(all_gages)) {
     if (gage %in% names(daymet_idx)) {
       daymet_rows <- daymet_idx[[gage]]
       gage_climate <- daymet[daymet_rows, ]
-      if ("PPT" %in% names(gage_climate)) {
-        climate_merge <- gage_climate[, c("date", "PPT"), with = FALSE]
+      clim_cols <- intersect(c("date", "PPT", "SWE"), names(gage_climate))
+      if ("PPT" %in% clim_cols) {
+        climate_merge <- gage_climate[, clim_cols, with = FALSE]
         gage_data <- merge(gage_data, climate_merge, by = "date", all.x = TRUE)
         has_climate <- TRUE
       }
@@ -313,14 +331,39 @@ for (i in seq_along(all_gages)) {
         climate_data_subset <- pp_data[pp_data$water_year %in% pp$valid_climate_years, ]
       }
 
+      # Snow data: EXPLICIT opt-in frame filtered to SWE-valid years. Possibly
+      # 0 rows; NULL when the gage has no SWE column at all. No implicit
+      # fallback inside the orchestrator (mirrors the Julia/Python runners).
+      snow_data <- NULL
+      if ("SWE" %in% names(pp_data)) {
+        snow_data <- pp_data[pp_data$water_year %in% pp$valid_swe_years, , drop = FALSE]
+      }
+
+      gage_collector <- if (save_annual) annual_collector() else NULL
+
       sigs <- calculate_all_signatures(
         pp_data, has_climate = gage_has_climate,
         seasonal_flags = pp$seasonal_flags,
         trend_completeness = pkg_env$na_trend_min_fraction,
         decade_completeness = pkg_env$na_decade_min_fraction,
+        min_values_for_stats = pkg_env$min_values_for_stats,
         climate_data = climate_data_subset,
-        area_normalized = gage_area_normalized
+        area_normalized = gage_area_normalized,
+        changepoint = cp_config,
+        collector = gage_collector,
+        snow_data = snow_data,
+        snow_climate_years = pp$valid_climate_years,
+        gage_id = gage
       )
+
+      # Drain this gage's annual values
+      if (!is.null(gage_collector)) {
+        d <- collector_drain(gage_collector)
+        if (nrow(d) > 0) {
+          d$gage_id <- gage
+          annual_chunks[[length(annual_chunks) + 1L]] <- d
+        }
+      }
 
       sigs$gage_id <- gage
       sigs$start_water_year <- min(pp$valid_years)
@@ -395,6 +438,21 @@ out_dt <- rbindlist(lapply(results_list, function(sigs) {
   }
   as.data.table(row)
 }), fill = TRUE)
+
+# Phase 4a: write the annual values parquet (before the metadata merge, so a
+# metadata failure cannot lose it). Long format, deterministically sorted.
+if (save_annual && length(annual_chunks) > 0) {
+  cat("\nWriting annual values parquet...\n")
+  annual_dt <- data.table::rbindlist(annual_chunks)
+  data.table::setcolorder(annual_dt, c("gage_id", "signature", "water_year", "value"))
+  data.table::setorder(annual_dt, gage_id, signature, water_year)
+  annual_path <- file.path(output_dir, paste0(output_prefix, "_signatures_annual.parquet"))
+  arrow::write_parquet(annual_dt, annual_path, compression = "zstd")
+  cat("  Saved", nrow(annual_dt), "rows (",
+      length(unique(annual_dt$signature)), "signatures ) to", annual_path, "\n")
+  timing$n_annual_rows <- nrow(annual_dt)
+  rm(annual_dt); invisible(gc())
+}
 
 # Phase 4b: interference metadata (GAGES-II + Canadian HYDAT), mirroring the
 # Julia runner's Phase 5. Closes a pre-existing rpkg schema gap (2026-08-24):

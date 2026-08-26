@@ -62,7 +62,7 @@ Signature functions receive clean data
     ├── Snow signatures use an EXPLICIT snow_data frame filtered to valid_swe_years
     │   (opt-in — never derived implicitly from an SWE column in the gage frame)
     ├── Drought signatures smooth Q within contiguous date runs (never across a
-    │   rejected-year gap) before thresholding — July 2026, Julia only
+    │   rejected-year gap) before thresholding — July 2026; all 3 languages
     └── Seasonal signatures respect seasonal_flags (incomplete → NA)
 ```
 
@@ -75,7 +75,7 @@ Signature functions receive clean data
 - Seasonal completeness is computed from RAW observations (pre-interpolation)
 - `generate_stats()` has optional `trend_completeness` / `decade_completeness` params
 
-### Annual Values Export (July 2026, Julia only)
+### Annual Values Export (July 2026; all three languages since August 2026)
 
 Every signature's per-year annual values — previously discarded after
 `generate_stats()` collapsed them into the 8 statistics — are exported as one
@@ -111,8 +111,14 @@ stats, zero warnings, signature coverage, NaN/missing-year guards, no duplicate
 keys); `docs/benchmarks/validate_annual_values.py` recomputes mean/median from the
 parquet and cross-checks the summary CSV after each benchmark run.
 
-**Ports**: Python/rpkg deferred — the collector kwarg defaults to nothing, so
-cross-language numerical parity of the summary outputs is unaffected.
+**Ports**: implemented in Python and rpkg by the August 2026 port campaign.
+The collector kwarg still defaults to nothing/NULL, so passing no collector is
+byte-identical to the pre-collector behaviour in every language. Python's
+collector is a small class over list accumulators; rpkg's is an environment
+with pre-grown chunk lists (`c()` append would be O(n^2) in R). Cross-language
+validation of the exported parquet: identical 100-signature sets, 0 NA-pattern
+mismatches, 18,898,405 of 18,898,406 rows shared with the Julia reference
+(docs/CROSS_LANGUAGE_STATUS.md).
 
 Design + Codex review record: `docs/plans/annual_values_export_plan.md`.
 
@@ -552,9 +558,29 @@ testthat::test_dir("R/tests/")
 
 Python, rpkg, and R canonical implementations are validated against Julia golden outputs using the R² of the identity line (y = x). This measures whether implementations produce identical values (not just correlated). Spearman rank correlation is reported as a secondary diagnostic.
 
-### Current Status (April 28, 2026 — Pettitt changepoint only)
+### Current Status (August 2026 — FULL PARITY)
 
-Julia now produces 1,264 columns (656 base/metadata + 608 changepoint = 76 sigs × 8 Pettitt fields) across 7,313 gages. Python and rpkg remain at 624 (changepoint port pending). R canonical still has the old recession algorithm (46 poor columns, sync pending).
+The August 2026 port campaign closed the six-feature gap: Python and rpkg now
+produce the same **1,653-column** product as canonical Julia (Pettitt fields,
+20-value stats floor, annual-values collector, b=1 recession alpha, snow,
+drought). Python vs Julia over the WY 1993–2025 window: strict schema gate PASS
+(identical column AND gage sets), mean identity-R² **0.999988**, **1,615
+Perfect / 5 Good / 0 below 0.99**; the annual parquets share 18,898,405 of
+18,898,406 rows with 0 NA-pattern mismatches. Full detail, including the two
+characterised residuals and the convention decisions taken (Mann-Kendall
+p-value method; sparse-family row emission; canonical metric names), is in
+[`CROSS_LANGUAGE_STATUS.md`](CROSS_LANGUAGE_STATUS.md) and CHANGELOG →
+August 2026. Benchmark timings are no longer comparable to the April table
+below (the ports now compute ~2.6x the columns).
+
+**Acceptance gating changed too**: `compare_*_vs_golden_julia.py` intersects
+columns and exits 0 on missing schemas, so they are DIAGNOSTICS. The gate is
+`docs/benchmarks/check_schema_equality.py` (strict column + gage set equality
+with explicit, logged waivers).
+
+### Historical status (April 28, 2026 — Pettitt changepoint only)
+
+*(April 2026 snapshot — superseded, retained for provenance.)* Julia produced 1,264 columns (656 base/metadata + 608 changepoint = 76 sigs × 8 Pettitt fields) across 7,313 gages. Python and rpkg were at 624 (changepoint port pending). R canonical still has the old recession algorithm (46 poor columns, sync pending).
 
 | Metric | rpkg | Julia | Python | R (canonical) |
 |--------|------|-------|--------|---------------|
@@ -594,7 +620,7 @@ All 46-49 poor columns are recession metrics — R canonical still has the old l
 All poor columns across the 3 synced implementations are irreducible library-level differences:
 - 2 recession pointcloud p-values: Spearman p-value calculation differences (exact permutation vs t-approximation for small n)
 - 2 FDC90th p-values: 28-gage NA mismatch from floating-point precision in near-zero regression
-- 3 recession seasonality minimum: Sinusoidal fit sensitivity (Python-Julia only, R²=0.984-0.989)
+- 3 recession seasonality minimum: Sinusoidal fit sensitivity (Python-Julia only, R²=0.984-0.989) — **RESOLVED August 2026**: the true cause was an off-by-one in Python's mid-event day-of-water-year (upper-middle index vs Julia's floor midpoint), not fit sensitivity; after the fix the seasonality outputs agree to ~1e-15
 
 #### Julia Post-Section 3 vs Golden R (Feb 2026)
 

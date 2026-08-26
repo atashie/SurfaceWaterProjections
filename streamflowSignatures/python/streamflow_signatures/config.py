@@ -222,10 +222,19 @@ if DROUGHT_ENABLED:
         raise ValueError("drought.smoothing_window_days must be ODD for centered alignment")
     if DROUGHT_SMOOTH_MIN_VALID > DROUGHT_SMOOTH_WINDOW:
         raise ValueError("drought.smoothing_min_valid_days must be <= smoothing_window_days")
+    if DROUGHT_SMOOTH_ALIGNMENT not in ("center", "trailing"):
+        raise ValueError(f"drought.smoothing_alignment must be 'center' or "
+                         f"'trailing', got {DROUGHT_SMOOTH_ALIGNMENT!r}")
+    if DROUGHT_SMOOTH_MIN_VALID < 1:
+        raise ValueError("drought.smoothing_min_valid_days must be >= 1")
     if not DROUGHT_PERCENTILES or any(not (0 < p < 100) for p in DROUGHT_PERCENTILES):
-        raise ValueError("drought.threshold_percentiles must all be in (0, 100)")
+        raise ValueError("drought.threshold_percentiles must be non-empty and all in (0, 100)")
     if list(DROUGHT_PERCENTILES) != sorted(DROUGHT_PERCENTILES):
         raise ValueError("drought.threshold_percentiles must be sorted ascending")
+    if len(set(DROUGHT_PERCENTILES)) != len(DROUGHT_PERCENTILES):
+        raise ValueError("drought.threshold_percentiles must be unique")
+    if DROUGHT_MIN_YEARS < 1:
+        raise ValueError("drought.min_years_for_threshold must be >= 1")
 
 # ==============================================================================
 # SNOW — fallbacks mirror julia/src/config.jl (absent section => gate disabled)

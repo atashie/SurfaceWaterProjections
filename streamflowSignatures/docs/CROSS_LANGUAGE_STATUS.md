@@ -1,28 +1,36 @@
 # Cross-Language Implementation Status
 
-> **STATUS (August 2026): the August 2026 port campaign brought Python and rpkg
-> to FULL feature parity with canonical Julia — all six previously Julia-only
-> features (Pettitt changepoint fields, the 20-value stats floor, the
-> annual-values collector, the b=1 recession alpha, 14 snow metrics, 10 drought
-> metrics). Everything below the "Historical record" divider describes the
-> APRIL 2026 state, when the ports reproduced only a 623-signature-column
-> subset. It is retained for provenance; do not read it as current.**
+> **STATUS (August 2026): the August 2026 port campaign implemented all six
+> previously Julia-only features (Pettitt changepoint fields, the 20-value stats
+> floor, the annual-values collector, the b=1 recession alpha, 14 snow metrics,
+> 10 drought metrics) in BOTH Python and rpkg. Python is
+> VALIDATED against canonical Julia at full scale (2026-08-26, below); **rpkg is
+> code-complete and unit-tested but its full-scale benchmark validation is still
+> PENDING** — do not cite rpkg parity numbers until that run is gated.**
+> Everything below the "Historical record" divider describes the APRIL 2026
+> state, when the ports reproduced only a 623-signature-column subset. It is
+> retained for provenance; do not read it as current.
 > Campaign plan and phase-by-phase record:
 > `docs/plans/2026-08-24-port-julia-features-to-python-rpkg-plan.md` and
 > CHANGELOG → August 2026.
 
 ## Current status (August 2026)
 
+"Implemented" = the feature exists in that language and is covered by its unit
+suite. "Validated" is a separate, stronger claim — a full-scale benchmark diffed
+against canonical Julia under the strict schema + value gates — and is recorded
+per language below.
+
 | | Julia | Python | rpkg |
 |---|---|---|---|
-| Role | **Canonical** | Full port | Full port |
-| Summary columns (WY 1993–2025 @ 60 %) | 1,653 | **1,653** | 1,653 (pending final run) |
-| Pettitt changepoint fields | yes | yes | yes |
-| 20-value stats floor | yes | yes | yes |
-| Annual-values collector + parquet | yes | yes | yes |
-| b = 1 recession alpha | yes | yes | yes |
-| Snow metrics (14) | yes | yes | yes |
-| Drought metrics (10 + 5 scalars) | yes | yes | yes |
+| Role | **Canonical** | Full port, **validated** | Full port, **validation pending** |
+| Summary columns (WY 1993–2025 @ 60 %) | 1,653 | **1,653 (gated)** | 1,653 expected (benchmark running) |
+| Pettitt changepoint fields | yes | yes | implemented |
+| 20-value stats floor | yes | yes | implemented |
+| Annual-values collector + parquet | yes | yes | implemented |
+| b = 1 recession alpha | yes | yes | implemented |
+| Snow metrics (14) | yes | yes | implemented |
+| Drought metrics (10 + 5 scalars) | yes | yes | implemented |
 
 ### Python vs Julia — feature-complete validation (2026-08-26)
 
@@ -48,8 +56,37 @@ merely tolerated:
    values (0.0015 %), all discrete threshold-crossing metrics (`D*_day`,
    `D25_to_D75`, `TQmean`).
 2. **Signed-zero `unique` semantics** — 1 annual row in 18.9 M. Julia's
-   `unique` uses `isequal` (−0.0 ≠ +0.0); numpy and R use `==`. Logged as a
-   non-blocking canonical cleanup (CHANGELOG → Planned).
+   `unique` uses `isequal`, under which `-0.0` and `+0.0` are DISTINCT values;
+   numpy and R use `==`, under which they are equal. So a series containing
+   both a negative and a positive zero yields one more distinct value in Julia
+   than in the ports.
+
+   **Direction of fix is Julia-side** (the canonical implementation is the
+   outlier here, and `==` is the semantics the hydrology intends — a negative
+   zero flow is not a different flow from zero). **Decision (user, 2026-08-26):
+   note it as a future cleanup; it does NOT block the port campaign and does
+   NOT justify regenerating any delivered product** — the measured cost is one
+   annual row in 18.9 million. Apply the `==` semantics when this code is next
+   touched for another reason, and re-measure rather than assuming the count
+   stays at one. Tracked in CHANGELOG → `[Unreleased]` → Planned.
+
+### rpkg vs Julia — validation PENDING (as of 2026-08-26)
+
+rpkg carries all six features in source and its testthat suite is green
+(1,008 assertions against the INSTALLED package, not `load_all`), but **no
+full-scale benchmark has yet passed the gates**, so there are no rpkg parity
+numbers to report. Status of the prerequisites:
+
+- Config, orchestrator, and benchmark runner wire every new argument through
+  (`changepoint`, `min_values_for_stats`, `collector`, `snow_data`) — an earlier
+  runner did not, which is why the first long run was discarded (below).
+- A 3-gage end-to-end smoke on real data produces the full key set: 1,620
+  signature keys, 800 Pettitt fields, 224 snow, 165 drought, and a
+  100-signature annual collector.
+- The WY 1993–2025 @ 60 % benchmark is running; gates to follow are the strict
+  schema gate (1,653 columns, 6,678 gages), the identity-R² value comparison,
+  and the cross-language annual-parquet comparator — the same three Python
+  passed.
 
 ### Convention decisions taken during the campaign
 
@@ -77,6 +114,28 @@ comparison could not see: the ports' flashiness `== 0` guard (vs canonical
 changepoint keys, placeholder metric names in BOTH ports, NaN-vs-absent row
 emission, rpkg's 12 double-prefixed QA-flag columns, and a mask-tool float
 parser. Full list: CHANGELOG → August 2026.
+
+Two later defects came from a different kind of check — running the actual
+pipeline end to end on real data rather than testing modules in isolation:
+
+- **rpkg's benchmark runner did not pass the new arguments** (no `changepoint`,
+  `min_values_for_stats`, `collector`, or `snow_data`; SWE discarded at the
+  climate join), and rpkg's config carried no `changepoint` or `stats_floor`
+  section at all. A 19-hour run was discarded because it provably could not have
+  produced the ported columns.
+- **rpkg's drought family was silently all-NA on every real gage.** rpkg's
+  `preprocess_daily_data()` renames `date` → `Date` internally, while the ported
+  drought module checks the Julia/Python lowercase name; the missing-column
+  branch returned an all-NA family behind a warning. The unit tests could not
+  catch it because they build frames with `date` directly and never traverse
+  the preprocessor → drought path. Fixed by accepting either spelling, plus a
+  new end-to-end test that goes through `preprocess_daily_data()` and the
+  orchestrator.
+
+The shared lesson: **module-level unit tests cannot prove a port is wired in.**
+Both defects presented as clean, warning-only degradation — exactly the failure
+mode the campaign's per-gage schema assertions are meant to convert into a hard
+error.
 
 ---
 

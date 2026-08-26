@@ -118,6 +118,15 @@ calculate_drought_metrics <- function(streamflow_data, trend_completeness = NULL
   }
 
   df <- as.data.frame(streamflow_data)
+  # rpkg's preprocess_daily_data() renames `date` -> `Date` internally (io.R),
+  # while Julia/Python keep lowercase throughout. Accept EITHER so the module
+  # works on both a raw frame and a preprocessor output — without this, drought
+  # silently returned an all-NA family for every real gage (caught 2026-08-26 by
+  # an end-to-end smoke on real data; the unit tests built frames with `date`
+  # directly and so never exercised the preprocessor -> drought path).
+  if (!"date" %in% names(df) && "Date" %in% names(df)) {
+    df$date <- df$Date
+  }
   needed <- c("Q", "water_year", "date")
   if (length(setdiff(needed, names(df))) > 0) {
     warning(paste("calculate_drought_metrics: Missing columns:",

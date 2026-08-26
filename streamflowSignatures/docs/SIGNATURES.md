@@ -406,7 +406,7 @@ Peters, N.E., & Aulenbach, B.T. (2011). Water storage at the Panola Mountain Res
 
 **Function**: `calculate_snow_metrics`
 
-**Requires SWE Data** (Daymet `swe` via the climate parquet; July 2026, Julia only)
+**Requires SWE Data** (Daymet `swe` via the climate parquet; July 2026; all three languages since the August 2026 port campaign)
 
 Fourteen per-water-year snow metrics computed from daily snow water equivalent.
 ALL metrics operate on a thresholded series `SWE* = (SWE >= 10 mm) ? SWE : 0` —
@@ -512,7 +512,7 @@ days below the threshold are treated as snow-free for durations AND magnitudes
 
 ## 13. Streamflow Drought
 
-**Function**: `calculate_drought_metrics` (July 2026, Julia only)
+**Function**: `calculate_drought_metrics` (July 2026; all three languages since the August 2026 port campaign)
 
 Per-water-year drought duration and deficit against **fixed** percentile thresholds,
 following Adelsperger et al. (in review). Ten metrics: two measures × five severity
@@ -667,8 +667,8 @@ five levels mirror the operational U.S. Drought Monitor classes:
 | Q-P Seasonality | `calculate_qp_seasonality` | Yes | 2 metrics |
 | Average Storage | `calculate_average_storage` | Yes | 1 metric |
 | Negative Flow Days | `calculate_negative_days` | No | 1 metric (negative_ann) |
-| Snow Metrics | `calculate_snow_metrics` | SWE (Daymet) | 14 metrics (July 2026, Julia only) |
-| Streamflow Drought | `calculate_drought_metrics` | No | 10 metrics (2 measures × 5 severity levels) + 5 threshold scalars (July 2026, Julia only) |
+| Snow Metrics | `calculate_snow_metrics` | SWE (Daymet) | 14 metrics (July 2026; all 3 languages since Aug 2026) |
+| Streamflow Drought | `calculate_drought_metrics` | No | 10 metrics (2 measures × 5 severity levels) + 5 threshold scalars (July 2026; all 3 languages since Aug 2026) |
 
 ---
 

@@ -137,6 +137,18 @@ pkg_env <- new.env(parent = emptyenv())
   # Legacy filtering flag
   pkg_env$use_legacy_filtering <- cfg$filtering$use_legacy_filtering %||% TRUE
 
+  # ---- Changepoint (Pettitt); fallbacks mirror julia/src/config.jl
+  cp <- cfg$changepoint
+  pkg_env$changepoint_enabled   <- if (!is.null(cp$enabled)) isTRUE(cp$enabled) else FALSE
+  pkg_env$cp_start_water_year   <- if (!is.null(cp$start_water_year)) cp$start_water_year else 1980L
+  pkg_env$cp_end_water_year     <- if (!is.null(cp$end_water_year)) cp$end_water_year else 2024L
+  pkg_env$cp_min_total_obs      <- if (!is.null(cp$min_total_obs)) cp$min_total_obs else 20L
+  pkg_env$cp_min_segment_obs    <- if (!is.null(cp$min_segment_obs)) cp$min_segment_obs else 10L
+
+  # ---- Stats floor: NULL when the section is absent (no floor; legacy behavior)
+  pkg_env$min_values_for_stats <- if (!is.null(cfg$stats_floor$min_values_for_stats))
+    as.integer(cfg$stats_floor$min_values_for_stats) else NULL
+
   # ---- Snow (fallbacks mirror julia/src/config.jl; absent section => gate off)
   sn <- cfg$snow
   pkg_env$snow_swe_threshold_mm   <- if (!is.null(sn$swe_day_threshold_mm)) sn$swe_day_threshold_mm else 10
@@ -165,6 +177,19 @@ pkg_env <- new.env(parent = emptyenv())
       stop("drought.smoothing_window_days must be ODD for centered alignment")
     if (pkg_env$drought_smooth_min_valid > pkg_env$drought_smooth_window)
       stop("drought.smoothing_min_valid_days must be <= smoothing_window_days")
+    if (!pkg_env$drought_smooth_alignment %in% c("center", "trailing"))
+      stop("drought.smoothing_alignment must be 'center' or 'trailing'")
+    if (pkg_env$drought_smooth_window < 1L)
+      stop("drought.smoothing_window_days must be >= 1")
+    if (pkg_env$drought_smooth_min_valid < 1L)
+      stop("drought.smoothing_min_valid_days must be >= 1")
+    pc <- pkg_env$drought_percentiles
+    if (length(pc) == 0L || any(pc <= 0) || any(pc >= 100))
+      stop("drought.threshold_percentiles must be non-empty and all in (0, 100)")
+    if (is.unsorted(pc)) stop("drought.threshold_percentiles must be sorted ascending")
+    if (anyDuplicated(pc) > 0) stop("drought.threshold_percentiles must be unique")
+    if (pkg_env$drought_min_years < 1L)
+      stop("drought.min_years_for_threshold must be >= 1")
   }
 
   # ---- Annual values export
