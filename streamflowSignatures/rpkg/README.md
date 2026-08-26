@@ -62,9 +62,12 @@ columns, and returns a named list of statistics:
 
 ## Cross-Language Compatibility
 
-This package produces near-identical results to the Python (`streamflow_signatures`)
+This package targets near-identical results to the Python (`streamflow_signatures`)
 and Julia (`StreamflowSignatures`) packages, all sharing
-`config/signatures_config.json` for parameter values.
+`config/signatures_config.json` for parameter values. That agreement is
+**established for the April 2026 shared subset** and, for Python, re-established at
+full scale in August 2026. **For rpkg's August feature set it is an implementation
+goal, not yet a measured result** — see the status note below.
 
 ### Benchmark Results (April 2026 — post Section 3 sync)
 

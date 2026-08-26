@@ -7,7 +7,7 @@ This project has two primary goals and two secondary goals:
 1. **Data Processing** — Ingest raw streamflow data (USGS, HYDAT, Caravan), clean/filter/collate metadata, standardize outputs.
 2. **Signature Extraction** — Extract 100+ hydrological signatures under strict guardrails. Domain experts update methodology via plain-English instructions in `docs/SIGNATURE_GUIDELINES.md`; code implements those definitions.
 3. **Visualization** (secondary) — Shiny dashboard for broader audience exploration.
-4. **Cross-Language Implementations** (secondary) — Julia is canonical; Python and rpkg produce near-identical results for community sharing (future: publishable packages/libraries).
+4. **Cross-Language Implementations** (secondary) — Julia is canonical; Python and rpkg aim to produce near-identical results for community sharing (future: publishable packages/libraries). Python's agreement is measured at full scale (August 2026); **rpkg's is validated only for the April 2026 shared subset — its August feature set is unproven at scale.**
 
 ## Multi-Language Architecture
 
