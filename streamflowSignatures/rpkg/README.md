@@ -68,7 +68,12 @@ and Julia (`StreamflowSignatures`) packages, all sharing
 
 ### Benchmark Results (April 2026 — post Section 3 sync)
 
-Full benchmark (WY 1993-2025 @ 60%): 6,678 gages, 1,653 columns — full parity with canonical Julia after the August 2026 port campaign (Pettitt, stats floor, annual-values collector, b=1 alpha, snow, drought). See docs/CROSS_LANGUAGE_STATUS.md.
+Full benchmark (WY 1993-2025 @ 60%): 6,678 gages, 1,653 columns expected. The August
+2026 port campaign implemented all six formerly Julia-only features here (Pettitt,
+stats floor, annual-values collector, b=1 alpha, snow, drought) and the testthat
+suite is green against the INSTALLED package, but **the full-scale benchmark has not
+yet passed its acceptance gates** — treat parity as unproven until it does. Python's
+equivalent run is validated. See docs/CROSS_LANGUAGE_STATUS.md.
 
 | Pair | Perfect (>=0.999) | Good (0.99-0.999) | Poor (<0.99) |
 |------|-------------------|-------------------|-------------|
