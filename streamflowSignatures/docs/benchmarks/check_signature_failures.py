@@ -65,25 +65,30 @@ RE_R_TRUNCATED = re.compile(r"There were (\d+|50 or more) warnings")
 # processing started all contain no failure lines and would "pass" (Codex
 # 2026-08-26 MAJOR). Any ONE of these end-of-run markers, emitted by the three
 # runners on successful completion, is sufficient.
-COMPLETION_MARKERS = [
-    re.compile(r"Signatures processed in"),          # rpkg runner
-    re.compile(r"Processed\s+[\d,]+\s+gages"),       # python runner
-    re.compile(r"Saved\s+[\d,]+\s+rows"),            # annual parquet write (rpkg)
-    re.compile(r"Writing annual values parquet"),    # python/julia runner
-    re.compile(r"TOTAL.*(min|sec)", re.IGNORECASE),  # julia runner timing footer
-]
+# The ONLY true end-of-run marker. Earlier drafts accepted mid-run lines such as
+# rpkg's "Signatures processed in" or "Writing annual values parquet", but those
+# all precede output assembly, the metadata merge, and the CSV/timing writes — a
+# log truncated just after one of them would have been certified (Codex delta
+# review, 2026-08-26). All three runners print this AFTER the timing JSON.
+RE_COMPLETE = re.compile(r"BENCHMARK COMPLETE")
+# rpkg/Python footers also report the per-gage error tally.
+RE_ERRORED = re.compile(r"Gages errored:\s*(\d+)")
 
 
 def scan(path: Path):
     failures = []  # (gage, family)
     truncated = False
     completed = False
+    n_errored = None
     n_lines = 0
     with path.open(errors="replace") as fh:
         for line in fh:
             n_lines += 1
-            if not completed and any(m.search(line) for m in COMPLETION_MARKERS):
+            if not completed and RE_COMPLETE.search(line):
                 completed = True
+            me = RE_ERRORED.search(line)
+            if me:
+                n_errored = int(me.group(1))
             if RE_R_TRUNCATED.search(line):
                 truncated = True
             m = RE_GAGE_FIRST.search(line)
@@ -93,7 +98,7 @@ def scan(path: Path):
             m = RE_JULIA.search(line)
             if m:
                 failures.append((m.group(2), m.group(1).strip()))
-    return failures, truncated, completed, n_lines
+    return failures, truncated, completed, n_lines, n_errored
 
 
 def main() -> int:
@@ -114,7 +119,7 @@ def main() -> int:
         print(f"FAIL: log not found: {args.log}")
         return 2
 
-    failures, truncated, completed, n_lines = scan(args.log)
+    failures, truncated, completed, n_lines, n_errored = scan(args.log)
     waived = {f.lower() for f in args.allow_family}
 
     hard = [(g, f) for g, f in failures if f.lower() not in waived]
@@ -122,8 +127,15 @@ def main() -> int:
 
     print(f"Signature-failure gate: {args.log}")
     print(f"  log lines read                 : {n_lines:,}")
-    print(f"  benchmark-completion marker    : {'found' if completed else 'NOT FOUND'}")
+    print(f"  BENCHMARK COMPLETE footer      : {'found' if completed else 'NOT FOUND'}")
+    print(f"  runner-reported gage errors    : "
+          f"{'not reported' if n_errored is None else n_errored}")
     print(f"  per-gage family failures found : {len(failures)}")
+
+    if n_errored:
+        print(f"\nFAIL: the runner itself reported {n_errored} errored gage(s); those "
+              f"gages are missing from the output entirely.")
+        return 1
 
     if not completed and not args.skip_completion_check:
         print("\nFAIL: no end-of-run marker in this log, so it cannot be shown to "

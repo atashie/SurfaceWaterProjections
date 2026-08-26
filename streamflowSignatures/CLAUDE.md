@@ -11,7 +11,7 @@ This project has two primary goals and two secondary goals:
 
 ## Multi-Language Architecture
 
-This project provides identical signature calculations in Julia (canonical), Python, and R:
+This project implements the same signature calculations in Julia (canonical), Python, and R. Numerical agreement is **measured** for Julia↔Python (August 2026, full scale) and for the April 2026 shared subset; rpkg's August feature set is **not yet gated at scale**:
 
 | Directory | Language | Status | Description |
 |-----------|----------|--------|-------------|

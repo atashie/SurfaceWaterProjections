@@ -10,8 +10,9 @@
 #
 # Usage:  bash docs/benchmarks/run_rpkg_acceptance_gates.sh [PREFIX] [RUN_LOG]
 #           PREFIX  defaults to rpkg_full_26aug2026
-#           RUN_LOG defaults to <PREFIX>_run.log, falling back to rpkg_full_run.log
-#                   ONLY when that is the log the named prefix actually produced.
+#           RUN_LOG defaults to <PREFIX>_run.log. If that does not exist the script
+#                   FAILS rather than guessing — it never falls back to a
+#                   conventionally-named log that may belong to a different run.
 #
 # The log must be tied to the prefix under test. Hard-coding one log path lets the
 # schema and annual gates examine a retry while the failure gate scans a clean log
@@ -25,16 +26,19 @@ PREFIX=${1:-rpkg_full_26aug2026}
 PORT=$DIR/$PREFIX
 PY=${PY:-.venv/bin/python}
 
-# Resolve the run log: explicit arg > <PREFIX>_run.log > the legacy single name.
+# Resolve the run log: explicit arg > <PREFIX>_run.log > fail. Never guess.
 if [ "${2:-}" != "" ]; then
   LOG=$2
 elif [ -f "$DIR/${PREFIX}_run.log" ]; then
   LOG=$DIR/${PREFIX}_run.log
 else
-  LOG=$DIR/rpkg_full_run.log
-  echo "NOTE: no ${PREFIX}_run.log; falling back to $(basename "$LOG")."
-  echo "      Confirm that log is the one '$PREFIX' produced before trusting the"
-  echo "      failure gate — pass the log explicitly as argument 2 to be certain."
+  echo "FAIL: no $DIR/${PREFIX}_run.log, and no log given as argument 2."
+  echo "      Refusing to guess. Falling back to a conventionally-named log would"
+  echo "      let this harness gate one run's artifacts against another run's log,"
+  echo "      which is exactly the failure this argument exists to prevent."
+  echo "      Pass the log explicitly:"
+  echo "        bash $0 $PREFIX /path/to/that/run.log"
+  exit 2
 fi
 echo "prefix : $PREFIX"
 echo "log    : $LOG"

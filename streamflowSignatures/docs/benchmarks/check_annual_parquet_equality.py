@@ -91,6 +91,14 @@ def main() -> int:
                          "an allowance documents a residual rather than hiding it.")
     args = ap.parse_args()
 
+    # A bare count allowance is sized for one residual but silently excuses any
+    # other (Codex delta review, 2026-08-26). Require the residual to be named.
+    if (args.allow_key_diff or args.allow_value_diff) and not args.allow_diff_signature:
+        print("FAIL: --allow-key-diff/--allow-value-diff require at least one "
+              "--allow-diff-signature naming the residual being excused. A bare "
+              "count would also excuse an unrelated difference of the same size.")
+        return 2
+
     ref = load(args.ref, "reference")
     port = load(args.port, "port")
     failures: list[str] = []

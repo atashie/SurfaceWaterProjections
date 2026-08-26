@@ -45,14 +45,21 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
          `STREAMFLOW_CONFIG`** (`rpkg/R/config.R`). An experiment launched uniformly
          with `STREAMFLOW_CONFIG=variant.json` would silently use the variant in
          Julia/Python and the *installed default* in rpkg — the same class of hazard
-         as the Julia precompilation gotcha. Inert for the active run, which sets
-         neither and uses the bundled config.
+         as the Julia precompilation gotcha. **Basis for calling it inert here:** the
+         2026-08-26 launch command sets no config environment variable of either
+         name, so both resolve empty and rpkg falls through to its bundled config.
+         Confirm against that run's `timing.json` provenance block once written —
+         the in-flight log does not record the selected config path.
       3. **Non-canonical fallbacks when the whole `na_handling` section is absent**
          (`rpkg/R/config.R`): rpkg would default `reject_negative_flow` to TRUE where
          Julia/Python default FALSE, and would leave the three SWE keys `NULL`,
-         producing length-zero control-flow errors in `io.R`. Latent only — verified
-         the bundled config's `na_handling` is byte-identical to canonical and rpkg
-         resolves `reject_negative_flow = FALSE` with all SWE keys populated.
+         producing length-zero control-flow errors in `io.R`. **Latent only** — this
+         branch runs only when the whole `na_handling` section is absent, and the
+         bundled config's `na_handling` was diffed against canonical as
+         byte-identical (no key differing, added or missing), with the installed
+         package resolving `na_reject_negative_flow = FALSE` and all three SWE keys
+         populated. That establishes the fallback is unreachable for the bundled
+         config; confirm the run actually used it from its provenance block.
       4. **SWE is merged only inside an `if ("PPT" %in% clim_cols)` branch**
          (`run_rpkg_benchmark.R`), so a climate parquet carrying SWE but no PPT would
          silently drop every snow key; Python merges the slice independently. Inert
