@@ -49,12 +49,21 @@ if "report_interval <- 500" in s:
     s = s.replace("report_interval <- 500", "report_interval <- 50", 1)
     print("  [5] report_interval 500 -> 50")
 
-print("  [6] REVIEW MANUALLY: give the streamflow read a column projection.")
-print("      run_rpkg_benchmark.R:118 reads all 9 columns of the 111.6M-row parquet")
-print("      (~6-8 GB); rpkg's read_parquet() takes no col_select, so either extend")
-print("      it or call arrow::read_parquet(path, col_select=c('gage_id','Date','Q'))")
-print("      directly and normalize names. Verify add_water_year_columns() supplies")
-print("      every derived column the loop needs before dropping them.")
+# (6) Column-project the streamflow read. rpkg's read_parquet() takes no
+# col_select, so call arrow directly and apply the same Date -> date rename.
+# VERIFIED SAFE (2026-08-26): the parquet carries
+# gage_id, Date, Q, year, month, doy, water_year, dowy, flag; the runner uses
+# only the first three, because it calls add_water_year_columns() immediately
+# after subsetting, which re-derives water_year/month/dowy from date. Nothing in
+# the runner reads flag, doy or year. Dropping 6 of 9 columns removes roughly
+# 4 GB of resident data on a 111.6M-row table.
+old_read = "streamflow <- read_parquet(parquet_path)"
+if old_read in s:
+    s = s.replace(old_read, (
+        'streamflow <- data.table::as.data.table(arrow::read_parquet(\n'
+        '  parquet_path, col_select = c("gage_id", "Date", "Q")))\n'
+        'data.table::setnames(streamflow, "Date", "date")'), 1)
+    print("  [6] streamflow read column-projected to gage_id, Date, Q")
 
 print("  [4] REVIEW MANUALLY: move the SWE merge out of the `if (\"PPT\" %in% clim_cols)`")
 print("      branch near line 250 so a climate source with SWE but no PPT still")
