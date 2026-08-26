@@ -2,14 +2,21 @@
 # Acceptance gates for the feature-complete rpkg benchmark, against the Julia
 # reference produced in Phase 0 of the August 2026 port campaign.
 #
-# These are GATES, not diagnostics: each exits nonzero on failure and the script
-# reports a consolidated verdict. The compare_*_vs_golden_julia.py scripts are
-# deliberately NOT gates — they compare only the column intersection and exit 0
-# when whole families are missing — so one is run here for its identity-R² tiers
-# only, after the strict schema gate has already proven the sets are equal.
+# Steps 1-3 are GATES: each exits nonzero on failure and drives the consolidated
+# verdict. Step 4 is a DIAGNOSTIC and is reported separately — the
+# compare_*_vs_golden_julia.py scripts compare only the column INTERSECTION and
+# exit 0 even when whole families are missing, so their exit status must never be
+# read as acceptance. Gate 1 is what proves the column and gage sets are equal.
 #
-# Usage:  bash docs/benchmarks/run_rpkg_acceptance_gates.sh [PREFIX]
-#           PREFIX defaults to rpkg_full_26aug2026
+# Usage:  bash docs/benchmarks/run_rpkg_acceptance_gates.sh [PREFIX] [RUN_LOG]
+#           PREFIX  defaults to rpkg_full_26aug2026
+#           RUN_LOG defaults to <PREFIX>_run.log, falling back to rpkg_full_run.log
+#                   ONLY when that is the log the named prefix actually produced.
+#
+# The log must be tied to the prefix under test. Hard-coding one log path lets the
+# schema and annual gates examine a retry while the failure gate scans a clean log
+# from an earlier run, so the harness can report success on a broken retry
+# (Codex 2026-08-26 MAJOR).
 set -uo pipefail
 
 DIR=/Volumes/Untitled/processedOuts_portref_24aug2026
@@ -17,9 +24,31 @@ REF=$DIR/streamflow_1993_2025_60pct_portref_24aug2026
 PREFIX=${1:-rpkg_full_26aug2026}
 PORT=$DIR/$PREFIX
 PY=${PY:-.venv/bin/python}
-LOG=$DIR/rpkg_full_run.log
+
+# Resolve the run log: explicit arg > <PREFIX>_run.log > the legacy single name.
+if [ "${2:-}" != "" ]; then
+  LOG=$2
+elif [ -f "$DIR/${PREFIX}_run.log" ]; then
+  LOG=$DIR/${PREFIX}_run.log
+else
+  LOG=$DIR/rpkg_full_run.log
+  echo "NOTE: no ${PREFIX}_run.log; falling back to $(basename "$LOG")."
+  echo "      Confirm that log is the one '$PREFIX' produced before trusting the"
+  echo "      failure gate — pass the log explicitly as argument 2 to be certain."
+fi
+echo "prefix : $PREFIX"
+echo "log    : $LOG"
+if [ ! -f "$LOG" ]; then echo "MISSING: $LOG"; exit 2; fi
 
 fail=0
+run_diag () {  # like run(), but its exit status does NOT affect the verdict
+  local label=$1; shift
+  echo; echo "═══════════════════════════════════════════════════════════════"
+  echo "DIAGNOSTIC (not a gate): $label"
+  echo "═══════════════════════════════════════════════════════════════"
+  "$@" || echo ">>> $label reported a nonzero exit (informational only)"
+}
+
 run () {  # run <label> <cmd...>
   local label=$1; shift
   echo; echo "═══════════════════════════════════════════════════════════════"
@@ -60,9 +89,12 @@ else
   echo; echo ">>> annual parquet MISSING for $PREFIX — collector did not write"; fail=1
 fi
 
-# 4. Identity-R² tiers (diagnostic detail, meaningful only after gate 1 passed).
-#    This script is configured by env vars, not flags.
-run "identity-R² comparison vs Julia golden" \
+# 4. DIAGNOSTIC, NOT A GATE. compare_rpkg_vs_golden_julia.py compares only the
+#    column INTERSECTION and exits 0 even when whole families are missing, so its
+#    exit status must never be read as acceptance — gate 1 is what proves the sets
+#    are equal. It is run here for its R² tier breakdown, and its result is
+#    reported separately from the verdict below.
+run_diag "identity-R² tiers vs Julia golden (DIAGNOSTIC)" \
   env COMPARE_REFERENCE_CSV="$REF"_signatures.csv \
       COMPARE_CANDIDATE_CSV="$PORT"_signatures.csv \
       COMPARE_OUTPUT_DIR="$DIR" \

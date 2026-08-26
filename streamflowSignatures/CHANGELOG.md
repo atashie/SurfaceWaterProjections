@@ -33,12 +33,30 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
   **rpkg is code-complete and unit-tested (1,008 assertions against the INSTALLED
   package) but its full-scale benchmark has not yet been gated** — that run is the
   remaining work, plus these follow-ups:
-    - Add `options(warn = 1)` to `run_rpkg_benchmark.R` so R prints each per-gage
-      family-failure warning immediately instead of deferring and truncating at 50
-      (must be applied between runs — never mid-run). Until then the new
-      `docs/benchmarks/check_signature_failures.py` gate correctly REFUSES to certify
-      an rpkg log that ends in R's truncation banner, and rpkg's assurance rests on
-      the schema + identity-R² + annual-parquet gates instead.
+    - **Four rpkg-side fixes deferred until the running benchmark finishes** (all
+      require editing rpkg source or its runner, which must not change mid-run; none
+      invalidates the active run — each was checked against it):
+      1. `options(warn = 1)` in `run_rpkg_benchmark.R`, so R prints each per-gage
+         family-failure warning immediately instead of deferring and truncating at 50.
+         Until then `check_signature_failures.py` correctly REFUSES to certify an rpkg
+         log ending in that banner, and rpkg's assurance rests on the schema +
+         annual-parquet gates.
+      2. **rpkg reads `STREAMFLOW_SIGNATURES_CONFIG`, not the canonical
+         `STREAMFLOW_CONFIG`** (`rpkg/R/config.R`). An experiment launched uniformly
+         with `STREAMFLOW_CONFIG=variant.json` would silently use the variant in
+         Julia/Python and the *installed default* in rpkg — the same class of hazard
+         as the Julia precompilation gotcha. Inert for the active run, which sets
+         neither and uses the bundled config.
+      3. **Non-canonical fallbacks when the whole `na_handling` section is absent**
+         (`rpkg/R/config.R`): rpkg would default `reject_negative_flow` to TRUE where
+         Julia/Python default FALSE, and would leave the three SWE keys `NULL`,
+         producing length-zero control-flow errors in `io.R`. Latent only — verified
+         the bundled config's `na_handling` is byte-identical to canonical and rpkg
+         resolves `reject_negative_flow = FALSE` with all SWE keys populated.
+      4. **SWE is merged only inside an `if ("PPT" %in% clim_cols)` branch**
+         (`run_rpkg_benchmark.R`), so a climate parquet carrying SWE but no PPT would
+         silently drop every snow key; Python merges the slice independently. Inert
+         here — the run's own log records `columns: gage_id,date,PPT,SWE`.
     - Julia canonical cleanup (non-blocking, no rerun needed): `unique` uses `isequal`,
       so −0.0 and +0.0 are distinct values; numpy and R use `==`. Cost measured at
       **1 annual row in 18.9 M**. Julia should switch to `==` semantics when this code

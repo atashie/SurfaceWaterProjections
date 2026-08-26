@@ -60,12 +60,30 @@ RE_JULIA = re.compile(r"(\S+)\s+failed\s+for\s+gage\s+(\S+)")
 # R's deferred-warning truncation banner — makes a clean result unprovable.
 RE_R_TRUNCATED = re.compile(r"There were (\d+|50 or more) warnings")
 
+# A log must PROVE it observed a completed benchmark. Without this, a zero-byte
+# log, a stdout-only capture that dropped stderr, or a log cut off before
+# processing started all contain no failure lines and would "pass" (Codex
+# 2026-08-26 MAJOR). Any ONE of these end-of-run markers, emitted by the three
+# runners on successful completion, is sufficient.
+COMPLETION_MARKERS = [
+    re.compile(r"Signatures processed in"),          # rpkg runner
+    re.compile(r"Processed\s+[\d,]+\s+gages"),       # python runner
+    re.compile(r"Saved\s+[\d,]+\s+rows"),            # annual parquet write (rpkg)
+    re.compile(r"Writing annual values parquet"),    # python/julia runner
+    re.compile(r"TOTAL.*(min|sec)", re.IGNORECASE),  # julia runner timing footer
+]
+
 
 def scan(path: Path):
     failures = []  # (gage, family)
     truncated = False
+    completed = False
+    n_lines = 0
     with path.open(errors="replace") as fh:
         for line in fh:
+            n_lines += 1
+            if not completed and any(m.search(line) for m in COMPLETION_MARKERS):
+                completed = True
             if RE_R_TRUNCATED.search(line):
                 truncated = True
             m = RE_GAGE_FIRST.search(line)
@@ -75,7 +93,7 @@ def scan(path: Path):
             m = RE_JULIA.search(line)
             if m:
                 failures.append((m.group(2), m.group(1).strip()))
-    return failures, truncated
+    return failures, truncated, completed, n_lines
 
 
 def main() -> int:
@@ -87,20 +105,35 @@ def main() -> int:
                     help="Waive failures for this family (repeatable). Each waiver is "
                          "printed, so a waived run still reports what was ignored.")
     ap.add_argument("--max-show", type=int, default=15)
+    ap.add_argument("--skip-completion-check", action="store_true",
+                    help="Proceed even without an end-of-run marker. Only for a log "
+                         "whose completeness you have established another way.")
     args = ap.parse_args()
 
     if not args.log.exists():
         print(f"FAIL: log not found: {args.log}")
         return 2
 
-    failures, truncated = scan(args.log)
+    failures, truncated, completed, n_lines = scan(args.log)
     waived = {f.lower() for f in args.allow_family}
 
     hard = [(g, f) for g, f in failures if f.lower() not in waived]
     soft = [(g, f) for g, f in failures if f.lower() in waived]
 
     print(f"Signature-failure gate: {args.log}")
+    print(f"  log lines read                 : {n_lines:,}")
+    print(f"  benchmark-completion marker    : {'found' if completed else 'NOT FOUND'}")
     print(f"  per-gage family failures found : {len(failures)}")
+
+    if not completed and not args.skip_completion_check:
+        print("\nFAIL: no end-of-run marker in this log, so it cannot be shown to "
+              "cover a completed benchmark.")
+        print("      An absent failure line proves nothing in a log that is empty, "
+              "truncated, still running, or captured without stderr.")
+        print("      Re-check the path, ensure the runner's stderr was redirected "
+              "(2>&1), or pass --skip-completion-check if you have verified "
+              "completeness another way.")
+        return 1
     if soft:
         by_fam = Counter(f for _, f in soft)
         print(f"  WAIVED (--allow-family)        : {len(soft)}")

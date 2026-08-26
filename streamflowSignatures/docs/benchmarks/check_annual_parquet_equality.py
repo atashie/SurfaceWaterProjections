@@ -79,6 +79,12 @@ def main() -> int:
                     help="Permit up to N rows present on only one side. Use ONLY for a "
                          "residual that has been characterised and written down; the "
                          "actual count and its signatures are always printed.")
+    ap.add_argument("--allow-diff-signature", action="append", default=[],
+                    metavar="SIG",
+                    help="Restrict --allow-key-diff/--allow-value-diff to these "
+                         "signatures (repeatable). A difference in ANY other signature "
+                         "then fails regardless of count — so an allowance names the "
+                         "residual it excuses instead of merely bounding it.")
     ap.add_argument("--allow-value-diff", type=int, default=0, metavar="N",
                     help="Permit up to N finite pairs over --tol. Same discipline: the "
                          "count, the families and the worst rows are always printed, so "
@@ -88,6 +94,13 @@ def main() -> int:
     ref = load(args.ref, "reference")
     port = load(args.port, "port")
     failures: list[str] = []
+
+    # Emptiness check FIRST. Without it two structurally-valid zero-row parquets
+    # satisfy every downstream check vacuously and the gate prints PASS.
+    if len(ref) == 0 or len(port) == 0:
+        print(f"\nFAIL: empty artifact — reference has {len(ref):,} rows, "
+              f"port has {len(port):,}. A gate cannot certify nothing.")
+        return 1
 
     print(f"reference : {args.ref.name}  ({len(ref):,} rows)")
     print(f"port      : {args.port.name}  ({len(port):,} rows)")
@@ -134,8 +147,15 @@ def main() -> int:
     print(f"\n[2] key sets: shared={n_both:,} ref-only={n_ref_only:,} "
           f"port-only={n_port_only:,}")
     n_key_diff = n_ref_only + n_port_only
-    if n_key_diff > args.allow_key_diff:
+    unscoped_keys = set()
+    if n_key_diff and args.allow_diff_signature:
+        off = m[m._merge != "both"]
+        unscoped_keys = set(off.signature.unique()) - set(args.allow_diff_signature)
+    if n_key_diff > args.allow_key_diff or unscoped_keys:
         failures.append("key-set mismatch")
+        if unscoped_keys:
+            print(f"    NOT COVERED by --allow-diff-signature: "
+                  f"{sorted(unscoped_keys)[:args.max_show or 10]}")
     elif n_key_diff:
         print(f"    ALLOWED: {n_key_diff} <= --allow-key-diff {args.allow_key_diff} "
               f"(documented residual)")
@@ -150,11 +170,17 @@ def main() -> int:
         print("    OK — identical")
 
     both = m[m._merge == "both"]
+    if len(both) == 0:
+        print("\nFAIL: the two parquets share no keys at all — nothing to compare.")
+        return 1
     vr = both.value_ref.to_numpy(dtype=float)
     vp = both.value_port.to_numpy(dtype=float)
 
     # ---- 4. NA-pattern equality ----------------------------------------------
-    na_r, na_p = ~np.isfinite(vr), ~np.isfinite(vp)
+    # NaN means "not computable that year" and is the only missing marker.
+    # +/-Inf are real values: previously ~isfinite lumped them in with NaN, so a
+    # reference +Inf against a port -Inf at the same key compared as "both NA".
+    na_r, na_p = np.isnan(vr), np.isnan(vp)
     n_na_mismatch = int((na_r != na_p).sum())
     print(f"\n[4] NA patterns: mismatches={n_na_mismatch:,}")
     if n_na_mismatch:
@@ -165,14 +191,33 @@ def main() -> int:
         print("    OK — identical")
 
     # ---- 5. value agreement ---------------------------------------------------
-    finite = ~na_r & ~na_p
+    present = ~na_r & ~na_p
+    inf_pair = present & (np.isinf(vr) | np.isinf(vp))
+    n_inf_bad = int((vr[inf_pair] != vp[inf_pair]).sum()) if inf_pair.any() else 0
+    if inf_pair.any():
+        print(f"\n[5a] infinities: {int(inf_pair.sum()):,} pairs where either side is "
+              f"+/-Inf; sign/'value' mismatches={n_inf_bad:,}")
+        if n_inf_bad:
+            failures.append("infinity mismatch")
+            print("    FAIL — an infinity must match exactly (same sign) to agree")
+        else:
+            print("    OK — every infinity matches exactly")
+
+    finite = present & np.isfinite(vr) & np.isfinite(vp)
     if finite.any():
         diff = np.abs(vr[finite] - vp[finite])
         n_over = int((diff > args.tol).sum())
         print(f"\n[5] values (finite pairs={int(finite.sum()):,}, tol={args.tol:g}): "
               f"over-tolerance={n_over:,}  max|diff|={diff.max():.3e}")
-        if n_over > args.allow_value_diff:
+        unscoped_vals = set()
+        if n_over and args.allow_diff_signature:
+            sigs_over = both[finite].signature.to_numpy()[diff > args.tol]
+            unscoped_vals = set(np.unique(sigs_over)) - set(args.allow_diff_signature)
+        if n_over > args.allow_value_diff or unscoped_vals:
             failures.append("value mismatch")
+            if unscoped_vals:
+                print(f"    NOT COVERED by --allow-diff-signature: "
+                      f"{sorted(unscoped_vals)[:10]}")
         elif n_over:
             print(f"    ALLOWED: {n_over} <= --allow-value-diff "
                   f"{args.allow_value_diff} (documented residual)")
