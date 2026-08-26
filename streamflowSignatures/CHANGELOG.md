@@ -60,7 +60,14 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
          package resolving `na_reject_negative_flow = FALSE` and all three SWE keys
          populated. That establishes the fallback is unreachable for the bundled
          config; confirm the run actually used it from its provenance block.
-      4. **SWE is merged only inside an `if ("PPT" %in% clim_cols)` branch**
+      4. **R block-buffers stdout when redirected**, so `run_rpkg_benchmark.R`'s
+         `[i/n]` progress reports are invisible for long stretches while the
+         Kendall C-level warnings (stderr, unbuffered) stream through — during the
+         2026-08-26 run no progress line appeared for over 30 minutes despite
+         steady 100 % CPU, making the run impossible to monitor. Add
+         `flush.console()` after the progress `cat()`. Cosmetic for correctness,
+         but it is the difference between an observable run and a black box.
+      5. **SWE is merged only inside an `if ("PPT" %in% clim_cols)` branch**
          (`run_rpkg_benchmark.R`), so a climate parquet carrying SWE but no PPT would
          silently drop every snow key; Python merges the slice independently. Inert
          here — the run's own log records `columns: gage_id,date,PPT,SWE`.

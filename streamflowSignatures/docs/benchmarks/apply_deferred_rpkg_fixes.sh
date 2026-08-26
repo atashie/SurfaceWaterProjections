@@ -41,6 +41,16 @@ if "options(warn = 1)" not in s:
     s = s.replace(marker, ins, 1) if s.startswith(marker) else "options(warn = 1)\n" + s
     print("  [1] options(warn = 1) added")
 
+# (5) Flush progress lines. R block-buffers stdout when redirected to a file, so
+# the [i/n] progress reports sit unflushed for long stretches while the Kendall
+# C-level warnings (stderr, unbuffered) stream through — during the 2026-08-26 run
+# no progress line was visible for over 30 minutes despite steady 100% CPU.
+if "flush.console()" not in s:
+    old = '                i, n_gages, processed, skipped, errored, rate, eta))'
+    if old in s:
+        s = s.replace(old, old + "\n    flush.console()", 1)
+        print("  [5] flush.console() added after the progress report")
+
 print("  [4] REVIEW MANUALLY: move the SWE merge out of the `if (\"PPT\" %in% clim_cols)`")
 print("      branch near line 250 so a climate source with SWE but no PPT still")
 print("      yields snow metrics (Python merges the slice independently).")
