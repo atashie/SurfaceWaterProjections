@@ -33,10 +33,13 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
   **rpkg is code-complete and unit-tested (1,008 assertions against the INSTALLED
   package) but its full-scale benchmark has not yet been gated** — that run is the
   remaining work, plus these follow-ups:
-    - **Four rpkg-side fixes deferred until the running benchmark finishes** (all
-      require editing rpkg source or its runner, which must not change mid-run; none
-      invalidates the active run — each was checked against it):
-      1. `options(warn = 1)` in `run_rpkg_benchmark.R`, so R prints each per-gage
+    - **Seven rpkg-side fixes identified 2026-08-26. Three are APPLIED (the runner
+      ones — the benchmark they were queued behind was stopped externally, which
+      made them safe to apply); four remain DEFERRED** because they change rpkg
+      package source and would require an `R CMD INSTALL` that must not happen while
+      a benchmark runs. None invalidates any run — each was checked against the
+      active one:
+      1. ✅ **APPLIED** — `options(warn = 1)` in `run_rpkg_benchmark.R`, so R prints each per-gage
          family-failure warning immediately instead of deferring and truncating at 50.
          Until then `check_signature_failures.py` correctly REFUSES to certify an rpkg
          log ending in that banner, and rpkg's assurance rests on the schema +
@@ -60,7 +63,7 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
          package resolving `na_reject_negative_flow = FALSE` and all three SWE keys
          populated. That establishes the fallback is unreachable for the bundled
          config; confirm the run actually used it from its provenance block.
-      4. **`report_interval` of 500 gages is far too coarse to monitor an R run**,
+      4. ✅ **APPLIED** — **`report_interval` 500 → 50.** 500 was far too coarse to monitor an R run,
          which is slow enough that the first marker can be over an hour away —
          during the 2026-08-26 run no progress line appeared for 65 minutes.
          Drop it to ~50. **Correction to an earlier diagnosis in this entry: R
@@ -71,8 +74,9 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
          (The Kendall `tauk2` warnings do go to stdout — 31 on stdout, 0 on
          stderr for a 3-gage smoke — so they are a usable liveness signal, but
          their per-gage rate varies far too much to serve as a progress count.)
-      5. **The runner reads the 111.6M-row streamflow parquet with NO column
-         projection** (`run_rpkg_benchmark.R:118` → `read_parquet(path)`, which
+      5. ✅ **APPLIED — the single biggest win of the day (~15x).** The runner read
+         the 111.6M-row streamflow parquet with NO column
+         projection (`run_rpkg_benchmark.R:118` → `read_parquet(path)`, which
          takes no `col_select`), pulling all 9 columns — roughly 6–8 GB resident —
          on top of ~3 GB of climate. On a 16 GB machine this drives the system
          into swap: measured mid-run at 20.3 of 21.5 GB swap used, 163 MB/s
