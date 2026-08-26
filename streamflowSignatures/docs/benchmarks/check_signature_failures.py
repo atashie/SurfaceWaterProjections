@@ -43,7 +43,14 @@ rather than reporting a clean pass it cannot substantiate.
 
 USAGE
 -----
-    python docs/benchmarks/check_signature_failures.py RUN.log [--allow-family F]...
+    python docs/benchmarks/check_signature_failures.py RUN.log \
+        [--expect-prefix PREFIX] [--require-error-tally] [--allow-family F]...
+
+--expect-prefix binds the log to the run whose artifacts are being gated: without
+it an operator can gate a broken run's outputs while this gate certifies a
+different run's clean log. --require-error-tally additionally demands the
+"Gages errored: N" line the rpkg runner prints AFTER "BENCHMARK COMPLETE",
+catching a footer truncated between the two.
 """
 from __future__ import annotations
 
@@ -71,15 +78,20 @@ RE_R_TRUNCATED = re.compile(r"There were (\d+|50 or more) warnings")
 # log truncated just after one of them would have been certified (Codex delta
 # review, 2026-08-26). All three runners print this AFTER the timing JSON.
 RE_COMPLETE = re.compile(r"BENCHMARK COMPLETE")
-# rpkg/Python footers also report the per-gage error tally.
+# The rpkg footer reports the per-gage error tally — AFTER "BENCHMARK COMPLETE",
+# so a log truncated between the two lines has a completion marker and no tally.
 RE_ERRORED = re.compile(r"Gages errored:\s*(\d+)")
+# Every runner prints this near the top; it binds a log to the run that produced it.
+RE_PREFIX = re.compile(r"OUTPUT_PREFIX=\s*([^\s,]+)")
 
 
 def scan(path: Path):
     failures = []  # (gage, family)
     truncated = False
     completed = False
-    n_errored = None
+    errored_values: list[int] = []
+    tally_after_complete = False
+    prefixes: set[str] = set()
     n_lines = 0
     with path.open(errors="replace") as fh:
         for line in fh:
@@ -88,7 +100,15 @@ def scan(path: Path):
                 completed = True
             me = RE_ERRORED.search(line)
             if me:
-                n_errored = int(me.group(1))
+                # Collect ALL tallies rather than letting the last one win: a
+                # concatenated log with "Gages errored: 7" followed by
+                # "Gages errored: 0" must not pass on the second value.
+                errored_values.append(int(me.group(1)))
+                if completed:
+                    tally_after_complete = True
+            mp = RE_PREFIX.search(line)
+            if mp:
+                prefixes.add(mp.group(1))
             if RE_R_TRUNCATED.search(line):
                 truncated = True
             m = RE_GAGE_FIRST.search(line)
@@ -98,7 +118,8 @@ def scan(path: Path):
             m = RE_JULIA.search(line)
             if m:
                 failures.append((m.group(2), m.group(1).strip()))
-    return failures, truncated, completed, n_lines, n_errored
+    return (failures, truncated, completed, n_lines,
+            errored_values, tally_after_complete, prefixes)
 
 
 def main() -> int:
@@ -110,6 +131,14 @@ def main() -> int:
                     help="Waive failures for this family (repeatable). Each waiver is "
                          "printed, so a waived run still reports what was ignored.")
     ap.add_argument("--max-show", type=int, default=15)
+    ap.add_argument("--expect-prefix", metavar="PREFIX",
+                    help="Require the log to record OUTPUT_PREFIX=PREFIX (and only "
+                         "that one). Binds the log to the run whose artifacts are "
+                         "being gated.")
+    ap.add_argument("--require-error-tally", action="store_true",
+                    help="Require a 'Gages errored: N' line after the completion "
+                         "marker (rpkg runner). Catches a footer truncated between "
+                         "'BENCHMARK COMPLETE' and the tally.")
     ap.add_argument("--skip-completion-check", action="store_true",
                     help="Proceed even without an end-of-run marker. Only for a log "
                          "whose completeness you have established another way.")
@@ -119,7 +148,8 @@ def main() -> int:
         print(f"FAIL: log not found: {args.log}")
         return 2
 
-    failures, truncated, completed, n_lines, n_errored = scan(args.log)
+    (failures, truncated, completed, n_lines,
+     errored_values, tally_after_complete, prefixes) = scan(args.log)
     waived = {f.lower() for f in args.allow_family}
 
     hard = [(g, f) for g, f in failures if f.lower() not in waived]
@@ -128,14 +158,42 @@ def main() -> int:
     print(f"Signature-failure gate: {args.log}")
     print(f"  log lines read                 : {n_lines:,}")
     print(f"  BENCHMARK COMPLETE footer      : {'found' if completed else 'NOT FOUND'}")
+    print(f"  log's OUTPUT_PREFIX            : "
+          f"{', '.join(sorted(prefixes)) if prefixes else 'not recorded'}")
     print(f"  runner-reported gage errors    : "
-          f"{'not reported' if n_errored is None else n_errored}")
+          f"{errored_values if errored_values else 'not reported'}")
     print(f"  per-gage family failures found : {len(failures)}")
 
-    if n_errored:
-        print(f"\nFAIL: the runner itself reported {n_errored} errored gage(s); those "
-              f"gages are missing from the output entirely.")
+    # Bind the log to the run under test. Without this an operator can gate one
+    # run's artifacts while this gate certifies a different run's clean log.
+    if args.expect_prefix:
+        if args.expect_prefix not in prefixes:
+            print(f"\nFAIL: this log does not belong to '{args.expect_prefix}'. "
+                  f"It records OUTPUT_PREFIX="
+                  f"{', '.join(sorted(prefixes)) if prefixes else '(none)'}.")
+            return 1
+        if len(prefixes) > 1:
+            print(f"\nFAIL: this log records more than one OUTPUT_PREFIX "
+                  f"({', '.join(sorted(prefixes))}) — it covers multiple runs, so a "
+                  f"clean stretch cannot vouch for the run under test.")
+            return 1
+
+    if any(v > 0 for v in errored_values):
+        print(f"\nFAIL: the runner itself reported errored gages {errored_values}; "
+              f"those gages are missing from the output entirely.")
         return 1
+
+    if args.require_error_tally and not args.skip_completion_check:
+        if not errored_values:
+            print("\nFAIL: no 'Gages errored: N' tally in this log. The rpkg runner "
+                  "prints it AFTER 'BENCHMARK COMPLETE', so its absence means the "
+                  "footer is truncated and the run's error count is unknown.")
+            return 1
+        if completed and not tally_after_complete:
+            print("\nFAIL: the error tally appears only BEFORE 'BENCHMARK COMPLETE', "
+                  "so this log's footer is not the one belonging to the completed "
+                  "run.")
+            return 1
 
     if not completed and not args.skip_completion_check:
         print("\nFAIL: no end-of-run marker in this log, so it cannot be shown to "

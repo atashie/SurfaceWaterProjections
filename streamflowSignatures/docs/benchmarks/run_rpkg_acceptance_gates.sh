@@ -80,7 +80,8 @@ run "schema equality (1,653 columns / 6,678 gages)" \
 #    expect this gate to report that it cannot substantiate a pass — which is
 #    the correct outcome, not a green light.
 run "no swallowed signature-family failures" \
-  $PY docs/benchmarks/check_signature_failures.py "$LOG"
+  $PY docs/benchmarks/check_signature_failures.py "$LOG" \
+      --expect-prefix "$PREFIX" --require-error-tally
 
 # 3. Cross-language annual parquet (the sufficient annual check — unlike
 #    validate_annual_values.py, which is self-referential).
