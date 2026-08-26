@@ -528,3 +528,60 @@ In progress / pending:
   `ice_affected_days_total`.
 - R runner syntax/behavior untested until R exists (no R runtime on this
   machine yet).
+
+---
+
+### 2026-08-26 — Python track CLOSED (validated); rpkg track re-opened after a discarded run
+
+**Python: DONE and gated.** Strict schema gate PASS with no waivers (1,653 columns,
+6,678 gages — identical sets). 1,615 of 1,620 shared signature columns Perfect
+(R² ≥ 0.999), 5 Good, zero below 0.99; mean R² 0.999988, min 0.997935. Annual parquet:
+identical 100-signature set, 0 duplicate keys, 0 NA-pattern mismatches, 18,898,405 of
+18,898,406 rows shared. `check_signature_failures.py` PASS (0 swallowed family
+exceptions). Both residuals characterised — Pettitt tie flips (99.9963 % exact `cp_year`)
+and one signed-zero `unique` row in 18.9 M. **No divergence class remains.**
+
+**MK convention resolved (user, option C):** Python moved to the canonical
+continuity-corrected normal formula. scipy's `kendalltau` selects on TIES rather than
+sample size, so it was the sole outlier — `Kendall::MannKendall` already reproduced the
+Julia formula exactly. Significance-call disagreement fell 0.24 % → 0.0009 % (main path)
+and 0.45 % → 0.0009 % (Pettitt segments).
+
+**rpkg: the first long run was invalid and was discarded.** The final Codex review's
+CRITICAL held: `run_rpkg_benchmark.R` passed none of the ported arguments
+(`changepoint`, `min_values_for_stats`, `collector`, `snow_data`), discarded SWE at the
+climate join, and rpkg's bundled config had no `changepoint` or `stats_floor` section at
+all. The 19-hour run in flight could not have produced the ported columns, so it was
+killed rather than gated. Runner + config fixed; suite green at 1,008 assertions against
+the INSTALLED package.
+
+**A second rpkg defect surfaced only on real data:** `calculate_drought_metrics()`
+returned an all-NA family for every gage, because rpkg's `preprocess_daily_data()`
+renames `date` → `Date` internally while the ported module checks the lowercase name.
+Fixed to accept either, plus an end-to-end test traversing the preprocessor AND the
+orchestrator. Both defects were warning-only degradation — the lesson for the remaining
+work is that **module-level unit tests cannot prove a port is wired in**; only an
+end-to-end smoke on real data can.
+
+**Smoke gate added before committing to another long run** (3 gages, real inputs): full
+key set confirmed — 1,620 signature keys, 800 Pettitt fields, 224 snow, 165 drought, and
+a 100-signature annual collector; `drought_duration_fixed_p10_mean` = 36.52 days/yr
+against the p × 365.25 construction target; `swe_max_mean` 232 mm (ME) and 335 mm (CO),
+a valid 0 in FL.
+
+**Verified NOT a defect** while chasing the above: per-gage key-set variation is
+canonical. A gage failing the 25-event recession gate emits 64 fewer keys (the Pettitt
+fields of 8 recession / parameterized-BFI bases) because Julia's own `empty_stats`
+returns the 8 statistics ONLY. Python's and rpkg's mirror it exactly. **A strict
+per-gage key-set equality assertion would therefore false-positive** — which is why
+Codex's per-gage-silent-column-loss MAJOR was answered with a log-based gate
+(`check_signature_failures.py`) rather than a key-set assertion.
+
+Remaining:
+- Feature-complete rpkg benchmark (running) → strict schema gate (1,653 / 6,678),
+  identity-R² value comparison, cross-language annual comparator, failure gate.
+- **Apply `options(warn = 1)` to `run_rpkg_benchmark.R` between runs** (never mid-run):
+  R defers warnings and truncates at 50, so an rpkg log cannot currently substantiate a
+  clean failure gate. Until then rpkg's assurance rests on the schema/value/annual gates.
+- Julia-side cleanup, non-blocking, no rerun: switch `unique` to `==` semantics.
+- Phase 6 docs sweep + final Codex review.
