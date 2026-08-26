@@ -60,19 +60,29 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
          package resolving `na_reject_negative_flow = FALSE` and all three SWE keys
          populated. That establishes the fallback is unreachable for the bundled
          config; confirm the run actually used it from its provenance block.
-      4. **R block-buffers stdout when redirected**, so `run_rpkg_benchmark.R`'s
-         `[i/n]` progress reports are invisible for long stretches — during the
-         2026-08-26 run no progress line appeared for over 35 minutes despite
-         steady ~100 % CPU and stable memory, making the run impossible to monitor.
-         Note the Kendall `tauk2` IFAULT warnings go to **stdout as well**
-         (verified by capturing the streams separately: 31 on stdout, 0 on stderr
-         for a 3-gage smoke), so they lag in the same buffer and cannot be used as
-         a progress proxy either — the log grows in bursts, and any count read
-         from it is a lower bound. CPU time is the only reliable progress signal
-         until this is fixed. Add
-         `flush.console()` after the progress `cat()`. Cosmetic for correctness,
-         but it is the difference between an observable run and a black box.
-      5. **Emit a per-run identifier into BOTH the log header and the timing JSON**
+      4. **`report_interval` of 500 gages is far too coarse to monitor an R run**,
+         which is slow enough that the first marker can be over an hour away —
+         during the 2026-08-26 run no progress line appeared for 65 minutes.
+         Drop it to ~50. **Correction to an earlier diagnosis in this entry: R
+         does NOT block-buffer `cat()` here.** That was tested and disproven —
+         `cat()` output appeared within seconds while the writing script still
+         slept, on the local SSD *and* on the exFAT volume the log lives on. The
+         silence was real: the loop genuinely had not reached iteration 500.
+         (The Kendall `tauk2` warnings do go to stdout — 31 on stdout, 0 on
+         stderr for a 3-gage smoke — so they are a usable liveness signal, but
+         their per-gage rate varies far too much to serve as a progress count.)
+      5. **The runner reads the 111.6M-row streamflow parquet with NO column
+         projection** (`run_rpkg_benchmark.R:118` → `read_parquet(path)`, which
+         takes no `col_select`), pulling all 9 columns — roughly 6–8 GB resident —
+         on top of ~3 GB of climate. On a 16 GB machine this drives the system
+         into swap: measured mid-run at 20.3 of 21.5 GB swap used, 163 MB/s
+         sustained page-ins, 6.8 GB in the compressor, and the R process's RSS
+         squeezed to 0.41 GB despite holding ~210M rows. The run still progresses
+         but loses roughly a quarter of its wall-clock to paging (CPU time ran at
+         ~67–75 % of elapsed). Project to `gage_id, Date, Q` and let
+         `add_water_year_columns()` derive the rest — the same bounded-memory
+         treatment `run_python_benchmark.py` already received.
+      6. **Emit a per-run identifier into BOTH the log header and the timing JSON**
          (all three runners, rpkg first). Today a run log can be tied to an artifact
          set only by OUTPUT_PREFIX and by the footer counts, and both describe a
          run's *configuration* and its output *shape* rather than the execution —
@@ -81,7 +91,7 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
          `check_signature_failures.py`, makes the binding exact and unforgeable by
          copying or touching a file. Until then the gate's binding is documented as
          making accidental mispairing hard, not as proof of provenance.
-      6. **SWE is merged only inside an `if ("PPT" %in% clim_cols)` branch**
+      7. **SWE is merged only inside an `if ("PPT" %in% clim_cols)` branch**
          (`run_rpkg_benchmark.R`), so a climate parquet carrying SWE but no PPT would
          silently drop every snow key; Python merges the slice independently. Inert
          here — the run's own log records `columns: gage_id,date,PPT,SWE`.

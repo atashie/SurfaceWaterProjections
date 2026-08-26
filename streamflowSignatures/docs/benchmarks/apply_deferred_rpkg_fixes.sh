@@ -41,15 +41,20 @@ if "options(warn = 1)" not in s:
     s = s.replace(marker, ins, 1) if s.startswith(marker) else "options(warn = 1)\n" + s
     print("  [1] options(warn = 1) added")
 
-# (5) Flush progress lines. R block-buffers stdout when redirected to a file, so
-# the [i/n] progress reports sit unflushed for long stretches while the Kendall
-# C-level warnings (stderr, unbuffered) stream through — during the 2026-08-26 run
-# no progress line was visible for over 30 minutes despite steady 100% CPU.
-if "flush.console()" not in s:
-    old = '                i, n_gages, processed, skipped, errored, rate, eta))'
-    if old in s:
-        s = s.replace(old, old + "\n    flush.console()", 1)
-        print("  [5] flush.console() added after the progress report")
+# (5) Report progress far more often. R is slow enough here that a 500-gage
+# interval put the first marker over an hour away, leaving the run unobservable.
+# NOT a buffering problem — cat() was verified to flush promptly on both the
+# local SSD and the exFAT volume; the loop simply had not reached iteration 500.
+if "report_interval <- 500" in s:
+    s = s.replace("report_interval <- 500", "report_interval <- 50", 1)
+    print("  [5] report_interval 500 -> 50")
+
+print("  [6] REVIEW MANUALLY: give the streamflow read a column projection.")
+print("      run_rpkg_benchmark.R:118 reads all 9 columns of the 111.6M-row parquet")
+print("      (~6-8 GB); rpkg's read_parquet() takes no col_select, so either extend")
+print("      it or call arrow::read_parquet(path, col_select=c('gage_id','Date','Q'))")
+print("      directly and normalize names. Verify add_water_year_columns() supplies")
+print("      every derived column the loop needs before dropping them.")
 
 print("  [4] REVIEW MANUALLY: move the SWE merge out of the `if (\"PPT\" %in% clim_cols)`")
 print("      branch near line 250 so a climate source with SWE but no PPT still")
