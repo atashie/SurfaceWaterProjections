@@ -130,6 +130,7 @@ def calculate_pulse_metrics(
     decade_completeness: Optional[float] = None,
     min_values_for_stats: Optional[int] = None,
     changepoint: Optional[dict] = None,
+    collector: Optional[object] = None,
 ) -> Dict[str, float]:
     """
     Calculate pulse metrics and flow reversal trends.
@@ -271,7 +272,7 @@ def calculate_pulse_metrics(
         value_cols=metric_cols,
         year_col="water_year",
         trend_completeness=trend_completeness,
-        decade_completeness=decade_completeness, min_values_for_stats=min_values_for_stats, changepoint=changepoint,
+        decade_completeness=decade_completeness, min_values_for_stats=min_values_for_stats, changepoint=changepoint, collector=collector,
     )
 
 
@@ -281,6 +282,7 @@ def calculate_negative_days(
     decade_completeness: Optional[float] = None,
     min_values_for_stats: Optional[int] = None,
     changepoint: Optional[dict] = None,
+    collector: Optional[object] = None,
 ) -> Dict[str, float]:
     """Count days with negative streamflow per water year."""
     results = {}
@@ -303,7 +305,7 @@ def calculate_negative_days(
         generate_stats(
             annual, value_cols=["negative_ann"],
             trend_completeness=trend_completeness,
-            decade_completeness=decade_completeness, min_values_for_stats=min_values_for_stats, changepoint=changepoint,
+            decade_completeness=decade_completeness, min_values_for_stats=min_values_for_stats, changepoint=changepoint, collector=collector,
         )
     )
     return results

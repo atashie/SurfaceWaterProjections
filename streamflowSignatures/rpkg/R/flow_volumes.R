@@ -12,7 +12,7 @@
 #' @export
 calculate_flow_vols_by_year <- function(streamflow_data, seasonal_flags = NULL,
                                        trend_completeness = NULL,
-                                       decade_completeness = NULL) {
+                                       decade_completeness = NULL, min_values_for_stats = NULL, changepoint = NULL, collector = NULL) {
   required_cols <- c("water_year", "Q", "month", "dowy")
   missing <- setdiff(required_cols, colnames(streamflow_data))
   if (length(missing) > 0) stop(paste("Missing required columns:", paste(missing, collapse = ", ")))
@@ -83,5 +83,5 @@ calculate_flow_vols_by_year <- function(streamflow_data, seasonal_flags = NULL,
   metric_columns <- setdiff(names(all_metrics), "water_year")
   generate_stats(all_metrics, value_cols = metric_columns, year_col = "water_year",
                  trend_completeness = trend_completeness,
-                 decade_completeness = decade_completeness)
+                 decade_completeness = decade_completeness, min_values_for_stats = min_values_for_stats, changepoint = changepoint, collector = collector)
 }

@@ -4,7 +4,15 @@
 \alias{calculate_qp_seasonality}
 \title{Calculate Q-P seasonality metrics (Wrede et al. 2015)}
 \usage{
-calculate_qp_seasonality(streamflow_data, slope_window_days = NULL)
+calculate_qp_seasonality(
+  streamflow_data,
+  slope_window_days = NULL,
+  trend_completeness = NULL,
+  decade_completeness = NULL,
+  min_values_for_stats = NULL,
+  changepoint = NULL,
+  collector = NULL
+)
 }
 \arguments{
 \item{streamflow_data}{A data.table with columns: water_year, Q, PPT, month, dowy.}

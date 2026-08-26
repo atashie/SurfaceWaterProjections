@@ -25,6 +25,54 @@ CP_SUFFIXES = [
 ]
 
 
+class AnnualCollector:
+    """Opt-in accumulator for per-year signature values (long format).
+
+    Port of the `AnnualCollector` struct in julia/src/stats.jl. When passed to
+    ``generate_stats``, the annual series is appended EXACTLY as received —
+    before any min_rows, stats-floor or trend-completeness gating — so the
+    collected rows are precisely what the summary statistics were computed
+    from. Collection is read-only with respect to the statistics.
+
+    One instance per gage; the benchmark runner drains it into a global
+    long-format table tagged with gage_id.
+    """
+
+    __slots__ = ("signature", "water_year", "value")
+
+    def __init__(self):
+        self.signature = []
+        self.water_year = []
+        self.value = []
+
+    def __len__(self):
+        return len(self.value)
+
+
+def _collect_annual(collector: "AnnualCollector", data: pd.DataFrame,
+                    value_cols: List[str], year_col: str) -> None:
+    """Append the annual series as passed to generate_stats (long format).
+
+    Rows whose year is missing or non-finite are skipped (they cannot be
+    keyed); missing values become NaN. NaN values are KEPT — they record
+    "year present, metric not computable".
+    """
+    years_raw = pd.to_numeric(data[year_col], errors="coerce").to_numpy(dtype=float)
+    keep = np.isfinite(years_raw)
+    if not keep.any():
+        return
+    keyed = np.rint(years_raw[keep]).astype(np.int32)
+    n_keep = int(keep.sum())
+
+    for col in value_cols:
+        if col not in data.columns:
+            continue
+        vals = pd.to_numeric(data[col], errors="coerce").to_numpy(dtype=float)[keep]
+        collector.signature.extend([col] * n_keep)
+        collector.water_year.extend(keyed.tolist())
+        collector.value.extend(vals.tolist())
+
+
 def empty_stats(metric: str) -> Dict[str, float]:
     """
     Return a dict with NaN values for all 8 statistics for a metric.
@@ -130,24 +178,65 @@ def mann_kendall_test(y: np.ndarray) -> tuple:
 
     Notes
     -----
-    Matches R's Kendall::MannKendall implementation.
-    The Mann-Kendall test is equivalent to Kendall's tau correlation
-    between the values and their time indices.
+    Computed directly (not via ``scipy.stats.kendalltau``) so that BOTH outputs
+    match canonical Julia — which is itself a faithful port of R's
+    ``Kendall::MannKendall`` (verified identical to 1.000 at n = 10…33):
+
+    - tau is tau-b: ``S / sqrt((n_pairs - T_y) * n_pairs)``. The time index has
+      no ties, so only ties in ``y`` enter. Algebraically identical to scipy's
+      tau-b for this input; computing it here removes the last-ulp difference.
+    - the p-value uses the tie-corrected variance AND the **continuity
+      correction** ``z = (S ∓ 1)/sqrt(var_S)`` — the standard adjustment when
+      approximating a discrete statistic with a normal.
+
+    Why not scipy's p-value (changed 2026-08-26, port campaign): scipy selects
+    on TIES, not sample size — with no ties it returns the EXACT Kendall
+    p-value, and with ties it uses an asymptotic branch with NO continuity
+    correction. The second case dominates here, because day counts, pulse
+    counts and drought durations are tie-heavy: it shifted ~0.24 % of
+    main-path and ~0.45 % of Pettitt-segment significance calls at alpha = 0.05
+    relative to Julia/R.
     """
     # Remove NaN values
-    y_clean = y[~np.isnan(y)]
+    y_clean = np.asarray(y, dtype=float)
+    y_clean = y_clean[~np.isnan(y_clean)]
+    n = len(y_clean)
 
-    if len(y_clean) < 3:
+    if n < 3:
         return np.nan, np.nan
 
     try:
-        # Mann-Kendall is Kendall's tau between values and time indices
-        x = np.arange(len(y_clean))
-        tau, p_value = stats.kendalltau(x, y_clean)
+        # S = sum over i<j of sign(y_j - y_i). n <= ~46 here, so the pairwise
+        # matrix is trivial; np.subtract.outer(y, y)[i, j] = y_i - y_j, hence
+        # the sign flip on the strict upper triangle.
+        S = float(-np.triu(np.sign(np.subtract.outer(y_clean, y_clean)), 1).sum())
 
-        # R's Kendall::MannKendall uses exact p-values for n<=10 but fails
-        # for n<=3 (IFAULT=12, returns p=1.0). Match R's behavior.
-        if len(y_clean) <= 3:
+        # Tie-corrected variance of S
+        _, tie_groups = np.unique(y_clean, return_counts=True)
+        ties = tie_groups[tie_groups > 1].astype(float)
+        tie_correction = float((ties * (ties - 1) * (2 * ties + 5)).sum())
+        var_S = (n * (n - 1) * (2 * n + 5) - tie_correction) / 18.0
+        if var_S <= 0:
+            return np.nan, np.nan
+
+        # tau-b (x = time indices, so only ties in y contribute)
+        n_pairs = n * (n - 1) / 2.0
+        T_y = float((tie_groups * (tie_groups - 1) / 2.0).sum())
+        denom = np.sqrt((n_pairs - T_y) * n_pairs)
+        tau = S / denom if denom > 0.0 else np.nan
+
+        # Continuity-corrected normal approximation
+        if S > 0:
+            z = (S - 1) / np.sqrt(var_S)
+        elif S < 0:
+            z = (S + 1) / np.sqrt(var_S)
+        else:
+            z = 0.0
+        p_value = 2.0 * (1.0 - stats.norm.cdf(abs(z)))
+
+        # R's Kendall::MannKendall fails for n<=3 (IFAULT=12, returns p=1.0);
+        # Julia mirrors that. Match it.
+        if n <= 3:
             p_value = 1.0
 
         return tau, p_value
@@ -232,6 +321,7 @@ def generate_stats(
     changepoint: Optional[dict] = None,
     min_values_for_stats: Optional[int] = None,
     force_skip_trends: Optional[set] = None,
+    collector: Optional["AnnualCollector"] = None,
 ) -> Dict[str, float]:
     """
     Generate 8 standard statistics for each metric column.
@@ -279,6 +369,10 @@ def generate_stats(
         path as trend_completeness — mean/median and changepoint unaffected.
         Used by caller-computed gates (e.g. the snow record-anchored decade
         gate).
+    collector : AnnualCollector, optional
+        When supplied, the annual series is appended to it in long format
+        BEFORE any gating (export contract). Read-only with respect to the
+        statistics: passing a collector never changes the returned values.
 
     Returns
     -------
@@ -310,15 +404,35 @@ def generate_stats(
     if year_col not in data.columns:
         raise ValueError(f"Year column '{year_col}' not found in data")
 
-    # Sort by year for trend calculations
-    data = data.sort_values(year_col).copy()
-
-    # Determine value columns
+    # Resolve value columns BEFORE sorting/gating (mirrors Julia's hoisted
+    # resolution — eltypes are unaffected by sorting)
     if value_cols is None:
         numeric_cols = data.select_dtypes(include=[np.number]).columns.tolist()
         value_cols = [c for c in numeric_cols if c != year_col]
 
     results = {}
+
+    # Opt-in annual-values collection: capture the series exactly as passed,
+    # BEFORE any gating below (matching Julia's placement).
+    if collector is not None:
+        _collect_annual(collector, data, value_cols, year_col)
+
+    # Frame-level gate (mirrors Julia's earliest nrow < min_rows return): every
+    # REQUESTED metric — including requested-but-absent columns — emits the 8
+    # NaN statistics (+ NaN changepoint fields when enabled). Added 2026-08-25
+    # (Codex Phase-1 review): the per-column path below silently skips absent
+    # columns, which diverges from Julia on short frames.
+    if len(data) < min_rows:
+        for col in value_cols:
+            for suffix in STAT_SUFFIXES:
+                results[f"{col}{suffix}"] = np.nan
+            if changepoint is not None:
+                for cp_suffix in CP_SUFFIXES:
+                    results[f"{col}{cp_suffix}"] = np.nan
+        return results
+
+    # Sort by year for trend calculations
+    data = data.sort_values(year_col).copy()
 
     for col in value_cols:
         if col not in data.columns:

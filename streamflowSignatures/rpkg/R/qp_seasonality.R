@@ -10,7 +10,7 @@
 #' @importFrom data.table as.data.table copy setorder data.table rbindlist
 calculate_qp_seasonality <- function(streamflow_data, slope_window_days = NULL,
                                     trend_completeness = NULL,
-                                    decade_completeness = NULL) {
+                                    decade_completeness = NULL, min_values_for_stats = NULL, changepoint = NULL, collector = NULL) {
   if (is.null(slope_window_days)) slope_window_days <- pkg_env$qp_slope_window_days
 
   required_cols <- c("water_year", "Q", "PPT", "month", "dowy")
@@ -78,12 +78,12 @@ calculate_qp_seasonality <- function(streamflow_data, slope_window_days = NULL,
 
   sd_stats <- generate_stats(annual_metrics, value_cols = "qp_slope_sd", year_col = "water_year",
                              trend_completeness = trend_completeness,
-                             decade_completeness = decade_completeness)
+                             decade_completeness = decade_completeness, min_values_for_stats = min_values_for_stats, changepoint = changepoint, collector = collector)
   bi_df    <- annual_metrics[!is.na(qp_bimodality)]
   bi_stats <- if (nrow(bi_df) >= 3) {
     generate_stats(bi_df, value_cols = "qp_bimodality", year_col = "water_year",
                    trend_completeness = trend_completeness,
-                   decade_completeness = decade_completeness)
+                   decade_completeness = decade_completeness, min_values_for_stats = min_values_for_stats, changepoint = changepoint, collector = collector)
   } else {
     empty_stats("qp_bimodality")
   }

@@ -4,7 +4,14 @@
 \alias{analyze_fdc_trends}
 \title{Analyze flow duration curve trends}
 \usage{
-analyze_fdc_trends(streamflow_data)
+analyze_fdc_trends(
+  streamflow_data,
+  trend_completeness = NULL,
+  decade_completeness = NULL,
+  min_values_for_stats = NULL,
+  changepoint = NULL,
+  collector = NULL
+)
 }
 \arguments{
 \item{streamflow_data}{A data.frame with columns: water_year, Q.}

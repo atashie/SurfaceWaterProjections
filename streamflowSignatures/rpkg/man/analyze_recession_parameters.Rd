@@ -4,7 +4,13 @@
 \alias{analyze_recession_parameters}
 \title{Analyze recession parameters}
 \usage{
-analyze_recession_parameters(streamflow_data)
+analyze_recession_parameters(
+  streamflow_data,
+  trend_completeness = NULL,
+  decade_completeness = NULL,
+  changepoint = NULL,
+  collector = NULL
+)
 }
 \arguments{
 \item{streamflow_data}{A data.frame with columns: water_year, Q, dowy.}

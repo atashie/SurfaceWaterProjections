@@ -140,6 +140,28 @@ def fit_recession_event(
         return np.nan, np.nan
 
 
+def _event_log_a_b1(Q_event: np.ndarray) -> float:
+    """Per-event log(a) under a FIXED linear reservoir (b = 1): the median of
+    log(-dQ/dt) - log(Q) over the event's valid pairs — no regression.
+
+    Port of julia/src/recession.jl `event_log_a_b1` (July 2026 convention,
+    Phase 2 of the port campaign): fixing b = 1 removes the slope-intercept
+    convolution of the free power-law fit. Conventions match the fitting path:
+    first day removed (storm peak), pairs require Q > 0 and -dQ > 0, natural
+    log. NaN when there are no valid pairs or fewer than 3 days.
+    """
+    Q_event = np.asarray(Q_event, dtype=float)
+    if len(Q_event) < 3:
+        return np.nan
+    Q_work = Q_event[1:]            # Remove first day (storm peak)
+    dQdt = -np.diff(Q_work)
+    Q_mid = Q_work[:-1]             # Q at start of each interval
+    valid = (Q_mid > 0) & (dQdt > 0) & ~np.isnan(Q_mid) & ~np.isnan(dQdt)
+    if not valid.any():
+        return np.nan
+    return float(np.median(np.log(dQdt[valid]) - np.log(Q_mid[valid])))
+
+
 def fit_sinusoidal_model(
     doy_values: np.ndarray,
     log_a_values: np.ndarray
@@ -213,6 +235,7 @@ def analyze_recession_parameters(
     trend_completeness: Optional[float] = None,
     decade_completeness: Optional[float] = None,
     changepoint: Optional[dict] = None,
+    collector: Optional[object] = None,
 ) -> Dict[str, float]:
     """
     Calculate recession parameter trends.
@@ -304,22 +327,37 @@ def analyze_recession_parameters(
         all_dQ_dt = []
         year_alpha_linear = []
 
-        # Store individual event parameters
+        # Store individual event parameters. log_a values are the per-event
+        # FIXED-b=1 values (linear reservoir; July 2026 canonical convention) —
+        # the free-fit intercept and the median-b recalculation are gone: alpha
+        # is decoupled from b everywhere. b itself stays a free fit.
         event_log_a_values = []
         event_b_values = []
         event_concavities = []
-        successful_events_Q = []  # Store Q data for successful events (for log_a recalc)
 
         # Process each recession event
         for event in recession_events:
             Q_event = Q[event['indices']]
 
-            # Get middle day of recession for timing
-            mid_idx = event['indices'][len(event['indices']) // 2]
+            # Get middle day of recession for timing (feeds the seasonality
+            # sinusoid). Canonical is the FLOOR midpoint of the index range
+            # (julia/src/recession.jl `div(start_idx + end_idx, 2)`; rpkg's
+            # 1-based `ceiling(n/2)` is algebraically the same). The previous
+            # `indices[len // 2]` took the UPPER middle, putting even-length
+            # events one day late — 8 of 12 events/year on a monthly-recession
+            # gage (found 2026-08-25 by the Phase-2 cross-language check, which
+            # the b=1 fix finally made visible).
+            ev_idx = event['indices']
+            mid_idx = (ev_idx[0] + ev_idx[-1]) // 2
             event_dowy = dowy[mid_idx]
 
-            # Fit parameters for this event
+            # Per-event FREE power-law fit (remove_first_day=True) — used for b
+            # only; fit success also gates event acceptance (unchanged counts)
             log_a, b = fit_recession_event(Q_event, remove_first_day=True)
+
+            # Per-event alpha under fixed b = 1 (same valid-pair definition as
+            # the free fit, so non-NaN whenever the fit succeeds)
+            log_a_b1 = _event_log_a_b1(Q_event)
 
             # Compute discrete recession constant alpha = Q_{i+1}/Q_i (b=1 linear reservoir)
             # INDEPENDENT of power-law fit — depends only on raw Q pairs
@@ -334,15 +372,16 @@ def analyze_recession_parameters(
                             all_alpha_linear.append(a_i)
 
             if not np.isnan(log_a) and not np.isnan(b):
-                event_log_a_values.append(log_a)
+                event_log_a_values.append(log_a_b1)
                 event_b_values.append(b)
-                successful_events_Q.append(Q_event.copy())
 
-                # Store event with timing
+                # Store event with timing (log_a is the b=1 value — the
+                # seasonality sinusoid consumes these, per the July 2026
+                # convention)
                 all_recession_events.append({
                     'water_year': yr,
                     'dowy': event_dowy,
-                    'log_a': log_a,
+                    'log_a': log_a_b1,
                     'b': b
                 })
 
@@ -373,47 +412,33 @@ def analyze_recession_parameters(
 
         # Point cloud analysis
         if len(all_Q) > 10:
-            try:
-                all_Q = np.array(all_Q)
-                all_dQ_dt = np.array(all_dQ_dt)
-                log_Q = np.log(all_Q)
-                log_dQ_dt = np.log(all_dQ_dt)
+            all_Q = np.array(all_Q)
+            all_dQ_dt = np.array(all_dQ_dt)
+            log_Q = np.log(all_Q)
+            log_dQ_dt = np.log(all_dQ_dt)
 
-                # Skip near-singular data (matching R's lm() QR rank check)
-                # R's tolerance is .Machine$double.eps^0.5 ≈ 1.49e-8
-                if np.var(log_Q) < 1e-8:
-                    pass  # Year remains NA
-                else:
-                    result = scipy_stats.linregress(log_Q, log_dQ_dt)
-                    b_pointcloud = result.slope
+            # log_a under fixed b = 1 (linear reservoir): log(a) = log(-dQ/dt)
+            # - log(Q). No regression is involved, so this needs no singularity
+            # gate and is independent of the free b fit below (July 2026
+            # canonical convention; Phase 2 of the port campaign).
+            annual_metrics.loc[annual_metrics["water_year"] == yr, "log_a_pointcloud"] = \
+                np.median(log_dQ_dt - log_Q)
 
-                    # Calculate log(a) using b_pointcloud
-                    log_a_values_pc = log_dQ_dt - b_pointcloud * log_Q
-                    log_a_pointcloud = np.median(log_a_values_pc)
+            # b from the FREE point-cloud fit (unchanged).
+            # Skip near-singular data (matching R's lm() QR rank check);
+            # R's tolerance is .Machine$double.eps^0.5 ≈ 1.49e-8
+            if np.var(log_Q) >= 1e-8:
+                result = scipy_stats.linregress(log_Q, log_dQ_dt)
+                if not np.isnan(result.slope):
+                    annual_metrics.loc[annual_metrics["water_year"] == yr, "b_pointcloud"] = result.slope
 
-                    annual_metrics.loc[annual_metrics["water_year"] == yr, "b_pointcloud"] = b_pointcloud
-                    annual_metrics.loc[annual_metrics["water_year"] == yr, "log_a_pointcloud"] = log_a_pointcloud
-            except Exception:
-                pass
-
-        # Individual events analysis — recalculate log_a using median_b (matching R)
+        # Event-based metrics. log_a_events uses the per-event fixed-b=1 values
+        # — the previous median-b recalculation is gone: alpha is decoupled
+        # from b by assuming a linear reservoir everywhere.
         if len(event_b_values) > 0:
-            median_b = np.median(event_b_values)
-
-            # Recalculate log_a for each event using the ensemble median_b
-            log_a_events_recalc = []
-            for Q_ev in successful_events_Q:
-                if len(Q_ev) > 1:
-                    Q_subset = Q_ev[1:]  # Remove first day
-                    dQ_subset = -np.diff(Q_ev[1:])
-                    Q_for_calc = Q_subset[:-1]
-                    valid_mask = (Q_for_calc > 0) & (dQ_subset > 0)
-                    if valid_mask.any():
-                        log_a_vals = np.log(dQ_subset[valid_mask]) - median_b * np.log(Q_for_calc[valid_mask])
-                        log_a_events_recalc.append(np.median(log_a_vals))
-
-            if log_a_events_recalc:
-                annual_metrics.loc[annual_metrics["water_year"] == yr, "log_a_events"] = np.median(log_a_events_recalc)
+            valid_b1 = [v for v in event_log_a_values if not np.isnan(v)]
+            annual_metrics.loc[annual_metrics["water_year"] == yr, "log_a_events"] = \
+                np.median(valid_b1) if valid_b1 else np.nan
             annual_metrics.loc[annual_metrics["water_year"] == yr, "b_events"] = np.median(event_b_values)
 
         # Concavity
@@ -429,7 +454,7 @@ def analyze_recession_parameters(
     if len(events_df) >= 3:
         n_events_stats = generate_stats(
             events_df, value_cols=["n_recession_events"], year_col="water_year",
-            trend_completeness=trend_completeness, decade_completeness=decade_completeness, changepoint=changepoint,
+            trend_completeness=trend_completeness, decade_completeness=decade_completeness, changepoint=changepoint, collector=collector,
         )
     else:
         n_events_stats = {}
@@ -460,7 +485,7 @@ def analyze_recession_parameters(
         value_cols=signatures_with_stats,
         year_col="water_year",
         trend_completeness=trend_completeness,
-        decade_completeness=decade_completeness, changepoint=changepoint,
+        decade_completeness=decade_completeness, changepoint=changepoint, collector=collector,
     )
 
     # Add n_recession_events stats (computed independently above)

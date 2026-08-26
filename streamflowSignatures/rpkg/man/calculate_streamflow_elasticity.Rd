@@ -4,16 +4,30 @@
 \alias{calculate_streamflow_elasticity}
 \title{Calculate streamflow elasticity}
 \usage{
-calculate_streamflow_elasticity(streamflow_data, rolling_window = NULL)
+calculate_streamflow_elasticity(
+  streamflow_data,
+  rolling_window = NULL,
+  trend_completeness = NULL,
+  decade_completeness = NULL,
+  changepoint = NULL,
+  collector = NULL
+)
 }
 \arguments{
 \item{streamflow_data}{A data.table with columns: water_year, Q, PPT.}
 
 \item{rolling_window}{Size of rolling window in years (default from config).}
+
+\item{trend_completeness}{Forwarded to generate_stats.}
+
+\item{decade_completeness}{Forwarded to generate_stats.}
 }
 \value{
-Named list with elasticity_static and 8 trend statistics.
+Named list with elasticity_static, elasticity_rolling_* (8 stats),
+elasticity_annual_* (8 stats), and diagnostic scalars.
 }
 \description{
-Computes static elasticity and rolling-window elasticity trend statistics.
+Computes static elasticity, rolling-window elasticity trends (Sawicz et al.
+2011), and year-over-year elasticity trends using consecutive-year
+differences.
 }

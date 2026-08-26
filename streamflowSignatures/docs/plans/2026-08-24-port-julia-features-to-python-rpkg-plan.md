@@ -399,8 +399,127 @@ user go-ahead relaunched as ONE combined Phase-1 run (Pettitt + floor), with
 both effects independently attributable (additivity handles the +608; the
 mask script independently recomputes the floor's NaN set).
 
+**Phase-1 Python EXIT (2026-08-25): gates A/B/C PASS + Codex review
+GO-WITH-FIXES, all findings resolved.** Gate evidence in the reference folder's
+RUN_NOTES (schema exactly +608/76 bases at 1,264 columns; floor transition
+byte-exact vs the independently-masked baseline; cp_year 99.995% exact, 0
+NA-pattern mismatches; 6-tier: 1,074 Perfect / 85 Good / 33 Poor — ALL 33 the
+segment-MK-p-value library class / 39 below = the b≠1 log_a family). Codex
+review (`codex_phase1_review.log` in the run folder) verified pettitt semantics,
+gate ordering, exemption topology, and the wholesale-merge fixes line-by-line;
+found 1 MAJOR + 3 MINOR, all fixed same day: config resolution now
+STREAMFLOW_CONFIG env → repo canonical → wheel-bundled copy
+(`streamflow_signatures/data/`, package-data, drift-guard test); the frame-level
+`nrow < min_rows` gate added before sorting (requested-but-absent metrics emit
+keys, as Julia); regression tests added (config override/fail-loud, frame gate,
+orchestrator floor/CP topology on a synthetic recession-rich gage, qp/storage
+CP-key retention, flashiness negative-total, NaN-in-years, pct_change guard,
+frozen segment p-values). Python suite: 66/66. The R flashiness regression test
+is written but runs after the rpkg baseline completes (no reinstall mid-run).
+
+### Phase 2 — Python side (2026-08-25)
+
+b=1 recession alpha ported (`log_a_pointcloud` / `log_a_events` / seasonality
+now `median(log(-dQ/dt) − log(Q))`, b fixed at 1; `b_*` / `concavity` /
+`alpha_linear` keep free fits). **Cross-language fixture check: the b=1 values
+are BIT-IDENTICAL to Julia** on three synthetic gages (linear reservoir,
+quadratic reservoir, seasonally alternating alpha) — log_a pointcloud/events
+mean+median exact, recession-alpha scalar exact, free-fit b within 1 ulp, event
+counts exact. The quadratic gage is the discriminating case (free fit recovers
+b = 2 while b=1 alpha sits far from log(k)), so regression to the old
+convention is caught.
+
+**Found + fixed en route (pre-existing, Python-only): the mid-event
+day-of-water-year used the UPPER-middle index (`indices[len//2]`) where
+canonical Julia uses the FLOOR midpoint (`div(start+end, 2)`)** — every
+EVEN-length event was timed one day late (8 of 12 events/year on the fixture).
+It feeds only the seasonality sinusoid, so it stayed hidden while the ports fed
+that sinusoid free-fit log_a; matching the convention exposed it. rpkg's
+1-based `ceiling(n/2)` is algebraically identical to Julia and was already
+correct. After the fix, seasonality converges from ~1e-3 relative to
+**0.0 / 1.7e-15** on the signal-bearing fixtures — retiring a divergence
+carried since April as "irreducible sinusoidal fit sensitivity". Python suite
+77/77. Phase-2 gates written (A: only the log_a family moves vs Phase 1;
+B: that family converges to the reference).
+
+### rpkg Phases 1+2 — implemented, awaiting install (2026-08-25)
+
+Written while the rpkg baseline ran (editing sources is safe; only
+`R CMD INSTALL` would disturb the running process, so install + test are
+deferred to its completion). Every semantic decision was already settled and
+Julia-cross-checked during the Python phases, so this is a mechanical mirror:
+- **`rpkg/R/changepoint.R`** (new): `pettitt_test`,
+  `segment_differential_metrics`, `CP_SUFFIXES`, `empty_changepoint`,
+  `run_changepoint_block`. R is 1-based like Julia, so the candidate-range and
+  first-max tie logic translate directly (`which.max` returns the first
+  maximum, matching Julia's strict `>`). Segment MK p-values use
+  `Kendall::MannKendall` — each language reuses its own MK, as Julia does.
+- **`rpkg/R/stats.R`**: frame-level `nrow < min_rows` gate before sorting
+  (Codex Phase-1 MINOR, applied here from the start), stats floor sharing that
+  branch, `force_skip_trends`, changepoint on all three gate paths with Julia's
+  ordering.
+- **Kwarg sweep**: `changepoint` in all 13 module functions;
+  `min_values_for_stats` in the 11 non-exempt ones — recession/elasticity
+  structurally exempt, pinned by a `formals()` test.
+- **`rpkg/R/signatures.R`**: floor+CP to the 6 non-exempt call sites, CP-only
+  to recession/elasticity, plus `gage_id` warning context (Julia parity).
+- **`rpkg/R/recession.R`**: `event_log_a_b1` helper, per-event b=1 storage,
+  pointcloud b=1 (no regression, no singularity gate), events median of b=1
+  values, seasonality fed the b=1 series.
+- **Tests** (3 new files): `test-changepoint.R` (the SAME Julia-cross-checked
+  frozen fixtures the Python suite pins, incl. the tie case), plus
+  `test-stats_floor.R` and `test-recession_alpha_b1.R` mirroring their Python
+  counterparts. All rpkg sources + tests parse clean; roxygen regenerated
+  (NAMESPACE gains `pettitt_test` + `segment_differential_metrics`; internal
+  helpers correctly unexported).
+
+### Python — ALL PHASES COMPLETE AND VALIDATED (2026-08-25/26)
+
+Phases 1–5 plus the MK-method alignment are done; see CHANGELOG for the full
+record. Final state of the feature-complete Python port vs the Julia reference:
+**strict schema gate PASS** (1,653 columns and 6,678 gages, no waivers), mean
+R² **0.999988**, min R² **0.997935**, **1,615 Perfect / 5 Good / 0 below**;
+annual parquet identical signature sets, 0 NA-pattern mismatches, 18,898,405 of
+18,898,406 rows shared. **No divergence class remains.** The 5 Good columns and
+the 1 unshared row are both fully explained (Pettitt changepoint tie flips; the
+signed-zero `unique` semantics, logged as a non-blocking canonical cleanup).
+
+Cross-language fixture verification per phase (all against canonical Julia):
+Pettitt 7 fixtures exact incl. the tie case; b=1 alpha bit-identical; snow 126
+values at 3.5e-16; drought 105 values at 6.0e-15; MK formula bit-exact on 12
+fixtures. Python suite: **143/143**.
+
+### rpkg — Phases 1–5 IMPLEMENTED, awaiting the in-flight benchmark (2026-08-26)
+
+Phases 1+2 were installed and validated (testthat **760/760** against the
+INSTALLED package) and their benchmark is running. Phases 3–5 were written
+during that run (source edits are safe; only `R CMD INSTALL` would disturb it):
+- **Phase 3**: `annual_collector()` / `collector_drain()` / `collect_annual()`
+  in `stats.R` — an environment with pre-grown chunk lists rather than `c()`
+  append (which is O(n²) in R); collection happens BEFORE all gates; threaded
+  through all 13 module functions and the orchestrator.
+- **Phase 4**: `rpkg/R/snow.R` (14 metrics, spells, anchor/censoring, melt
+  attribution, record-anchored decade gate via `force_skip_trends`), plus
+  preprocessor SWE support in `io.R` (`swe`→`SWE`, per-year policy mirroring
+  PPT, new `valid_swe_years`) and the orchestrator's explicit-`snow_data` rule.
+- **Phase 5**: `rpkg/R/drought.R` (`weibull_quantile`, gap-aware
+  `smooth_daily_flow`, duration/deficit at the five levels with the strict `<`,
+  threshold scalars) + config fail-fast + the `drought_enabled` gate.
+- Config gained the snow/drought/annual_values sections and the SWE NA policy;
+  roxygen regenerated (32 exports).
+- **No MK change is needed for rpkg**: `Kendall::MannKendall` already
+  reproduces the Julia formula exactly (verified 1.000 at n = 10…33) — rpkg was
+  canonical on this all along; Python was the sole outlier.
+
 In progress / pending:
-- Combined Phase-1 Python benchmark running → gates A/B/C + 6-tier comparison.
+- rpkg Phase-1/2 benchmark running (4,500/8,014, 0 errors). NOTE its output
+  carries the pre-fix DOUBLE-prefixed QA-flag names — rename those 12 columns
+  post-hoc before its schema gate (a re-run is not worth 8+ h for metadata
+  naming).
+- Then: install rpkg with Phases 3–5, run its full suite, cross-check the new
+  modules against the Julia fixtures (as done for Python), and run the
+  feature-complete rpkg benchmark + gates.
+- Phase 6: docs sweep + final Codex review.
 - R install requires one sudo command from the user (CRAN R 4.6.1 arm64
   downloaded); then `setup_r_env.sh` (deps, `R CMD INSTALL rpkg`,
   installed-package testthat), rpkg Phase-0 baseline, then rpkg Phases 1a/1b.

@@ -4,7 +4,14 @@
 \alias{analyze_baseflow_indices}
 \title{Analyze baseflow indices (Eckhardt and Lyne-Hollick)}
 \usage{
-analyze_baseflow_indices(streamflow_data)
+analyze_baseflow_indices(
+  streamflow_data,
+  trend_completeness = NULL,
+  decade_completeness = NULL,
+  min_values_for_stats = NULL,
+  changepoint = NULL,
+  collector = NULL
+)
 }
 \arguments{
 \item{streamflow_data}{A data.frame with columns: water_year, Q, dowy.}

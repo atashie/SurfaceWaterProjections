@@ -4,7 +4,14 @@
 \alias{calculate_pulse_metrics}
 \title{Calculate pulse metrics}
 \usage{
-calculate_pulse_metrics(streamflow_data)
+calculate_pulse_metrics(
+  streamflow_data,
+  trend_completeness = NULL,
+  decade_completeness = NULL,
+  min_values_for_stats = NULL,
+  changepoint = NULL,
+  collector = NULL
+)
 }
 \arguments{
 \item{streamflow_data}{A data.frame with columns: water_year, Q, dowy, month.}

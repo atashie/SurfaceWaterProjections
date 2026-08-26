@@ -2,11 +2,14 @@
 % Please edit documentation in R/recession.R
 \name{identify_recession_events}
 \alias{identify_recession_events}
-\title{Identify recession events using look-ahead algorithm}
+\title{Identify recession events using position-level marking}
 \usage{
 identify_recession_events(Q_vector, min_length = NULL)
 }
 \description{
-Identify recession events using look-ahead algorithm
+Marks each position where both recession criteria hold (Q decreasing AND
+|dQ/dt| decreasing), then finds contiguous runs of valid positions >=
+min_length. This captures the full extent of each recession event, unlike
+the previous look-ahead algorithm which could truncate events.
 }
 \keyword{internal}

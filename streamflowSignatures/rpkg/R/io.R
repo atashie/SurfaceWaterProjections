@@ -11,7 +11,7 @@ read_parquet <- function(path) {
 
   # Normalize column names to match expected schema
   nmap <- c(Date = "date", site_id = "gage_id", prcp = "PPT",
-            site_no = "gage_id", PRCP = "PPT")
+            site_no = "gage_id", PRCP = "PPT", swe = "SWE")
   for (old in names(nmap)) {
     if (old %in% names(dt) && !nmap[[old]] %in% names(dt)) {
       data.table::setnames(dt, old, nmap[[old]])
@@ -162,6 +162,7 @@ preprocess_daily_data <- function(gage_flow, config = NULL) {
 
   # Climate NA policy
   has_ppt <- "PPT" %in% names(gage_flow)
+  has_swe <- "SWE" %in% names(gage_flow)
   max_raw_na_ppt     <- config$climate_na_policy$max_raw_na_per_year_ppt %||% 30L
   max_gap_ppt        <- config$climate_na_policy$max_interpolation_gap_ppt %||% 3L
   reject_negative_ppt <- config$climate_na_policy$reject_negative_ppt %||% TRUE
@@ -186,6 +187,7 @@ preprocess_daily_data <- function(gage_flow, config = NULL) {
   seasonal_list  <- list()
   valid_years    <- integer(0)
   valid_climate_years <- integer(0)
+  valid_swe_years <- integer(0)
 
   for (wy in water_years) {
     # Step a: Normalize to complete daily grid
@@ -368,10 +370,56 @@ preprocess_daily_data <- function(gage_flow, config = NULL) {
       }
     }
 
+    # Step f2: SWE handling (same rules as PPT, tracked separately)
+    swe_valid <- TRUE
+    if (has_swe) {
+      swe_vals <- wy_data$SWE
+      swe_raw_na <- sum(is.na(swe_vals))
+      max_raw_na_swe <- pkg_env$na_max_raw_na_swe
+      max_gap_swe    <- pkg_env$na_max_gap_swe
+
+      if (swe_raw_na > max_raw_na_swe) {
+        swe_valid <- FALSE
+      } else if (swe_raw_na > 0) {
+        rle_swe <- rle(is.na(swe_vals))
+        swe_max_run <- max(rle_swe$lengths[rle_swe$values], 0L)
+        if (swe_max_run > max_gap_swe) {
+          swe_valid <- FALSE
+        } else {
+          rle_res_swe <- rle(is.na(wy_data$SWE))
+          run_ends_swe <- cumsum(rle_res_swe$lengths)
+          run_starts_swe <- c(1L, run_ends_swe[-length(run_ends_swe)] + 1L)
+          n_swe <- nrow(wy_data)
+          for (ri in seq_along(rle_res_swe$lengths)) {
+            if (!rle_res_swe$values[ri]) next
+            if (rle_res_swe$lengths[ri] > max_gap_swe) next
+            s2 <- run_starts_swe[ri]; e2 <- run_ends_swe[ri]
+            left_ok  <- (s2 > 1L) && !is.na(wy_data$SWE[s2 - 1L])
+            right_ok <- (e2 < n_swe) && !is.na(wy_data$SWE[e2 + 1L])
+            if (left_ok && right_ok) {
+              wy_data$SWE[s2:e2] <- stats::approx(
+                x = c(s2 - 1L, e2 + 1L),
+                y = c(wy_data$SWE[s2 - 1L], wy_data$SWE[e2 + 1L]),
+                xout = s2:e2, rule = 1
+              )$y
+            }
+          }
+          if (sum(is.na(wy_data$SWE)) > 0) swe_valid <- FALSE
+        }
+      }
+      if (swe_valid && isTRUE(pkg_env$na_reject_negative_swe) &&
+          any(wy_data$SWE < 0, na.rm = TRUE)) {
+        swe_valid <- FALSE
+      }
+    }
+
     # Step g: Build return objects for this year
     valid_years <- c(valid_years, wy)
     if (has_ppt && ppt_valid) {
       valid_climate_years <- c(valid_climate_years, wy)
+    }
+    if (has_swe && swe_valid) {
+      valid_swe_years <- c(valid_swe_years, wy)
     }
 
     diag_list[[length(diag_list) + 1L]] <- data.table::data.table(
@@ -425,6 +473,7 @@ preprocess_daily_data <- function(gage_flow, config = NULL) {
     data = cleaned_data,
     valid_years = valid_years,
     valid_climate_years = valid_climate_years,
+    valid_swe_years = valid_swe_years,
     rejected_years = rejected_years,
     seasonal_flags = seasonal_flags_dt,
     diagnostics = diagnostics

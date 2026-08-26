@@ -48,7 +48,9 @@ qual_years, qualifies = filter_qualifying_years(gage_data)
 if qualifies:
     gage_data = gage_data[gage_data["water_year"].isin(qual_years)]
     results = calculate_all_signatures(gage_data, has_climate="PPT" in gage_data.columns)
-    # results is a dict with ~551 keys (with climate) or ~478 keys (without climate)
+    # results is a dict with ~1,653 keys for a full climate+SWE gage (8 stats +
+    # 8 Pettitt changepoint fields per signature base, plus per-gage scalars);
+    # fewer without climate/SWE or with the drought family disabled
     # e.g. {"Qann_mean": 573.7, "Qann_senn_slp": -0.3, ...}
 
 # Save results to CSV

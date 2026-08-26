@@ -18,6 +18,9 @@ from .runoff_ratios import analyze_Q_PPT_relationships
 from .elasticity import calculate_streamflow_elasticity
 from .qp_seasonality import calculate_qp_seasonality
 from .storage import calculate_average_storage
+from .snow import calculate_snow_metrics
+from .drought import calculate_drought_metrics
+from .config import DROUGHT_ENABLED
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +36,9 @@ def calculate_all_signatures(
     area_normalized: bool = True,
     changepoint: Optional[dict] = None,
     min_values_for_stats: Optional[int] = None,
+    collector: Optional[object] = None,
+    snow_data: Optional[pd.DataFrame] = None,
+    snow_climate_years: Optional[list] = None,
     gage_id: Optional[str] = None,
 ) -> dict:
     """Calculate all signatures for a single gage.
@@ -78,10 +84,21 @@ def calculate_all_signatures(
         (their trend-gate/stats-floor exemptions do NOT extend to changepoint,
         matching the Julia orchestrator). Keys: start_year, end_year,
         min_total_obs, min_segment_obs.
+    collector : AnnualCollector, optional
+        When supplied, every family's annual series is appended to it in long
+        format (before gating). Threaded to ALL families including the
+        floor-exempt recession and elasticity, matching the Julia orchestrator.
     min_values_for_stats : int, optional
         Stats floor: metrics with fewer non-NaN annual values emit NaN for all
         8 statistics + changepoint fields. NOT passed to recession/elasticity
         (inherently sparse; same exemption as the trend gates).
+    snow_data : pd.DataFrame, optional
+        EXPLICIT frame filtered to the gage's SWE-valid years. Snow metrics run
+        only when this is supplied and carries an SWE column — an SWE column in
+        `gage_data` is NEVER used implicitly (matching Julia; prevents
+        SWE-invalid years leaking in). May legitimately have 0 rows.
+    snow_climate_years : list of int, optional
+        valid_climate_years for the PPT-dependent `swe_max_to_ppt` metric.
     gage_id : str, optional
         Gage identifier used only for warning context on per-family failures.
 
@@ -126,6 +143,7 @@ def calculate_all_signatures(
         decade_completeness=decade_completeness,
         min_values_for_stats=min_values_for_stats,
         changepoint=changepoint,
+        collector=collector,
     )
 
     # Non-climate signatures
@@ -140,7 +158,7 @@ def calculate_all_signatures(
     # changepoint still applies
     recession_alpha = float("nan")
     recession_results = run_family("recession", analyze_recession_parameters,
-                                   gage_data, changepoint=changepoint)
+                                   gage_data, changepoint=changepoint, collector=collector)
     if recession_results is not None:
         recession_alpha = recession_results.get(
             "recession_alpha_point_cloud_linear_reservoir", float("nan"))
@@ -152,6 +170,10 @@ def calculate_all_signatures(
 
     run_family("pulse metrics", calculate_pulse_metrics, gage_data, **trend_kwargs)
     run_family("negative days", calculate_negative_days, gage_data, **trend_kwargs)
+
+    # Streamflow drought (config-gated: absent `drought` section => family off)
+    if DROUGHT_ENABLED:
+        run_family("drought", calculate_drought_metrics, gage_data, **trend_kwargs)
 
     # Climate-dependent signatures
     # Use climate_data if provided, otherwise fall back to gage_data.
@@ -169,9 +191,14 @@ def calculate_all_signatures(
         # Elasticity: rolling window produces fewer values than years, no trend
         # completeness — changepoint still applies
         run_family("elasticity", calculate_streamflow_elasticity,
-                   climate_df, changepoint=changepoint)
+                   climate_df, changepoint=changepoint, collector=collector)
         run_family("Q-P seasonality", calculate_qp_seasonality, climate_df, **trend_kwargs)
         run_family("storage", calculate_average_storage, climate_df, **trend_kwargs)
+
+    # Snow metrics: explicit opt-in frame only (never derived from gage_data)
+    if snow_data is not None and "SWE" in snow_data.columns:
+        run_family("snow", calculate_snow_metrics, snow_data,
+                   valid_climate_years=snow_climate_years, **trend_kwargs)
 
     # QA/QC flags (optional)
     if include_qa_flags:

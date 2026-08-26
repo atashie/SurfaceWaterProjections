@@ -139,6 +139,7 @@ def analyze_baseflow_indices(
     decade_completeness: Optional[float] = None,
     min_values_for_stats: Optional[int] = None,
     changepoint: Optional[dict] = None,
+    collector: Optional[object] = None,
 ) -> Dict[str, float]:
     """
     Calculate baseflow index trends using recursive digital filters.
@@ -175,11 +176,11 @@ def analyze_baseflow_indices(
     years = df["water_year"].unique()
 
     # Initialize results DataFrame
-    bfi_by_year = pd.DataFrame({
-        "water_year": years,
-        "BFI_Eckhardt": np.nan,
-        "BFI_LyneHollick": np.nan,
-    })
+    # Rows are built only for COMPUTABLE years (total valid Q > 0), matching
+    # Julia's `total_Q <= 0 -> continue`: a pre-allocated all-years frame would
+    # export NaN rows Julia omits and would make the `< 3 rows` guard count
+    # non-computable years (found 2026-08-25, Phase-3 cross-language comparator).
+    bfi_rows = []
 
     # Process each year
     for yr, year_data in df.groupby("water_year", sort=False):
@@ -203,17 +204,26 @@ def analyze_baseflow_indices(
         # where BOTH Q and baseflow are valid) empirically matches R's behavior
         # for both Eckhardt and Lyne-Hollick filters.
 
-        # Eckhardt BFI
-        valid_eck = ~np.isnan(Q) & ~np.isnan(baseflow_eckhardt)
+        # Year-level computability gate (Julia: total_Q <= 0 -> skip the year)
+        valid_q = ~np.isnan(Q)
+        if valid_q.sum() == 0 or np.sum(Q[valid_q]) <= 0:
+            continue
+
+        bfi_eckhardt = np.nan
+        valid_eck = valid_q & ~np.isnan(baseflow_eckhardt)
         if valid_eck.sum() > 0 and np.sum(Q[valid_eck]) > 0:
             bfi_eckhardt = np.sum(baseflow_eckhardt[valid_eck]) / np.sum(Q[valid_eck])
-            bfi_by_year.loc[bfi_by_year["water_year"] == yr, "BFI_Eckhardt"] = bfi_eckhardt
 
-        # Lyne-Hollick BFI
-        valid_lh = ~np.isnan(Q) & ~np.isnan(baseflow_lyne)
+        bfi_lyne = np.nan
+        valid_lh = valid_q & ~np.isnan(baseflow_lyne)
         if valid_lh.sum() > 0 and np.sum(Q[valid_lh]) > 0:
             bfi_lyne = np.sum(baseflow_lyne[valid_lh]) / np.sum(Q[valid_lh])
-            bfi_by_year.loc[bfi_by_year["water_year"] == yr, "BFI_LyneHollick"] = bfi_lyne
+
+        bfi_rows.append({"water_year": yr, "BFI_Eckhardt": bfi_eckhardt,
+                         "BFI_LyneHollick": bfi_lyne})
+
+    bfi_by_year = pd.DataFrame(bfi_rows, columns=["water_year", "BFI_Eckhardt",
+                                                  "BFI_LyneHollick"])
 
     # Generate statistics
     return generate_stats(
@@ -221,7 +231,7 @@ def analyze_baseflow_indices(
         value_cols=["BFI_Eckhardt", "BFI_LyneHollick"],
         year_col="water_year",
         trend_completeness=trend_completeness,
-        decade_completeness=decade_completeness, min_values_for_stats=min_values_for_stats, changepoint=changepoint,
+        decade_completeness=decade_completeness, min_values_for_stats=min_values_for_stats, changepoint=changepoint, collector=collector,
     )
 
 
@@ -234,6 +244,7 @@ def analyze_baseflow_indices_with_parameters(
     decade_completeness: Optional[float] = None,
     min_values_for_stats: Optional[int] = None,
     changepoint: Optional[dict] = None,
+    collector: Optional[object] = None,
 ) -> Dict[str, float]:
     """
     Calculate baseflow indices using recession-derived filter parameters.
@@ -278,11 +289,8 @@ def analyze_baseflow_indices_with_parameters(
     df = streamflow_data
     years = df["water_year"].unique()
 
-    bfi_by_year = pd.DataFrame({
-        "water_year": years,
-        "BFI_Eckhardt_param": np.nan,
-        "BFI_LyneHollick_param": np.nan,
-    })
+    # Computable years only (see the fixed-parameter function above)
+    bfi_rows = []
 
     for yr, year_data in df.groupby("water_year", sort=False):
         year_data = year_data.copy()
@@ -293,24 +301,30 @@ def analyze_baseflow_indices_with_parameters(
         bf_eck = eckhardt_filter(Q, BFImax=BFImax, a=alpha)
         bf_lh = lyne_hollick_filter(Q, alpha=alpha, passes=passes)
 
-        # Eckhardt BFI with paired masking
-        valid_eck = ~np.isnan(Q) & ~np.isnan(bf_eck)
-        if valid_eck.sum() > 0 and np.sum(Q[valid_eck]) > 0:
-            bfi_eck = np.sum(bf_eck[valid_eck]) / np.sum(Q[valid_eck])
-            bfi_eck = np.clip(bfi_eck, 0.0, 1.0)
-            bfi_by_year.loc[bfi_by_year["water_year"] == yr, "BFI_Eckhardt_param"] = bfi_eck
+        # Year-level computability gate (Julia: total_Q <= 0 -> skip the year)
+        valid_q = ~np.isnan(Q)
+        if valid_q.sum() == 0 or np.sum(Q[valid_q]) <= 0:
+            continue
 
-        # Lyne-Hollick BFI with paired masking
-        valid_lh = ~np.isnan(Q) & ~np.isnan(bf_lh)
+        bfi_eck = np.nan
+        valid_eck = valid_q & ~np.isnan(bf_eck)
+        if valid_eck.sum() > 0 and np.sum(Q[valid_eck]) > 0:
+            bfi_eck = float(np.clip(np.sum(bf_eck[valid_eck]) / np.sum(Q[valid_eck]), 0.0, 1.0))
+
+        bfi_lh = np.nan
+        valid_lh = valid_q & ~np.isnan(bf_lh)
         if valid_lh.sum() > 0 and np.sum(Q[valid_lh]) > 0:
-            bfi_lh = np.sum(bf_lh[valid_lh]) / np.sum(Q[valid_lh])
-            bfi_lh = np.clip(bfi_lh, 0.0, 1.0)
-            bfi_by_year.loc[bfi_by_year["water_year"] == yr, "BFI_LyneHollick_param"] = bfi_lh
+            bfi_lh = float(np.clip(np.sum(bf_lh[valid_lh]) / np.sum(Q[valid_lh]), 0.0, 1.0))
+
+        bfi_rows.append({"water_year": yr, "BFI_Eckhardt_param": bfi_eck,
+                         "BFI_LyneHollick_param": bfi_lh})
+
+    bfi_by_year = pd.DataFrame(bfi_rows, columns=["water_year"] + metrics)
 
     return generate_stats(
         bfi_by_year,
         value_cols=metrics,
         year_col="water_year",
         trend_completeness=trend_completeness,
-        decade_completeness=decade_completeness, min_values_for_stats=min_values_for_stats, changepoint=changepoint,
+        decade_completeness=decade_completeness, min_values_for_stats=min_values_for_stats, changepoint=changepoint, collector=collector,
     )

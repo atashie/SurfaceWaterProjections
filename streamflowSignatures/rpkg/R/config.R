@@ -99,6 +99,10 @@ pkg_env <- new.env(parent = emptyenv())
     pkg_env$na_internal_only            <- nah$interpolation$internal_only %||% TRUE
     pkg_env$na_max_raw_na_per_year      <- nah$year_rejection$max_raw_na_per_year %||% 30L
     pkg_env$na_reject_negative_flow     <- nah$year_rejection$reject_negative_flow %||% FALSE  # fallback aligned with Python/canonical JSON (2026-08-24; was TRUE)
+    # SWE NA policy (mirrors PPT; fallbacks match julia/src/config.jl)
+    pkg_env$na_max_raw_na_swe   <- nah$snow_na_policy$max_raw_na_per_year_swe %||% 30L
+    pkg_env$na_max_gap_swe      <- nah$snow_na_policy$max_interpolation_gap_swe %||% 3L
+    pkg_env$na_reject_negative_swe <- nah$snow_na_policy$reject_negative_swe %||% TRUE
     pkg_env$na_reject_residual_na       <- nah$year_rejection$reject_residual_na %||% TRUE
     pkg_env$na_constant_sd_enabled      <- nah$constant_sd_flag$enabled %||% TRUE
     pkg_env$na_constant_sd_min_days     <- nah$constant_sd_flag$min_nonzero_days_per_month %||% 15L
@@ -133,5 +137,39 @@ pkg_env <- new.env(parent = emptyenv())
   # Legacy filtering flag
   pkg_env$use_legacy_filtering <- cfg$filtering$use_legacy_filtering %||% TRUE
 
+  # ---- Snow (fallbacks mirror julia/src/config.jl; absent section => gate off)
+  sn <- cfg$snow
+  pkg_env$snow_swe_threshold_mm   <- if (!is.null(sn$swe_day_threshold_mm)) sn$swe_day_threshold_mm else 10
+  pkg_env$snow_seasonal_min_days  <- if (!is.null(sn$seasonal_spell_min_days)) sn$seasonal_spell_min_days else 60L
+  pkg_env$snow_melt_com_fraction  <- if (!is.null(sn$melt_com_fraction)) sn$melt_com_fraction else 0.5
+  pkg_env$snow_min_annual_ppt_mm  <- if (!is.null(sn$min_annual_ppt_mm)) sn$min_annual_ppt_mm else 10
+  pkg_env$snow_record_decade_gate <- if (!is.null(sn$record_anchored_decade_gate)) isTRUE(sn$record_anchored_decade_gate) else FALSE
+
+  # ---- Drought (absent section => family disabled)
+  dr <- cfg$drought
+  pkg_env$drought_enabled          <- !is.null(dr) && length(dr) > 0
+  pkg_env$drought_smooth_window    <- if (!is.null(dr$smoothing_window_days)) dr$smoothing_window_days else 7L
+  pkg_env$drought_smooth_alignment <- if (!is.null(dr$smoothing_alignment)) dr$smoothing_alignment else "center"
+  pkg_env$drought_smooth_min_valid <- if (!is.null(dr$smoothing_min_valid_days)) dr$smoothing_min_valid_days else 4L
+  pkg_env$drought_percentiles      <- if (!is.null(dr$threshold_percentiles)) as.integer(dr$threshold_percentiles) else c(2L,5L,10L,20L,30L)
+  pkg_env$drought_below_range_policy <- if (!is.null(dr$below_plotting_range_policy)) dr$below_plotting_range_policy else "na"
+  pkg_env$drought_min_years        <- if (!is.null(dr$min_years_for_threshold)) dr$min_years_for_threshold else 10L
+  if (isTRUE(pkg_env$drought_enabled)) {
+    if (!is.null(dr$threshold_method) && dr$threshold_method != "fixed")
+      stop("drought.threshold_method must be 'fixed' (variable method not implemented)")
+    if (!is.null(dr$plotting_position) && dr$plotting_position != "weibull")
+      stop("drought.plotting_position must be 'weibull'")
+    if (!pkg_env$drought_below_range_policy %in% c("na", "clamp"))
+      stop("drought.below_plotting_range_policy must be 'na' or 'clamp'")
+    if (pkg_env$drought_smooth_alignment == "center" && pkg_env$drought_smooth_window %% 2 == 0)
+      stop("drought.smoothing_window_days must be ODD for centered alignment")
+    if (pkg_env$drought_smooth_min_valid > pkg_env$drought_smooth_window)
+      stop("drought.smoothing_min_valid_days must be <= smoothing_window_days")
+  }
+
+  # ---- Annual values export
+  pkg_env$save_annual_values <- if (!is.null(cfg$annual_values$save)) isTRUE(cfg$annual_values$save) else FALSE
+
   invisible(NULL)
+
 }

@@ -11,7 +11,6 @@ compute_qa_flags(sigs)
 }
 \value{
 Named list of 12 logical flags (TRUE = potential issue).
-Uses \code{flagged_for_*} naming convention matching Python/Julia.
 }
 \description{
 Checks ranges for common signatures and returns a named logical list

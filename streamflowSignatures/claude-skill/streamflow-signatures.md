@@ -54,12 +54,13 @@ Interpretation notes:
   `elasticity_annual` to the later year of each consecutive-year pair.
 - Recomputing `mean`/`median` from this file reproduces the summary `_mean`/`_median`
   columns exactly (validated by `docs/benchmarks/validate_annual_values.py`).
-- Julia only (controlled by `annual_values.save` in `config/signatures_config.json`).
+- Available in ALL THREE languages since the August 2026 port campaign
+  (controlled by `annual_values.save` in `config/signatures_config.json`).
 
 ### Snow Metrics (July 2026)
 
-Fourteen per-water-year metrics from Daymet daily SWE (`calculate_snow_metrics`,
-Julia only): `swe_max`, `swe_max_dowy`, `snow_cover_days`, `snow_on_dowy`,
+Fourteen per-water-year metrics from Daymet daily SWE (`calculate_snow_metrics`;
+all three languages since the August 2026 port campaign): `swe_max`, `swe_max_dowy`, `snow_cover_days`, `snow_on_dowy`,
 `snow_off_dowy`, `melt_season_days`, `melt_rate`, `ssm`, `swe_apr1`,
 `melt_before_peak(+_pct, _to_max_swe)`, `melt_com_dowy`, `swe_max_to_ppt`.
 Interpretation keys:
@@ -80,7 +81,8 @@ Interpretation keys:
 
 ### Streamflow Drought Metrics (July 2026)
 
-Ten per-water-year metrics (`calculate_drought_metrics`, Julia only) after
+Ten per-water-year metrics (`calculate_drought_metrics`; all three languages
+since the August 2026 port campaign) after
 Adelsperger et al. (in review): `drought_duration_fixed_p{2,5,10,20,30}` (days below
 threshold) and `drought_deficit_fixed_p{2,5,10,20,30}` (summed departures below
 threshold, mm), plus five `drought_threshold_fixed_p{n}` per-gage scalars holding the

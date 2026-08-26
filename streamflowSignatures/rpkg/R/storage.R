@@ -9,7 +9,7 @@
 #' @importFrom data.table as.data.table copy setorder rbindlist
 calculate_average_storage <- function(streamflow_data,
                                      trend_completeness = NULL,
-                                     decade_completeness = NULL) {
+                                     decade_completeness = NULL, min_values_for_stats = NULL, changepoint = NULL, collector = NULL) {
   required_cols <- c("water_year", "Q", "PPT", "dowy")
   missing <- setdiff(required_cols, colnames(streamflow_data))
   if (length(missing) > 0) stop(paste("Missing required columns:", paste(missing, collapse = ", ")))
@@ -48,5 +48,5 @@ calculate_average_storage <- function(streamflow_data,
 
   generate_stats(storage_df, value_cols = "avg_storage", year_col = "water_year",
                  trend_completeness = trend_completeness,
-                 decade_completeness = decade_completeness)
+                 decade_completeness = decade_completeness, min_values_for_stats = min_values_for_stats, changepoint = changepoint, collector = collector)
 }

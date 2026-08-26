@@ -17,7 +17,7 @@ from daily streamflow (and optionally climate) data. All signatures produce
 
 __version__ = "0.1.0"
 
-from .stats import generate_stats, theil_sen_slope, mann_kendall_test, empty_stats, STAT_SUFFIXES, CP_SUFFIXES
+from .stats import generate_stats, theil_sen_slope, mann_kendall_test, empty_stats, STAT_SUFFIXES, CP_SUFFIXES, AnnualCollector
 from .changepoint import pettitt_test, segment_differential_metrics
 from .io import read_parquet, write_signatures, validate_schema, add_water_year_columns, filter_qualifying_years, preprocess_daily_data
 from .signatures import calculate_all_signatures
@@ -32,6 +32,8 @@ from .runoff_ratios import analyze_Q_PPT_relationships
 from .elasticity import calculate_streamflow_elasticity
 from .qp_seasonality import calculate_qp_seasonality
 from .storage import calculate_average_storage
+from .snow import calculate_snow_metrics, SNOW_METRICS
+from .drought import calculate_drought_metrics, DROUGHT_METRICS, DROUGHT_THRESHOLD_SCALARS
 
 __all__ = [
     # Stats
@@ -39,6 +41,7 @@ __all__ = [
     "theil_sen_slope",
     "mann_kendall_test",
     "empty_stats",
+    "AnnualCollector",
     "STAT_SUFFIXES",
     "CP_SUFFIXES",
     # Changepoint (Pettitt)
@@ -70,4 +73,11 @@ __all__ = [
     "calculate_streamflow_elasticity",
     "calculate_qp_seasonality",
     "calculate_average_storage",
+    # Snow (Daymet SWE)
+    "calculate_snow_metrics",
+    "SNOW_METRICS",
+    # Streamflow drought
+    "calculate_drought_metrics",
+    "DROUGHT_METRICS",
+    "DROUGHT_THRESHOLD_SCALARS",
 ]

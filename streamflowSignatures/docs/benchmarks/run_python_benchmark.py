@@ -39,6 +39,7 @@ from streamflow_signatures import (
     preprocess_daily_data,
     calculate_all_signatures,
 )
+from streamflow_signatures import AnnualCollector
 from streamflow_signatures.qa_qc import compute_qa_flags
 from streamflow_signatures.metadata import load_gages_ii_interference
 from streamflow_signatures.config import (
@@ -56,6 +57,7 @@ from streamflow_signatures.config import (
     CP_MIN_TOTAL_OBS,
     CP_MIN_SEGMENT_OBS,
     MIN_VALUES_FOR_STATS,
+    SAVE_ANNUAL_VALUES,
 )
 
 # Configuration — ENV names mirror the Julia runner (STREAMFLOW_*); the pre-2026-08-24
@@ -76,8 +78,8 @@ GAGES_II_DIR_EFFECTIVE = os.environ.get("STREAMFLOW_GAGES_II_DIR", GAGES_II_DIR)
 
 # Climate columns this runner consumes (post-normalization names). SWE joins the
 # list with the Phase-4 snow port — extend here AND in the raw-name projection.
-CLIMATE_KEEP = ["gage_id", "date", "PPT"]
-_CLIMATE_RAW_WANTED = ("gage_id", "site_id", "date", "Date", "PPT", "prcp")
+CLIMATE_KEEP = ["gage_id", "date", "PPT", "SWE"]
+_CLIMATE_RAW_WANTED = ("gage_id", "site_id", "date", "Date", "PPT", "prcp", "SWE", "swe")
 
 
 def _env_int(name):
@@ -168,6 +170,7 @@ def main():
     print(f"Changepoint: enabled={CHANGEPOINT_ENABLED}, WY={CP_START_WATER_YEAR}-{CP_END_WATER_YEAR}, "
           f"min_obs={CP_MIN_TOTAL_OBS}, min_seg={CP_MIN_SEGMENT_OBS}")
     print(f"Stats floor: min_values_for_stats={MIN_VALUES_FOR_STATS} (recession/elasticity exempt)")
+    print(f"Annual values: save={SAVE_ANNUAL_VALUES}")
     print(f"Experiment: OUTPUT_PREFIX={OUTPUT_PREFIX}, START_WY={start_water_year}, "
           f"END_WY={end_water_year}, MIN_QUAL_FRAC={min_qualifying_frac}")
     print(f"Output dir: {OUTPUT_DIR}")
@@ -236,6 +239,7 @@ def main():
 
         t1 = time.perf_counter()
         print(f"  Loaded {len(climate):,} rows (columns: {list(climate.columns)}) in {t1-t0:.2f}s")
+        print(f"  SWE column: {'present (snow metrics enabled)' if 'SWE' in climate.columns else 'absent (snow metrics skipped)'}")
 
         print("  Grouping climate data by gage...")
         climate_by_gage = {gid: frame for gid, frame in climate.groupby("gage_id", sort=False)}
@@ -375,6 +379,11 @@ def main():
 
     all_results = []
 
+    # Annual-values accumulators (long format; one collector per gage, drained
+    # here with the gage_id tag) — mirrors the Julia runner.
+    save_annual = SAVE_ANNUAL_VALUES
+    annual_gage_id, annual_signature, annual_water_year, annual_value = [], [], [], []
+
     if use_legacy:
         # Legacy path (deprecated compat mode; blocked above unless explicitly
         # allowed): raw data + per-year filter, no preprocessing semantics
@@ -402,6 +411,7 @@ def main():
                 print(f"  [{i+1}/{n_gages}] Processing... ({rate:.1f} gages/s, ETA: {eta/60:.1f} min)")
 
             gage_area_normalized = area_norm_lookup.get(_normalize_join_id(gage_id), True)
+            gage_collector = AnnualCollector() if save_annual else None
 
             # Evict as we go so the cache shrinks as Phase 4 progresses
             pp = preprocess_cache.pop(gage_id)
@@ -414,8 +424,15 @@ def main():
                 climate_yr_set = set(pp["valid_climate_years"])
                 climate_data = pp_data[pp_data["water_year"].isin(climate_yr_set)]
 
-            # Phase-4 (snow port) wiring point: build snow_data from
-            # pp["valid_swe_years"] here once the library supports it.
+            # Snow data: explicit opt-in frame filtered to SWE-valid years.
+            # Possibly 0 rows (gage has SWE but no valid SWE year -> full NaN
+            # snow key set); None when the gage has no SWE column at all ->
+            # snow keys absent. NO implicit fallback to pp_data in the
+            # orchestrator (mirrors the Julia runner).
+            snow_data = None
+            if "SWE" in pp_data.columns:
+                swe_yr_set = set(pp.get("valid_swe_years", []))
+                snow_data = pp_data[pp_data["water_year"].isin(swe_yr_set)]
             signatures = calculate_all_signatures(
                 pp_data, gage_has_climate,
                 seasonal_flags=pp.get("seasonal_flags"),
@@ -425,8 +442,19 @@ def main():
                 area_normalized=gage_area_normalized,
                 changepoint=cp_config,
                 min_values_for_stats=MIN_VALUES_FOR_STATS,
+                collector=gage_collector,
+                snow_data=snow_data,
+                snow_climate_years=pp.get("valid_climate_years"),
                 gage_id=str(gage_id),
             )
+
+            # Drain this gage's annual values into the global accumulators
+            if gage_collector is not None and len(gage_collector) > 0:
+                n_rows = len(gage_collector)
+                annual_gage_id.extend([str(gage_id)] * n_rows)
+                annual_signature.extend(gage_collector.signature)
+                annual_water_year.extend(gage_collector.water_year)
+                annual_value.extend(gage_collector.value)
 
             signatures["gage_id"] = gage_id
             signatures["start_water_year"] = min(qual_years) if qual_years else np.nan
@@ -448,6 +476,27 @@ def main():
         print("WARNING: Zero gages qualified. Writing empty output.")
         pd.DataFrame({"gage_id": []}).to_csv(OUTPUT_DIR / f"{OUTPUT_PREFIX}_signatures.csv", index=False)
         return 0
+
+    # Phase 4b: Write annual values parquet (before the metadata merge, so a
+    # metadata failure cannot lose it). Long format, deterministically sorted —
+    # mirrors the Julia runner.
+    if save_annual and annual_value:
+        print("\nPhase 4b: Writing annual values parquet...")
+        t0 = time.perf_counter()
+        annual_df = pd.DataFrame({
+            "gage_id": annual_gage_id,
+            "signature": annual_signature,
+            "water_year": np.asarray(annual_water_year, dtype="int32"),
+            "value": annual_value,
+        }).sort_values(["gage_id", "signature", "water_year"], kind="stable")
+        annual_path = OUTPUT_DIR / f"{OUTPUT_PREFIX}_signatures_annual.parquet"
+        annual_df.to_parquet(annual_path, index=False, compression="zstd")
+        t1 = time.perf_counter()
+        timing["phases"]["write_annual_values"] = t1 - t0
+        timing["n_annual_rows"] = len(annual_df)
+        print(f"  Saved {len(annual_df):,} rows ({annual_df['signature'].nunique()} signatures) "
+              f"to {annual_path}")
+        print(f"  Size: {annual_path.stat().st_size/1e6:.1f} MB, took {t1-t0:.2f}s")
 
     # Phase 5: Merge metadata and compute QA/QC flags
     print("\nPhase 5: Merging metadata and computing QA/QC flags...")

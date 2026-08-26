@@ -11,7 +11,7 @@
 #' @export
 analyze_Q_PPT_relationships <- function(streamflow_data, seasonal_flags = NULL,
                                        trend_completeness = NULL,
-                                       decade_completeness = NULL) {
+                                       decade_completeness = NULL, min_values_for_stats = NULL, changepoint = NULL, collector = NULL) {
   required_cols <- c("water_year", "Q", "PPT", "month")
   missing <- setdiff(required_cols, colnames(streamflow_data))
   if (length(missing) > 0) stop(paste("Missing required columns:", paste(missing, collapse = ", ")))
@@ -73,7 +73,7 @@ analyze_Q_PPT_relationships <- function(streamflow_data, seasonal_flags = NULL,
   metric_cols <- setdiff(names(all_ratios), "water_year")
   result <- generate_stats(all_ratios, value_cols = metric_cols, year_col = "water_year",
                            trend_completeness = trend_completeness,
-                           decade_completeness = decade_completeness)
+                           decade_completeness = decade_completeness, min_values_for_stats = min_values_for_stats, changepoint = changepoint, collector = collector)
 
   # Count years where annual runoff ratio > 2.0 (per-gage scalar diagnostic)
   n_high <- sum(all_ratios$annual_runoff_ratio > 2.0, na.rm = TRUE)

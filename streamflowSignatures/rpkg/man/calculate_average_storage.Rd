@@ -4,7 +4,14 @@
 \alias{calculate_average_storage}
 \title{Calculate average storage metric (Peters & Aulenbach 2011)}
 \usage{
-calculate_average_storage(streamflow_data)
+calculate_average_storage(
+  streamflow_data,
+  trend_completeness = NULL,
+  decade_completeness = NULL,
+  min_values_for_stats = NULL,
+  changepoint = NULL,
+  collector = NULL
+)
 }
 \arguments{
 \item{streamflow_data}{A data.table with columns: water_year, Q, PPT, dowy.}

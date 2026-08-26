@@ -33,7 +33,7 @@ if (filt$qualifies) {
   # Calculate all signatures (set has_climate = TRUE if PPT column exists)
   sigs <- calculate_all_signatures(gage_filtered, has_climate = "PPT" %in% names(df))
 
-  # sigs is a named list with ~478-551 values
+  # sigs is a named list with ~1,653 values for a full climate+SWE gage
   sigs$Qann_mean
   sigs$BFI_Eckhardt_mean
   sigs$elasticity_static
@@ -68,7 +68,7 @@ and Julia (`StreamflowSignatures`) packages, all sharing
 
 ### Benchmark Results (April 2026 — post Section 3 sync)
 
-Full benchmark: 7,313 gages, 624 signature columns (including recession-parameterized BFI). Julia canonical is the reference.
+Full benchmark (WY 1993-2025 @ 60%): 6,678 gages, 1,653 columns — full parity with canonical Julia after the August 2026 port campaign (Pettitt, stats floor, annual-values collector, b=1 alpha, snow, drought). See docs/CROSS_LANGUAGE_STATUS.md.
 
 | Pair | Perfect (>=0.999) | Good (0.99-0.999) | Poor (<0.99) |
 |------|-------------------|-------------------|-------------|

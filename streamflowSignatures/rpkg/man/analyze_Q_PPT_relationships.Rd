@@ -4,10 +4,22 @@
 \alias{analyze_Q_PPT_relationships}
 \title{Analyze Q-PPT relationships (runoff ratios)}
 \usage{
-analyze_Q_PPT_relationships(streamflow_data)
+analyze_Q_PPT_relationships(
+  streamflow_data,
+  seasonal_flags = NULL,
+  trend_completeness = NULL,
+  decade_completeness = NULL,
+  min_values_for_stats = NULL,
+  changepoint = NULL,
+  collector = NULL
+)
 }
 \arguments{
 \item{streamflow_data}{A data.frame with columns: water_year, Q, PPT, month.}
+
+\item{seasonal_flags}{Optional data.table from \code{preprocess_daily_data()}
+with per-year seasonal completeness flags. When supplied, seasonal runoff
+ratios for incomplete seasons are set to NA.}
 }
 \value{
 Named list of 8 statistics per ratio (5 ratios = 40 values).

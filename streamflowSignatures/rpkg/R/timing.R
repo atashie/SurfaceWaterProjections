@@ -8,7 +8,7 @@
 #' @export
 analyze_flow_timing_trends <- function(streamflow_data,
                                       trend_completeness = NULL,
-                                      decade_completeness = NULL) {
+                                      decade_completeness = NULL, min_values_for_stats = NULL, changepoint = NULL, collector = NULL) {
   required_cols <- c("water_year", "Q", "dowy")
   missing <- setdiff(required_cols, colnames(streamflow_data))
   if (length(missing) > 0) stop(paste("Missing required columns:", paste(missing, collapse = ", ")))
@@ -58,5 +58,5 @@ analyze_flow_timing_trends <- function(streamflow_data,
   metric_columns <- c(paste0("D", percentiles, "_day"), "D25_to_D75", "Dmax")
   generate_stats(timing_by_year, value_cols = metric_columns, year_col = "water_year",
                  trend_completeness = trend_completeness,
-                 decade_completeness = decade_completeness)
+                 decade_completeness = decade_completeness, min_values_for_stats = min_values_for_stats, changepoint = changepoint, collector = collector)
 }

@@ -4,7 +4,14 @@
 \alias{analyze_flashiness_trends}
 \title{Calculate Richards-Baker flashiness index trends}
 \usage{
-analyze_flashiness_trends(streamflow_data)
+analyze_flashiness_trends(
+  streamflow_data,
+  trend_completeness = NULL,
+  decade_completeness = NULL,
+  min_values_for_stats = NULL,
+  changepoint = NULL,
+  collector = NULL
+)
 }
 \arguments{
 \item{streamflow_data}{A data.frame with columns: water_year, Q, dowy.}

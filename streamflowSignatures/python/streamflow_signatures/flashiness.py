@@ -17,6 +17,7 @@ def analyze_flashiness_trends(
     decade_completeness: Optional[float] = None,
     min_values_for_stats: Optional[int] = None,
     changepoint: Optional[dict] = None,
+    collector: Optional[object] = None,
 ) -> Dict[str, float]:
     """
     Calculate Richards-Baker flashiness index trends.
@@ -81,30 +82,35 @@ def analyze_flashiness_trends(
         # values Julia declines (found 2026-08-24 at gage 02244440 WY1999,
         # total Q = -78.8, via the Phase-1 floor-transition gate).
         if total_q <= 0:
-            results_list.append({"water_year": yr, "RB_index": np.nan})
+            # Non-computable year: OMIT the row entirely (Julia pushes only when
+            # the value is non-NaN). Absent row and NaN are semantically
+            # equivalent per the annual-values contract, but omitting keeps the
+            # exported parquet structurally identical across languages and keeps
+            # the `< 3 rows` early return counting COMPUTABLE years, as Julia
+            # does (found 2026-08-25 by the Phase-3 cross-language comparator).
             continue
 
         # Calculate R-B index
         rb_index = np.nansum(q_diff) / total_q
 
         # Store result
-        results_list.append({"water_year": yr, "RB_index": rb_index})
+        results_list.append({"water_year": yr, "flashinessRB": rb_index})
 
     flashiness_by_year = pd.DataFrame(results_list)
 
     # Generate statistics
+    # Metric columns use the CANONICAL names directly (matching Julia, which
+    # never renames): the annual-values collector captures the column name it
+    # is given, so a placeholder + post-hoc rename would put the wrong
+    # signature name in the annual parquet (found 2026-08-25, Phase 3).
     result = generate_stats(
         flashiness_by_year,
-        value_cols=["RB_index"],
+        value_cols=["flashinessRB"],
         year_col="water_year",
         trend_completeness=trend_completeness,
-        decade_completeness=decade_completeness, min_values_for_stats=min_values_for_stats, changepoint=changepoint,
+        decade_completeness=decade_completeness, min_values_for_stats=min_values_for_stats, changepoint=changepoint, collector=collector,
     )
 
-    # Rename columns to match expected output
-    renamed = {}
-    for key, value in result.items():
-        new_key = key.replace("RB_index", "flashinessRB")
-        renamed[new_key] = value
+    renamed = dict(result)
 
     return renamed

@@ -97,6 +97,28 @@ fit_sinusoidal_model <- function(doy_values, log_a_values) {
   }, error = function(e) list(amplitude = NA_real_, minimum_doy = NA_real_))
 }
 
+#' Per-event log(a) under a fixed linear reservoir (b = 1)
+#'
+#' Median of log(-dQ/dt) - log(Q) over the event's valid pairs — no regression.
+#' Port of \code{event_log_a_b1} in julia/src/recession.jl (July 2026
+#' convention): fixing b = 1 removes the slope-intercept convolution of the free
+#' power-law fit. Conventions match the fitting path: first day removed (storm
+#' peak), pairs require Q > 0 and -dQ > 0, natural log.
+#'
+#' @param Q_event Numeric vector of daily Q for one recession event.
+#' @return Median log(a) under b = 1, or NA if there are no valid pairs.
+#' @keywords internal
+event_log_a_b1 <- function(Q_event) {
+  if (length(Q_event) < 3) return(NA_real_)
+  Q_work <- Q_event[-1]                 # Remove first day (storm peak)
+  dQdt <- -diff(Q_work)
+  Q_mid <- Q_work[-length(Q_work)]      # Q at start of each interval
+  valid <- !is.na(Q_mid) & !is.na(dQdt) & Q_mid > 0 & dQdt > 0
+  if (!any(valid)) return(NA_real_)
+  median(log(dQdt[valid]) - log(Q_mid[valid]))
+}
+
+
 #' Analyze recession parameters
 #'
 #' Computes point cloud and event-based recession parameters (log_a, b),
@@ -108,7 +130,7 @@ fit_sinusoidal_model <- function(doy_values, log_a_values) {
 #' @export
 analyze_recession_parameters <- function(streamflow_data,
                                         trend_completeness = NULL,
-                                        decade_completeness = NULL) {
+                                        decade_completeness = NULL, changepoint = NULL, collector = NULL) {
   required_cols <- c("water_year", "Q", "dowy")
   missing <- setdiff(required_cols, colnames(streamflow_data))
   if (length(missing) > 0) stop(paste("Missing required columns:", paste(missing, collapse = ", ")))
@@ -167,7 +189,13 @@ analyze_recession_parameters <- function(streamflow_data,
       mid_idx <- event$indices[ceiling(length(event$indices) / 2)]
       event_dowy <- year_data$dowy[mid_idx]
 
+      # Per-event FREE power-law fit — used for b only; fit success also
+      # gates event acceptance (unchanged event counts)
       params <- fit_recession_event(Q_event, remove_first_day = TRUE)
+
+      # Per-event alpha under fixed b = 1 (same valid-pair definition as the
+      # free fit, so non-NA whenever the fit succeeds)
+      log_a_b1 <- event_log_a_b1(Q_event)
 
       # Compute discrete recession constant alpha = Q_{i+1}/Q_i (b=1 linear reservoir)
       # INDEPENDENT of power-law fit — depends only on raw Q pairs
@@ -186,12 +214,14 @@ analyze_recession_parameters <- function(streamflow_data,
       }
 
       if (!is.na(params$log_a) && !is.na(params$b)) {
-        event_log_a_values <- c(event_log_a_values, params$log_a)
+        event_log_a_values <- c(event_log_a_values, log_a_b1)
         event_b_values <- c(event_b_values, params$b)
 
+        # log_a stored is the b=1 value — the seasonality sinusoid consumes
+        # these (July 2026 convention)
         all_recession_events[[length(all_recession_events) + 1]] <- list(
           water_year = yr, dowy = event_dowy,
-          log_a = params$log_a, b = params$b
+          log_a = log_a_b1, b = params$b
         )
 
         # Concavity
@@ -224,35 +254,31 @@ analyze_recession_parameters <- function(streamflow_data,
 
     # Point cloud
     if (length(all_Q) > 10) {
+      log_Q <- log(all_Q)
+      log_dQdt <- log(all_dQ_dt)
+
+      # log_a under fixed b = 1 (linear reservoir): log(a) = log(-dQ/dt) -
+      # log(Q). No regression is involved, so this needs no singularity gate
+      # and is independent of the free b fit below.
+      annual_metrics$log_a_pointcloud[annual_metrics$water_year == yr] <-
+        median(log_dQdt - log_Q, na.rm = TRUE)
+
+      # b from the FREE point-cloud fit (unchanged)
       tryCatch({
-        pc_fit <- lm(log(all_dQ_dt) ~ log(all_Q))
-        b_pc   <- coef(pc_fit)[2]
-        log_a_pc <- median(log(all_dQ_dt) - b_pc * log(all_Q), na.rm = TRUE)
-        annual_metrics$b_pointcloud[annual_metrics$water_year == yr]     <- b_pc
-        annual_metrics$log_a_pointcloud[annual_metrics$water_year == yr] <- log_a_pc
+        b_pc <- coef(lm(log_dQdt ~ log_Q))[2]
+        if (!is.na(b_pc)) {
+          annual_metrics$b_pointcloud[annual_metrics$water_year == yr] <- b_pc
+        }
       }, error = function(e) NULL)
     }
 
-    # Events
-    if (length(event_log_a_values) > 0) {
-      log_a_recalc <- numeric(0)
-      for (ei in seq_along(recession_events)) {
-        if (ei <= length(event_b_values) && !is.na(event_b_values[ei])) {
-          ev <- recession_events[[ei]]
-          Qe <- year_data$Q[ev$indices]
-          if (length(Qe) > 1) {
-            Qs <- Qe[-1]
-            dQs <- -diff(Qe[-1])
-            vi <- which(Qs[-length(Qs)] > 0 & dQs > 0)
-            if (length(vi) > 0) {
-              la <- log(dQs[vi]) - median_b * log(Qs[-length(Qs)][vi])
-              log_a_recalc <- c(log_a_recalc, median(la, na.rm = TRUE))
-            }
-          }
-        }
-      }
-      if (length(log_a_recalc) > 0) {
-        annual_metrics$log_a_events[annual_metrics$water_year == yr] <- median(log_a_recalc, na.rm = TRUE)
+    # Events. log_a_events uses the per-event fixed-b=1 values — the previous
+    # median-b recalculation is gone: alpha is decoupled from b by assuming a
+    # linear reservoir everywhere.
+    if (length(event_b_values) > 0) {
+      valid_b1 <- event_log_a_values[!is.na(event_log_a_values)]
+      if (length(valid_b1) > 0) {
+        annual_metrics$log_a_events[annual_metrics$water_year == yr] <- median(valid_b1)
       }
       annual_metrics$b_events[annual_metrics$water_year == yr] <- median_b
     }
@@ -274,7 +300,7 @@ analyze_recession_parameters <- function(streamflow_data,
     n_events_stats <- generate_stats(events_df, value_cols = "n_recession_events",
                                      year_col = "water_year",
                                      trend_completeness = trend_completeness,
-                                     decade_completeness = decade_completeness)
+                                     decade_completeness = decade_completeness, changepoint = changepoint, collector = collector)
   } else {
     n_events_stats <- empty_stats("n_recession_events")
   }
@@ -298,7 +324,7 @@ analyze_recession_parameters <- function(streamflow_data,
   result <- generate_stats(annual_metrics, value_cols = signatures_with_stats,
                            year_col = "water_year",
                            trend_completeness = trend_completeness,
-                           decade_completeness = decade_completeness)
+                           decade_completeness = decade_completeness, changepoint = changepoint, collector = collector)
 
   # Add n_recession_events stats (computed independently above)
   result <- c(result, n_events_stats)

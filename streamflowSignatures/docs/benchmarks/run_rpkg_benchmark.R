@@ -338,10 +338,14 @@ for (i in seq_along(all_gages)) {
       }
     }
 
-    # QA/QC flags
+    # QA/QC flags. compute_qa_flags ALREADY returns names prefixed with
+    # "flagged_for_" — the previous `paste0("flagged_for_", nm)` produced
+    # `flagged_for_flagged_for_*` for all 12 flags. Pre-existing; invisible to
+    # the intersection-based comparison scripts, caught 2026-08-25 by the
+    # strict schema gate (check_schema_equality.py) on the rpkg baseline.
     qa <- compute_qa_flags(sigs)
     for (nm in names(qa)) {
-      sigs[[paste0("flagged_for_", nm)]] <- qa[[nm]]
+      sigs[[nm]] <- qa[[nm]]
     }
 
     results_list[[gage]] <- sigs

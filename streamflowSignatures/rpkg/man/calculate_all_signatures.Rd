@@ -12,7 +12,13 @@ calculate_all_signatures(
   decade_completeness = NULL,
   climate_data = NULL,
   include_qa_flags = FALSE,
-  area_normalized = TRUE
+  area_normalized = TRUE,
+  changepoint = NULL,
+  min_values_for_stats = NULL,
+  collector = NULL,
+  snow_data = NULL,
+  snow_climate_years = NULL,
+  gage_id = NULL
 )
 }
 \arguments{

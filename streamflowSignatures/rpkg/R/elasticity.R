@@ -15,7 +15,7 @@
 calculate_streamflow_elasticity <- function(streamflow_data,
                                             rolling_window = NULL,
                                             trend_completeness = NULL,
-                                            decade_completeness = NULL) {
+                                            decade_completeness = NULL, changepoint = NULL, collector = NULL) {
   if (is.null(rolling_window)) rolling_window <- pkg_env$elasticity_window_years
 
   required_cols <- c("water_year", "Q", "PPT")
@@ -88,7 +88,7 @@ calculate_streamflow_elasticity <- function(streamflow_data,
       ts <- generate_stats(roll_dt, value_cols = "elasticity_rolling",
                            year_col = "water_year",
                            trend_completeness = trend_completeness,
-                           decade_completeness = decade_completeness)
+                           decade_completeness = decade_completeness, changepoint = changepoint, collector = collector)
       result <- c(result, ts)
     } else {
       result <- c(result, empty_stats("elasticity_rolling"))
@@ -120,7 +120,7 @@ calculate_streamflow_elasticity <- function(streamflow_data,
     yoy_stats <- generate_stats(yoy_dt, value_cols = "elasticity_annual",
                                 year_col = "water_year",
                                 trend_completeness = trend_completeness,
-                                decade_completeness = decade_completeness)
+                                decade_completeness = decade_completeness, changepoint = changepoint, collector = collector)
     result <- c(result, yoy_stats)
   } else {
     result <- c(result, empty_stats("elasticity_annual"))

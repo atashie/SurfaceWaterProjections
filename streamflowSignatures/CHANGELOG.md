@@ -8,6 +8,21 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
 ## [Unreleased]
 
 ### Planned
+- **Canonical cleanup (LOW priority, non-blocking): make Julia's storage
+  `unique` use `==` semantics rather than `isequal`.** `julia/src/storage.jl`
+  builds `Q_unique = unique(Q_valid)` and gates the year on
+  `length(Q_unique) < 10`. Julia's `unique` compares with `isequal`, under which
+  **−0.0 and +0.0 are DISTINCT**, so a year containing both signed zeros counts
+  one extra "unique" value; numpy (`==`) and R (`unique`, also `==`) do not.
+  Measured impact across the whole WY 1993–2025 product: **exactly 1 gage-year
+  in 18.9 M** (gage 08134000, `avg_storage`, WY2017 — 365 days, 9 distinct Q
+  values plus both signed zeros). The port is arguably the more correct side
+  here: for a *numerical* distinctness threshold, −0.0 == +0.0. **Direction of
+  fix: change JULIA to `==` semantics** (e.g. `unique(x -> x + 0.0, Q_valid)`
+  or an explicit tolerance-free numeric dedup), not the ports. **Explicitly NOT
+  blocking**: it does not justify re-running any benchmark or delaying the port
+  campaign (user decision, 2026-08-26); fold it into the next behavior-changing
+  Julia release and let it land in the next product regeneration.
 - Port the Julia-only features to Python and rpkg. As of Aug 2026 that is **six**:
   Pettitt changepoint fields, the 20-value stats floor, the annual-values collector, the
   b=1 recession alpha, the 14 snow metrics, and the 10 drought metrics. Python and rpkg
@@ -606,6 +621,210 @@ campaign. Key facts established on the way:
 - Windows where seasons CAN fail completeness (other configs, legacy-path users)
   will see seasonal runoff ratios become NaN where flow volumes already did — the
   two families are now consistent.
+
+### Port campaign: rpkg Phases 3–5 implemented + fixture-verified (2026-08-26)
+Written and validated WHILE the rpkg Phase-1/2 benchmark ran — source edits and
+`devtools::load_all` (which loads into a separate session) never touch the
+installed library the running benchmark uses; only `R CMD INSTALL` would.
+- **Phase 3 (collector)**: `annual_collector()` / `collector_drain()` /
+  `collect_annual()` in `stats.R`, using an environment with pre-grown chunk
+  lists rather than `c()` append (O(n²) in R); collection precedes every gate;
+  threaded through all 13 module functions and the orchestrator. Contract
+  verified: stats identical with/without a collector, values equal the input
+  series, integer years, 0 duplicate keys, and rows still collected when the
+  metric is below `min_rows` AND below the stats floor.
+- **Phase 4 (snow)**: `rpkg/R/snow.R` (14 metrics) + preprocessor SWE support
+  in `io.R` (`swe`→`SWE`, per-year policy mirroring PPT, new `valid_swe_years`)
+  + record-anchored decade gate + the orchestrator's explicit-`snow_data` rule.
+  **Cross-checked vs canonical Julia: 126 values over 3 fixtures, 0 mismatches,
+  worst relative difference 3.9e-16.**
+- **Phase 5 (drought)**: `rpkg/R/drought.R` (`weibull_quantile`, gap-aware
+  `smooth_daily_flow`, duration/deficit at the 5 levels with strict `<`,
+  threshold scalars) + config fail-fast + `drought_enabled` gate.
+  **Cross-checked vs canonical Julia: 105 values over 3 fixtures (seasonal,
+  intermittent, gapped), 0 mismatches, worst relative difference 3.6e-14.**
+- **No MK-method change is needed for rpkg** — `Kendall::MannKendall` already
+  reproduces the Julia formula exactly, so rpkg was canonical on that point
+  throughout; Python was the sole outlier.
+- rpkg suite: **1,003 passing / 0 failures** (was 760), including new
+  `test-annual_collector.R`, `test-snow_metrics.R` and `test-drought_metrics.R`
+  — the last carrying the same Sep 30 → Oct 1 boundary-attribution fixture
+  Codex required of the Julia original.
+
+### Port campaign: PYTHON PORT FEATURE-COMPLETE + VALIDATED (2026-08-25)
+The Phase-4/5 benchmark (snow + drought, 83 min) produced **6,678 gages ×
+1,653 columns — the Julia reference count exactly** — and passed the STRICT
+schema gate with NO waivers (column set and gage set both equal to the
+reference). Value comparison over 1,620 shared signature columns: mean R²
+0.999071, 1,443 Perfect / 121 Good / 55 Poor / 1 Low, and **the Extremely-Low
+and Very-Low tiers are EMPTY**. **All 56 columns below R² 0.99 are Pettitt
+segment MK p-values** — the single documented methodology difference (see the
+Phase-2 entry); zero non-Pettitt columns diverge. The annual parquets share
+**18,898,405 of 18,898,406 rows** with identical 100-signature sets, 0 duplicate
+keys and **0 NA-pattern mismatches**; 267 of 18.2 M finite pairs differ by
+>1e-6 (0.0015 %), all discrete threshold-crossing metrics (the FP-tie class).
+- **The one non-shared row is fully explained**: gage 08134000 / avg_storage /
+  WY2017 has 365 days but only 9 distinct Q values — including BOTH −0.0 and
+  +0.0. Julia's `unique` uses `isequal` (−0.0 ≠ +0.0 → 10 unique → passes its
+  `< 10` guard); numpy's uses `==` (→ 9 unique → skips the year). A pure IEEE
+  signed-zero semantics difference between the two languages' `unique`,
+  1 row in 18.9 M. Like the MK p-value method it is a canonical-side
+  convention choice, so it was NOT changed unilaterally — logged for Phase 6.
+- rpkg Phase-0 baseline also complete: 516.9 min, 6,678 gages, **0 errored**,
+  installed-package testthat **760/760**, and its **gage set is identical to the
+  reference** — the rebuilt R runner reproduces Julia's qualification exactly.
+  **Found + fixed (pre-existing): all 12 rpkg QA-flag columns were
+  DOUBLE-prefixed** (`flagged_for_flagged_for_*`) because the runner
+  re-prefixed names `compute_qa_flags` already prefixes — invisible to the
+  intersection-based comparison scripts, caught by the strict schema gate.
+
+### Port campaign Phase 5 (2026-08-25, Python drought — implemented)
+All 10 drought metrics + 5 threshold scalars ported
+(`python/streamflow_signatures/drought.py`): `weibull_quantile` (Hyndman-Fan
+type 6 with the project's `below_plotting_range_policy="na"` refusal to
+extrapolate), `smooth_daily_flow` (7-day centered, applied within maximal runs
+of consecutive dates so it never averages across a gap), duration/deficit at the
+five USDM levels with the STRICT `<` comparison, config fail-fast validation
+mirroring Julia's, and the `DROUGHT_ENABLED` orchestrator gate (absent config
+section => family off). **Cross-language fixture check: 105 values across three
+fixtures — seasonal low-flow, intermittent (zero thresholds + strict `<`), and a
+GAPPED record that proves the smoothing never blends across a temporal break —
+0 mismatches, worst relative difference 6.0e-15.** Tests include the
+boundary-attribution fixture Codex demanded of the Julia original (a low-flow
+block straddling Sep 30 → Oct 1 must SPLIT across two water years; a
+conservation check alone would pass under a uniform year shift).
+
+**Python is now FEATURE-COMPLETE for all six queued features** (Pettitt, stats
+floor, annual collector, b=1 alpha, snow, drought). Suite: 130/130.
+
+### Port campaign Phase 4 (2026-08-25, Python snow — implemented)
+All 14 snow metrics ported (`python/streamflow_signatures/snow.py`), plus the
+preprocessor SWE plumbing (`swe`→`SWE` normalization, per-year SWE policy
+mirroring PPT, new `valid_swe_years` return key), the record-anchored decade
+gate via the Phase-1b `force_skip_trends` mechanism, orchestrator
+`snow_data`/`snow_climate_years` kwargs (explicit frame only — an SWE column in
+the main gage frame is NEVER used implicitly, matching Julia), and runner SWE
+plumbing. **Cross-language fixture check: 126 values across three discriminating
+synthetic gages (clean triangle snowpack, mid-winter thaw producing two spells,
+and a vanishing snowpack that trips the decade gate) — 0 mismatches, worst
+relative difference 3.5e-16.** Python suite 112/112 (21 new snow tests). Two
+hand-derived test expectations were off by one against the code; the code was
+correct (it matched Julia exactly), the expectations were corrected — and the
+gate fixture was rebuilt so it isolates the record-anchored gate from the
+20-value stats floor rather than conflating them.
+
+### Port campaign Phase 3 findings (2026-08-25, Python — in progress)
+Annual-values collector ported to Python (`AnnualCollector` + `_collect_annual`,
+threaded through all 13 signature functions and the orchestrator — including the
+floor-exempt recession/elasticity, as Julia does; collection happens BEFORE every
+gate, so the exported rows are exactly what the statistics were computed from).
+Runner drains per-gage collectors into a long-format zstd parquet
+(`{prefix}_signatures_annual.parquet`, `gage_id/signature/water_year/value`),
+written before the metadata merge so a metadata failure cannot lose it.
+- **Fixed (schema, BOTH ports): flashiness and FDC used placeholder metric names
+  internally (`RB_index`, `slp_all`/`slp_90th`/`slp_mid`) and renamed the stat
+  keys afterwards, where canonical Julia uses the final names
+  (`flashinessRB`, `FDCall`/`FDC90th`/`FDCmid`) throughout.** Invisible in the
+  summary CSV (the rename produced identical column names) but the collector
+  captures the column name it is GIVEN — so the annual parquet would have
+  carried four wrong signature names in both ports. Found by the collector's
+  signature-coverage test. Both ports now use the canonical names directly and
+  the rename steps are gone; summary output is unchanged by construction.
+  (Exactly the class Codex F6 predicted a self-referential validator would miss.)
+Python suite 91/91. Phase-3 benchmark running.
+
+### Port campaign Phase 2 findings (2026-08-25, Python — in progress)
+b=1 recession alpha ported to Python (`log_a_pointcloud` / `log_a_events` /
+seasonality now use `median(log(-dQ/dt) − log(Q))` with b fixed at 1; `b_*`,
+`concavity`, `alpha_linear` keep their free fits). Cross-checked by running
+three synthetic gages (linear reservoir, quadratic reservoir, seasonally
+alternating alpha) through BOTH languages: **the b=1 values are bit-identical**
+(log_a pointcloud/events mean+median exact; `recession_alpha_point_cloud_
+linear_reservoir` exact; free-fit `b` within 1 ulp; event counts exact).
+- **Fixed (alignment, pre-existing): Python's mid-event day-of-water-year used
+  the UPPER-middle index (`indices[len//2]`) where canonical Julia uses the
+  FLOOR midpoint (`div(start+end, 2)`)** — so every EVEN-length recession event
+  was timed one day late (8 of 12 events/year on the monthly-recession
+  fixture). It feeds only the seasonality sinusoid, and was invisible while the
+  ports fed that sinusoid free-fit log_a values; the b=1 alignment exposed it.
+  rpkg's 1-based `ceiling(n/2)` is algebraically identical to Julia and was
+  already correct — **Python only**. After the fix the seasonality outputs
+  converge from ~1e-3 relative to **0.0 / 1.7e-15** on the signal-bearing
+  fixtures (the zero-amplitude linear-reservoir gage has no seasonal signal, so
+  its fitted phase is meaningless in either language). Regression test pins the
+  formula and the end-to-end equality.
+Python suite 77/77. **Phase-2 exit gates PASS** (89.7 min benchmark, 6,678 ×
+1,264): Gate A surgical — exactly 38 log_a-family columns moved vs Phase 1 and
+**0 other columns changed bitwise**; Gate B convergence — all 38 now Perfect
+(R² ≥ 0.999) against the Julia reference, against −3.13 … −0.28 before.
+Overall 6-tier: mean R² 0.999203, **the Extremely-Low and Very-Low tiers are
+now EMPTY** (Phase 1 had 39 columns below 0.50); 1,112 Perfect / 85 Good /
+33 Poor / 1 Low of 1,231 shared columns; 5 NA-pattern mismatches in total.
+
+**Last remaining divergence class isolated: Mann-Kendall p-value METHOD (full
+mechanism established 2026-08-26 — see the diagnosis below, which SUPERSEDES
+the first-pass account).** Every sub-0.99 column in the feature-complete port
+is an MK p-value; taus, slopes, means, Spearman p-values and changepoint
+locations are all unaffected (`_mk_rho` 100/100 Perfect, `_spearman_pval`
+100/100 Perfect, `_mk_pval` 56 of 300 below 0.99).
+
+Two distinct mechanisms, the first dominant:
+1. **Continuity correction on TIED series.** With ties, scipy's `kendalltau`
+   uses its asymptotic branch with `z = S/√var_S` and NO continuity
+   correction; Julia (and R) use `z = (S∓1)/√var_S`. Ties are pervasive here —
+   day counts (`D*_day`, `TQmean`), pulse counts, drought durations,
+   `snow_cover_days`. Measured on integer-valued series: median |Δp| = 0.058
+   at n = 10, 0.021 at n = 20, 0.006 at n = 46; significance-flip rate at
+   α = 0.05 falls from 1.2 % to 0.1 % over the same range.
+2. **Exact vs normal on UNTIED series.** With no ties scipy uses the EXACT
+   Kendall distribution regardless of n (verified: scipy 1.18 selects on ties,
+   NOT on sample size — correcting the first-pass claim). This effect is small:
+   median |Δp| ≈ 0.002–0.004 and **zero** significance flips in 4,000 trials
+   per n.
+
+**R is NOT a third variant — `Kendall::MannKendall` reproduces the Julia
+formula to 1.000 at every n tested.** Julia is a faithful port of R's
+convention, so Julia and rpkg agree and **Python is the sole outlier**.
+
+Real-world impact on the WY 1993–2025 product (Julia vs Python, per cell):
+main-path `_mk_pval` 1,298 significance flips in 551,218 cells (**0.24 %**);
+Pettitt segment p-values 5,256 in 1,161,770 (**0.45 %**); Spearman p-values
+2 in 551,219 (0.0004 %, i.e. not affected).
+
+Options were: (a) accept and document; (b) standardize all three on the exact
+method (changes Julia AND rpkg, i.e. the delivered products, and exact is
+unavailable under ties anyway — where most of the divergence lives);
+(c) change PYTHON only to the continuity-corrected normal formula.
+
+**DECIDED (user, 2026-08-26): option (c) — IMPLEMENTED same day.** Python's
+`mann_kendall_test` no longer calls `scipy.stats.kendalltau`; it computes S,
+the tie-corrected variance, tau-b and the continuity-corrected normal p-value
+directly, mirroring `julia/src/stats.jl` line for line. tau is now computed
+here too (algebraically identical to scipy's tau-b for a tie-free time index,
+but this removes the last-ulp difference). Verified **BIT-EXACT against Julia
+on 12 fixtures** spanning untied/tied, short/long, monotone/constant/reversing,
+negative S, single-tie and the n≤3 and constant-series NaN contracts — both
+tau and p-value, worst relative difference 0.000e+00. Rationale for the
+direction: R's `Kendall::MannKendall` reproduces the Julia formula exactly, so
+canonical is corroborated by the convention's origin, and the continuity
+correction is the standard treatment for a discrete statistic — scipy's
+omission of it under ties is the anomaly. Regression tests pin all 12 fixtures
+plus an explicit assertion that the result differs from scipy's uncorrected
+asymptotic value. Python suite 143/143.
+
+**VALIDATED (86.6 min benchmark, 6,678 × 1,653, strict schema gate PASS):**
+mean R² over 1,620 shared columns rose 0.999071 → **0.999988**, min R²
+0.932816 → **0.997935**, and the tier table went 1,443/121/55/1 →
+**1,615 Perfect (99.7 %) / 5 Good / 0 Poor / 0 Low** — *no column below
+R² 0.99 and no tier below "Good" populated*. Significance flips at α = 0.05
+collapsed from 1,298 → **5** on the main path (0.2355 % → 0.0009 %) and
+5,256 → **11** on Pettitt segments (0.4524 % → 0.0009 %). The 5 residual Good
+columns are Pettitt fields on 3 bases only and are *downstream of changepoint
+tie flips*, not the MK formula: `cp_year` agrees exactly on 597,505/597,527
+cells (99.9963 %), and a flipped changepoint year moves the segment split.
+The annual parquet is **byte-identical** to the pre-fix run
+(`DataFrame.equals` True), confirming the change touches statistics only.
+**The Python port now has no remaining divergence class.**
 
 ### Port campaign Phase 1 findings (2026-08-24, in progress)
 Phase 1 (Pettitt + stats floor → Python) surfaced four genuine defects, each caught

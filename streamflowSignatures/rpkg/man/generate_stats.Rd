@@ -4,7 +4,18 @@
 \alias{generate_stats}
 \title{Generate 8 summary statistics for each metric column}
 \usage{
-generate_stats(data, value_cols = NULL, year_col = "water_year", min_rows = 3)
+generate_stats(
+  data,
+  value_cols = NULL,
+  year_col = "water_year",
+  min_rows = 3,
+  trend_completeness = NULL,
+  decade_completeness = NULL,
+  changepoint = NULL,
+  min_values_for_stats = NULL,
+  force_skip_trends = NULL,
+  collector = NULL
+)
 }
 \arguments{
 \item{data}{A data.frame or data.table with a year column and value columns.}
@@ -15,6 +26,35 @@ If NULL, uses all numeric columns except year_col.}
 \item{year_col}{Name of the year column (default "water_year").}
 
 \item{min_rows}{Minimum non-NA rows required for trend statistics.}
+
+\item{trend_completeness}{Numeric in (0,1] or NULL. If non-NULL, trend
+statistics are set to NA when the fraction of non-NA values falls below
+this threshold. Mean and median are still computed.}
+
+\item{decade_completeness}{Numeric in (0,1] or NULL. If non-NULL (and
+\code{trend_completeness} is also non-NULL), the first and last decades
+of the series must each have at least this fraction of non-NA values,
+otherwise trend statistics are set to NA.}
+
+\item{changepoint}{Named list (start_year, end_year, min_total_obs,
+min_segment_obs) or NULL. When supplied, 8 additional \code{_pettitt_*}
+fields are emitted per metric. Changepoint analysis runs INDEPENDENTLY of
+the trend-completeness gates (matching Julia): a trend-gated metric still
+gets its Pettitt fields, while a metric below \code{min_rows} or the stats
+floor gets NA Pettitt fields.}
+
+\item{min_values_for_stats}{Integer or NULL. Stats floor: a metric with
+fewer non-NA annual values emits NA for ALL 8 statistics AND its
+changepoint fields. Recession and elasticity are exempt at the
+orchestration layer (the argument is never passed to them).}
+
+\item{force_skip_trends}{Character vector of metric names whose 6 trend
+statistics are suppressed through the SAME path as trend_completeness —
+mean/median and changepoint unaffected.}
+
+\item{collector}{Optional \code{annual_collector()} environment. When
+supplied, each metric's annual series is appended in long format BEFORE
+any gating (export contract). Read-only with respect to the statistics.}
 }
 \value{
 Named list of statistics (metric_stat = value).

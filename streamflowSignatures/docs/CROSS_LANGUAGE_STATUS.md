@@ -1,8 +1,88 @@
 # Cross-Language Implementation Status
 
-Detailed status of Python and rpkg implementations relative to the Julia canonical reference (April 2026). R monolithic (`R/helperFunctions.R`) is deprecated for signature development; rpkg is the maintained R package.
+> **STATUS (August 2026): the August 2026 port campaign brought Python and rpkg
+> to FULL feature parity with canonical Julia — all six previously Julia-only
+> features (Pettitt changepoint fields, the 20-value stats floor, the
+> annual-values collector, the b=1 recession alpha, 14 snow metrics, 10 drought
+> metrics). Everything below the "Historical record" divider describes the
+> APRIL 2026 state, when the ports reproduced only a 623-signature-column
+> subset. It is retained for provenance; do not read it as current.**
+> Campaign plan and phase-by-phase record:
+> `docs/plans/2026-08-24-port-julia-features-to-python-rpkg-plan.md` and
+> CHANGELOG → August 2026.
 
-For summary results and how-to-run commands, see the [Cross-Language Benchmarks section in DEVELOPMENT.md](../DEVELOPMENT.md#cross-language-benchmarks). For the historical record of individual bug fixes, see [CHANGELOG.md](../CHANGELOG.md).
+## Current status (August 2026)
+
+| | Julia | Python | rpkg |
+|---|---|---|---|
+| Role | **Canonical** | Full port | Full port |
+| Summary columns (WY 1993–2025 @ 60 %) | 1,653 | **1,653** | 1,653 (pending final run) |
+| Pettitt changepoint fields | yes | yes | yes |
+| 20-value stats floor | yes | yes | yes |
+| Annual-values collector + parquet | yes | yes | yes |
+| b = 1 recession alpha | yes | yes | yes |
+| Snow metrics (14) | yes | yes | yes |
+| Drought metrics (10 + 5 scalars) | yes | yes | yes |
+
+### Python vs Julia — feature-complete validation (2026-08-26)
+
+Strict schema gate **PASS** with no waivers: identical column set (1,653) and
+gage set (6,678). Over 1,620 shared signature columns:
+
+| Tier | Count |
+|---|---|
+| Perfect (R² ≥ 0.999) | **1,615 (99.7 %)** |
+| Good (0.99–0.999) | 5 |
+| Poor / Low / Very Low / Extremely Low | **0 / 0 / 0 / 0** |
+
+Mean R² **0.999988**, min R² **0.997935**. Annual parquet: identical
+100-signature sets, 0 duplicate keys, **0 NA-pattern mismatches**, 18,898,405 of
+18,898,406 rows shared.
+
+**No divergence class remains.** The two residuals are characterised, not
+merely tolerated:
+1. **Pettitt changepoint ties.** `cp_year` agrees exactly on 597,505/597,527
+   cells (99.9963 %); where a rank tie flips the changepoint year, that base's
+   segment split moves and its segment p-values follow. This accounts for all
+   5 Good columns (3 bases: FDC90th, Q90, Qsum) and for 267 of 18.2 M annual
+   values (0.0015 %), all discrete threshold-crossing metrics (`D*_day`,
+   `D25_to_D75`, `TQmean`).
+2. **Signed-zero `unique` semantics** — 1 annual row in 18.9 M. Julia's
+   `unique` uses `isequal` (−0.0 ≠ +0.0); numpy and R use `==`. Logged as a
+   non-blocking canonical cleanup (CHANGELOG → Planned).
+
+### Convention decisions taken during the campaign
+
+- **Mann-Kendall p-value method.** scipy's `kendalltau` selects on TIES (not
+  sample size): exact when untied, asymptotic WITHOUT continuity correction
+  when tied. Julia and R both use the continuity-corrected normal
+  approximation, and `Kendall::MannKendall` reproduces the Julia formula
+  exactly — so Python was the sole outlier. Python was changed to the canonical
+  formula (2026-08-26), which cut significance-call disagreement from 0.24 % to
+  0.0009 % (main path) and 0.45 % to 0.0009 % (Pettitt segments).
+- **Sparse-family row emission.** flashiness and both BFI families OMIT
+  non-computable years rather than emitting NaN rows, matching Julia's
+  `total_Q <= 0 -> continue`.
+- **Canonical metric names throughout.** flashiness and FDC now use
+  `flashinessRB` / `FDCall` / `FDC90th` / `FDCmid` internally in all three
+  languages; the ports' old placeholder-then-rename pattern would have written
+  the wrong signature names into the annual parquet.
+
+### Defects found by the campaign's gates
+
+The strict schema gate, the floor-transition check and the cross-language
+annual comparator each caught real defects that the older intersection-based
+comparison could not see: the ports' flashiness `== 0` guard (vs canonical
+`<= 0`), Python's `qp_seasonality`/`storage` silently dropping their new
+changepoint keys, placeholder metric names in BOTH ports, NaN-vs-absent row
+emission, rpkg's 12 double-prefixed QA-flag columns, and a mask-tool float
+parser. Full list: CHANGELOG → August 2026.
+
+---
+
+# Historical record (April 2026 and earlier)
+
+Everything below predates the August 2026 port campaign.
 
 ## Implementation Status
 

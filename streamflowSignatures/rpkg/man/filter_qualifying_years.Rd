@@ -14,7 +14,7 @@ A list with \code{qualifying_years} (integer vector) and
 \code{qualifies} (logical).
 }
 \description{
-Matches the canonical R filtering in process_signatures_from_parquet():
+Matches the canonical filtering in process_signatures_from_parquet():
 \enumerate{
 \item Minimum days with Q > threshold per water year
 \item Minimum fraction of non-NA days per water year (accounting for leap years)

@@ -18,6 +18,7 @@ def analyze_fdc_trends(
     decade_completeness: Optional[float] = None,
     min_values_for_stats: Optional[int] = None,
     changepoint: Optional[dict] = None,
+    collector: Optional[object] = None,
 ) -> Dict[str, float]:
     """
     Calculate Flow Duration Curve slope trends.
@@ -61,7 +62,7 @@ def analyze_fdc_trends(
     # Calculate FDC slopes for each year
     for yr, year_data in df.groupby("water_year", sort=False):
 
-        row = {"water_year": yr, "slp_all": np.nan, "slp_90th": np.nan, "slp_mid": np.nan}
+        row = {"water_year": yr, "FDCall": np.nan, "FDC90th": np.nan, "FDCmid": np.nan}
 
         # Remove NA and negative values from Q
         q_values = year_data["Q"].dropna().values
@@ -81,7 +82,7 @@ def analyze_fdc_trends(
         if n >= 10:
             try:
                 result = scipy_stats.linregress(exceedance, log_flow)
-                row["slp_all"] = result.slope
+                row["FDCall"] = result.slope
             except Exception:
                 pass
 
@@ -93,7 +94,7 @@ def analyze_fdc_trends(
                         exceedance[low_flow_mask],
                         log_flow[low_flow_mask]
                     )
-                    row["slp_90th"] = result.slope
+                    row["FDC90th"] = result.slope
                 except Exception:
                     pass
 
@@ -105,7 +106,7 @@ def analyze_fdc_trends(
                         exceedance[mid_flow_mask],
                         log_flow[mid_flow_mask]
                     )
-                    row["slp_mid"] = result.slope
+                    row["FDCmid"] = result.slope
                 except Exception:
                     pass
 
@@ -116,18 +117,16 @@ def analyze_fdc_trends(
     # Generate statistics
     result = generate_stats(
         fdc_by_year,
-        value_cols=["slp_all", "slp_90th", "slp_mid"],
+        value_cols=["FDCall", "FDC90th", "FDCmid"],
         year_col="water_year",
         trend_completeness=trend_completeness,
-        decade_completeness=decade_completeness, min_values_for_stats=min_values_for_stats, changepoint=changepoint,
+        decade_completeness=decade_completeness, min_values_for_stats=min_values_for_stats, changepoint=changepoint, collector=collector,
     )
 
-    # Rename columns to match expected output
-    renamed = {}
-    for key, value in result.items():
-        new_key = key.replace("slp_all", "FDCall")
-        new_key = new_key.replace("slp_90th", "FDC90th")
-        new_key = new_key.replace("slp_mid", "FDCmid")
-        renamed[new_key] = value
+    # Metric columns use the CANONICAL names directly (matching Julia, which
+    # never renames): the annual-values collector captures the column name it
+    # is given, so a placeholder + post-hoc rename would put the wrong
+    # signature name in the annual parquet (found 2026-08-25, Phase 3).
+    renamed = dict(result)
 
     return renamed

@@ -19,6 +19,7 @@ def calculate_average_storage(
     decade_completeness: Optional[float] = None,
     min_values_for_stats: Optional[int] = None,
     changepoint: Optional[dict] = None,
+    collector: Optional[object] = None,
 ) -> Dict[str, float]:
     """
     Calculate average catchment storage trends.
@@ -141,7 +142,7 @@ def calculate_average_storage(
         value_cols=["avg_storage"],
         year_col="water_year",
         trend_completeness=trend_completeness,
-        decade_completeness=decade_completeness, min_values_for_stats=min_values_for_stats, changepoint=changepoint,
+        decade_completeness=decade_completeness, min_values_for_stats=min_values_for_stats, changepoint=changepoint, collector=collector,
     )
 
     # Return the full generate_stats output (merged wholesale, as Julia does):

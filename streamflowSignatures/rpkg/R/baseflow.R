@@ -88,7 +88,7 @@ lyne_hollick_filter <- function(Q, alpha = pkg_env$lyne_hollick_alpha,
 #' @export
 analyze_baseflow_indices <- function(streamflow_data,
                                     trend_completeness = NULL,
-                                    decade_completeness = NULL) {
+                                    decade_completeness = NULL, min_values_for_stats = NULL, changepoint = NULL, collector = NULL) {
   required_cols <- c("water_year", "Q", "dowy")
   missing <- setdiff(required_cols, colnames(streamflow_data))
   if (length(missing) > 0) stop(paste("Missing required columns:", paste(missing, collapse = ", ")))
@@ -128,7 +128,7 @@ analyze_baseflow_indices <- function(streamflow_data,
   generate_stats(bfi_by_year, value_cols = c("BFI_Eckhardt", "BFI_LyneHollick"),
                  year_col = "water_year",
                  trend_completeness = trend_completeness,
-                 decade_completeness = decade_completeness)
+                 decade_completeness = decade_completeness, min_values_for_stats = min_values_for_stats, changepoint = changepoint, collector = collector)
 }
 
 #' Analyze baseflow indices with recession-derived parameters
@@ -151,7 +151,8 @@ analyze_baseflow_indices_with_parameters <- function(
     BFImax = pkg_env$eckhardt_bfimax,
     passes = pkg_env$lyne_hollick_passes,
     trend_completeness = NULL,
-    decade_completeness = NULL
+    decade_completeness = NULL,
+    min_values_for_stats = NULL, changepoint = NULL, collector = NULL
 ) {
   metrics <- c("BFI_Eckhardt_param", "BFI_LyneHollick_param")
 
@@ -199,5 +200,5 @@ analyze_baseflow_indices_with_parameters <- function(
 
   generate_stats(bfi_by_year, value_cols = metrics, year_col = "water_year",
                  trend_completeness = trend_completeness,
-                 decade_completeness = decade_completeness)
+                 decade_completeness = decade_completeness, min_values_for_stats = min_values_for_stats, changepoint = changepoint, collector = collector)
 }

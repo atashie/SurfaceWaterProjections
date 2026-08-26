@@ -18,6 +18,7 @@ from .config import (
     NA_REJECT_RESIDUAL_NA, NA_CONSTANT_SD_ENABLED, NA_CONSTANT_SD_MIN_DAYS,
     NA_CONSTANT_SD_MAX_UNIQUE, NA_SEASONAL_MIN_FRACTION, NA_SEASONAL_DEFINITIONS,
     NA_MAX_RAW_NA_PPT, NA_MAX_GAP_PPT, NA_REJECT_NEGATIVE_PPT,
+    NA_MAX_RAW_NA_SWE, NA_MAX_GAP_SWE, NA_REJECT_NEGATIVE_SWE,
 )
 
 
@@ -136,6 +137,8 @@ def read_parquet(
             rename_map["site_id"] = "gage_id"
         if "prcp" in df.columns and "PPT" not in df.columns:
             rename_map["prcp"] = "PPT"
+        if "swe" in df.columns and "SWE" not in df.columns:
+            rename_map["swe"] = "SWE"
         if rename_map:
             df.rename(columns=rename_map, inplace=True)
 
@@ -423,14 +426,19 @@ def preprocess_daily_data(
     const_sd_max_unique = config.get("constant_sd_max_unique", NA_CONSTANT_SD_MAX_UNIQUE)
     seasonal_min_frac = config.get("seasonal_min_fraction", NA_SEASONAL_MIN_FRACTION)
     seasonal_defs = config.get("seasonal_definitions", NA_SEASONAL_DEFINITIONS)
+    max_raw_na_swe = config.get("max_raw_na_swe", NA_MAX_RAW_NA_SWE)
+    max_gap_swe = config.get("max_gap_swe", NA_MAX_GAP_SWE)
+    reject_neg_swe = config.get("reject_negative_swe", NA_REJECT_NEGATIVE_SWE)
     max_raw_na_ppt = config.get("max_raw_na_ppt", NA_MAX_RAW_NA_PPT)
     max_gap_ppt = config.get("max_gap_ppt", NA_MAX_GAP_PPT)
     reject_neg_ppt = config.get("reject_negative_ppt", NA_REJECT_NEGATIVE_PPT)
 
     has_ppt = "PPT" in gage_flow.columns
+    has_swe = "SWE" in gage_flow.columns
 
     valid_years: List[int] = []
     valid_climate_years: List[int] = []
+    valid_swe_years: List[int] = []
     rejected_years: List[Dict] = []
     seasonal_flags: List[Dict] = []
     diagnostics: List[Dict] = []
@@ -585,6 +593,37 @@ def preprocess_daily_data(
         if ppt_valid:
             valid_climate_years.append(wy)
 
+        # --- (f2) SWE handling (same rules as PPT, tracked separately) ---
+        swe_valid = False
+        if has_swe:
+            swe_raw = yr_data["SWE"].values.copy()
+            swe_raw_na = int(np.sum(np.isnan(swe_raw.astype(float))))
+            swe_max_run = _max_consecutive_na(yr_data["SWE"])
+            swe_finite = swe_raw[~np.isnan(swe_raw.astype(float))]
+            swe_negative = bool(np.any(swe_finite < 0)) if len(swe_finite) > 0 else False
+
+            swe_reject = False
+            if swe_raw_na > max_raw_na_swe:
+                swe_reject = True
+            if swe_max_run > max_gap_swe:
+                swe_reject = True
+            if reject_neg_swe and swe_negative:
+                swe_reject = True
+
+            if not swe_reject:
+                yr_data["SWE"] = yr_data["SWE"].interpolate(
+                    method="linear", limit=max_gap_swe, limit_area="inside"
+                )
+                swe_post_na = int(yr_data["SWE"].isna().sum())
+                if reject_residual and swe_post_na > 0:
+                    swe_reject = True
+
+            if not swe_reject:
+                swe_valid = True
+
+        if swe_valid:
+            valid_swe_years.append(wy)
+
         cleaned_frames.append(yr_data)
 
     # --- (g) Assemble output ---
@@ -597,6 +636,7 @@ def preprocess_daily_data(
         "data": cleaned_data,
         "valid_years": valid_years,
         "valid_climate_years": valid_climate_years,
+        "valid_swe_years": valid_swe_years,
         "rejected_years": rejected_years,
         "seasonal_flags": seasonal_flags,
         "diagnostics": diagnostics,

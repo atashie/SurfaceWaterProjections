@@ -4,10 +4,22 @@
 \alias{calculate_flow_vols_by_year}
 \title{Calculate flow volume signatures by water year}
 \usage{
-calculate_flow_vols_by_year(streamflow_data)
+calculate_flow_vols_by_year(
+  streamflow_data,
+  seasonal_flags = NULL,
+  trend_completeness = NULL,
+  decade_completeness = NULL,
+  min_values_for_stats = NULL,
+  changepoint = NULL,
+  collector = NULL
+)
 }
 \arguments{
 \item{streamflow_data}{A data.frame with columns: water_year, Q, month, dowy.}
+
+\item{seasonal_flags}{Optional data.table from \code{preprocess_daily_data()}
+with columns water_year plus \code{<season>_complete} logicals. When
+supplied, seasonal totals for incomplete seasons are set to NA.}
 }
 \value{
 Named list of statistics.

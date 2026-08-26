@@ -49,7 +49,7 @@ count_flow_reversals <- function(flow_vector, threshold_pct = NULL) {
 #' @export
 calculate_pulse_metrics <- function(streamflow_data,
                                    trend_completeness = NULL,
-                                   decade_completeness = NULL) {
+                                   decade_completeness = NULL, min_values_for_stats = NULL, changepoint = NULL, collector = NULL) {
   required_cols <- c("water_year", "Q", "dowy", "month")
   missing <- setdiff(required_cols, colnames(streamflow_data))
   if (length(missing) > 0) stop(paste("Missing required columns:", paste(missing, collapse = ", ")))
@@ -117,7 +117,7 @@ calculate_pulse_metrics <- function(streamflow_data,
 
   generate_stats(pulse_metrics, value_cols = metric_names, year_col = "water_year",
                  trend_completeness = trend_completeness,
-                 decade_completeness = decade_completeness)
+                 decade_completeness = decade_completeness, min_values_for_stats = min_values_for_stats, changepoint = changepoint, collector = collector)
 }
 
 #' Count days with negative streamflow per water year
@@ -132,7 +132,7 @@ calculate_pulse_metrics <- function(streamflow_data,
 #' @export
 calculate_negative_days <- function(streamflow_data,
                                     trend_completeness = NULL,
-                                    decade_completeness = NULL) {
+                                    decade_completeness = NULL, min_values_for_stats = NULL, changepoint = NULL, collector = NULL) {
   required_cols <- c("water_year", "Q")
   missing <- setdiff(required_cols, colnames(streamflow_data))
   if (length(missing) > 0) {
@@ -146,5 +146,5 @@ calculate_negative_days <- function(streamflow_data,
 
   generate_stats(annual, value_cols = "negative_ann", year_col = "water_year",
                  trend_completeness = trend_completeness,
-                 decade_completeness = decade_completeness)
+                 decade_completeness = decade_completeness, min_values_for_stats = min_values_for_stats, changepoint = changepoint, collector = collector)
 }

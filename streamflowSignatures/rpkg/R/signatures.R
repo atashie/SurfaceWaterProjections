@@ -23,7 +23,9 @@
 #'   Q-to-PPT signatures (runoff ratios, elasticity, Q-P seasonality, storage)
 #'   are skipped because Q and PPT units don't match. Q-only signatures are
 #'   unaffected. Default TRUE.
-#' @return Named list with ~478 (no climate) or ~551 (with climate) elements,
+#' @return Named list with ~1,653 elements for a full climate+SWE gage (8 stats
+#'   + 8 Pettitt fields per signature base, plus per-gage scalars); fewer when
+#'   climate, SWE or the drought family are unavailable/disabled,
 #'   plus 12 flag columns if \code{include_qa_flags = TRUE}.
 #' @export
 calculate_all_signatures <- function(streamflow_data, has_climate = FALSE,
@@ -32,7 +34,13 @@ calculate_all_signatures <- function(streamflow_data, has_climate = FALSE,
                                      decade_completeness = NULL,
                                      climate_data = NULL,
                                      include_qa_flags = FALSE,
-                                     area_normalized = TRUE) {
+                                     area_normalized = TRUE,
+                                     changepoint = NULL,
+                                     min_values_for_stats = NULL,
+                                     collector = NULL,
+                                     snow_data = NULL,
+                                     snow_climate_years = NULL,
+                                     gage_id = NULL) {
   results <- list()
 
   # Season exclusion year counts (per-gage scalar diagnostics)
@@ -53,9 +61,10 @@ calculate_all_signatures <- function(streamflow_data, has_climate = FALSE,
   }
 
   # Safe wrapper for calling signature functions
+  gid <- if (is.null(gage_id)) "unknown" else as.character(gage_id)
   safe_call <- function(fn, label, ...) {
     tryCatch(fn(...), error = function(e) {
-      warning(paste(label, "failed:", e$message))
+      warning(paste0("Gage ", gid, ": ", label, " failed: ", e$message))
       NULL
     })
   }
@@ -64,7 +73,9 @@ calculate_all_signatures <- function(streamflow_data, has_climate = FALSE,
   out <- safe_call(calculate_flow_vols_by_year, "Flow volumes",
                    streamflow_data, seasonal_flags = seasonal_flags,
                    trend_completeness = trend_completeness,
-                   decade_completeness = decade_completeness)
+                   decade_completeness = decade_completeness,
+                   min_values_for_stats = min_values_for_stats,
+                   changepoint = changepoint, collector = collector)
   if (!is.null(out)) results <- c(results, out)
 
   # Non-climate signatures (no seasonal_flags needed)
@@ -79,14 +90,16 @@ calculate_all_signatures <- function(streamflow_data, has_climate = FALSE,
   for (spec in specs) {
     out <- safe_call(spec$fn, spec$label, streamflow_data,
                      trend_completeness = trend_completeness,
-                     decade_completeness = decade_completeness)
+                     decade_completeness = decade_completeness,
+                   min_values_for_stats = min_values_for_stats,
+                   changepoint = changepoint, collector = collector)
     if (!is.null(out)) results <- c(results, out)
   }
 
   # Recession: event-based (inherently sparse), no trend completeness
   recession_alpha <- NaN
   out <- safe_call(analyze_recession_parameters, "Recession parameters",
-                   streamflow_data)
+                   streamflow_data, changepoint = changepoint, collector = collector)
   if (!is.null(out)) {
     # Extract scalar for parameterized BFI before merging
     if ("recession_alpha_point_cloud_linear_reservoir" %in% names(out)) {
@@ -100,15 +113,30 @@ calculate_all_signatures <- function(streamflow_data, has_climate = FALSE,
   out <- safe_call(analyze_baseflow_indices_with_parameters, "Parameterized baseflow",
                    streamflow_data, alpha = recession_alpha,
                    trend_completeness = trend_completeness,
-                   decade_completeness = decade_completeness)
+                   decade_completeness = decade_completeness,
+                   min_values_for_stats = min_values_for_stats,
+                   changepoint = changepoint, collector = collector)
   if (!is.null(out)) results <- c(results, out)
 
   # Negative days
   out <- safe_call(calculate_negative_days, "Negative days",
                    streamflow_data,
                    trend_completeness = trend_completeness,
-                   decade_completeness = decade_completeness)
+                   decade_completeness = decade_completeness,
+                   min_values_for_stats = min_values_for_stats,
+                   changepoint = changepoint, collector = collector)
   if (!is.null(out)) results <- c(results, out)
+
+  # Streamflow drought (config-gated: absent `drought` section => family off)
+  if (isTRUE(pkg_env$drought_enabled)) {
+    out <- safe_call(calculate_drought_metrics, "Drought",
+                     streamflow_data,
+                     trend_completeness = trend_completeness,
+                     decade_completeness = decade_completeness,
+                     min_values_for_stats = min_values_for_stats,
+                     changepoint = changepoint, collector = collector)
+    if (!is.null(out)) results <- c(results, out)
+  }
 
   # Climate signatures
   # Gate: Q-to-PPT signatures are undefined when Q is not area-normalized
@@ -123,12 +151,14 @@ calculate_all_signatures <- function(streamflow_data, has_climate = FALSE,
     out <- safe_call(analyze_Q_PPT_relationships, "Q-PPT ratios",
                      clim_input, seasonal_flags = seasonal_flags,
                      trend_completeness = trend_completeness,
-                     decade_completeness = decade_completeness)
+                     decade_completeness = decade_completeness,
+                   min_values_for_stats = min_values_for_stats,
+                   changepoint = changepoint, collector = collector)
     if (!is.null(out)) results <- c(results, out)
 
     # Elasticity: rolling-window based, no trend completeness
     out <- safe_call(calculate_streamflow_elasticity, "Elasticity",
-                     clim_input)
+                     clim_input, changepoint = changepoint, collector = collector)
     if (!is.null(out)) results <- c(results, out)
 
     climate_specs <- list(
@@ -139,9 +169,23 @@ calculate_all_signatures <- function(streamflow_data, has_climate = FALSE,
     for (spec in climate_specs) {
       out <- safe_call(spec$fn, spec$label, clim_input,
                        trend_completeness = trend_completeness,
-                       decade_completeness = decade_completeness)
+                       decade_completeness = decade_completeness,
+                   min_values_for_stats = min_values_for_stats,
+                   changepoint = changepoint, collector = collector)
       if (!is.null(out)) results <- c(results, out)
     }
+  }
+
+  # Snow metrics: EXPLICIT opt-in frame only — an SWE column in streamflow_data
+  # is never used implicitly (matching Julia; prevents SWE-invalid years leaking)
+  if (!is.null(snow_data) && "SWE" %in% names(snow_data)) {
+    out <- safe_call(calculate_snow_metrics, "Snow",
+                     snow_data, valid_climate_years = snow_climate_years,
+                     trend_completeness = trend_completeness,
+                     decade_completeness = decade_completeness,
+                     min_values_for_stats = min_values_for_stats,
+                     changepoint = changepoint, collector = collector)
+    if (!is.null(out)) results <- c(results, out)
   }
 
   # QA/QC flags (optional)
