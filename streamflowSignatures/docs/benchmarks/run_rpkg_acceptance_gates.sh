@@ -65,6 +65,21 @@ if [ -z "${n_g:-}" ]; then
   echo "      Refusing to fall back to an unbound failure gate."
   exit 2
 fi
+# The CSV and the timing JSON are NOT written atomically together: the runner
+# writes the CSV, then collects provenance, then writes the timing JSON. A rerun
+# that aborts in that interval leaves a NEW CSV beside the PREVIOUS run's timing
+# JSON (Codex delta 5). Bind them by content: the CSV's own row count must equal
+# the gage count the timing JSON claims.
+csv_rows=$(($(wc -l < "$PORT"_signatures.csv) - 1))
+if [ "$csv_rows" -ne "$n_g" ]; then
+  echo "FAIL: ${PREFIX}_signatures.csv has $csv_rows data rows but"
+  echo "      $(basename "$TIMING") reports n_gages_processed=$n_g."
+  echo "      The timing JSON does not describe this CSV — most likely a rerun"
+  echo "      aborted between writing the CSV and writing the timing JSON, leaving"
+  echo "      a stale JSON beside new artifacts. Re-run, or supply matching files."
+  exit 2
+fi
+echo "binding: CSV rows ($csv_rows) == timing n_gages_processed ($n_g)"
 EXPECT_ARGS+=(--expect-gages "$n_g")
 [ -n "${n_c:-}" ] && EXPECT_ARGS+=(--expect-columns "$n_c")
 echo "binding: timing.json reports n_gages_processed=$n_g n_columns=${n_c:-absent}"
