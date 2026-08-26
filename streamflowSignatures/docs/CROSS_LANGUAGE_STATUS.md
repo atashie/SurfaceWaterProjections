@@ -52,9 +52,16 @@ merely tolerated:
 1. **Pettitt changepoint ties.** `cp_year` agrees exactly on 597,505/597,527
    cells (99.9963 %); where a rank tie flips the changepoint year, that base's
    segment split moves and its segment p-values follow. This accounts for all
-   5 Good columns (3 bases: FDC90th, Q90, Qsum) and for 267 of 18.2 M annual
-   values (0.0015 %), all discrete threshold-crossing metrics (`D*_day`,
-   `D25_to_D75`, `TQmean`).
+   5 Good columns (3 bases: FDC90th, Q90, Qsum) and, **at a 1e-6 tolerance**,
+   for 267 of 18,217,552 finite annual pairs (0.0015 %) — every one a discrete
+   threshold-crossing metric (`D*_day`, `D25_to_D75`, `TQmean`, one
+   `dur_low_pulses_all`), where a last-bit tie moves a whole day.
+
+   *Always quote the tolerance with these counts.* At 1e-9 the count is 465:
+   the extra 198 rows are `qp_slope_sd` (116, max 1.3e-07) and
+   `elasticity_annual` (82, max 5.5e-08), continuous quantities differing at
+   ordinary cross-library floating-point noise rather than tie flips. The two
+   figures are one result read at two thresholds.
 2. **Signed-zero `unique` semantics** — 1 annual row in 18.9 M. Julia's
    `unique` uses `isequal`, under which `-0.0` and `+0.0` are DISTINCT values;
    numpy and R use `==`, under which they are equal. So a series containing

@@ -438,11 +438,19 @@ b=1 recession alpha, 14 snow metrics, 10 drought metrics + 5 scalars).
 - **No divergence class remains** — both residuals are characterised rather than merely
   tolerated. (1) **Pettitt ties**: `cp_year` agrees on 597,505/597,527 cells (99.9963 %);
   where a rank tie flips the changepoint the segment split moves with it, which accounts
-  for all 5 Good columns (FDC90th, Q90, Qsum) and 267 of 18.2 M annual values, all
-  discrete threshold-crossing metrics. (2) **Signed-zero `unique` semantics**: 1 annual
-  row in 18.9 M — Julia's `unique` uses `isequal` so −0.0 ≠ +0.0, while numpy and R use
-  `==`. Logged as a non-blocking canonical cleanup; **no rerun required** (user decision,
-  2026-08-26).
+  for all 5 Good columns (FDC90th, Q90, Qsum) and, **at a 1e-6 tolerance, 267 of
+  18,217,552 finite annual pairs (0.0015 %) — every one a discrete threshold-crossing
+  metric** (`D*_day`, `D25_to_D75`, `TQmean`, one `dur_low_pulses_all`), where a
+  last-bit tie moves a whole day. (2) **Signed-zero `unique` semantics**: 1 annual row
+  in 18.9 M (an `avg_storage` row present only in the reference) — Julia's `unique` uses
+  `isequal` so −0.0 ≠ +0.0, while numpy and R use `==`. Logged as a non-blocking
+  canonical cleanup; **no rerun required** (user decision, 2026-08-26).
+
+  **State the tolerance when quoting these counts.** Tightening to 1e-9 adds 198 more
+  rows — `qp_slope_sd` (116, max 1.3e-07) and `elasticity_annual` (82, max 5.5e-08) —
+  which are genuinely continuous quantities differing at ordinary floating-point noise
+  between statistics libraries, not tie flips. 465 @ 1e-9 and 267 @ 1e-6 are the same
+  result read at two thresholds, not a discrepancy.
 - **Mann-Kendall p-value convention settled.** scipy's `kendalltau` selects on TIES, not
   sample size — exact when untied, asymptotic **without** continuity correction when
   tied. Julia and R both use the continuity-corrected normal approximation, and
