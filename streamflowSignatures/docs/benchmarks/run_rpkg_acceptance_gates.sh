@@ -52,14 +52,22 @@ if [ ! -f "$LOG" ]; then echo "MISSING: $LOG"; exit 2; fi
 # carries the counts that run printed in its log footer.
 EXPECT_ARGS=()
 TIMING=${PORT}_timing.json
-if [ -f "$TIMING" ]; then
-  n_g=$($PY -c "import json,sys;print(json.load(open(sys.argv[1])).get('n_gages_processed',''))" "$TIMING" 2>/dev/null || true)
-  [ -n "${n_g:-}" ] && EXPECT_ARGS+=(--expect-gages "$n_g")
-  echo "binding: timing.json reports n_gages_processed=${n_g:-unknown}"
-else
-  echo "NOTE: no $(basename "$TIMING") — the failure gate cannot bind this log to"
-  echo "      these artifacts by content, only by prefix."
+if [ ! -f "$TIMING" ]; then
+  echo "FAIL: no $(basename "$TIMING"). Without the run's own timing JSON the"
+  echo "      failure gate cannot be bound to these artifacts at all, and a log"
+  echo "      from a different run could certify them. Refusing to proceed."
+  exit 2
 fi
+n_g=$($PY -c "import json,sys;print(json.load(open(sys.argv[1]))['n_gages_processed'])" "$TIMING" 2>/dev/null || true)
+n_c=$($PY -c "import json,sys;print(json.load(open(sys.argv[1])).get('n_columns',''))" "$TIMING" 2>/dev/null || true)
+if [ -z "${n_g:-}" ]; then
+  echo "FAIL: $(basename "$TIMING") is unreadable or lacks n_gages_processed."
+  echo "      Refusing to fall back to an unbound failure gate."
+  exit 2
+fi
+EXPECT_ARGS+=(--expect-gages "$n_g")
+[ -n "${n_c:-}" ] && EXPECT_ARGS+=(--expect-columns "$n_c")
+echo "binding: timing.json reports n_gages_processed=$n_g n_columns=${n_c:-absent}"
 
 fail=0
 run_diag () {  # like run(), but its exit status does NOT affect the verdict

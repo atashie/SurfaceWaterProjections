@@ -72,7 +72,16 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
          until this is fixed. Add
          `flush.console()` after the progress `cat()`. Cosmetic for correctness,
          but it is the difference between an observable run and a black box.
-      5. **SWE is merged only inside an `if ("PPT" %in% clim_cols)` branch**
+      5. **Emit a per-run identifier into BOTH the log header and the timing JSON**
+         (all three runners, rpkg first). Today a run log can be tied to an artifact
+         set only by OUTPUT_PREFIX and by the footer counts, and both describe a
+         run's *configuration* and its output *shape* rather than the execution —
+         two runs of the same config match on all of them. A UUID (or the run's
+         start timestamp) written to both places, and required to match by
+         `check_signature_failures.py`, makes the binding exact and unforgeable by
+         copying or touching a file. Until then the gate's binding is documented as
+         making accidental mispairing hard, not as proof of provenance.
+      6. **SWE is merged only inside an `if ("PPT" %in% clim_cols)` branch**
          (`run_rpkg_benchmark.R`), so a climate parquet carrying SWE but no PPT would
          silently drop every snow key; Python merges the slice independently. Inert
          here — the run's own log records `columns: gage_id,date,PPT,SWE`.

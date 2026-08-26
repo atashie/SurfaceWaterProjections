@@ -50,7 +50,21 @@ USAGE
 it an operator can gate a broken run's outputs while this gate certifies a
 different run's clean log. --require-error-tally additionally demands the
 "Gages errored: N" line the rpkg runner prints AFTER "BENCHMARK COMPLETE",
-catching a footer truncated between the two.
+catching a footer truncated between the two. --expect-gages/--expect-columns
+require the log's own footer counts to match the artifacts under test.
+
+LIMIT OF THAT BINDING — state it rather than overclaim. Prefix and counts
+identify a run's CONFIGURATION and its output SHAPE, not the run itself: two
+executions of the same configuration produce the same prefix and the same
+counts, so an earlier clean log can still be paired with a later run's artifacts
+if someone supplies it. Together with the single-footer rule and the harness's
+refusal to guess a log path, this makes ACCIDENTAL mispairing hard; it does not
+make a deliberately or carelessly supplied stale log detectable.
+
+The durable fix is a per-run identifier emitted by the runner into BOTH the log
+header and the timing JSON, which the gate then requires to match — unforgeable
+by copying or touching a file, and unique per execution. That is a runner change
+and is queued with the other deferred rpkg fixes (CHANGELOG -> Planned).
 """
 from __future__ import annotations
 
