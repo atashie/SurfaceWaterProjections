@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
-# Apply the four rpkg-side fixes deferred during the 2026-08-26 benchmark.
+# Apply the rpkg-side fixes still deferred after 2026-08-26.
+#
+# THREE ARE ALREADY APPLIED to run_rpkg_benchmark.R (options(warn=1),
+# report_interval 500->50, and the streamflow column projection) — the
+# benchmark they were queued behind was stopped externally, which made them
+# safe to apply. Their steps below are idempotent no-ops now. What REMAINS is
+# rpkg package source: the STREAMFLOW_CONFIG env-var name, the na_handling
+# fallbacks, the SWE-merged-only-under-PPT branch, and the run manifest.
 #
 # All four change rpkg source or its runner, which must not happen while a
 # benchmark is executing — an `R CMD INSTALL` mid-run can break lazy-load access
