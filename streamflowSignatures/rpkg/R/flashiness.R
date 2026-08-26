@@ -37,6 +37,13 @@ analyze_flashiness_trends <- function(streamflow_data,
     flashiness_by_year$flashinessRB[flashiness_by_year$water_year == yr] <- rb_index
   }
 
+  # Julia APPENDS only computable years, so a non-computable year is ABSENT
+  # from its frame. rpkg pre-allocates a row per year and assigns into it, so a
+  # skipped year left an NA row behind — which the annual collector then exported
+  # as a row Julia never emits (1,039 such rows across the sparse families,
+  # caught 2026-08-26 by the cross-language annual gate). Drop them to match.
+  flashiness_by_year <- flashiness_by_year[!is.na(flashiness_by_year$flashinessRB), , drop = FALSE]
+
   result <- generate_stats(flashiness_by_year, value_cols = "flashinessRB",
                            year_col = "water_year",
                            trend_completeness = trend_completeness,

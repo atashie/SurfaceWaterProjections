@@ -209,6 +209,16 @@ preprocess_daily_data <- function(gage_flow, config = NULL) {
     q_vals <- wy_data$Q
     raw_na_count <- sum(is.na(q_vals))
 
+    # NA-cause tracking: USGS marks ice-affected days with an "Ice" qualifier in
+    # the flag column. Mirrors julia/src/io.jl (regex [Ii]ce over the flags of
+    # NA days); feeds the per-gage `ice_affected_days_total` diagnostic. Absent
+    # a flag column this is simply 0.
+    na_cause_ice <- 0L
+    if (raw_na_count > 0 && "flag" %in% names(wy_data)) {
+      na_flags <- wy_data$flag[is.na(q_vals)]
+      na_cause_ice <- sum(!is.na(na_flags) & grepl("[Ii]ce", as.character(na_flags)))
+    }
+
     raw_max_na_run <- 0L
     if (raw_na_count > 0) {
       rle_na <- rle(is.na(q_vals))
@@ -263,7 +273,7 @@ preprocess_daily_data <- function(gage_flow, config = NULL) {
         water_year = wy, raw_na_count = raw_na_count,
         raw_max_na_run = raw_max_na_run, interpolated_count = 0L,
         residual_na_count = raw_na_count, negative_flag = negative_flag,
-        constant_sd_months = constant_sd_months
+        constant_sd_months = constant_sd_months, na_cause_ice = na_cause_ice
       )
       seasonal_list[[length(seasonal_list) + 1L]] <- data.table::as.data.table(season_flags)
       next
@@ -316,7 +326,7 @@ preprocess_daily_data <- function(gage_flow, config = NULL) {
         interpolated_count = interpolated_count,
         residual_na_count = residual_na_count,
         negative_flag = negative_flag,
-        constant_sd_months = constant_sd_months
+        constant_sd_months = constant_sd_months, na_cause_ice = na_cause_ice
       )
       seasonal_list[[length(seasonal_list) + 1L]] <- data.table::as.data.table(season_flags)
       next
@@ -428,7 +438,7 @@ preprocess_daily_data <- function(gage_flow, config = NULL) {
       interpolated_count = interpolated_count,
       residual_na_count = residual_na_count,
       negative_flag = negative_flag,
-      constant_sd_months = constant_sd_months
+      constant_sd_months = constant_sd_months, na_cause_ice = na_cause_ice
     )
     seasonal_list[[length(seasonal_list) + 1L]] <- data.table::as.data.table(season_flags)
 
@@ -456,7 +466,7 @@ preprocess_daily_data <- function(gage_flow, config = NULL) {
       water_year = integer(0), raw_na_count = integer(0),
       raw_max_na_run = integer(0), interpolated_count = integer(0),
       residual_na_count = integer(0), negative_flag = logical(0),
-      constant_sd_months = integer(0)
+      constant_sd_months = integer(0), na_cause_ice = integer(0)
     )
   }
   seasonal_flags_dt <- if (length(seasonal_list) > 0) {

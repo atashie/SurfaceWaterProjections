@@ -125,6 +125,13 @@ analyze_baseflow_indices <- function(streamflow_data,
     }
   }
 
+  # Julia APPENDS only computable years, so a non-computable year is ABSENT from
+  # its frame. rpkg pre-allocates a row per year and assigns into it, so a skipped
+  # year left an NA row behind — which the annual collector then exported as a row
+  # Julia never emits (1,039 such rows across the sparse families, caught
+  # 2026-08-26 by the cross-language annual gate). Drop them to match.
+  bfi_by_year <- bfi_by_year[!is.na(bfi_by_year$BFI_Eckhardt) | !is.na(bfi_by_year$BFI_LyneHollick), , drop = FALSE]
+
   generate_stats(bfi_by_year, value_cols = c("BFI_Eckhardt", "BFI_LyneHollick"),
                  year_col = "water_year",
                  trend_completeness = trend_completeness,
@@ -197,6 +204,13 @@ analyze_baseflow_indices_with_parameters <- function(
       bfi_by_year$BFI_LyneHollick_param[bfi_by_year$water_year == yr] <- bfi_lh
     }
   }
+
+  # Julia APPENDS only computable years, so a non-computable year is ABSENT from
+  # its frame. rpkg pre-allocates a row per year and assigns into it, so a skipped
+  # year left an NA row behind — which the annual collector then exported as a row
+  # Julia never emits (1,039 such rows across the sparse families, caught
+  # 2026-08-26 by the cross-language annual gate). Drop them to match.
+  bfi_by_year <- bfi_by_year[rowSums(!is.na(bfi_by_year[, metrics, drop = FALSE])) > 0, , drop = FALSE]
 
   generate_stats(bfi_by_year, value_cols = metrics, year_col = "water_year",
                  trend_completeness = trend_completeness,

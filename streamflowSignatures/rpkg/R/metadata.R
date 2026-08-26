@@ -71,9 +71,14 @@ load_gages_ii_interference <- function(gages_dir = NULL) {
   akhipr_data <- merge_files(akhipr_files, gages_dir)
 
   if (!is.null(conus_data) && !is.null(akhipr_data)) {
-    common_cols <- intersect(names(conus_data), names(akhipr_data))
-    akhipr_data <- akhipr_data[, common_cols, with = FALSE]
-    conus_data  <- conus_data[,  common_cols, with = FALSE]
+    # Do NOT intersect the CONUS and AKHIPR column sets. The AKHIPR files carry a
+    # narrower schema — none of them has IMPNLCD06, DEVNLCD06, FRESHW_WITHDRAWAL
+    # or HYDRO_DISTURB_INDX, and there is no AKHIPR_lc06_basin.txt at all — so
+    # intersecting dropped all four columns for the ~9,000 CONUS gages that DO
+    # have them, silently costing the output 4 metadata columns against canonical
+    # Julia (caught 2026-08-26 by the strict schema gate). rbindlist(fill = TRUE)
+    # already reconciles differing schemas by filling NA, which is the correct
+    # result: those attributes genuinely do not exist for AK/HI/PR gages.
     combined <- data.table::rbindlist(list(conus_data, akhipr_data), fill = TRUE)
   } else if (!is.null(conus_data)) {
     combined <- conus_data

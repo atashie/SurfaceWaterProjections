@@ -152,6 +152,21 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
 - BFImax estimation via Collischonn & Fan (2013) backward filter — would give BFI_Eckhardt_param per-gage BFImax instead of fixed 0.8, improving discriminating power (currently range [0.47–0.80] due to BFImax saturation)
 
 ### Known Issues (discovered 2026-07-14, Codex review — not yet fixed)
+- **MEDIUM (canonical Julia, discovered 2026-08-26) — `ice_affected_days_total` is
+  structurally always 0.** The WY 1993–2025 reference run emits `0.0` for **all 6,678
+  gages**, yet the streamflow parquet contains **3,693 rows flagged `'P Ice'` across 90
+  gages, every one with a NULL Q** — exactly the days the diagnostic is meant to count.
+  Three of those gages (01011000, 01029200, 15129500) are in the product and still
+  report 0. The Julia runner does load the `flag` column (it reads the full parquet),
+  so the guard in `julia/src/io.jl:365` (`na_count > 0 && "flag" in names(joined)`)
+  should fire; the cause is somewhere between the daily-grid normalization and that
+  check, and is not yet pinned down. **Consequence**: the metric conveys no information
+  in any delivered product, and the guidelines' request for "a total count of the number
+  of days that are ice affected" per site is unmet.
+  **Deliberately NOT worked around in rpkg** (2026-08-26): rpkg's preprocessor now
+  tracks `na_cause_ice` correctly, but the benchmark runner does not load `flag`, so
+  rpkg emits 0 and MATCHES canonical. Making rpkg "more correct" than Julia would break
+  cross-language parity — fix the canonical side first, then enable it in both.
 - **RESOLVED 2026-08-11 (workaround in place; the corrupt file is still on the drive) —
   the truncated climate parquet.** The user restored the 44 annual Daymet CSVs to
   `/Volumes/Untitled/daymet_1980_2023/` (10 GB) and the parquet was rebuilt from them

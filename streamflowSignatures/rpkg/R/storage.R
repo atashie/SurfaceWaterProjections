@@ -33,6 +33,19 @@ calculate_average_storage <- function(streamflow_data,
     sq_data <- yd[!is.na(Q) & !is.na(S)]
     if (nrow(sq_data) < 10) return(NULL)
 
+    # Julia applies a SECOND guard here: at least 10 DISTINCT Q values, not just
+    # 10 valid rows (julia/src/storage.jl "if length(Q_unique) < 10"). rpkg had
+    # only the row-count guard, so a year with e.g. 365 rows but 5 distinct flows
+    # produced an avg_storage Julia declines to compute — 176 such gage-years,
+    # caught 2026-08-26 by the cross-language annual gate.
+    # (R's unique() uses == semantics, so -0.0 and +0.0 collapse; Julia's uses
+    # isequal and keeps them distinct. That is the documented signed-zero
+    # divergence, worth exactly 1 annual row in 18.9M — see CHANGELOG.)
+    if (length(unique(sq_data$Q)) < 10) return(NULL)
+
+    # The interpolation itself needs no de-duplication: R's approx() defaults to
+    # ties = mean, which is precisely the behaviour Julia hand-rolls via S_means.
+
     data.table::setorder(sq_data, Q)
     avg_stor <- tryCatch(approx(sq_data$Q, sq_data$S, xout = mean_Q, rule = 2)$y,
                          error = function(e) NA_real_)

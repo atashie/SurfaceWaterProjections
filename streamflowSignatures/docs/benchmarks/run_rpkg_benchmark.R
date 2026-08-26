@@ -126,6 +126,12 @@ cat("  Reading streamflow parquet...\n")
 # water_year/month/dowy from date; flag/doy/year are never read. Loading all
 # 9 for 111.6M rows put ~4 GB of dead weight resident and drove this 16 GB
 # machine into swap (measured 2026-08-26: 163 MB/s page-ins, CPU at 54%).
+# `flag` is deliberately NOT loaded. rpkg's preprocessor can count ice-affected
+# NA days from it, but canonical Julia emits ice_affected_days_total = 0 for
+# ALL 6,678 gages — including 01011000 / 01029200 / 15129500, which provably
+# have 'P Ice' rows with NULL Q. Loading flag here would make rpkg emit
+# non-zero values and DIVERGE from canonical. Julia is canonical: match its
+# output, and fix the canonical side first (logged in CHANGELOG).
 streamflow <- data.table::as.data.table(arrow::read_parquet(
   parquet_path, col_select = c("gage_id", "Date", "Q")))
 data.table::setnames(streamflow, "Date", "date")
@@ -382,6 +388,12 @@ for (i in seq_along(all_gages)) {
       sigs$start_water_year <- min(pp$valid_years)
       sigs$end_water_year <- max(pp$valid_years)
       sigs$num_water_years <- length(pp$valid_years)
+
+      # Per-gage ice diagnostic (mirrors run_julia_benchmark.jl)
+      sigs$ice_affected_days_total <- if (!is.null(pp$diagnostics) &&
+                                          "na_cause_ice" %in% names(pp$diagnostics)) {
+        sum(pp$diagnostics$na_cause_ice, na.rm = TRUE)
+      } else 0
     }
 
     # Match metadata row

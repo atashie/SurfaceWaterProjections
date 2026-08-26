@@ -63,16 +63,27 @@ calculate_snow_metrics <- function(streamflow_data, valid_climate_years = NULL,
                                    changepoint = NULL, collector = NULL) {
   df <- as.data.frame(streamflow_data)
 
-  # Defensive: emit the IDENTICAL key set via the same explicit-value_cols
-  # machinery as the 0-row case (schema contract)
-  if (!"SWE" %in% names(df)) {
+  # Emit the IDENTICAL key set via the same explicit-value_cols machinery for
+  # every degenerate input (schema contract).
+  empty_snow_result <- function() {
     empty <- data.frame(water_year = integer(0))
     for (m in SNOW_METRICS) empty[[m]] <- numeric(0)
-    return(generate_stats(empty, value_cols = SNOW_METRICS, year_col = "water_year",
-                          trend_completeness = trend_completeness,
-                          decade_completeness = decade_completeness,
-                          min_values_for_stats = min_values_for_stats,
-                          changepoint = changepoint, collector = collector))
+    generate_stats(empty, value_cols = SNOW_METRICS, year_col = "water_year",
+                   trend_completeness = trend_completeness,
+                   decade_completeness = decade_completeness,
+                   min_values_for_stats = min_values_for_stats,
+                   changepoint = changepoint, collector = collector)
+  }
+
+  # A 0-ROW frame is a legitimate input, not an error: the orchestrator passes an
+  # explicit snow_data filtered to valid_swe_years, which is empty for a gage that
+  # has SWE columns but no SWE-valid year (e.g. warm-climate gages). Without this
+  # branch the code below builds a 0-row `annual` and then assigns a length-1
+  # NA into it, raising "replacement has 1 row, data has 0" — swallowed by the
+  # orchestrator's try/catch, so the gage silently lost all 224 snow columns.
+  # Caught 2026-08-26 by check_signature_failures.py on 4 Florida gages.
+  if (!"SWE" %in% names(df) || nrow(df) == 0L) {
+    return(empty_snow_result())
   }
 
   thr          <- pkg_env$snow_swe_threshold_mm

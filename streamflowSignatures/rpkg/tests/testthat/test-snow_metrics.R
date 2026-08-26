@@ -99,3 +99,29 @@ test_that("no SWE column still emits the full 14-metric key set", {
     expect_true(paste0(m, "_pettitt_cp_year") %in% names(r), info = m)
   }
 })
+
+test_that("a ZERO-ROW snow_data frame returns the full key set, not an error", {
+  # Regression for 2026-08-26: the orchestrator passes an explicit snow_data
+  # filtered to valid_swe_years, which is legitimately EMPTY for a gage with SWE
+  # columns but no SWE-valid year. snow.R then built a 0-row `annual` and
+  # assigned a length-1 NA into it -> "replacement has 1 row, data has 0", which
+  # the orchestrator's try/catch swallowed into a warning, silently costing that
+  # gage all 224 snow columns. Found on 4 Florida gages by the run-log gate; no
+  # unit test covered a 0-row frame with the SWE column present.
+  d <- data.table::data.table(
+    gage_id = "T", date = seq(as.Date("1992-10-01"), as.Date("1995-09-30"), by = "day"))
+  d[, Q := 1]; d[, SWE := 0]
+  d <- add_water_year_columns(d)
+
+  r0 <- calculate_snow_metrics(d[0], valid_climate_years = integer(0))
+  rN <- calculate_snow_metrics(d, valid_climate_years = unique(d$water_year))
+
+  expect_identical(sort(names(r0)), sort(names(rN)))   # identical schema
+  expect_true(all(is.na(unlist(r0))))                  # and all-NA values
+  expect_gt(length(r0), 0)
+
+  # ...and through the orchestrator, the way the runner calls it
+  s <- calculate_all_signatures(d, has_climate = FALSE, snow_data = d[0],
+                                snow_climate_years = integer(0), gage_id = "T")
+  expect_true(any(grepl("^swe_max", names(s))))
+})
