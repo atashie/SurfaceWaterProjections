@@ -44,6 +44,22 @@ echo "prefix : $PREFIX"
 echo "log    : $LOG"
 if [ ! -f "$LOG" ]; then echo "MISSING: $LOG"; exit 2; fi
 
+# Prefix equality alone does NOT bind a log to an artifact set: a re-run under the
+# same prefix overwrites the CSV/parquet, so an earlier run's clean log would still
+# satisfy --expect-prefix (Codex delta 3). The runner writes its footer AFTER the
+# CSV, so a log that PREDATES the CSV cannot belong to it.
+if [ -f "$PORT"_signatures.csv ]; then
+  log_mt=$(stat -f%m "$LOG"); csv_mt=$(stat -f%m "$PORT"_signatures.csv)
+  if [ "$log_mt" -lt "$csv_mt" ]; then
+    echo "FAIL: $LOG is OLDER than ${PREFIX}_signatures.csv"
+    echo "      (log $(date -r "$log_mt" '+%F %T') vs csv $(date -r "$csv_mt" '+%F %T'))."
+    echo "      The runner writes its footer after the CSV, so this log cannot be"
+    echo "      the one that produced these artifacts — most likely the prefix was"
+    echo "      re-used by a later run. Supply that run's log."
+    exit 2
+  fi
+fi
+
 fail=0
 run_diag () {  # like run(), but its exit status does NOT affect the verdict
   local label=$1; shift

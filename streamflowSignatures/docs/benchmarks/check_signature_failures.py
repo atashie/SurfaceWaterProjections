@@ -89,6 +89,7 @@ def scan(path: Path):
     failures = []  # (gage, family)
     truncated = False
     completed = False
+    n_complete = 0
     errored_values: list[int] = []
     tally_after_complete = False
     prefixes: set[str] = set()
@@ -96,7 +97,10 @@ def scan(path: Path):
     with path.open(errors="replace") as fh:
         for line in fh:
             n_lines += 1
-            if not completed and RE_COMPLETE.search(line):
+            if RE_COMPLETE.search(line):
+                # COUNT them: a set of prefixes collapses duplicates, so two runs
+                # sharing a prefix would otherwise look like one (Codex delta 3).
+                n_complete += 1
                 completed = True
             me = RE_ERRORED.search(line)
             if me:
@@ -119,7 +123,7 @@ def scan(path: Path):
             if m:
                 failures.append((m.group(2), m.group(1).strip()))
     return (failures, truncated, completed, n_lines,
-            errored_values, tally_after_complete, prefixes)
+            errored_values, tally_after_complete, prefixes, n_complete)
 
 
 def main() -> int:
@@ -149,7 +153,8 @@ def main() -> int:
         return 2
 
     (failures, truncated, completed, n_lines,
-     errored_values, tally_after_complete, prefixes) = scan(args.log)
+     errored_values, tally_after_complete, prefixes,
+     n_complete) = scan(args.log)
     waived = {f.lower() for f in args.allow_family}
 
     hard = [(g, f) for g, f in failures if f.lower() not in waived]
@@ -171,6 +176,12 @@ def main() -> int:
             print(f"\nFAIL: this log does not belong to '{args.expect_prefix}'. "
                   f"It records OUTPUT_PREFIX="
                   f"{', '.join(sorted(prefixes)) if prefixes else '(none)'}.")
+            return 1
+        if n_complete > 1:
+            print(f"\nFAIL: this log contains {n_complete} 'BENCHMARK COMPLETE' "
+                  f"footers, so it covers more than one run. A clean stretch in it "
+                  f"cannot vouch for the artifacts under test — even at the same "
+                  f"OUTPUT_PREFIX, since a re-run overwrites them.")
             return 1
         if len(prefixes) > 1:
             print(f"\nFAIL: this log records more than one OUTPUT_PREFIX "
