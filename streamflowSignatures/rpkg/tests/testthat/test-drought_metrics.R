@@ -141,3 +141,44 @@ test_that("END-TO-END: drought runs on a preprocess_daily_data() output", {
                                 min_values_for_stats = 20, gage_id = "T")
   expect_false(is.na(s$drought_duration_fixed_p10_mean))
 })
+
+test_that("smoothing accumulates SEQUENTIALLY in double, matching julia/src/drought.jl", {
+  # R's mean() uses a long-double accumulator plus a correction pass, so it can
+  # return a different last bit than Julia's `s += v` loop. Harmless alone, but
+  # the fixed thresholds are percentiles OF this series: when a threshold lands
+  # on a flow plateau, a last-bit shift flips every plateau day at once through
+  # the strict `<`. Measured 2026-08-26 on gage 01589795 — 4,513 of 10,227
+  # smoothed values differed (max 3.6e-15) and WY2002's p5 drought duration read
+  # 116 in Julia vs 60 here. After this change the series is BIT-IDENTICAL to
+  # Julia across all 10,227 days and the duration agrees.
+  v <- c(0.098890929785557094, 0.039774545328691603, 0.011569777876138687,
+         0.0069748678710311656, 0.024374939058907332, 0.079201042582280945,
+         0.034006235282868148)
+  seq_sum <- 0
+  for (x in v) seq_sum <- seq_sum + x
+  expect_false(identical(seq_sum / 7, mean(v)))   # the fixture really discriminates
+
+  dates <- seq(as.Date("2000-01-01"), by = "day", length.out = 7)
+  out <- smooth_daily_flow(dates, v, window = 7L, alignment = "center", min_valid = 1L)
+  # the centre day sees the whole window
+  expect_identical(out[4], seq_sum / 7)
+  expect_false(identical(out[4], mean(v)))
+})
+
+test_that("zero-row input returns the canonical key set for every sparse family", {
+  # Regression for 2026-08-26: these functions built a 0-row frame and then
+  # assigned length-1 NA columns into it, raising an error that the orchestrator
+  # swallowed — silently dropping the family for that gage.
+  d <- data.table::data.table(
+    gage_id = "T", date = seq(as.Date("1992-10-01"), as.Date("1995-09-30"), by = "day"))
+  d[, Q := 1.5]
+  d <- add_water_year_columns(d)
+
+  for (fn in c("analyze_flashiness_trends", "analyze_flow_timing_trends",
+               "analyze_baseflow_indices")) {
+    f <- get(fn, envir = asNamespace("streamflowsignatures"))
+    rz <- f(d[0]); rn <- f(d)
+    expect_identical(sort(names(rz)), sort(names(rn)), info = fn)
+    expect_true(all(is.na(unlist(rz))), info = fn)
+  }
+})

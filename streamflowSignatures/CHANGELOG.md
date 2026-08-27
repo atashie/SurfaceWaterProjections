@@ -152,6 +152,20 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
 - BFImax estimation via Collischonn & Fan (2013) backward filter — would give BFI_Eckhardt_param per-gage BFImax instead of fixed 0.8, improving discriminating power (currently range [0.47–0.80] due to BFImax saturation)
 
 ### Known Issues (discovered 2026-07-14, Codex review — not yet fixed)
+- **ACCEPTED DIVERGENCE (rpkg vs Julia, 1 annual row in 18.9M) — the storage
+  distinct-value guard and signed zeros.** `julia/src/storage.jl` gates a year on
+  `length(unique(Q_valid)) < 10`, and Julia's `unique` uses `isequal`, under which
+  `-0.0` and `+0.0` are DISTINCT. rpkg's `unique` (like numpy's) uses `==`, so a year
+  holding both signed zeros counts one fewer distinct value and can be skipped where
+  Julia keeps it. **A pre-run review recommended replicating Julia's signed-zero
+  distinctness in rpkg so the strict annual gate passes. Deliberately NOT done**: the
+  user already ruled (2026-08-26) that the ports are the more correct side here and
+  that JULIA should move to `==` semantics, so reproducing the quirk downstream would
+  propagate a behaviour already agreed to be wrong, in two languages instead of one.
+  The cost is bounded and measured at exactly **1 annual row in 18,898,406**. It is
+  recorded at gate time with an explicit, named waiver
+  (`--allow-key-diff 1 --allow-diff-signature avg_storage`) rather than hidden, and
+  closes for good when the canonical `unique` is fixed.
 - **MEDIUM (canonical Julia, discovered 2026-08-26) — `ice_affected_days_total` is
   structurally always 0.** The WY 1993–2025 reference run emits `0.0` for **all 6,678
   gages**, yet the streamflow parquet contains **3,693 rows flagged `'P Ice'` across 90

@@ -94,6 +94,22 @@ analyze_baseflow_indices <- function(streamflow_data,
   if (length(missing) > 0) stop(paste("Missing required columns:", paste(missing, collapse = ", ")))
 
   years <- unique(streamflow_data$water_year)
+  # Zero-row input is legitimate and canonical Julia guards it. Without this,
+  # data.frame(water_year = <empty>, X = NA_real_) raises "arguments imply
+  # differing number of rows", which safe_call() swallows — silently dropping
+  # the whole family for that gage (the class of the snow defect, 2026-08-26).
+  # Route through generate_stats so the key set is identical to the normal path.
+  if (nrow(streamflow_data) == 0L || length(years) == 0L) {
+    .empty <- data.frame(water_year = integer(0))
+    for (.m in c("BFI_Eckhardt", "BFI_LyneHollick")) .empty[[.m]] <- numeric(0)
+    return(generate_stats(.empty, value_cols = c("BFI_Eckhardt", "BFI_LyneHollick"),
+                          year_col = "water_year",
+                          trend_completeness = trend_completeness,
+                          decade_completeness = decade_completeness,
+                          min_values_for_stats = min_values_for_stats,
+                          changepoint = changepoint, collector = collector))
+  }
+
   bfi_by_year <- data.frame(water_year = years, BFI_Eckhardt = NA_real_,
                             BFI_LyneHollick = NA_real_)
 
@@ -174,6 +190,22 @@ analyze_baseflow_indices_with_parameters <- function(
   if (length(missing) > 0) stop(paste("Missing required columns:", paste(missing, collapse = ", ")))
 
   years <- unique(streamflow_data$water_year)
+  # Zero-row input is legitimate and canonical Julia guards it. Without this,
+  # data.frame(water_year = <empty>, X = NA_real_) raises "arguments imply
+  # differing number of rows", which safe_call() swallows — silently dropping
+  # the whole family for that gage (the class of the snow defect, 2026-08-26).
+  # Route through generate_stats so the key set is identical to the normal path.
+  if (nrow(streamflow_data) == 0L || length(years) == 0L) {
+    .empty <- data.frame(water_year = integer(0))
+    for (.m in c("BFI_Eckhardt_param", "BFI_LyneHollick_param")) .empty[[.m]] <- numeric(0)
+    return(generate_stats(.empty, value_cols = c("BFI_Eckhardt_param", "BFI_LyneHollick_param"),
+                          year_col = "water_year",
+                          trend_completeness = trend_completeness,
+                          decade_completeness = decade_completeness,
+                          min_values_for_stats = min_values_for_stats,
+                          changepoint = changepoint, collector = collector))
+  }
+
   bfi_by_year <- data.frame(water_year = years, BFI_Eckhardt_param = NA_real_,
                             BFI_LyneHollick_param = NA_real_)
 

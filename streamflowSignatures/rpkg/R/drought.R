@@ -69,9 +69,27 @@ smooth_daily_flow <- function(dates, Q, window = NULL, alignment = NULL,
         } else {
           lo <- max(run_start, j - window + 1L); hi <- j
         }
-        seg <- Q[lo:hi]
-        v <- seg[!is.na(seg)]
-        out[j] <- if (length(v) >= min_valid) mean(v) else NA_real_
+        # Accumulate SEQUENTIALLY in double precision, mirroring the loop in
+        # julia/src/drought.jl exactly. R's mean() uses a long-double accumulator
+        # plus a correction pass, so it returns a different last bit than Julia's
+        # `s += v` — measured on gage 01589795: 4,513 of 10,227 smoothed values
+        # differed, by at most 3.6e-15. Harmless in isolation, but the fixed
+        # thresholds are percentiles OF this series, so when a threshold lands on
+        # a flow plateau a last-bit shift flips every plateau day at once through
+        # the strict `<` (that gage's WY2002 drought duration read 116 in Julia
+        # vs 60 here). numpy's mean happens to match Julia's order for windows
+        # this short, which is why the Python port never showed this.
+        # This is also marginally FASTER: no per-day subvector allocation.
+        s <- 0
+        cnt <- 0L
+        for (k in lo:hi) {
+          vk <- Q[k]
+          if (!is.na(vk)) {
+            s <- s + vk
+            cnt <- cnt + 1L
+          }
+        }
+        out[j] <- if (cnt >= min_valid) s / cnt else NA_real_
       }
     }
     run_start <- i + 1L

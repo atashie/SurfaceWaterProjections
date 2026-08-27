@@ -16,6 +16,22 @@ analyze_flow_timing_trends <- function(streamflow_data,
   years <- unique(streamflow_data$water_year)
   percentiles <- pkg_env$d_percentiles
 
+  # Zero-row input is legitimate and canonical Julia guards it. Without this,
+  # data.frame(water_year = <empty>, X = NA_real_) raises "arguments imply
+  # differing number of rows", which safe_call() swallows — silently dropping
+  # the whole family for that gage (the class of the snow defect, 2026-08-26).
+  # Route through generate_stats so the key set is identical to the normal path.
+  if (nrow(streamflow_data) == 0L || length(years) == 0L) {
+    .empty <- data.frame(water_year = integer(0))
+    for (.m in c(paste0("D", percentiles, "_day"), "D25_to_D75", "Dmax")) .empty[[.m]] <- numeric(0)
+    return(generate_stats(.empty, value_cols = c(paste0("D", percentiles, "_day"), "D25_to_D75", "Dmax"),
+                          year_col = "water_year",
+                          trend_completeness = trend_completeness,
+                          decade_completeness = decade_completeness,
+                          min_values_for_stats = min_values_for_stats,
+                          changepoint = changepoint, collector = collector))
+  }
+
   timing_by_year <- data.frame(water_year = years)
   for (p in percentiles) timing_by_year[[paste0("D", p, "_day")]] <- NA_real_
   timing_by_year$D25_to_D75 <- NA_real_
