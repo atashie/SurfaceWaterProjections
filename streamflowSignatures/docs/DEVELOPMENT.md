@@ -563,12 +563,23 @@ Python, rpkg, and R canonical implementations are validated against Julia golden
 The August 2026 port campaign closed the six-feature gap: Python and rpkg now
 produce the same **1,653-column** product as canonical Julia (Pettitt fields,
 20-value stats floor, annual-values collector, b=1 recession alpha, snow,
-drought). Python vs Julia over the WY 1993–2025 window: strict schema gate PASS
-(identical column AND gage sets), mean identity-R² **0.999988**, **1,615
-Perfect / 5 Good / 0 below 0.99**; the annual parquets share 18,898,405 of
-18,898,406 rows with 0 NA-pattern mismatches. Full detail, including the two
-characterised residuals and the convention decisions taken (Mann-Kendall
-p-value method; sparse-family row emission; canonical metric names), is in
+drought), and **both are validated at full scale** — Python 2026-08-26, rpkg
+2026-08-27 — each passing strict schema equality with no waivers, the
+swallowed-family-failure gate, and the cross-language annual-parquet gate over
+the WY 1993–2025 window:
+
+| | columns | gages | identity-R² tiers | mean R² | annual rows shared |
+|---|---|---|---|---|---|
+| Python | 1,653 | 6,678 | 1,615 Perfect / 5 Good / **0 below 0.99** | 0.999988 | 18,898,405 / 18,898,406 |
+| rpkg | 1,653 | 6,678 | 1,601 Perfect / 10 Good / 9 Poor / **0 below 0.95** | 0.999843 | 18,898,405 / 18,898,406 |
+
+Both share 0 NA-pattern mismatches. rpkg's 19 non-Perfect columns are entirely
+the pre-existing irreducible classes (FDC90th near-zero-tail OLS plus its
+downstream Pettitt tie flips, and 3 recession Spearman p-values). Full detail,
+including the characterised residuals, the defects the gates caught that unit
+tests could not, and the convention decisions taken (Mann-Kendall
+p-value method; sparse-family row emission; canonical metric names; R's
+`mean()` vs Julia's sequential summation in the drought smoother), is in
 [`CROSS_LANGUAGE_STATUS.md`](CROSS_LANGUAGE_STATUS.md) and CHANGELOG →
 August 2026. Benchmark timings are no longer comparable to the April table
 below (the ports now compute ~2.6x the columns).

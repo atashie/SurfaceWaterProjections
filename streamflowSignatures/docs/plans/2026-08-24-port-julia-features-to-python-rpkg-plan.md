@@ -585,3 +585,36 @@ Remaining:
   clean failure gate. Until then rpkg's assurance rests on the schema/value/annual gates.
 - Julia-side cleanup, non-blocking, no rerun: switch `unique` to `==` semantics.
 - Phase 6 docs sweep + final Codex review.
+
+---
+
+### 2026-08-27 — CAMPAIGN COMPLETE: rpkg validated at full scale
+
+Both ports now reproduce canonical Julia's 1,653 columns for the same 6,678 gages.
+rpkg: 131.9 min, 0 errored, **all four acceptance gates green** (strict schema equality
+with no waivers; 0 swallowed family failures; annual parquet with two named residuals;
+identity-R² 1,601 Perfect / 10 Good / 9 Poor, mean 0.999843).
+
+**The central lesson of the campaign.** The first rpkg benchmark passed a 1,012-assertion
+unit suite and still failed three of four gates — and every one of those findings was a
+real defect. Unit tests verify modules in isolation; they cannot see a family that is
+never wired in, a degenerate input that raises an exception the orchestrator swallows,
+an extra annual row, or a last-bit summation difference that only matters downstream.
+Three of the four gates exist precisely because a green suite is not evidence about any
+of those.
+
+The subtlest finding is worth remembering: **R's `mean()` vs Julia's sequential sum in
+the drought smoother.** The values differed by ≤ 3.6e-15 — noise by any normal
+standard — but the drought thresholds are percentiles *of that same series*, so a
+threshold landing on a flow plateau flipped every plateau day at once through the strict
+`<`. One gage-year moved from 116 days to 60. It looked exactly like the documented
+FP-tie class, and was initially filed there. The clue that it was not: **the Python port
+had no drought divergence at all**, because numpy's `mean` happens to match Julia's
+summation order for windows this short. When one port is clean and another is not, the
+difference is a defect, not an irreducible property — that inference is the reusable
+part.
+
+Remaining follow-ups (none blocking, all logged in CHANGELOG → Planned): the four
+deferred rpkg-source items (STREAMFLOW_CONFIG env-var name, `na_handling` fallbacks,
+SWE-merged-only-under-PPT, the run manifest), the canonical `ice_affected_days_total`
+defect, and the canonical signed-zero `unique` cleanup.
