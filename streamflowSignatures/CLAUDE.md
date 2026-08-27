@@ -7,7 +7,7 @@ This project has two primary goals and two secondary goals:
 1. **Data Processing** — Ingest raw streamflow data (USGS, HYDAT, Caravan), clean/filter/collate metadata, standardize outputs.
 2. **Signature Extraction** — Extract 100+ hydrological signatures under strict guardrails. Domain experts update methodology via plain-English instructions in `docs/SIGNATURE_GUIDELINES.md`; code implements those definitions.
 3. **Visualization** (secondary) — Shiny dashboard for broader audience exploration.
-4. **Cross-Language Implementations** (secondary) — Julia is canonical; Python and rpkg aim to produce near-identical results for community sharing (future: publishable packages/libraries). Python's agreement is measured at full scale (August 2026); **rpkg's is validated only for the April 2026 shared subset — its August feature set is unproven at scale.**
+4. **Cross-Language Implementations** (secondary) — Julia is canonical; Python and rpkg aim to produce near-identical results for community sharing (future: publishable packages/libraries). Both ports' agreement is **measured at full scale** (Python 2026-08-26, rpkg 2026-08-27).
 
 ## Multi-Language Architecture
 
@@ -20,7 +20,7 @@ This project implements the same signature calculations in Julia (canonical), Py
 | `rpkg/` | R | Active | R port of Julia signatures |
 | `R/` | R | Deprecated | Legacy shim (still functional for ingestion) |
 
-**Change Workflow**: Julia is canonical. Changes are made in Julia first, then propagated to Python and rpkg. Golden outputs from Julia (April 2026) validate other implementations. Historical note: R was canonical through March 2026; Guidelines Section 3 changes (April 2026) were implemented Julia-first for faster iteration (~10 min benchmark vs hours for R), which drove the transition. Python and rpkg synced April 14-15. **As of the August 2026 port campaign both ports IMPLEMENT all six formerly Julia-only features** — Pettitt changepoint fields, the 20-value stats floor, the annual-values collector, the b=1 recession alpha, snow and drought — i.e. the 1,653-column product, not the April 623-column subset. **Python is VALIDATED at full scale against canonical Julia; rpkg's full-scale benchmark validation is still PENDING** — do not cite rpkg parity numbers until it is gated (docs/CROSS_LANGUAGE_STATUS.md).
+**Change Workflow**: Julia is canonical. Changes are made in Julia first, then propagated to Python and rpkg. Golden outputs from Julia (April 2026) validate other implementations. Historical note: R was canonical through March 2026; Guidelines Section 3 changes (April 2026) were implemented Julia-first for faster iteration (~10 min benchmark vs hours for R), which drove the transition. Python and rpkg synced April 14-15. **As of the August 2026 port campaign both ports IMPLEMENT all six formerly Julia-only features** — Pettitt changepoint fields, the 20-value stats floor, the annual-values collector, the b=1 recession alpha, snow and drought — i.e. the 1,653-column product, not the April 623-column subset. **BOTH ports are VALIDATED at full scale against canonical Julia** — Python 2026-08-26, rpkg 2026-08-27, each passing strict schema equality, the swallowed-failure gate and the cross-language annual-parquet gate (docs/CROSS_LANGUAGE_STATUS.md).
 
 **Canadian HYDAT Metadata**: RHBN and REGULATED status for Canadian gages is pre-exported to `metadata/canadian_hydat_interference.csv` (via `R/export_hydat_metadata.R` using tidyhydat). Julia reads this CSV directly; R uses tidyhydat at runtime.
 

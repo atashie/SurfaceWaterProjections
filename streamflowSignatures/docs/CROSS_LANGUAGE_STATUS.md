@@ -3,10 +3,8 @@
 > **STATUS (August 2026): the August 2026 port campaign implemented all six
 > previously Julia-only features (Pettitt changepoint fields, the 20-value stats
 > floor, the annual-values collector, the b=1 recession alpha, 14 snow metrics,
-> 10 drought metrics) in BOTH Python and rpkg. Python is
-> VALIDATED against canonical Julia at full scale (2026-08-26, below); **rpkg is
-> code-complete and unit-tested but its full-scale benchmark validation is still
-> PENDING** — do not cite rpkg parity numbers until that run is gated.**
+> 10 drought metrics) in BOTH Python and rpkg, and BOTH are now VALIDATED against
+> canonical Julia at full scale — Python 2026-08-26, rpkg 2026-08-27.**
 > Everything below the "Historical record" divider describes the APRIL 2026
 > state, when the ports reproduced only a 623-signature-column subset. It is
 > retained for provenance; do not read it as current.
@@ -23,14 +21,14 @@ per language below.
 
 | | Julia | Python | rpkg |
 |---|---|---|---|
-| Role | **Canonical** | Full port, **validated** | Full port, **validation pending** |
-| Summary columns (WY 1993–2025 @ 60 %) | 1,653 | **1,653 (gated)** | 1,653 expected (benchmark running) |
-| Pettitt changepoint fields | yes | yes | implemented |
-| 20-value stats floor | yes | yes | implemented |
-| Annual-values collector + parquet | yes | yes | implemented |
-| b = 1 recession alpha | yes | yes | implemented |
-| Snow metrics (14) | yes | yes | implemented |
-| Drought metrics (10 + 5 scalars) | yes | yes | implemented |
+| Role | **Canonical** | Full port, **validated** | Full port, **validated** |
+| Summary columns (WY 1993–2025 @ 60 %) | 1,653 | **1,653 (gated)** | **1,653 (gated)** |
+| Pettitt changepoint fields | yes | yes | yes |
+| 20-value stats floor | yes | yes | yes |
+| Annual-values collector + parquet | yes | yes | yes |
+| b = 1 recession alpha | yes | yes | yes |
+| Snow metrics (14) | yes | yes | yes |
+| Drought metrics (10 + 5 scalars) | yes | yes | yes |
 
 ### Python vs Julia — feature-complete validation (2026-08-26)
 
@@ -77,23 +75,59 @@ merely tolerated:
    touched for another reason, and re-measure rather than assuming the count
    stays at one. Tracked in CHANGELOG → `[Unreleased]` → Planned.
 
-### rpkg vs Julia — validation PENDING (as of 2026-08-26)
+### rpkg vs Julia — feature-complete validation (2026-08-27)
 
-rpkg carries all six features in source and its testthat suite is green
-(1,008 assertions against the INSTALLED package, not `load_all`), but **no
-full-scale benchmark has yet passed the gates**, so there are no rpkg parity
-numbers to report. Status of the prerequisites:
+131.9 min, **6,678 gages, 0 errored, 1,653 columns**. All four acceptance gates pass:
 
-- Config, orchestrator, and benchmark runner wire every new argument through
-  (`changepoint`, `min_values_for_stats`, `collector`, `snow_data`) — an earlier
-  runner did not, which is why the first long run was discarded (below).
-- A 3-gage end-to-end smoke on real data produces the full key set: 1,620
-  signature keys, 800 Pettitt fields, 224 snow, 165 drought, and a
-  100-signature annual collector.
-- The WY 1993–2025 @ 60 % benchmark is running; gates to follow are the strict
-  schema gate (1,653 columns, 6,678 gages), the identity-R² value comparison,
-  and the cross-language annual-parquet comparator — the same three Python
-  passed.
+| Gate | Result |
+|---|---|
+| Strict schema equality | **PASS, no waivers** — identical column set (1,653) and gage set (6,678) |
+| Swallowed family failures | **PASS** — 0 per-gage failures across a 997,194-line log |
+| Cross-language annual parquet | **PASS** with two named residuals (below) |
+| Identity R² (diagnostic) | **1,601 Perfect (98.8 %) / 10 Good / 9 Poor / 0 below 0.95**; mean 0.999843, min 0.971051 |
+
+Annual parquet: identical 100-signature sets, 0 duplicate keys, **0 NA-pattern
+mismatches**, 18,898,405 of 18,898,406 rows shared, and **518 of 18,217,552 finite
+pairs (0.0028 %) over 1e-6**.
+
+**The 19 non-Perfect columns are entirely the pre-existing irreducible classes** —
+11 FDC90th + 3 FDCmid + 2 Q90 (near-zero-tail OLS on `log10(Q + 1e-10)`, and
+Pettitt tie flips downstream of it) and 3 recession Spearman p-values (exact
+permutation vs t-approximation for small n). No drought, storage, snow, BFI or
+changepoint family appears.
+
+Two residuals are waived by name at gate time rather than hidden:
+1. **1 annual row in 18.9 M** — the signed-zero `unique` divergence in the storage
+   distinct-value guard (see the accepted-divergence note in CHANGELOG).
+2. **518 annual values** — 291 discrete threshold-crossing metrics (`D*_day`,
+   `D25_to_D75`, `TQmean`, `dur_low_pulses_*`), where a last-bit tie moves a whole
+   day; and ~199 recession-family rows traceable to **3 gages of 6,507** whose
+   `recession_alpha_point_cloud_linear_reservoir` differs (max 4.9e-3) through
+   tie-sensitive recession-event identification.
+
+#### What the gates caught that nothing else could
+
+The first rpkg benchmark passed its unit suite and still failed three of four
+gates. Every finding was a real defect:
+
+- `calculate_snow_metrics()` raised on a legitimately **zero-row** `snow_data`
+  frame; the orchestrator swallowed it and 4 gages silently lost all 224 snow
+  columns. The same guard was missing in flashiness, timing and both baseflow
+  functions.
+- `load_gages_ii_interference()` **intersected** the CONUS and AKHIPR column sets,
+  dropping 4 metadata columns for the ~9,000 CONUS gages that have them.
+- flashiness, both BFIs and storage **pre-allocated a row per year**, exporting
+  1,039 annual rows Julia omits; storage also lacked Julia's ≥10-**distinct**-Q guard.
+- **`smooth_daily_flow` used R's `mean()`.** Its long-double accumulator plus
+  correction pass returns a different last bit than Julia's sequential `s += v`
+  loop — 4,513 of 10,227 smoothed values differed by ≤ 3.6e-15. Harmless alone,
+  but the drought thresholds are percentiles OF that series, so a threshold landing
+  on a flow plateau flipped every plateau day at once through the strict `<`
+  (gage 01589795 WY2002: Julia 116 days, rpkg 60). An explicit sequential double
+  sum makes the series **bit-identical across all 10,227 days** — and is
+  marginally faster. This alone was ~11,578 of the 12,096 annual mismatches.
+  numpy's `mean` matches Julia's order for windows this short, which is why the
+  Python port never showed it.
 
 ### Convention decisions taken during the campaign
 

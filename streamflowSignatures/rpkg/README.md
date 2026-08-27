@@ -71,12 +71,14 @@ goal, not yet a measured result** — see the status note below.
 
 ### Benchmark Results (April 2026 — post Section 3 sync)
 
-Full benchmark (WY 1993-2025 @ 60%): 6,678 gages, 1,653 columns expected. The August
-2026 port campaign implemented all six formerly Julia-only features here (Pettitt,
-stats floor, annual-values collector, b=1 alpha, snow, drought) and the testthat
-suite is green against the INSTALLED package, but **the full-scale benchmark has not
-yet passed its acceptance gates** — treat parity as unproven until it does. Python's
-equivalent run is validated. See docs/CROSS_LANGUAGE_STATUS.md.
+Full benchmark (WY 1993-2025 @ 60%): **6,678 gages x 1,653 columns, 0 errored,
+131.9 min** — identical to canonical Julia's column and gage sets. Validated
+2026-08-27: strict schema equality passes with no waivers, the swallowed-failure
+gate reports 0 failures, and the cross-language annual parquet agrees on
+18,898,405 of 18,898,406 rows with 0 NA-pattern mismatches. Identity-R2:
+1,601 Perfect / 10 Good / 9 Poor of 1,620 shared columns (mean 0.999843); the
+non-Perfect ones are the pre-existing FDC90th near-zero-tail and recession
+Spearman p-value classes. See docs/CROSS_LANGUAGE_STATUS.md.
 
 | Pair | Perfect (>=0.999) | Good (0.99-0.999) | Poor (<0.99) |
 |------|-------------------|-------------------|-------------|

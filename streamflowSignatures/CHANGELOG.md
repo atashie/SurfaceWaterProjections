@@ -23,16 +23,15 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
   blocking**: it does not justify re-running any benchmark or delaying the port
   campaign (user decision, 2026-08-26); fold it into the next behavior-changing
   Julia release and let it land in the next product regeneration.
-- **Finish the Python/rpkg port campaign — Python DONE + validated, rpkg validation
-  PENDING.** All six formerly Julia-only features (Pettitt changepoint fields, the
+- **Port campaign COMPLETE (2026-08-27) — both ports validated at full scale.**
+  Retained below for the follow-ups it still carries. All six formerly Julia-only features (Pettitt changepoint fields, the
   20-value stats floor, the annual-values collector, the b=1 recession alpha, the 14
   snow metrics, the 10 drought metrics) are now implemented in BOTH ports; the
   "623-column April subset" description no longer applies to either. **Python is
   validated at full scale** against canonical Julia (1,653 columns / 6,678 gages,
   1,615 of 1,620 shared columns Perfect, zero below 0.99 — August 2026 entry).
-  **rpkg is code-complete and unit-tested (1,008 assertions against the INSTALLED
-  package) but its full-scale benchmark has not yet been gated** — that run is the
-  remaining work, plus these follow-ups:
+  **rpkg is now validated too** (2026-08-27, all four gates green — see the August 2026
+  milestone). Remaining follow-ups:
     - **Seven rpkg-side fixes identified 2026-08-26. Three are APPLIED (the runner
       ones — the benchmark they were queued behind was stopped externally, which
       made them safe to apply); four remain DEFERRED** because they change rpkg
@@ -520,6 +519,55 @@ Collection 1.
 ---
 
 ## [August 2026]
+
+### Milestone: rpkg VALIDATED at full scale — the port campaign is COMPLETE (2026-08-27)
+Both ports now reproduce canonical Julia's **1,653 columns for the same 6,678 gages** on
+the WY 1993–2025 @ 60 % standard configuration. rpkg's run: 131.9 min, **0 gages
+errored**, all four acceptance gates green — strict schema equality with **no waivers**,
+zero swallowed family failures across a 997,194-line log, cross-language annual-parquet
+equality (two named residuals), and an identity-R² diagnostic of **1,601 Perfect
+(98.8 %) / 10 Good / 9 Poor / 0 below 0.95**, mean R² 0.999843.
+
+**The 19 non-Perfect columns are entirely pre-existing irreducible classes** — 11
+FDC90th + 3 FDCmid + 2 Q90 (near-zero-tail OLS on `log10(Q + 1e-10)` and the Pettitt
+tie flips downstream of it) and 3 recession Spearman p-values (exact permutation vs
+t-approximation at small n). No drought, storage, snow, BFI or changepoint family
+appears. Annual parquet: 0 NA-pattern mismatches, 18,898,405 of 18,898,406 rows shared,
+**518 of 18,217,552 finite pairs (0.0028 %) over 1e-6**.
+
+**The first rpkg benchmark passed its unit suite and still failed three of four gates,
+and every finding was a real defect** (full detail in docs/CROSS_LANGUAGE_STATUS.md):
+zero-row crashes in snow (and latent in flashiness/timing/baseflow) that the
+orchestrator swallowed, costing 4 gages all 224 snow columns; a CONUS↔AKHIPR
+`intersect()` that dropped 4 metadata columns for ~9,000 gages; pre-allocated annual
+frames exporting 1,039 rows Julia omits, plus a missing ≥10-**distinct**-Q storage
+guard; and the big one —
+
+- **`smooth_daily_flow` used R's `mean()`.** Its long-double accumulator plus correction
+  pass returns a different last bit than Julia's sequential `s += v`: 4,513 of 10,227
+  smoothed values differed by ≤ 3.6e-15. Harmless in isolation, except the drought
+  thresholds are percentiles OF that series, so a threshold landing on a flow plateau
+  flips every plateau day at once through the strict `<` (gage 01589795 WY2002 read 116
+  days in Julia and 60 in rpkg). An explicit sequential double sum makes the smoothed
+  series **bit-identical across all 10,227 days**, and is marginally faster. This was
+  ~11,578 of the 12,096 annual mismatches. **numpy's `mean` matches Julia's summation
+  order for windows this short, which is why the Python port never exhibited it** — the
+  clean Python drought result was the clue that bit-parity was achievable, and filing
+  this under the documented tie-sensitivity class was the wrong initial call.
+
+**Performance**: the runner read all 9 columns of the 111.6M-row streamflow parquet,
+driving a 16 GB machine into swap (measured mid-run: 20.3/21.5 GB swap, 163 MB/s
+page-ins, RSS squeezed to 0.41 GB, CPU at 54 %, 0.1 gages/s → 22 h projected).
+Column-projecting to `gage_id/Date/Q` cut the table to a measured **2.50 GB** and the
+run to ~2 h — a ~15x throughput gain, verified behaviour-neutral by identical
+processed/skipped tallies at every checkpoint.
+
+**Accepted, not fixed**: Julia's `unique` uses `isequal`, so `-0.0` and `+0.0` are
+distinct in the storage distinct-value guard while rpkg's (like numpy's) uses `==`. A
+pre-run review recommended replicating the quirk so the strict gate passes; declined —
+the user ruled the ports are the correct side and Julia should move to `==`, so
+reproducing it downstream would propagate an agreed-wrong behaviour into two languages.
+Cost: **1 annual row in 18,898,406**, waived by name at gate time.
 
 ### Milestone: PYTHON reaches full feature parity with canonical Julia — VALIDATED at scale (2026-08-26)
 The August port campaign's Python track is complete and gated. Python now produces the
