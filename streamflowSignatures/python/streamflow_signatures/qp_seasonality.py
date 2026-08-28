@@ -78,7 +78,7 @@ def calculate_qp_seasonality(
     annual_metrics = []
 
     for yr, year_data in df.groupby("water_year", sort=False):
-        year_data = year_data.copy()  # needed because we mutate below (fillna)
+        year_data = year_data.copy()  # defensive copy of the groupby slice (no in-place mutation follows)
 
         # Skip years with any remaining NAs (data should be pre-interpolated)
         if year_data["Q"].isna().any() or year_data["PPT"].isna().any():

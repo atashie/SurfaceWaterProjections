@@ -27,7 +27,7 @@ from .timing import analyze_flow_timing_trends
 from .fdc import analyze_fdc_trends
 from .baseflow import analyze_baseflow_indices, analyze_baseflow_indices_with_parameters, eckhardt_filter, lyne_hollick_filter
 from .recession import analyze_recession_parameters
-from .pulses import calculate_pulse_metrics
+from .pulses import calculate_pulse_metrics, calculate_negative_days
 from .runoff_ratios import analyze_Q_PPT_relationships
 from .elasticity import calculate_streamflow_elasticity
 from .qp_seasonality import calculate_qp_seasonality
@@ -68,6 +68,7 @@ __all__ = [
     "lyne_hollick_filter",
     "analyze_recession_parameters",
     "calculate_pulse_metrics",
+    "calculate_negative_days",
     # Signatures - Climate-dependent (require PPT column)
     "analyze_Q_PPT_relationships",
     "calculate_streamflow_elasticity",

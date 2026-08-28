@@ -23,9 +23,9 @@ def calculate_flow_vols_by_year(
     """
     Calculate annual and seasonal flow volumes and percentiles.
 
-    This function calculates 22 flow volume metrics for each water year,
+    This function calculates 21 flow volume metrics for each water year,
     then applies generate_stats() to produce 8 statistics per metric
-    (176 total output columns).
+    (168 total output columns).
 
     Parameters
     ----------

@@ -40,11 +40,12 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/arikt/SurfaceWaterProjections"
-Documentation = "https://github.com/arikt/SurfaceWaterProjections#readme"
+Homepage = "https://github.com/CZ-Sync/HISSS"
+Documentation = "https://github.com/CZ-Sync/HISSS#readme"
 
 [tool.setuptools.packages.find]
 where = ["."]
+include = ["streamflow_signatures*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

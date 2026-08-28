@@ -10,7 +10,7 @@ Sensitivity of streamflow to precipitation changes.
 
 
 """
-    calculate_streamflow_elasticity(df::DataFrame; min_years=10, window=11) -> Dict
+    calculate_streamflow_elasticity(df::DataFrame; min_years=15, window=11) -> Dict
 
 Calculate streamflow elasticity signatures.
 
@@ -33,7 +33,8 @@ Parameters
 df : DataFrame
     Daily streamflow and climate data with columns: water_year, Q, PPT
 min_years : Int
-    Minimum years required for calculation
+    Minimum years required for calculation (default CFG_ELASTICITY_MIN_YEARS
+    from config `elasticity.min_years`; 15 as shipped)
 window : Int
     Rolling window size for trend calculation
 

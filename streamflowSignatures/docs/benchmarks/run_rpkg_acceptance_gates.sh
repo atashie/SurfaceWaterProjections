@@ -133,9 +133,10 @@ run "schema equality (1,653 columns / 6,678 gages)" \
 
 # 2. Swallowed per-gage family exceptions in the run log.
 #    NOTE: this REFUSES to certify a log ending in R's deferred-warning
-#    truncation banner. Until run_rpkg_benchmark.R sets options(warn = 1),
-#    expect this gate to report that it cannot substantiate a pass — which is
-#    the correct outcome, not a green light.
+#    truncation banner. run_rpkg_benchmark.R sets options(warn = 1) at the top
+#    so warnings print immediately; a log from an OLDER runner (or one whose
+#    warn option was overridden) can still end in the banner and will be
+#    refused — the correct outcome, not a green light.
 # --require-error-tally is rpkg-specific: only the R runner prints
 # "Gages errored: N". Dry-running this harness against a Python prefix therefore
 # fails this gate by design, not because of a defect.

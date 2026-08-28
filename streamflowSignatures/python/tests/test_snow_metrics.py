@@ -16,7 +16,7 @@ import pandas as pd
 import pytest
 
 from streamflow_signatures.snow import (
-    calculate_snow_metrics, snow_spells, SNOW_METRICS, SNOW_RECORD_GATED_METRICS,
+    calculate_snow_metrics, snow_spells, SNOW_METRICS,
 )
 from streamflow_signatures import calculate_all_signatures, AnnualCollector
 

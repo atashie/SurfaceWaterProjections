@@ -1,7 +1,14 @@
 """
-Changepoint detection via 4-model BIC comparison.
+Changepoint detection.
 
-Fits four competing models to an annual time series and selects the best via BIC:
+`pettitt_test` (below) is the PRODUCTION changepoint method: it is what
+`generate_stats()` applies to every signature's annual series to produce the
+8 `_pettitt_*` output fields.
+
+The 4-model BIC comparison (`detect_changepoint` and its helpers) is retained
+by design but is NOT called by the pipeline. It was built to distinguish step
+changes from trend breaks — something the Pettitt test cannot do — and is kept
+for potential future use:
 1. Flat:      y = μ + ε                                    (k=2)
 2. Trend:     y = α + βt + ε                               (k=3)
 3. Step:      y = μ₁(t≤τ) + μ₂(t>τ) + ε                   (k=4)

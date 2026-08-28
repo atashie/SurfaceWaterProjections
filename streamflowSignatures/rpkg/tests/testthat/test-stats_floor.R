@@ -2,7 +2,7 @@
 # Phase 1b of the port campaign (mirrors python/tests/test_stats_floor.py and
 # julia/test/test_stats_floor.jl).
 #
-# Contract (julia/src/stats.R equivalent): a metric with fewer non-NA annual
+# Contract (julia/src/stats.jl equivalent): a metric with fewer non-NA annual
 # values than the floor emits NA for ALL 8 statistics AND its changepoint
 # fields; force_skip_trends suppresses the 6 trend stats only (mean/median and
 # changepoint survive); recession and elasticity are exempt at the

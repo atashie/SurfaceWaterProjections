@@ -9,7 +9,7 @@ Annual and seasonal flow volumes plus percentile-based metrics.
 
 Calculate flow volume signatures with trend statistics.
 
-Calculates 22 metrics:
+Calculates 21 metrics:
 - Qann: Annual total flow
 - Qwin, Qspr, Qsum, Qfal: Seasonal totals
 - Q1, Q5, Q10, Q20, Q25, Q30, Q40, Q50, Q60, Q70, Q75, Q80, Q90, Q95, Q99: Percentiles
@@ -26,7 +26,7 @@ df : DataFrame
 Returns
 -------
 Dict{String, Float64}
-    Dictionary of signature statistics (22 metrics × 8 stats = 176 values)
+    Dictionary of signature statistics (21 metrics × 8 stats = 168 values)
 """
 function calculate_flow_vols_by_year(df::DataFrame; seasonal_flags::Union{Nothing, DataFrame}=nothing, trend_completeness::Union{Nothing, Float64}=nothing, decade_completeness::Union{Nothing, Float64}=nothing, min_values_for_stats::Union{Nothing, Int}=nothing, changepoint::Union{Nothing, NamedTuple}=nothing, collector::Union{Nothing, AnnualCollector}=nothing)
     result = Dict{String, Float64}()

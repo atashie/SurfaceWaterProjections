@@ -4,9 +4,11 @@ Smoke Test - Runs signature extraction on a small subset of gages.
 Usage:
     python tests/smoke_test.py
 
-Requires production parquet files. Edit paths below if needed.
+Requires production parquet files. Override paths via the STREAMFLOW_DATA_PATH
+and STREAMFLOW_CLIMATE_PATH environment variables if needed.
 """
 
+import os
 import sys
 import time
 from pathlib import Path
@@ -25,8 +27,15 @@ from streamflow_signatures import (
 )
 
 # ── Configuration ──────────────────────────────────────────────────────────────
-STREAMFLOW_PATH = r"D:\processedOuts_feb2026\combined_streamflow_data_09feb2026.parquet"
-CLIMATE_PATH = r"D:\processedOuts_feb2026\daymet_1980_2023.parquet"
+# Paths default to the Windows data drive but are ENV-overridable, using the
+# SAME variable names as the Julia smoke test / benchmark runners, so this can
+# run wherever the feb2026 inputs are mounted.
+STREAMFLOW_PATH = os.environ.get(
+    "STREAMFLOW_DATA_PATH",
+    r"D:\processedOuts_feb2026\combined_streamflow_data_09feb2026.parquet")
+CLIMATE_PATH = os.environ.get(
+    "STREAMFLOW_CLIMATE_PATH",
+    r"D:\processedOuts_feb2026\daymet_1980_2023.parquet")
 
 # 10 hardcoded test gages (same as R smoke test seed=42 selection for reproducibility)
 TEST_GAGES = [

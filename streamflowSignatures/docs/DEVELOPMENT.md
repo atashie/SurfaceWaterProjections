@@ -13,7 +13,7 @@ USGS (dataRetrieval)  ──┐
   (streamflow only)     ├──> Parquet Storage ──┐
                         │                       │
 Canadian HYDAT  ────────┘                       ├──> Signature ──> CSV Summary
-  (streamflow only)                             │    Extraction     (1264 columns)
+  (streamflow only)                             │    Extraction     (1653 columns)
                                                 │        │
 Daymet (climate data)  ──> Parquet Storage ─────┘        └──> Annual Values Parquet
   (PPT, temp, SWE)         (joined at runtime)                (gage_id, signature,
@@ -153,6 +153,7 @@ streamflowSignatures/
 │       ├── visualize_qa_qc.R    # QA/QC visualization plots
 │       ├── test_climate_functions.R # Climate function tests
 │       ├── test_climate_signatures.R
+│       ├── test_na_handling.R       # Legacy NA-handling suite (6 known pre-existing failures)
 │       ├── generate_golden_outputs.R
 │       └── verify_no_regression.R  # Golden output regression check
 │
@@ -160,19 +161,19 @@ streamflowSignatures/
 │   ├── DESCRIPTION
 │   ├── NAMESPACE
 │   ├── README.md
-│   ├── R/                       # 17 modules
+│   ├── R/                       # 20 modules (+ zzz.R)
 │   └── tests/                   # testthat tests + real-data smoke test
 │
 ├── python/                      # Python package (production-ready)
 │   ├── README.md
 │   ├── pyproject.toml
-│   ├── streamflow_signatures/   # 17 modules
+│   ├── streamflow_signatures/   # 20 modules
 │   └── tests/                   # Python tests
 │
 ├── julia/                       # Julia canonical implementation (production-ready)
 │   ├── README.md
 │   ├── Project.toml
-│   ├── src/                     # 17 modules
+│   ├── src/                     # 20 modules + StreamflowSignatures.jl
 │   └── test/                    # Julia tests
 │
 ├── config/                      # Cross-language configuration
@@ -199,7 +200,6 @@ streamflowSignatures/
 │   │   ├── run_r_benchmark.R
 │   │   ├── compare_three_way.py
 │   │   ├── compare_julia_vs_golden_r.py  # 6-tier Julia vs Golden R comparison
-│   │   ├── compare_outputs.py
 │   │   ├── build_julia_vs_golden_r_dashboard.py  # Interactive HTML dashboard
 │   │   ├── build_section3_dashboard.py   # Section 3 pre/post dashboard
 │   │   ├── compare_experiment_vs_julia.py  # Parameterized experiment comparison
@@ -222,7 +222,6 @@ streamflowSignatures/
 │
 ├── metadata/                    # Basin and gage metadata (43 files)
 │   └── canadian_hydat_interference.csv  # RHBN + REGULATED for 8,012 Canadian stations
-├── archive/                     # Archived/deprecated files (DO NOT USE)
 │
 ├── data_out/                    # Processed outputs (gitignored)
 ├── test_output/                 # Test outputs (gitignored)
@@ -230,6 +229,23 @@ streamflowSignatures/
 ```
 
 ## Common Tasks
+
+### Publish to the public mirror (CZ-Sync/HISSS)
+
+The public code repository for the HISSS manuscript is
+**https://github.com/CZ-Sync/HISSS** — a snapshot mirror of this project's
+git-tracked content, kept current by:
+
+```bash
+./publish_to_hisss.sh
+```
+
+The script copies exactly the tracked files minus a fixed exclusion list
+(internal/Claude tooling, the unpublished manuscript snapshot, `docs/plans/`,
+the defunct Shiny app, and the two >50 MB golden-output CSVs — see the script
+header), commits them on HISSS `main` with the source revision in the message,
+and pushes. **Run it after every merge to main.** Never commit to HISSS
+directly — the next publish overwrites it.
 
 ### Run Signature Extraction
 

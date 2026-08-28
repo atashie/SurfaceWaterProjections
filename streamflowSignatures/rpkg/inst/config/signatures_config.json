@@ -138,7 +138,7 @@
   },
   "annual_values": {
     "save": true,
-    "comment": "Write per-year annual signature values (long-format parquet: gage_id, signature, water_year, value) alongside the summary CSV. Absent section => disabled. Julia only; Python/rpkg ports deferred."
+    "comment": "Write per-year annual signature values (long-format parquet: gage_id, signature, water_year, value) alongside the summary CSV. Absent section => disabled. Implemented in all three languages (Julia, Python, rpkg) since the August 2026 port campaign."
   },
   "metadata": {
     "include_human_interference": true,

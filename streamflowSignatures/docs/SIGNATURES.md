@@ -654,12 +654,12 @@ five levels mirror the operational U.S. Drought Monitor classes:
 
 | Category | Function | Requires Climate | Notes |
 |----------|----------|------------------|-------|
-| Flow Volumes | `calculate_flow_vols_by_year` | No | 22 metrics (5 totals + 16 percentiles + Q95-Q10) + 4 season exclusion diagnostics |
+| Flow Volumes | `calculate_flow_vols_by_year` | No | 21 metrics (5 totals + 15 percentiles + Q95_Q10) + 4 season exclusion diagnostics |
 | FDC | `analyze_fdc_trends` | No | 3 metrics (FDCall, FDC90th, FDCmid) |
 | Baseflow (Fixed) | `analyze_baseflow_indices` | No | 2 metrics |
 | Baseflow (Recession-Parameterized) | `analyze_baseflow_indices_with_parameters` | No | 2 metrics + 1 scalar |
-| Recession | `analyze_recession_parameters` | No | 8 metrics + 6 seasonality |
-| Pulse Metrics | `calculate_pulse_metrics` | No | 15 metrics (8 pulse + TQmean + 5 flow reversals + negative_ann) |
+| Recession | `analyze_recession_parameters` | No | 7 metrics + 6 seasonality (the per-gage recession alpha scalar is counted under Baseflow (Recession-Parameterized)) |
+| Pulse Metrics | `calculate_pulse_metrics` | No | 14 metrics (8 pulse + TQmean + 5 flow reversals); negative_ann is counted under Negative Flow Days |
 | Flashiness | `analyze_flashiness_trends` | No | 1 metric |
 | Flow Timing | `analyze_flow_timing_trends` | No | 15 metrics |
 | Q-PPT Relationships | `analyze_Q_PPT_relationships` | Yes | 5 metrics + 1 diagnostic |

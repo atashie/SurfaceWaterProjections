@@ -3,14 +3,15 @@ Title: Streamflow Signature Extraction and Trend Analysis
 Version: 0.1.0
 Authors@R:
     person("Arik", "Tashie", role = c("aut", "cre"),
-           email = "arikt@example.com")
-Description: Extract 60+ hydrological signatures from daily streamflow data,
+           email = "arik.tash@gmail.com")
+Description: Extract 100+ hydrological signatures from daily streamflow data,
     including flow volumes, baseflow indices, recession parameters, pulse metrics,
     flow timing, flashiness, flow duration curves, runoff ratios, elasticity,
-    Q-P seasonality, and average storage. Each signature produces 8 trend
+    Q-P seasonality, average storage, snow metrics (from snow water equivalent),
+    and streamflow drought duration/deficit. Each signature produces 8 trend
     statistics (Theil-Sen slope, linear slope, Spearman correlation, Mann-Kendall
-    test, mean, median). Mirrors the Python and Julia implementations for
-    cross-language reproducibility.
+    test, mean, median) plus 8 Pettitt changepoint fields. Mirrors the Python and
+    Julia implementations for cross-language reproducibility.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
@@ -19,7 +20,9 @@ Imports:
     jsonlite,
     zyp,
     Kendall,
-    arrow
+    arrow,
+    stats,
+    utils
 Suggests:
     testthat (>= 3.0.0)
 Config/testthat/edition: 3

@@ -141,8 +141,8 @@ cat("  Reading Daymet parquet (column-projected)...\n")
 has_daymet <- file.exists(daymet_path)
 if (has_daymet) {
   # Memory: read only the columns this runner uses (the full 8-column ~98M-row
-  # frame is several GB of dead weight). SWE joins the list with the Phase-4
-  # snow port. Raw names cover pre-/post-normalization variants.
+  # frame is several GB of dead weight) — PPT and SWE for the climate/snow
+  # signatures. Raw names cover pre-/post-normalization variants.
   sch_names <- arrow::open_dataset(daymet_path)$schema$names
   raw_wanted <- c("gage_id", "site_id", "site_no", "date", "Date",
                   "PPT", "prcp", "PRCP", "SWE", "swe")
@@ -260,8 +260,8 @@ for (i in seq_along(all_gages)) {
     gage_area_normalized <- is.na(gan) || gan
 
     # Merge climate data if available (needed before preprocessing).
-    # Phase-4 (snow port) wiring point: carry SWE through here once the
-    # preprocessor supports valid_swe_years.
+    # PPT and SWE are both carried through; the preprocessor derives
+    # valid_swe_years from the SWE column.
     has_climate <- FALSE
     if (gage %in% names(daymet_idx)) {
       daymet_rows <- daymet_idx[[gage]]
@@ -306,7 +306,7 @@ for (i in seq_along(all_gages)) {
         pp$valid_years <- pp$valid_years[pp$valid_years >= wy_lo & pp$valid_years <= wy_hi]
         pp$valid_climate_years <- pp$valid_climate_years[
           pp$valid_climate_years >= wy_lo & pp$valid_climate_years <= wy_hi]
-        if (!is.null(pp$valid_swe_years)) {  # arrives with the snow port
+        if (!is.null(pp$valid_swe_years)) {  # NULL only when the preprocessor saw no SWE
           pp$valid_swe_years <- pp$valid_swe_years[
             pp$valid_swe_years >= wy_lo & pp$valid_swe_years <= wy_hi]
         }

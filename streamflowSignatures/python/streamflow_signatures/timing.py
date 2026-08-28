@@ -24,7 +24,9 @@ def analyze_flow_timing_trends(
     Calculate flow timing metrics trends.
 
     Determines the day of water year when cumulative flow reaches
-    various percentile thresholds (5%, 10%, 20%, ..., 95%).
+    various percentile thresholds (1%, 5%, 10%, ..., 95%, 99%) —
+    15 metrics: 13 D-day percentiles (config timing.d_percentiles)
+    plus D25_to_D75 and Dmax.
 
     Parameters
     ----------
@@ -38,7 +40,7 @@ def analyze_flow_timing_trends(
     -------
     dict
         Dictionary of signature statistics with keys for each metric:
-            - D5_day, D10_day, ..., D95_day: Day when cumulative
+            - D1_day, D5_day, ..., D99_day: Day when cumulative
               flow reaches each percentile
             - D25_to_D75: Duration between 25% and 75% cumulative flow
             - Dmax: Day of maximum discharge

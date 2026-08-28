@@ -170,13 +170,9 @@ run_test("Shiny app helperFunctions.R exists", quote({
 }))
 
 # =============================================================================
-# LEVEL 2: Archive and Orphans
+# LEVEL 2: Docs and Orphans
 # =============================================================================
-cat("\n--- LEVEL 2: Archive and Docs ---\n")
-
-run_test("archive/ directory exists", quote({
-  if (!dir.exists(file.path(main_dir, "archive"))) stop("Directory not found")
-}))
+cat("\n--- LEVEL 2: Docs ---\n")
 
 run_test("docs/ directory exists", quote({
   if (!dir.exists(file.path(main_dir, "docs"))) stop("Directory not found")

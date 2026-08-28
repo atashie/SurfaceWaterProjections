@@ -39,32 +39,40 @@ df = leftjoin(df, climate[:, [:gage_id, :date, :PPT]], on=[:gage_id, :date])
 # Process a single gage
 gage_data = df[df.gage_id .== "01011000", :]
 
-# Filter to qualifying water years (3-stage filter matching R):
+# Filter to qualifying water years — LEGACY path (3-stage filter matching R):
 #   1. Min 30 days with Q > 0.0001 mm/day
 #   2. Min 95% non-NA days per water year
 #   3. Min 20 qualifying water years total
 # Returns: (Vector{Int} of qualifying year numbers, Bool whether gage qualifies)
+# NOTE: production runs use preprocess_daily_data() (exported) for year
+# qualification and NA handling instead (config na_handling;
+# use_legacy_filtering: false).
 qual_years, qualifies = filter_qualifying_years(gage_data)
 if qualifies
     qual_set = Set(qual_years)
     gage_data = gage_data[in.(gage_data.water_year, Ref(qual_set)), :]
     results = calculate_all_signatures(gage_data, "PPT" in names(gage_data))
-    # results is a Dict with ~551 keys (with climate) or ~478 keys (without climate)
+    # results is a Dict of signature statistics. The full production pipeline
+    # emits the 1,653-column product for a climate+SWE gage — this bare call
+    # emits the 8-stat keys only: the Pettitt changepoint fields require the
+    # changepoint=... keyword and the 14 snow metrics require snow_data=...
+    # (see docs/benchmarks/run_julia_benchmark.jl for the full wiring)
     # e.g. "Qann_mean" => 573.7, "Qann_senn_slp" => -0.3, ...
 end
 ```
 
-## Data Setup
+## Input Data
 
-Production data paths (edit at the top of scripts). Paths shown are Windows; use forward slashes on Linux/macOS.
-
-| File | Default Path |
-|------|-------------|
-| Streamflow | `D:\processedOuts_feb2026\combined_streamflow_data_09feb2026.parquet` |
-| Climate (Daymet) | `D:\processedOuts_feb2026\daymet_1980_2023.parquet` |
-| Metadata | `D:\processedOuts_feb2026\combined_watershed_metadata_09feb2026.csv` |
-
-These paths are specific to the development machine. Adjust for your data location.
+Streamflow input is a table of `gage_id`, `date`, and daily `Q` in mm/day (see
+"Input Data Format" below for the full schema). Climate-dependent signatures
+additionally need `PPT` — and the snow metrics `SWE` — merged in from a climate
+table keyed by gage and date (e.g. basin-aggregated Daymet). The benchmark
+scripts read paths from environment variables (`STREAMFLOW_DATA_PATH`,
+`STREAMFLOW_CLIMATE_PATH`, `STREAMFLOW_METADATA_PATH`). The published HISSS
+data resources (daily streamflow, gage metadata, basin-aggregated Daymet
+climate, and the signature products) are distributed through the HISSS
+HydroShare collection:
+<https://www.hydroshare.org/resource/f702201faa5d46069a5ee83ffa4c9768/>.
 
 ## Smoke Test
 
@@ -111,20 +119,40 @@ Each signature metric produces 8 statistics:
 | `_mean` | Mean | Arithmetic mean |
 | `_median` | Median | Central value |
 
+When a `changepoint` configuration is passed to `calculate_all_signatures()`
+(as the production pipeline does), each signature additionally produces 8
+Pettitt changepoint fields:
+
+| Suffix | Description |
+|--------|-------------|
+| `_pettitt_cp_year` | Most likely changepoint year |
+| `_pettitt_pval` | Asymptotic p-value |
+| `_pettitt_pre_mean` | Mean before the changepoint |
+| `_pettitt_post_mean` | Mean after the changepoint |
+| `_pettitt_delta_mean` | Post minus pre mean |
+| `_pettitt_pct_change` | Percent change at the changepoint |
+| `_pettitt_pre_mk_pval` | Mann-Kendall p-value, pre-changepoint segment |
+| `_pettitt_post_mk_pval` | Mann-Kendall p-value, post-changepoint segment |
+
+An opt-in `AnnualCollector` (pass `collector=...`) records the per-year annual
+values behind every signature's statistics; the benchmark runner drains it into
+a long-format parquet with columns `gage_id, signature, water_year, value`,
+written alongside the summary CSV (same schema in Python and rpkg).
+
 ## Available Signatures
 
 ### Simple Signatures
 
-- **Flow Volumes** (`calculate_flow_vols_by_year`): 22 metrics
-  - Qann, Qwin, Qspr, Qsum, Qfal (seasonal totals)
-  - Q1, Q5, Q10, ..., Q99 (percentiles)
+- **Flow Volumes** (`calculate_flow_vols_by_year`): 21 metrics
+  - Qann, Qwin, Qspr, Qsum, Qfal (annual + seasonal totals)
+  - Q1, Q5, Q10, ..., Q99 (15 percentiles)
   - Q95_Q10 (high-low difference)
 
 - **Flashiness** (`analyze_flashiness_trends`): 1 metric
   - Richards-Baker flashiness index
 
-- **Flow Timing** (`analyze_flow_timing_trends`): 13 metrics
-  - D5_day, D10_day, ..., D95_day (cumulative flow timing)
+- **Flow Timing** (`analyze_flow_timing_trends`): 15 metrics
+  - D1_day, D5_day, ..., D99_day (13 cumulative flow timing days, per config `timing.d_percentiles`)
   - D25_to_D75 (duration of middle 50% of flow)
   - Dmax (day of maximum discharge)
 
@@ -139,11 +167,18 @@ Each signature metric produces 8 statistics:
   - BFI_Eckhardt (Eckhardt recursive digital filter)
   - BFI_LyneHollick (Lyne-Hollick filter with 2 passes)
 
-- **Recession Parameters** (`analyze_recession_parameters`): 5 metrics + 6 seasonality
-  - log_a_pointcloud, log_a_events (recession rate parameter)
-  - b_pointcloud, b_events (recession exponent)
+- **Recession-Parameterized Baseflow** (`analyze_baseflow_indices_with_parameters`): 2 metrics + 1 scalar
+  - BFI_Eckhardt_param (Eckhardt filter with recession-derived alpha)
+  - BFI_LyneHollick_param (Lyne-Hollick filter with recession-derived alpha)
+  - recession_alpha_point_cloud_linear_reservoir (per-gage scalar)
+
+- **Recession Parameters** (`analyze_recession_parameters`): 7 metrics + 6 seasonality
+  - log_a_pointcloud, log_a_events (recession rate parameter; b=1 linear-reservoir convention since July 2026)
+  - b_pointcloud, b_events (recession exponent, free fit)
   - concavity (curvature of recession)
-  - log_a_seasonality_* (sinusoidal seasonality of recession)
+  - n_recession_events (recession event count per year)
+  - alpha_linear (discrete recession constant, b=1 assumption)
+  - log_a_seasonality_* (sinusoidal seasonality of recession; 6 scalars)
 
 - **Pulse Metrics** (`calculate_pulse_metrics`): 14 metrics
   - n_high_pulses_year, n_high_pulses_all, n_low_pulses_year, n_low_pulses_all (pulse counts)
@@ -151,14 +186,25 @@ Each signature metric produces 8 statistics:
   - TQmean (percentage of days above mean)
   - Flow_Reversals_annual, _winter, _spring, _summer, _fall
 
+- **Negative Flow Days** (`calculate_negative_days`): 1 metric
+  - negative_ann (count of days with Q < 0 per year)
+
+- **Streamflow Drought** (`calculate_drought_metrics`): 10 metrics + 5 threshold scalars
+  - drought_duration_fixed_p{2,5,10,20,30} (days below the fixed threshold, 7-day-smoothed Q)
+  - drought_deficit_fixed_p{2,5,10,20,30} (summed departures below the threshold)
+  - drought_threshold_fixed_p{2,5,10,20,30} (per-gage threshold scalars)
+  - No climate data needed; thresholds are whole-record percentiles
+
 ### Climate-Dependent Signatures (require PPT column)
 
 - **Runoff Ratios** (`analyze_Q_PPT_relationships`): 5 metrics
   - annual_runoff_ratio, winter/spring/summer/fall_runoff_ratio
 
-- **Streamflow Elasticity** (`calculate_streamflow_elasticity`): 1 static + 8 trend
+- **Streamflow Elasticity** (`calculate_streamflow_elasticity`): 2 annual metrics + 1 static + 2 diagnostics
+  - elasticity_rolling (11-year rolling window, 8 stats)
+  - elasticity_annual (consecutive-year differences, 8 stats)
   - elasticity_static (single value)
-  - elasticity rolling window trend statistics
+  - elasticity_years_total, elasticity_years_low_ppt (per-gage diagnostics)
 
 - **Q-P Seasonality** (`calculate_qp_seasonality`): 2 metrics
   - qp_slope_sd (seasonal variation in Q-P relationship)
@@ -166,6 +212,25 @@ Each signature metric produces 8 statistics:
 
 - **Average Storage** (`calculate_average_storage`): 1 metric
   - avg_storage (catchment storage at mean discharge, mm)
+
+### Snow Signatures (require Daymet SWE)
+
+- **Snow Metrics** (`calculate_snow_metrics`): 14 metrics
+  - swe_max, swe_max_dowy, snow_cover_days, snow_on_dowy, snow_off_dowy
+  - melt_season_days, melt_rate, ssm, swe_apr1
+  - melt_before_peak, melt_before_peak_pct, melt_before_peak_to_max_swe
+  - melt_com_dowy, swe_max_to_ppt
+  - Run only on an explicitly passed, SWE-valid-year-filtered `snow_data`
+    frame (`calculate_all_signatures(...; snow_data=...)`); an SWE column in
+    the main gage frame is never used implicitly
+
+### Preprocessing
+
+- **`preprocess_daily_data`** (exported): the production year-qualification and
+  NA-handling preprocessor, run once per gage BEFORE any signature function —
+  daily-grid normalization, <=3-day gap interpolation, year rejection, seasonal
+  completeness flags, and separate PPT/SWE-valid year tracking (config
+  `na_handling`).
 
 ## Individual Signature Functions
 

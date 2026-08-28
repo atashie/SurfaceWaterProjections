@@ -96,18 +96,6 @@ SINGLE_VALUE_SIGS = [
 ]
 
 
-def r2_identity(x, y):
-    mask = np.isfinite(x) & np.isfinite(y)
-    if mask.sum() < 10:
-        return None
-    xm, ym = x[mask], y[mask]
-    ss_res = np.sum((ym - xm) ** 2)
-    ss_tot = np.sum((ym - np.mean(ym)) ** 2)
-    if ss_tot == 0:
-        return 1.0 if ss_res == 0 else None
-    return 1.0 - ss_res / ss_tot
-
-
 def build_data(name, baseline_path, experiment_path):
     print("Loading Julia baseline...")
     base_df = pd.read_csv(baseline_path, low_memory=False)
@@ -321,6 +309,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <script>
 const DATA = __DATA_JSON__;
 
+// Keep in sync with SINGLE_VALUE_SIGS in this file's Python section.
 const SINGLE_VALUE = new Set([
   "elasticity_static",
   "runoff_ratio_high_count",
@@ -328,7 +317,13 @@ const SINGLE_VALUE = new Set([
   "elasticity_years_low_ppt",
   "log_a_seasonality_minimum_all", "log_a_seasonality_minimum_first_half",
   "log_a_seasonality_minimum_last_half", "log_a_seasonality_amplitude_all",
-  "log_a_seasonality_amplitude_first_half", "log_a_seasonality_amplitude_last_half"
+  "log_a_seasonality_amplitude_first_half", "log_a_seasonality_amplitude_last_half",
+  "recession_alpha_point_cloud_linear_reservoir",
+  "season_excluded_years_winter", "season_excluded_years_spring",
+  "season_excluded_years_summer", "season_excluded_years_fall",
+  "drought_threshold_fixed_p2", "drought_threshold_fixed_p5",
+  "drought_threshold_fixed_p10", "drought_threshold_fixed_p20",
+  "drought_threshold_fixed_p30"
 ]);
 
 const VIRIDIS = [

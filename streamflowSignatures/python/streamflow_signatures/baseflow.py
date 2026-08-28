@@ -172,9 +172,6 @@ def analyze_baseflow_indices(
 
     df = streamflow_data
 
-    # Get unique years for pre-allocating results
-    years = df["water_year"].unique()
-
     # Initialize results DataFrame
     # Rows are built only for COMPUTABLE years (total valid Q > 0), matching
     # Julia's `total_Q <= 0 -> continue`: a pre-allocated all-years frame would
@@ -287,7 +284,6 @@ def analyze_baseflow_indices_with_parameters(
         raise ValueError(f"Missing required columns: {missing}")
 
     df = streamflow_data
-    years = df["water_year"].unique()
 
     # Computable years only (see the fixed-parameter function above)
     bfi_rows = []

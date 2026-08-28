@@ -200,11 +200,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 <div class="maps-row">
   <div class="map-col">
-    <div class="map-label">Original Filter (in R)</div>
+    <div class="map-label">Golden R Reference (Feb 2026)</div>
     <div id="map-r" class="map-container"></div>
   </div>
   <div class="map-col">
-    <div class="map-label">New Filter (in Julia)</div>
+    <div class="map-label">Julia Benchmark</div>
     <div id="map-julia" class="map-container"></div>
   </div>
 </div>

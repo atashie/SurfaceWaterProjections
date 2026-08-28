@@ -20,6 +20,8 @@ count_flow_reversals <- function(flow_vector, threshold_pct = NULL) {
   if (is.null(threshold_pct)) threshold_pct <- pkg_env$flow_reversal_threshold
 
   stopifnot(!any(is.na(flow_vector)))
+  # No NA-cleaning happens here (the stopifnot above guarantees none);
+  # the "_clean" name is historical.
   flow_clean <- flow_vector
 
   n <- length(flow_clean)

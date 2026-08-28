@@ -4437,7 +4437,7 @@ process_gages <- function(gages_df, gage_type, min_num_years, start_date, end_da
   return(summary_output)
 }
 
- # generate_streamflow_dt_og() — moved to archive/deprecated_generate_streamflow_dt_og.R
+ # generate_streamflow_dt_og() — removed in the August 2026 pre-publication cleanup
  # Superseded by the parquet-based pipeline in process_signatures_from_parquet()
 
 

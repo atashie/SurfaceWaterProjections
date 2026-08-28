@@ -1,9 +1,13 @@
 #!/usr/bin/env python
+import os
 import pandas as pd
 import re
 
-SCRATCH = "/tmp/claude-1000/-home-sagemaker-user-SurfaceWaterProjections-streamflowSignatures/ac73b276-3d84-466a-ad71-7cd7990458bc/scratchpad/eo_task1"
-GOLDEN = "/home/sagemaker-user/SurfaceWaterProjections/streamflowSignatures/golden-outputs/streamflow_signatures_full_10feb2026.csv"
+# Working dir for intermediate CSVs — ENV-overridable (was a session-specific scratchpad path).
+SCRATCH = os.environ.get("EO_RECONCILE_SCRATCH", os.path.join(os.path.dirname(os.path.abspath(__file__)), "scratch_eo_task1"))
+GOLDEN = os.environ.get(
+    "EO_RECONCILE_GOLDEN",
+    "/home/sagemaker-user/SurfaceWaterProjections/streamflowSignatures/golden-outputs/streamflow_signatures_full_10feb2026.csv")
 
 def load_ids(path, col="gage_id"):
     df = pd.read_csv(path, usecols=[col], dtype=str)

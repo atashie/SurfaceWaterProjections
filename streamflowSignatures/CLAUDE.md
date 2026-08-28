@@ -11,7 +11,7 @@ This project has two primary goals and two secondary goals:
 
 ## Multi-Language Architecture
 
-This project implements the same signature calculations in Julia (canonical), Python, and R. Numerical agreement is **measured** for Julia↔Python (August 2026, full scale) and for the April 2026 shared subset; rpkg's August feature set is **not yet gated at scale**:
+This project implements the same signature calculations in Julia (canonical), Python, and R. Numerical agreement is **measured at full scale for both ports** (Python 2026-08-26, rpkg 2026-08-27 — August 2026 port campaign):
 
 | Directory | Language | Status | Description |
 |-----------|----------|--------|-------------|
@@ -27,7 +27,7 @@ This project implements the same signature calculations in Julia (canonical), Py
 ## Canonical Code
 
 **Julia canonical source:**
-- `julia/src/` - All canonical signature modules (17 files under `StreamflowSignatures.jl`)
+- `julia/src/` - All canonical signature modules (20 modules + `StreamflowSignatures.jl`)
 - `config/signatures_config.json` - Cross-language configuration (source of truth)
 - `config.R` - R-side configuration, logging, validation (still active for R ingestion scripts)
 
@@ -36,7 +36,7 @@ This project implements the same signature calculations in Julia (canonical), Py
 
 **Deprecated:**
 - `R/helperFunctions.R` - Legacy monolithic R implementation (deprecated; use rpkg instead)
-- Other `helperFunctions*.R` files in `archive/` are deprecated.
+- The `archive/` directory of deprecated `helperFunctions*.R` variants was removed in the August 2026 pre-publication cleanup (recoverable from git history).
 
 ## Key Entry Points
 
@@ -76,6 +76,14 @@ This project implements the same signature calculations in Julia (canonical), Py
    - Do NOT use fillna(0) in signature functions — the preprocessor handles NAs centrally
    - Do NOT add per-year min_days or max_na_frac checks in signature functions
 
+## Public Mirror (CZ-Sync/HISSS)
+
+The public code repo for the HISSS manuscript is https://github.com/CZ-Sync/HISSS —
+a snapshot mirror built by `./publish_to_hisss.sh` (tracked files minus the exclusion
+list in the script header: Claude tooling, `docs/MANUSCRIPT_DRAFT.md`, `docs/plans/`,
+the Shiny app, the two large golden-output CSVs). **Run the script after every merge
+to main to keep the mirror current.** Never commit to HISSS directly.
+
 ## Signature Statistics Rule
 
 **Every signature MUST produce exactly 8 statistics using `generate_stats()`:**
@@ -103,7 +111,7 @@ This project implements the same signature calculations in Julia (canonical), Py
 
 | File | Status | Notes |
 |------|--------|-------|
-| `julia/src/*.jl` | **CANONICAL** | All canonical signature modules (17 files) |
+| `julia/src/*.jl` | **CANONICAL** | All canonical signature modules (20 modules + package entry) |
 | `docs/benchmarks/run_julia_benchmark.jl` | **PRIMARY** | Full benchmark entry point |
 | `config/signatures_config.json` | **ACTIVE** | Cross-language configuration |
 | `python/streamflow_signatures/` | **ACTIVE** | Python port |
@@ -114,7 +122,7 @@ This project implements the same signature calculations in Julia (canonical), Py
 | `run_full_processing.R` | **LEGACY** | Still functional for R ingestion |
 | `R/tests/smoke_test.R` | **ACTIVE** | Quick R validation |
 | `R/tests/qa_qc_signatures.R` | **ACTIVE** | Output validation |
-| `archive/*` | **DO NOT USE** | Reference only |
+| `archive/*` | **REMOVED** | Deleted Aug 2026 (pre-publication cleanup); in git history only |
 
 ## Adding New Signatures
 
@@ -160,8 +168,8 @@ other** and **record-dependent signatures (drought thresholds, `*_all` pulses, e
 parameterized BFI) must never be compared across them — nor re-aggregated from the annual
 values onto a different window, since their thresholds/record means come from the run's own
 window.** Each Julia run also writes the per-signature annual values parquet alongside the
-summary CSV (when `annual_values.save` is on — the shipped default; not implemented in the
-Python/rpkg ports) — see DEVELOPMENT.md → Annual Values Export.
+summary CSV (when `annual_values.save` is on — the shipped default; implemented in all
+three languages since the August 2026 port campaign) — see DEVELOPMENT.md → Annual Values Export.
 
 ⚠️ **Climate input**: the canonical `daymet_1980_2023.parquet` is TRUNCATED; use
 `daymet_1980_2023_rebuilt_10aug2026.parquet` (product #1 predates the rebuild, product #2
@@ -170,7 +178,7 @@ uses it; difference bounded at ≤ 3.4e-13). See DEVELOPMENT.md → Active Parqu
 ## References
 
 - **@docs/DEVELOPMENT.md** - Architecture, file structure, common tasks, workflows
-- **@docs/SIGNATURES.md** - Detailed signature documentation (11 categories)
+- **@docs/SIGNATURES.md** - Detailed signature documentation (14 categories)
 - **@CHANGELOG.md** - Current work, roadmap (historical: `docs/CHANGELOG_ARCHIVE.md`)
 - **@docs/SIGNATURE_GUIDELINES.md** - Collaborative guidelines from hydrology colleagues (auto-synced)
 - **@docs/MANUSCRIPT_DRAFT.md** - HISSS manuscript draft snapshot (auto-synced; reconciliation review)

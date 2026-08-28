@@ -96,7 +96,7 @@ function calculate_average_storage(
         Q_sorted = Q_vals[sort_idx]
         S_sorted = S[sort_idx]
 
-        # Remove NaN (shouldn't be any after replacement, but just in case)
+        # Remove NaN pairs defensively (preprocessed years should carry none)
         valid_mask = .!isnan.(Q_sorted) .& .!isnan.(S_sorted)
         Q_valid = Q_sorted[valid_mask]
         S_valid = S_sorted[valid_mask]

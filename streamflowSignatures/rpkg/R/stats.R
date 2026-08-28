@@ -212,12 +212,14 @@ empty_stats <- function(metric) {
 #' collected rows are precisely what the summary statistics were computed from.
 #' Collection is read-only with respect to the statistics.
 #'
-#' Uses an environment with pre-grown chunk lists rather than \code{c()} append
-#' (which would be O(n^2) in R). One instance per gage; the benchmark runner
-#' drains it with \code{collector_drain()} and tags the rows with gage_id.
+#' Uses an environment holding lists of per-metric chunks, appended by index
+#' assignment (\code{e$sig[[k]] <- ...}) and flattened once at drain time —
+#' avoiding the per-row \code{c()} append that would be O(n^2) in R. One
+#' instance per gage; the benchmark runner drains it with
+#' \code{collector_drain()} and tags the rows with gage_id.
 #'
-#' @return An environment with fields \code{signature}, \code{water_year},
-#'   \code{value} (accumulated chunks) and \code{n} (chunk count).
+#' @return An environment with fields \code{sig}, \code{wy}, \code{val}
+#'   (lists of accumulated chunks) and \code{n} (chunk count).
 #' @export
 annual_collector <- function() {
   e <- new.env(parent = emptyenv())

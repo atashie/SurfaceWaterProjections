@@ -42,7 +42,7 @@ function main()
     println("\nPhase 1: Loading streamflow data...")
     if !isfile(STREAMFLOW_PATH)
         println("ERROR: Streamflow file not found: $STREAMFLOW_PATH")
-        println("Edit STREAMFLOW_PATH in this file to point to your data.")
+        println("Set the STREAMFLOW_DATA_PATH (and STREAMFLOW_CLIMATE_PATH) ENV variables to point to your data.")
         return 1
     end
 

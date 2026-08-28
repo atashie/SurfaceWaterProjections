@@ -401,7 +401,7 @@ Julia/Python produce 7,313-7,369 qualifying gages (vs monolithic R's 5,707). The
 
 ### Human Interference Metadata (13 columns)
 
-All three languages include GAGES-II human interference metadata in their output: `NDAMS_2009`, `MAJ_DDENS_2009`, `STOR_NID_2009`, `IMPNLCD06`, `DEVNLCD06`, `FRESHW_WITHDRAWAL`, `HYDRO_DISTURB_INDX`, `CLASS`, `RHBN`, `REGULATED`, `human_interference_class`, plus `area_normalized` and `gage_type`. Julia loads GAGES-II metadata directly and Canadian HYDAT metadata from `metadata/canadian_hydat_interference.csv` (pre-exported from tidyhydat via `R/export_hydat_metadata.R`; 8,012 stations with RHBN and REGULATED status). Monolithic R loads both GAGES-II (USGS gages) and HYDAT (Canadian gages) metadata via `tidyhydat`. Python loads GAGES-II metadata; Canadian HYDAT integration pending.
+All three languages include GAGES-II human interference metadata in their output: `NDAMS_2009`, `MAJ_DDENS_2009`, `STOR_NID_2009`, `IMPNLCD06`, `DEVNLCD06`, `FRESHW_WITHDRAWAL`, `HYDRO_DISTURB_INDX`, `CLASS`, `RHBN`, `REGULATED`, `human_interference_class`, plus `area_normalized` and `gage_type`. Julia loads GAGES-II metadata directly and Canadian HYDAT metadata from `metadata/canadian_hydat_interference.csv` (pre-exported from tidyhydat via `R/export_hydat_metadata.R`; 8,012 stations with RHBN and REGULATED status). Monolithic R loads both GAGES-II (USGS gages) and HYDAT (Canadian gages) metadata via `tidyhydat`. Python and rpkg load GAGES-II metadata directly and fill RHBN/REGULATED from `metadata/canadian_hydat_interference.csv` (added in the August 2026 runner rebuild — the earlier "Canadian HYDAT integration pending" state is superseded).
 
 ### Q95_Q10 Naming Convention
 

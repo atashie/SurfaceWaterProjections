@@ -25,7 +25,6 @@ PROJECT_ROOT = SCRIPT_DIR.parent.parent
 # Paths overridable via ENV (port campaign, 2026-08-24): COMPARE_REFERENCE_CSV
 # points at any Julia reference run; COMPARE_CANDIDATE_CSV at the port output;
 # COMPARE_OUTPUT_DIR redirects both artifacts (one-folder convention).
-import os
 GOLDEN_JULIA_PATH = Path(os.environ.get("COMPARE_REFERENCE_CSV",
     str(PROJECT_ROOT / "golden-outputs" / "streamflow_signatures_julia_apr2026.csv")))
 PYTHON_PATH = Path(os.environ.get("COMPARE_CANDIDATE_CSV", str(SCRIPT_DIR / "python_signatures.csv")))
@@ -358,7 +357,7 @@ def generate_summary_report(res, common_norms, jl_only_norms, py_only_norms,
         f.write("| Dataset | File | Gages | Columns |\n")
         f.write("|---------|------|-------|---------|\n")
         f.write(f"| Julia reference | `{GOLDEN_JULIA_PATH}` | {n_jl_total:,} | {len(jl_norm):,} |\n")
-        f.write(f"| Python benchmark | `docs/benchmarks/python_signatures.csv` | {n_py_total:,} | — |\n")
+        f.write(f"| Python benchmark | `{PYTHON_PATH}` | {n_py_total:,} | — |\n")
         f.write(f"\n**Common gages**: {n_common_gages:,}\n")
         f.write(f"**Common signature columns**: {len(common_norms):,}\n\n")
 

@@ -76,8 +76,8 @@ OUTPUT_DIR = Path(os.environ.get("STREAMFLOW_OUTPUT_DIR", str(Path(__file__).par
 OUTPUT_PREFIX = os.environ.get("STREAMFLOW_OUTPUT_PREFIX", "python")
 GAGES_II_DIR_EFFECTIVE = os.environ.get("STREAMFLOW_GAGES_II_DIR", GAGES_II_DIR)
 
-# Climate columns this runner consumes (post-normalization names). SWE joins the
-# list with the Phase-4 snow port — extend here AND in the raw-name projection.
+# Climate columns this runner consumes (post-normalization names): PPT for the
+# climate signatures, SWE for snow. Extend here AND in the raw-name projection.
 CLIMATE_KEEP = ["gage_id", "date", "PPT", "SWE"]
 _CLIMATE_RAW_WANTED = ("gage_id", "site_id", "date", "Date", "PPT", "prcp", "SWE", "swe")
 
@@ -334,7 +334,7 @@ def main():
                     "rejected_years": result["rejected_years"],
                     "seasonal_flags": [d for d in result["seasonal_flags"] if wy_lo <= d["water_year"] <= wy_hi],
                     "diagnostics": [d for d in result["diagnostics"] if wy_lo <= d["water_year"] <= wy_hi],
-                    # Forward-compatible: valid_swe_years arrives with the snow port
+                    # valid_swe_years is present whenever the preprocessor saw SWE
                     **({"valid_swe_years": [yr for yr in result["valid_swe_years"] if wy_lo <= yr <= wy_hi]}
                        if "valid_swe_years" in result else {}),
                 }

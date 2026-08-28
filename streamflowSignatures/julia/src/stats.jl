@@ -115,7 +115,9 @@ function mann_kendall_test(y::AbstractVector{<:Real})
         return (NaN, NaN)
     end
 
-    # Calculate tau-b (matching R's Kendall::MannKendall and Python's scipy.stats.kendalltau)
+    # Calculate tau-b. All three languages agree here: R's Kendall::MannKendall
+    # computes the same tie-corrected tau, and Python implements this formula
+    # directly since 2026-08-26 (no scipy.stats.kendalltau).
     # For Mann-Kendall, x = time indices (no ties in x), so:
     #   tau_b = S / sqrt((n_pairs - T_y) * n_pairs)
     # where T_y = number of tied pairs in y
@@ -136,8 +138,11 @@ function mann_kendall_test(y::AbstractVector{<:Real})
     # Two-sided p-value using normal approximation
     pvalue = 2 * (1 - cdf(Normal(), abs(z)))
 
-    # R's Kendall::MannKendall uses exact p-values for n<=10 but fails
-    # for n<=3 (IFAULT=12, returns p=1.0). Match R's behavior.
+    # The continuity-corrected normal approximation above is the shared
+    # convention across all three languages: R's Kendall::MannKendall
+    # reproduces this formula, and Python implements it directly (2026-08-26,
+    # no scipy). For n<=3 R's MannKendall fails (IFAULT=12, returns p=1.0);
+    # match that behavior.
     if n <= 3
         pvalue = 1.0
     end

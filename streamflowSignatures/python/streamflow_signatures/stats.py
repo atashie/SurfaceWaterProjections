@@ -436,7 +436,7 @@ def generate_stats(
 
     for col in value_cols:
         if col not in data.columns:
-            # Skip missing columns with warning
+            # Skip missing columns silently (no stats emitted for them)
             continue
 
         # Extract non-NA data

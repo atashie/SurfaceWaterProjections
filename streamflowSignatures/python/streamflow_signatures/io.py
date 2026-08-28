@@ -34,19 +34,27 @@ STAT_SUFFIXES = [
     "_median",
 ]
 
-# Expected signature base names (matches R config.R EXPECTED_SIGNATURE_BASES)
+# Expected signature base names — the 100 time-series signature bases of the
+# current (Aug 2026) 1,653-column product. Mirrors the Julia annual-collector
+# registry: EXPECTED_DENSE_SIGNATURES in julia/test/test_annual_collector.jl
+# (78 dense bases) plus the sparse recession / parameterized-BFI bases
+# exercised there (8) plus the 14 snow metrics (julia/src/snow.jl SNOW_METRICS).
 EXPECTED_SIGNATURE_BASES = [
-    # Flow volumes (22 metrics)
+    # Flow volumes (21 metrics)
     "Qann", "Qwin", "Qspr", "Qsum", "Qfal",
     "Q1", "Q5", "Q10", "Q20", "Q25", "Q30", "Q40", "Q50",
     "Q60", "Q70", "Q75", "Q80", "Q90", "Q95", "Q99", "Q95_Q10",
     # FDC (3 metrics)
     "FDCall", "FDC90th", "FDCmid",
-    # Baseflow (2 metrics)
+    # Baseflow fixed-parameter (2 metrics)
     "BFI_Eckhardt", "BFI_LyneHollick",
-    # Recession (5 metrics + 6 seasonality)
-    "log_a_pointcloud", "log_a_events", "b_pointcloud", "b_events", "concavity",
-    # Pulses (10 metrics - year-specific + 4 period-of-record)
+    # Baseflow recession-parameterized (2 metrics)
+    "BFI_Eckhardt_param", "BFI_LyneHollick_param",
+    # Recession (7 annual metrics; the 6 seasonality scalars are not
+    # time-series bases)
+    "log_a_pointcloud", "log_a_events", "b_pointcloud", "b_events",
+    "concavity", "n_recession_events", "alpha_linear",
+    # Pulses (14 metrics)
     "n_high_pulses_year", "n_low_pulses_year",
     "dur_high_pulses_year", "dur_low_pulses_year",
     "n_high_pulses_all", "n_low_pulses_all",
@@ -54,21 +62,35 @@ EXPECTED_SIGNATURE_BASES = [
     "TQmean",
     "Flow_Reversals_annual", "Flow_Reversals_winter", "Flow_Reversals_spring",
     "Flow_Reversals_summer", "Flow_Reversals_fall",
-    "Flow_Reversals_rising_annual", "Flow_Reversals_falling_annual",
-    "Flow_Reversals_rising_winter", "Flow_Reversals_falling_winter",
-    "Flow_Reversals_rising_spring",
+    # Negative flow days (1 metric)
+    "negative_ann",
     # Flashiness (1 metric)
     "flashinessRB",
-    # Timing (13 metrics)
-    "D5_day", "D10_day", "D20_day", "D30_day", "D40_day", "D50_day",
-    "D60_day", "D70_day", "D80_day", "D90_day", "D95_day",
+    # Timing (15 metrics: 13 D-days D1-D99 + D25_to_D75 + Dmax)
+    "D1_day", "D5_day", "D10_day", "D20_day", "D30_day", "D40_day", "D50_day",
+    "D60_day", "D70_day", "D80_day", "D90_day", "D95_day", "D99_day",
     "D25_to_D75", "Dmax",
-    # Climate-dependent signatures
+    # Runoff ratios (5 metrics)
     "annual_runoff_ratio", "winter_runoff_ratio", "spring_runoff_ratio",
     "summer_runoff_ratio", "fall_runoff_ratio",
-    "elasticity",
+    # Elasticity (2 time-series metrics; elasticity_static is a scalar)
+    "elasticity_rolling", "elasticity_annual",
+    # Q-P seasonality (2 metrics)
     "qp_slope_sd", "qp_bimodality",
+    # Storage (1 metric)
     "avg_storage",
+    # Snow (14 metrics)
+    "swe_max", "swe_max_dowy", "snow_cover_days", "snow_on_dowy",
+    "snow_off_dowy", "melt_season_days", "melt_rate", "ssm", "swe_apr1",
+    "melt_before_peak", "melt_before_peak_pct", "melt_before_peak_to_max_swe",
+    "melt_com_dowy", "swe_max_to_ppt",
+    # Streamflow drought (10 metrics)
+    "drought_duration_fixed_p2", "drought_duration_fixed_p5",
+    "drought_duration_fixed_p10", "drought_duration_fixed_p20",
+    "drought_duration_fixed_p30",
+    "drought_deficit_fixed_p2", "drought_deficit_fixed_p5",
+    "drought_deficit_fixed_p10", "drought_deficit_fixed_p20",
+    "drought_deficit_fixed_p30",
 ]
 
 # Metadata columns expected in output

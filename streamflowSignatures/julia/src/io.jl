@@ -360,6 +360,13 @@ function preprocess_daily_data(
         end
 
         # NA-cause tracking (ice-affected days from USGS qualifier flags)
+        # KNOWN ISSUE (CHANGELOG → Known Issues, 2026-08-26): this guard can
+        # never fire — `joined` is built above via select(yr_df, :date, :Q,
+        # [:PPT], [:SWE]), which drops the `flag` column, so
+        # `"flag" in names(joined)` is always false and
+        # `ice_affected_days_total` is structurally 0 for every gage.
+        # Do NOT "fix" this here without cross-language coordination: rpkg
+        # deliberately matches this behavior for parity.
         na_cause_ice = 0
         na_cause_other = 0
         if na_count > 0 && "flag" in names(joined)
@@ -542,7 +549,7 @@ function preprocess_daily_data(
     end
 
     diagnostics_df = if isempty(diag_rows)
-        DataFrame(water_year=Int[], na_count=Int[], max_na_run=Int[], interpolated_count=Int[], negative_flag=Bool[], constant_sd_flag=Bool[])
+        DataFrame(water_year=Int[], na_count=Int[], max_na_run=Int[], interpolated_count=Int[], negative_flag=Bool[], constant_sd_flag=Bool[], na_cause_ice=Int[], na_cause_other=Int[])
     else
         DataFrame(diag_rows)
     end

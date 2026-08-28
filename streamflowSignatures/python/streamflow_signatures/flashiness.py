@@ -111,6 +111,4 @@ def analyze_flashiness_trends(
         decade_completeness=decade_completeness, min_values_for_stats=min_values_for_stats, changepoint=changepoint, collector=collector,
     )
 
-    renamed = dict(result)
-
-    return renamed
+    return result

@@ -127,6 +127,4 @@ def analyze_fdc_trends(
     # never renames): the annual-values collector captures the column name it
     # is given, so a placeholder + post-hoc rename would put the wrong
     # signature name in the annual parquet (found 2026-08-25, Phase 3).
-    renamed = dict(result)
-
-    return renamed
+    return result

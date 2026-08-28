@@ -9,8 +9,9 @@ Cumulative flow timing metrics (D-day metrics) and peak timing.
 
 Calculate flow timing signatures with trend statistics.
 
-Calculates 13 metrics:
-- D5_day through D95_day: Days when cumulative flow reaches X%
+Calculates 15 metrics:
+- D1_day through D99_day: Days when cumulative flow reaches X% (13 D-day
+  percentiles from config `timing.d_percentiles`)
 - D25_to_D75: Duration of middle 50% of flow
 - Dmax: Day of maximum flow
 
@@ -25,7 +26,7 @@ df : DataFrame
 Returns
 -------
 Dict{String, Float64}
-    Dictionary of signature statistics (13 metrics × 8 stats = 104 values)
+    Dictionary of signature statistics (15 metrics × 8 stats = 120 values)
 """
 function analyze_flow_timing_trends(df::DataFrame; trend_completeness::Union{Nothing, Float64}=nothing, decade_completeness::Union{Nothing, Float64}=nothing, min_values_for_stats::Union{Nothing, Int}=nothing, changepoint::Union{Nothing, NamedTuple}=nothing, collector::Union{Nothing, AnnualCollector}=nothing)
     result = Dict{String, Float64}()

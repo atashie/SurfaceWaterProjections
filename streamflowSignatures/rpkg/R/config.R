@@ -98,7 +98,7 @@ pkg_env <- new.env(parent = emptyenv())
     pkg_env$na_interpolation_method     <- nah$interpolation$method %||% "linear"
     pkg_env$na_internal_only            <- nah$interpolation$internal_only %||% TRUE
     pkg_env$na_max_raw_na_per_year      <- nah$year_rejection$max_raw_na_per_year %||% 30L
-    pkg_env$na_reject_negative_flow     <- nah$year_rejection$reject_negative_flow %||% FALSE  # fallback aligned with Python/canonical JSON (2026-08-24; was TRUE)
+    pkg_env$na_reject_negative_flow     <- nah$year_rejection$reject_negative_flow %||% FALSE  # key-missing fallback aligned with canonical (FALSE, 2026-08-24; was TRUE). NOTE: the section-absent branch below still defaults this to TRUE — a known deferred fix tracked in CHANGELOG [Unreleased].
     # SWE NA policy (mirrors PPT; fallbacks match julia/src/config.jl)
     pkg_env$na_max_raw_na_swe   <- nah$snow_na_policy$max_raw_na_per_year_swe %||% 30L
     pkg_env$na_max_gap_swe      <- nah$snow_na_policy$max_interpolation_gap_swe %||% 3L

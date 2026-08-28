@@ -516,9 +516,131 @@ for Arik to paste into the Google Doc; structure follows
 flagged for the list: HYDAT database, MCD12Q1 v061, MCD15A3H v061, Annual NLCD
 Collection 1.
 
+**2026-08-28 — major revision synced (publication-audit session); third reconciliation
+pass.** The draft gained a full author list (Kaiser, Tashie, Lowman, Jennings, Gorski,
+Murray), a rewritten §1, a corrected §2, and a fully drafted §3 Data Record. Snapshot
+overwritten.
+
+*Resolved since 2026-08-24*: queued #5 (§2.1.3 now says **6,087** Daymet basins —
+matches the repo's direct count); the §1/§2 cross-language library claim is now TRUE
+(both ports validated at full scale 2026-08-26/27 — no softening needed); §2.1.2 no
+longer conflates the decade trend gate with gage inclusion; §2.1.1 vs §2.1.3
+aggregation-boundary inconsistency resolved; typos fixed ("a nalyzing", "indented",
+"Hammon"); **§3's checkable numbers are all CORRECT** (1,653 = 20 metadata + 100×16 +
+21 scalars + 12 flags; annual rows 18,898,406 / 24,366,487; 111,624,189 obs / 8,014
+gages; Daymet 6,087 / 97,757,220 / CY 1980–2023; 7,964 polygons; 211 HydroATLAS attrs;
+LAI/LULC/NLCD counts; the 16 statistic suffixes; the HydroShare collection id).
+
+*Still open, manuscript-side (relay to co-authors)*:
+1. **Queued #1 core error remains**: §2 preamble still says watershed area "extracted
+   for each gage [from the boundary polygons] … used to area-normalize discharge" and
+   §2.1.2 still points at §2.1.1; truth = agency-published drainage areas (GAGES-II;
+   HYDAT `DRAINAGE_AREA_GROSS`). §5 Usage-Notes caveat (filter
+   `area_normalized == TRUE`) still missing.
+2. **Queued #8 still open**: §2 preamble + §2.2.1 still say "106 signatures … 90
+   annually resolved + 16 … 13 categories" and omit drought; truth = **121 (100
+   annually resolved + 21 scalars) across 14 categories**; drought methods paragraph
+   (queued edit #8 text) still needed.
+3. §2.2.1 dropped the avg_storage sentence entirely (it's still in the product —
+   reinstate "computed but omitted from major analyses, no ET term").
+4. §2.2.1 leftover duplicate BFI paragraph still present.
+5. Missing references unchanged (McMillan 2021; Hatchett 2021; Petersky & Harpold 2018;
+   HYSETS/Caravan/CAMELS-SPAT; DeCicco; Albers; HYDAT; gdptools; Annual NLCD;
+   correct MCD15A3H v061; Adelsperger) + §1 cites nonexistent "Linke et al. 2013".
+6. Carried typos ("Corack", unclosed "(e.g., CAMELS-Chem,"); placeholders (`<LINK TO
+   REPO>` — **now fillable: https://github.com/CZ-Sync/HISSS**; metadata file "(name)";
+   schematic; input-data table; §4/§5 stubs); §2.1.2 end date "30 September 2025" vs
+   partial-WY2026 rows.
+
+*New issues in this revision (manuscript-side)*:
+7. §2.1.2 "47% reduction in valid gages" — arithmetic wrong: 8,980/16,994 excluded =
+   **53% reduction** (47% retained).
+8. §2.1.3 "6,087 basins that both met both the aforementioned data quality standards" —
+   overstated: 122 of the 6,087 were never compiled; only 5,965 of the 8,014 processed
+   gages have Daymet series (also fix "both met both").
+9. §3 Resources 1–2: garbled sentence ("fitted checksums…"); filename typo
+   "hiss_signatures_wy}window}.csv"; the gage_id join claim needs the Resource-3
+   zero-stripped-ids nuance (documented join recipe).
+10. Acknowledgements: "Claude Code 0.145.0" is wrong — 0.145.0 is the **codex-cli**
+    version from this repo's adversarial-review records, not a Claude Code version;
+    duplicated AI sentences; consider crediting the second review tool (Codex CLI)
+    explicitly.
+11. §3 "released under CC-BY 4.0" — no license decision recorded in-repo; confirm it
+    matches the HydroShare resources. §3 labels the collection URL as a "DOI" — the
+    DOI form is https://doi.org/10.4211/hs.f702201faa5d46069a5ee83ffa4c9768.
+12. Small typos: ">6,000stream gages", "applied.The", "MOIDS", "WSG84", duplicate
+    "daily", "teh geometry layer", "joins ot legacy", "and_pre_mk_pval",
+    "nlcd_c{code}_pct}", stray "[tbd])".
+
+*Code/docs-side*: none new — every checkable changed claim matches code, or the error
+is manuscript-side. One repo-side stale comment found on the way and **fixed same
+day**: `config/signatures_config.json` → `annual_values.comment` no longer says
+"Julia only; Python/rpkg ports deferred".
+
 ---
 
 ## [August 2026]
+
+### Milestone: pre-publication audit + PUBLIC CODE RELEASE at github.com/CZ-Sync/HISSS (2026-08-28)
+Full audit of code + documentation ahead of the manuscript submission, followed by the
+first publication of the project to the public **CZ-Sync/HISSS** repository (created by
+the user; snapshot-mirror model). Five parallel audit passes (docs accuracy, package
+docs/metadata, legacy inventory, code hygiene + sensitive-content sweep, manuscript
+reconciliation), all findings fixed same day:
+
+- **Sensitive-content sweep: ZERO blockers** — no credentials, tokens, or personal
+  emails anywhere in the 376 tracked files (all credential handling is env-var/`.netrc`
+  indirection). Remaining private-path/infra references classified and dispositioned
+  (personal Windows-profile paths removed with the deleted April logs and the
+  `prod_1980_60pct` wrapper fix; Drive folder ID published as-is per user decision).
+- **Stale port-status claims corrected everywhere** — README.md (rewritten in full as
+  the public HISSS README: current 1,653-column parity numbers, complete 14-category
+  signature table incl. snow + drought, 16-statistics convention, standard products +
+  HydroShare link, MPL-2.0 LICENSE added), CLAUDE.md ("rpkg not yet gated" contradiction,
+  annual-values "not implemented in ports"), DEVELOPMENT.md (1,264-column diagram,
+  "17 modules" ×4), CROSS_LANGUAGE_STATUS.md ("Canadian HYDAT integration pending"),
+  claude-skill (wrong negative-Q rejection claim; stale 3-value stats rule → the
+  20-value floor; legacy-shim R example → rpkg), SIGNATURES.md summary-table count
+  errors (22→21 flow volumes, pulse double-count of negative_ann, recession scalar
+  accounting), `config/signatures_config.json` `annual_values.comment` ("Julia only;
+  ports deferred") — synced into the wheel-bundled and rpkg-bundled config copies too.
+- **All three package READMEs updated to the validated-parity state** + metadata fixes:
+  rpkg README's self-contradictory validation section; DESCRIPTION 60+→100+, real
+  maintainer email, stats/utils Imports; pyproject `tests`-package install bug + wrong
+  homepage URL (→ CZ-Sync/HISSS); `calculate_negative_days` now exported from Python
+  (matching Julia/rpkg); Julia README's ~551-key claim and missing six families;
+  unused `HypothesisTests` dropped from Project.toml. Quick Starts now label
+  `filter_qualifying_years` as the LEGACY path (production = `preprocess_daily_data`)
+  and state what the bare `calculate_all_signatures` call does/doesn't emit.
+- **Code hygiene** (all suites green after: Julia 2,798 assertions / 0 fail; Python
+  143 pass; rpkg 1,021 pass): Python's stale `EXPECTED_SIGNATURE_BASES` (5 phantom
+  Flow_Reversals bases + nonexistent `elasticity`) replaced with the current 100-base
+  registry; vestigial rename indirection removed from fdc/flashiness; dead
+  pre-allocation lines removed; MK comments de-scipy'd; `changepoint.jl` header now
+  says Pettitt is production (BIC retained-but-uncalled); `io.jl` empty-diagnostics
+  fallback gained the 2 missing na_cause columns; elasticity docstring min_years
+  10→15; outlived "Phase-4 pending" runner comments removed; dashboard embedded-JS
+  `SINGLE_VALUE` sets synced to their Python lists (newer scalars were unselectable);
+  compare-script reports now record the resolved candidate path; smoke tests gained
+  ENV path overrides in Python/rpkg.
+- **Legacy removal** (user-approved list, ~29 files / ~11.6 MB, each verified
+  unreferenced): `archive/` (18 files), the three stray April benchmark logs,
+  `compare_restricted_vs_baseline.R`, bit-rotted `compare_outputs.py`, root+data_out
+  `upstream_hydrobasins.RData` stubs, pre-2026 `data_out/summary_data.csv`, duplicate
+  `combined_watershed_metadata_09feb2026.csv`, header-only `all_us-can-al-grdc.csv`,
+  `logs.gitkeep`. References updated in the same commit.
+- **Public mirror tooling**: `publish_to_hisss.sh` mirrors exactly the git-tracked
+  files minus a fixed exclusion list (Claude tooling, `docs/MANUSCRIPT_DRAFT.md`,
+  `docs/plans/`, the defunct Shiny app, the two >50 MB golden CSVs — user-approved) to
+  HISSS `main`, stamping the source revision. Documented in DEVELOPMENT.md → Common
+  Tasks and CLAUDE.md → Public Mirror; run after every merge to main.
+- **Manuscript synced (major co-author revision) + third reconciliation pass** — see
+  `[Unreleased]` → Manuscript Reconciliation Log (2026-08-28): 6 prior findings
+  resolved by the revision (incl. §3 Data Record fully drafted with every checkable
+  number correct), 12 items queued for co-authors (area-normalization wording persists;
+  signature counts still 106/13-categories vs the true 121/14; a 47%-vs-53% arithmetic
+  slip; "Claude Code 0.145.0" is actually the codex-cli version; `<LINK TO REPO>` can
+  now be filled with https://github.com/CZ-Sync/HISSS).
 
 ### Milestone: rpkg VALIDATED at full scale — the port campaign is COMPLETE (2026-08-27)
 Both ports now reproduce canonical Julia's **1,653 columns for the same 6,678 gages** on

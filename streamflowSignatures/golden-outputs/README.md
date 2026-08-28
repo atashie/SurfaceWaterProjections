@@ -2,6 +2,13 @@
 
 Reference outputs used to validate cross-language implementations via R² of the identity line (y=x).
 
+> **Public mirror note** (github.com/CZ-Sync/HISSS): the two large signature CSVs
+> (`streamflow_signatures_julia_apr2026.csv`, 76 MB; `streamflow_signatures_full_10feb2026.csv`,
+> 52 MB) are omitted from the public mirror for size. They can be regenerated with the
+> benchmark runners below, and the delivered HISSS data products (which supersede them for
+> analysis use) are on HydroShare:
+> https://www.hydroshare.org/resource/f702201faa5d46069a5ee83ffa4c9768/
+
 ## Canonical (Julia — April 2026)
 
 - `streamflow_signatures_julia_apr2026.csv` — 7,313 gages, 624 signature columns

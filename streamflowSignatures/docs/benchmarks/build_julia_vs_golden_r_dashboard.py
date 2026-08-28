@@ -88,18 +88,6 @@ for suf in STAT_SUFFIXES:
     RENAMED_R_TO_JL[f"elasticity{suf}"] = f"elasticity_rolling{suf}"
 
 
-def r2_identity(x, y):
-    mask = np.isfinite(x) & np.isfinite(y)
-    if mask.sum() < 10:
-        return np.nan
-    xm, ym = x[mask], y[mask]
-    ss_res = np.sum((ym - xm) ** 2)
-    ss_tot = np.sum((ym - np.mean(ym)) ** 2)
-    if ss_tot == 0:
-        return 1.0 if ss_res == 0 else np.nan
-    return 1.0 - ss_res / ss_tot
-
-
 def build_data():
     print("Loading Golden R output...")
     r_df = pd.read_csv(GOLDEN_R_PATH, low_memory=False)

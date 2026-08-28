@@ -216,7 +216,7 @@ Daily streamflow data with columns:
 
 All year qualification is handled centrally by `preprocess_daily_data()` (single source of truth):
 - **Minimum years**: 20+ water years per gage
-- **Year rejection**: >30 raw NAs, >3-day gaps, negative Q, boundary NAs
+- **Year rejection**: >30 raw NAs, >3-day gaps, boundary NAs (negative Q rejection is config-driven via `reject_negative_flow`, default **false** — the `negative_ann` signature counts Q<0 days instead)
 - **Interpolation**: Internal gaps ≤3 days filled by linear interpolation
 - **Climate years**: Separate `valid_climate_years` set (same rules applied to PPT)
 - **Trend completeness**: ≥60% non-NA annual values overall (lowered from 80% in July 2026) and ≥80% in first/last decade for trend stats
@@ -229,7 +229,7 @@ All year qualification is handled centrally by `preprocess_daily_data()` (single
 ### Common Issues
 
 **Q: Why are all my statistics NA?**
-A: Check that you have enough data. Each metric requires at least 3 non-NA annual values for statistics.
+A: Check that you have enough data. Since July 2026 the **20-value stats floor** applies: a metric with fewer than 20 non-NA annual values emits NaN for all 8 statistics and its Pettitt fields (recession and elasticity are exempt). Trend statistics additionally require the 60%/80% completeness gates above.
 
 **Q: Why do Theil-Sen and linear slopes differ significantly?**
 A: Theil-Sen is robust to outliers. Large differences indicate outliers or non-linear trends in your data.
@@ -270,19 +270,20 @@ df = add_water_year_columns(df, date_col="date")
 signatures = calculate_flow_vols_by_year(df)
 ```
 
-### R
+### R (rpkg — the active R implementation)
 
 ```r
-source("config.R")
-source("R/helperFunctions.R")
-result <- process_signatures_from_parquet(parquet_file, metadata_file, output_file)
+library(streamflowsignatures)   # install from rpkg/ (R CMD INSTALL rpkg)
+df <- add_water_year_columns(df)
+signatures <- calculate_flow_vols_by_year(df)
 ```
+
+The legacy shim (`source("R/helperFunctions.R")`) is deprecated for signatures — use rpkg; the shim remains only for R ingestion utilities.
 
 ## References
 
 - **SIGNATURES.md**: Detailed signature documentation
 - **SIGNATURE_GUIDELINES.md**: Collaborative guidelines from hydrology team
-- **METHODOLOGY.md**: Mathematical specifications (planned)
 
 ## Cross-Language Alignment
 

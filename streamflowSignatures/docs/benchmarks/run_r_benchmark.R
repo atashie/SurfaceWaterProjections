@@ -74,7 +74,7 @@ cat("  Paths verified in", round(timing$phases$setup, 1), "s\n")
 
 # Phase 3: Process signatures
 cat("\nPhase 3: Processing signatures...\n")
-cat("  This may take 30-60 minutes...\n")
+cat("  This may take several hours (~1-2 h solo; the March 2026 run took ~874 min under I/O contention)...\n")
 phase_start <- Sys.time()
 
 summary_output <- process_signatures_from_parquet(

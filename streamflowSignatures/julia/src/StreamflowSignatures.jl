@@ -21,7 +21,6 @@ using Dates
 using Statistics
 using StatsBase
 using LinearAlgebra
-using HypothesisTests
 using JSON3
 
 # Include configuration first

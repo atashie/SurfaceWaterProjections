@@ -1,6 +1,6 @@
 ################################################################################################
 # Smoke Test - rpkg/ workflow on real parquet data
-# Mirrors the canonical R/tests/smoke_test.R but uses the rpkg package API
+# Mirrors the legacy (deprecated) R/tests/smoke_test.R but uses the rpkg package API
 ################################################################################################
 
 library(streamflowsignatures)
@@ -9,8 +9,12 @@ library(data.table)
 cat("========== rpkg SMOKE TEST: Real Data ==========\n\n")
 
 # --- Paths ---
-parquet_path <- "D:/processedOuts_feb2026/combined_streamflow_data_09feb2026.parquet"
-daymet_path  <- "D:/processedOuts_feb2026/daymet_1980_2023.parquet"
+# ENV-overridable (same variable names as the Julia/Python smoke tests and the
+# benchmark runners); defaults point at the Windows data drive.
+parquet_path <- Sys.getenv("STREAMFLOW_DATA_PATH",
+                           "D:/processedOuts_feb2026/combined_streamflow_data_09feb2026.parquet")
+daymet_path  <- Sys.getenv("STREAMFLOW_CLIMATE_PATH",
+                           "D:/processedOuts_feb2026/daymet_1980_2023.parquet")
 
 if (!file.exists(parquet_path)) {
   stop("Parquet file not found: ", parquet_path)
