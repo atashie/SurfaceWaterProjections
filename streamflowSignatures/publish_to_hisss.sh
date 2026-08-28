@@ -58,7 +58,9 @@ DIRTY=""
 git diff --quiet HEAD -- . 2>/dev/null || DIRTY=" (+uncommitted changes)"
 
 cd "$WORK"
-git add -A
+# -f: the mirrored .gitignore must not suppress files tracked in the source repo
+# (e.g. streamflowSignatures.Rproj is tracked there despite the *.Rproj rule)
+git add -A -f
 if git diff --cached --quiet; then
   echo "HISSS is already up to date with $SRC_REV — nothing to publish."
   exit 0
