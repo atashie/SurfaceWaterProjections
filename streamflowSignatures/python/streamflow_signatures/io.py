@@ -2,6 +2,20 @@
 I/O functions for reading and writing streamflow signature data.
 
 Handles parquet input, CSV output, and schema validation.
+
+Schema model (August 2026 product — 1,653 columns):
+
+    1,653 = 20 metadata columns
+          + 100 signature bases x 16 statistic suffixes   (= 1,600)
+          + 21 per-gage scalars
+          + 12 QA flag columns
+
+The 16 suffixes are the 8 ordinary statistics (``stats.STAT_SUFFIXES``) plus
+the 8 Pettitt changepoint fields (``stats.CP_SUFFIXES``). The 20 metadata
+columns mirror ``metadata_order`` in docs/benchmarks/run_python_benchmark.py
+(the production runner's output assembly); the 12 flags come from
+``qa_qc.get_flag_columns()``. Use ``expected_output_columns()`` for the full
+list and ``validate_schema(df, strict=True)`` to gate a complete product CSV.
 """
 
 from typing import Optional, List, Dict, Tuple, Union
@@ -20,19 +34,14 @@ from .config import (
     NA_MAX_RAW_NA_PPT, NA_MAX_GAP_PPT, NA_REJECT_NEGATIVE_PPT,
     NA_MAX_RAW_NA_SWE, NA_MAX_GAP_SWE, NA_REJECT_NEGATIVE_SWE,
 )
+from .stats import STAT_SUFFIXES, CP_SUFFIXES
+from .qa_qc import get_flag_columns
 
 
-# Schema constants matching R config.R
-STAT_SUFFIXES = [
-    "_senn_slp",
-    "_linear_slp",
-    "_spearman_rho",
-    "_spearman_pval",
-    "_mk_rho",
-    "_mk_pval",
-    "_mean",
-    "_median",
-]
+# The 16 per-base statistic suffixes of the full product: the 8 ordinary
+# statistics plus the 8 Pettitt changepoint fields.
+PETTITT_SUFFIXES = list(CP_SUFFIXES)
+ALL_STAT_SUFFIXES = list(STAT_SUFFIXES) + PETTITT_SUFFIXES
 
 # Expected signature base names — the 100 time-series signature bases of the
 # current (Aug 2026) 1,653-column product. Mirrors the Julia annual-collector
@@ -93,18 +102,98 @@ EXPECTED_SIGNATURE_BASES = [
     "drought_deficit_fixed_p30",
 ]
 
-# Metadata columns expected in output
+# Metadata columns of the production output (20), in the exact order the
+# benchmark runner emits them — mirrors `metadata_order` in
+# docs/benchmarks/run_python_benchmark.py: gage id / coords / area / type /
+# record info / area_normalized, the 8 GAGES-II interference attributes, the
+# 2 Canadian HYDAT interference fields, and the unified classification.
 METADATA_COLUMNS = [
     "gage_id",
     "latitude",
     "longitude",
-    "basin_area_km2",
+    "basin_area",
     "gage_type",
-    "processing_status",
     "num_water_years",
-    "start_year",
-    "end_year",
+    "start_water_year",
+    "end_water_year",
+    "area_normalized",
+    "NDAMS_2009",
+    "MAJ_DDENS_2009",
+    "STOR_NID_2009",
+    "IMPNLCD06",
+    "DEVNLCD06",
+    "FRESHW_WITHDRAWAL",
+    "HYDRO_DISTURB_INDX",
+    "CLASS",
+    "RHBN",
+    "REGULATED",
+    "human_interference_class",
 ]
+
+# Per-gage scalar outputs (21) — documented exceptions to the 8-statistic rule.
+# Each name is emitted as-is (no suffix). Sources: elasticity.py, recession.py,
+# runoff_ratios.py, signatures.py (season exclusion counts), drought.py
+# (DROUGHT_THRESHOLD_SCALARS), and the benchmark runner (ice_affected_days_total,
+# aggregated from preprocessor diagnostics).
+PER_GAGE_SCALARS = [
+    "elasticity_static",
+    "log_a_seasonality_amplitude_all",
+    "log_a_seasonality_amplitude_first_half",
+    "log_a_seasonality_amplitude_last_half",
+    "log_a_seasonality_minimum_all",
+    "log_a_seasonality_minimum_first_half",
+    "log_a_seasonality_minimum_last_half",
+    "runoff_ratio_high_count",
+    "elasticity_years_total",
+    "elasticity_years_low_ppt",
+    "ice_affected_days_total",
+    "recession_alpha_point_cloud_linear_reservoir",
+    "season_excluded_years_winter",
+    "season_excluded_years_spring",
+    "season_excluded_years_summer",
+    "season_excluded_years_fall",
+    "drought_threshold_fixed_p2",
+    "drought_threshold_fixed_p5",
+    "drought_threshold_fixed_p10",
+    "drought_threshold_fixed_p20",
+    "drought_threshold_fixed_p30",
+]
+
+# QA/QC flag columns (12) — single source of truth is qa_qc.get_flag_columns().
+QA_FLAG_COLUMNS = get_flag_columns()
+
+
+def expected_output_columns(
+    metadata_columns: Optional[List[str]] = None,
+    signature_bases: Optional[List[str]] = None,
+    scalars: Optional[List[str]] = None,
+    flag_columns: Optional[List[str]] = None,
+) -> List[str]:
+    """
+    Return the full expected column list of the production signatures CSV.
+
+    With the defaults this is the 1,653-column August 2026 product:
+    20 metadata + 100 bases x 16 suffixes + 21 scalars + 12 QA flags,
+    ordered as the benchmark runner writes it (metadata first, then the
+    signature + scalar columns sorted, then the flags sorted).
+    """
+    if metadata_columns is None:
+        metadata_columns = METADATA_COLUMNS
+    if signature_bases is None:
+        signature_bases = EXPECTED_SIGNATURE_BASES
+    if scalars is None:
+        scalars = PER_GAGE_SCALARS
+    if flag_columns is None:
+        flag_columns = QA_FLAG_COLUMNS
+
+    signature_cols = [
+        f"{base}{suffix}" for base in signature_bases for suffix in ALL_STAT_SUFFIXES
+    ]
+    return (
+        list(metadata_columns)
+        + sorted(signature_cols + list(scalars))
+        + sorted(flag_columns)
+    )
 
 
 def read_parquet(
@@ -221,54 +310,80 @@ def validate_schema(
     df: pd.DataFrame,
     required_columns: Optional[List[str]] = None,
     signature_bases: Optional[List[str]] = None,
+    strict: bool = False,
 ) -> Dict[str, Union[bool, List[str]]]:
     """
-    Validate that a DataFrame has the expected schema.
+    Validate a signatures DataFrame against the full product schema.
+
+    The expected column set is metadata + every signature base x all 16
+    statistic suffixes (8 ordinary stats + 8 Pettitt changepoint fields) +
+    the 21 per-gage scalars + the 12 QA flag columns — 1,653 columns with
+    the defaults (see the module docstring).
 
     Parameters
     ----------
     df : pd.DataFrame
-        DataFrame to validate
+        DataFrame to validate (only its columns are inspected).
     required_columns : list of str, optional
-        Required column names. Defaults to METADATA_COLUMNS.
+        Required metadata column names. Defaults to METADATA_COLUMNS (20).
     signature_bases : list of str, optional
-        Expected signature base names. Defaults to EXPECTED_SIGNATURE_BASES.
+        Expected signature base names. Defaults to EXPECTED_SIGNATURE_BASES (100).
+    strict : bool, default False
+        strict=True: every expected column must be present and no unexpected
+        column may exist — the gate for a complete production CSV.
+        strict=False: missing metadata / Pettitt fields / scalars / flags are
+        reported but do not fail validation, so partial outputs (e.g. a bare
+        ``calculate_all_signatures`` result without changepoint or metadata)
+        still validate as long as no signature base is entirely absent.
 
     Returns
     -------
     dict
         Validation result with keys:
-            - valid: bool, True if all validations pass
-            - missing_metadata: list of missing metadata columns
-            - missing_signatures: list of missing signature base names
-            - extra_columns: list of unexpected columns
+            - valid: bool. strict=True: no missing and no unexpected columns.
+              strict=False: no signature base entirely absent.
+            - missing_metadata: metadata columns absent from df
+            - missing_signatures: bases with NONE of their 16 fields present
+            - missing_columns: every expected column absent from df (sorted)
+            - extra_columns: columns of df outside the expected set
+            - n_expected: total size of the expected column set
     """
     if required_columns is None:
         required_columns = METADATA_COLUMNS
     if signature_bases is None:
         signature_bases = EXPECTED_SIGNATURE_BASES
 
-    # Check metadata columns
-    missing_metadata = [c for c in required_columns if c not in df.columns]
+    expected = expected_output_columns(
+        metadata_columns=required_columns, signature_bases=signature_bases
+    )
+    expected_set = set(expected)
+    present = set(df.columns)
 
-    # Check signature columns
+    # Metadata columns absent from df
+    missing_metadata = [c for c in required_columns if c not in present]
+
+    # Bases with none of their 16 fields present (entirely absent signature)
     missing_signatures = []
     for base in signature_bases:
-        expected_cols = [f"{base}{suffix}" for suffix in STAT_SUFFIXES]
-        if not any(c in df.columns for c in expected_cols):
+        if not any(f"{base}{suffix}" in present for suffix in ALL_STAT_SUFFIXES):
             missing_signatures.append(base)
 
-    # Identify extra columns
-    expected_all = set(required_columns)
-    for base in signature_bases:
-        expected_all.update(f"{base}{suffix}" for suffix in STAT_SUFFIXES)
-    extra_columns = [c for c in df.columns if c not in expected_all]
+    # Full accounting against the expected set
+    missing_columns = sorted(expected_set - present)
+    extra_columns = [c for c in df.columns if c not in expected_set]
+
+    if strict:
+        valid = len(missing_columns) == 0 and len(extra_columns) == 0
+    else:
+        valid = len(missing_signatures) == 0
 
     return {
-        "valid": len(missing_metadata) == 0 and len(missing_signatures) == 0,
+        "valid": valid,
         "missing_metadata": missing_metadata,
         "missing_signatures": missing_signatures,
+        "missing_columns": missing_columns,
         "extra_columns": extra_columns,
+        "n_expected": len(expected),
     }
 
 

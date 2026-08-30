@@ -588,9 +588,10 @@ the user; snapshot-mirror model). Five parallel audit passes (docs accuracy, pac
 docs/metadata, legacy inventory, code hygiene + sensitive-content sweep, manuscript
 reconciliation), all findings fixed same day:
 
-- **Sensitive-content sweep: ZERO blockers** — no credentials, tokens, or personal
-  emails anywhere in the 376 tracked files (all credential handling is env-var/`.netrc`
-  indirection). Remaining private-path/infra references classified and dispositioned
+- **Sensitive-content sweep: ZERO blockers** — no credentials, tokens, or unintended
+  personal emails anywhere in the 376 tracked files (all credential handling is
+  env-var/`.netrc` indirection; the maintainer contact added to rpkg/DESCRIPTION the
+  same day is the one deliberate address). Remaining private-path/infra references classified and dispositioned
   (personal Windows-profile paths removed with the deleted April logs and the
   `prod_1980_60pct` wrapper fix; Drive folder ID published as-is per user decision).
 - **Stale port-status claims corrected everywhere** — README.md (rewritten in full as
@@ -623,8 +624,9 @@ reconciliation), all findings fixed same day:
   `SINGLE_VALUE` sets synced to their Python lists (newer scalars were unselectable);
   compare-script reports now record the resolved candidate path; smoke tests gained
   ENV path overrides in Python/rpkg.
-- **Legacy removal** (user-approved list, ~29 files / ~11.6 MB, each verified
-  unreferenced): `archive/` (18 files), the three stray April benchmark logs,
+- **Legacy removal** (user-approved list, ~29 files / ~11.6 MB, each checked for
+  inbound references — one stale pointer survived and was caught by the post-audit
+  Codex review, see below): `archive/` (18 files), the three stray April benchmark logs,
   `compare_restricted_vs_baseline.R`, bit-rotted `compare_outputs.py`, root+data_out
   `upstream_hydrobasins.RData` stubs, pre-2026 `data_out/summary_data.csv`, duplicate
   `combined_watershed_metadata_09feb2026.csv`, header-only `all_us-can-al-grdc.csv`,
@@ -641,6 +643,25 @@ reconciliation), all findings fixed same day:
   signature counts still 106/13-categories vs the true 121/14; a 47%-vs-53% arithmetic
   slip; "Claude Code 0.145.0" is actually the codex-cli version; `<LINK TO REPO>` can
   now be filled with https://github.com/CZ-Sync/HISSS).
+- **Codex adversarial review of the full audit diff (2026-08-30, codex-cli 0.145.0,
+  read-only): GO-WITH-FIXES — 4 MAJOR + 6 MINOR, all fixed same day.** It independently
+  verified the science-facing claims clean (the 100-base Python registry exact against
+  the Julia registries; no behavior regression in any code cleanup; README counts and
+  parity numbers sound). The substantive catches: (MAJOR) Python's `validate_schema()`
+  was still incompatible with the real product — reworked to model the full 1,653-column
+  schema (20 production metadata columns derived from the runner + 100 bases × 16
+  suffixes + 21 scalars + 12 flags, strict/non-strict modes, 13 new tests asserting the
+  arithmetic; suite 156 passed); (MAJOR) the public README's R Quick Start used
+  `arrow::read_parquet`, which keeps `Date` and breaks rpkg's `add_water_year_columns`
+  — switched to the package reader; (MAJOR) root MPL-2.0 vs package MIT license
+  conflict — **user decision: MIT everywhere** (root LICENSE replaced; python/ gains a
+  LICENSE copy; rpkg was already MIT); (MAJOR) `publish_to_hisss.sh` treated ANY clone
+  failure as an empty repo — now discriminates via `git ls-remote --exit-code` and
+  aborts loudly on real failures, plus a deliberate empty-publish-set guard (MINOR).
+  Also fixed: a surviving pointer to the deleted `compare_outputs.py` in
+  `R/tests/generate_golden_outputs.R` (the one reference the deletion sweep missed),
+  two overclaims in this very changelog entry (softened above), the README's
+  collector-required implication and a broken anchor.
 
 ### Milestone: rpkg VALIDATED at full scale — the port campaign is COMPLETE (2026-08-27)
 Both ports now reproduce canonical Julia's **1,653 columns for the same 6,678 gages** on

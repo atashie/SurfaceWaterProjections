@@ -224,5 +224,6 @@ if (file.exists(test_climate_path)) {
   cat("  With climate:", golden_climate_path, "\n")
 }
 cat("\nNext steps:\n")
-cat("  1. Run Python: python docs/benchmarks/compare_outputs.py\n")
-cat("  2. Check validation_report.md for results\n")
+cat("  1. Compare against canonical Julia: python docs/benchmarks/compare_python_vs_golden_julia.py\n")
+cat("     (rpkg: compare_rpkg_vs_golden_julia.py)\n")
+cat("  2. Check the generated *_vs_golden_julia_summary.md for results\n")

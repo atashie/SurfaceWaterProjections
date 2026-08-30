@@ -27,7 +27,7 @@ This repository contains the code behind the **HISSS dataset** (Kaiser et al., m
 
 Each implementation has its own README with full API details, input format, and climate-dependent signatures: [`julia/README.md`](julia/README.md) · [`python/README.md`](python/README.md) · [`rpkg/README.md`](rpkg/README.md).
 
-Input expectations: a table with columns `gage_id`, `Date` (or `date`), and `Q` (mm/day; see [Units](#critical-conventions)); optional climate columns (`PPT`, `SWE`) enable the climate/snow families.
+Input expectations: a table with columns `gage_id`, `Date` (or `date`), and `Q` (mm/day; see [Configuration](#configuration) for unit conventions); optional climate columns (`PPT`, `SWE`) enable the climate/snow families.
 
 ### Julia (canonical)
 
@@ -62,14 +62,14 @@ results = calculate_all_signatures(gage_data, has_climate=False)
 # R CMD INSTALL rpkg
 library(streamflowsignatures)
 
-df <- arrow::read_parquet("path/to/streamflow.parquet")
+df <- read_parquet("path/to/streamflow.parquet")   # the package reader (normalizes Date -> date)
 df <- add_water_year_columns(df)
 gage_data <- df[df$gage_id == "01011000", ]
 
 results <- calculate_all_signatures(gage_data, has_climate = FALSE)
 ```
 
-**Producing the full product**: the bare `calculate_all_signatures` call returns the 8 statistics per signature. The full 1,653-column product additionally requires the `changepoint` configuration (Pettitt fields), an explicit `snow_data` frame (snow metrics), climate data (`has_climate = true` + PPT), and the annual-values collector. The benchmark runners wire all of this up and are the reference entry points:
+**Producing the full product**: the bare `calculate_all_signatures` call returns the 8 statistics per signature. The full 1,653-column summary additionally requires the `changepoint` configuration (Pettitt fields), an explicit `snow_data` frame (snow metrics), and climate data (`has_climate = true` + PPT); the annual-values parquet is a separate sidecar produced by passing the annual-values collector (it has no effect on the summary). The benchmark runners wire all of this up and are the reference entry points:
 
 ```bash
 julia --project=julia docs/benchmarks/run_julia_benchmark.jl   # canonical full pipeline
@@ -246,7 +246,7 @@ Full citations per signature: `docs/SIGNATURES.md`.
 
 ## License
 
-Mozilla Public License 2.0 — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE). The Python (`python/pyproject.toml`) and R (`rpkg/DESCRIPTION`) packages carry the same MIT license.
 
 ## Contact
 

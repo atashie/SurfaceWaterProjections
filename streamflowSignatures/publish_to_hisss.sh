@@ -34,12 +34,23 @@ EXCLUDE_PATTERNS=(
 WORK="$(mktemp -d /tmp/hisss_publish.XXXXXX)"
 trap 'rm -rf "$WORK"' EXIT
 
-echo "Cloning $REMOTE ..."
-git clone --quiet --depth 1 "$REMOTE" "$WORK" 2>/dev/null || {
-  # empty repo: clone still succeeds but warns; init fallback for safety
-  git -C "$WORK" init --quiet 2>/dev/null || true
-}
-git -C "$WORK" checkout -q -B "$BRANCH" 2>/dev/null || true
+# Distinguish "remote is empty" (init locally) from real failures (abort loudly):
+# ls-remote --exit-code returns 2 for a reachable repo with no refs, 128 for
+# auth/DNS/not-found — never treat those as an empty repo.
+echo "Checking $REMOTE ..."
+if git ls-remote --exit-code "$REMOTE" >/dev/null; then
+  git clone --quiet --depth 1 "$REMOTE" "$WORK"
+else
+  rc=$?
+  if [ "$rc" -eq 2 ]; then
+    echo "Remote is empty — initializing first publish."
+    git init --quiet "$WORK"
+  else
+    echo "ERROR: cannot reach $REMOTE (git ls-remote exit $rc) — aborting." >&2
+    exit 1
+  fi
+fi
+git -C "$WORK" checkout -q -B "$BRANCH"
 
 # Wipe everything except .git so deletions in the source propagate
 find "$WORK" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
@@ -48,7 +59,14 @@ find "$WORK" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
 cd "$SRC"
 FILTER="$(printf '%s|' "${EXCLUDE_PATTERNS[@]}")"
 FILTER="${FILTER%|}"
-git ls-files | grep -Ev "$FILTER" | while IFS= read -r f; do
+# Collect the list first so an empty selection fails deliberately (under
+# pipefail a no-match grep would otherwise abort the script with no message).
+FILES="$(git ls-files | grep -Ev "$FILTER" || true)"
+if [ -z "$FILES" ]; then
+  echo "ERROR: publish set is empty after exclusions — refusing to publish." >&2
+  exit 1
+fi
+printf '%s\n' "$FILES" | while IFS= read -r f; do
   mkdir -p "$WORK/$(dirname "$f")"
   cp -p "$f" "$WORK/$f"
 done
