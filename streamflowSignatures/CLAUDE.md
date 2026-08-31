@@ -191,11 +191,11 @@ Two collaborative Google Docs govern this project and are synced **at the start 
 
 ### A. Signature Guidelines (ground truth for methodology)
 
-The guidelines document is a core design feature: domain experts write plain-English signature definitions and QA/QC requirements, and those are translated into code. The current doc (created July 2026) supplanted the previous version at the same publish URL.
+The guidelines document is a core design feature: domain experts write plain-English signature definitions and QA/QC requirements, and those are translated into code. The current doc (declared ground truth 2026-08-31) lives at a NEW publish URL, superseding the July 2026 doc at the old `2PACX-1vQnt…` URL (which itself had supplanted an earlier version at that same URL).
 
 1. **Fetch fresh content** from the Google Doc:
    ```
-   URL: https://docs.google.com/document/d/e/2PACX-1vQnt7OCPm19vnWF4yynXL9JTzTvq9CrGoEaDv7yFSngLoFsypiWsx6fZLKWwaO5YQ/pub
+   URL: https://docs.google.com/document/d/e/2PACX-1vSVjtqLKk1r9TczxLEBhlnzfBWbm1TQVfvqERm-jEwLISZTEWx73ofV4Ng9H0JaXA/pub
    ```
 
 2. **Save to `docs/SIGNATURE_GUIDELINES.md`** (overwrite previous content; update the `Last synced` date in the header)

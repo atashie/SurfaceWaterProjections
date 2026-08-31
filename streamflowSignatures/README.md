@@ -8,7 +8,7 @@ This repository contains the code behind the **HISSS dataset** (Kaiser et al., m
 
 **Primary:**
 1. **Data Processing** — Ingest raw streamflow data (USGS, HYDAT, Caravan), clean and filter by configurable quality thresholds, collate metadata, and produce standardized parquet/CSV outputs.
-2. **Signature Extraction** — Calculate 100+ hydrological signatures under strict guardrails. Methodology is defined by domain experts in a [plain-English guidelines document](https://docs.google.com/document/d/e/2PACX-1vQnt7OCPm19vnWF4yynXL9JTzTvq9CrGoEaDv7yFSngLoFsypiWsx6fZLKWwaO5YQ/pub) (synced to `docs/SIGNATURE_GUIDELINES.md`) — hydrologists define what to calculate, and code implements those definitions.
+2. **Signature Extraction** — Calculate 100+ hydrological signatures under strict guardrails. Methodology is defined by domain experts in a [plain-English guidelines document](https://docs.google.com/document/d/e/2PACX-1vSVjtqLKk1r9TczxLEBhlnzfBWbm1TQVfvqERm-jEwLISZTEWx73ofV4Ng9H0JaXA/pub) (synced to `docs/SIGNATURE_GUIDELINES.md`) — hydrologists define what to calculate, and code implements those definitions.
 
 **Secondary:**
 3. **Visualization** — Interactive exploration of signatures, trends, and cross-signature relationships across thousands of gages (self-contained HTML explorers; dashboard rebuild planned).

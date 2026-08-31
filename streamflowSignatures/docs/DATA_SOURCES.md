@@ -30,7 +30,7 @@ The **collaborative signature guidelines Google Doc** — domain-expert plain-En
 signature definitions and QA/QC requirements, auto-synced each session to
 `docs/SIGNATURE_GUIDELINES.md`. It is the source of truth for *how* the data above
 gets processed.
-URL: https://docs.google.com/document/d/e/2PACX-1vQnt7OCPm19vnWF4yynXL9JTzTvq9CrGoEaDv7yFSngLoFsypiWsx6fZLKWwaO5YQ/pub
+URL: https://docs.google.com/document/d/e/2PACX-1vSVjtqLKk1r9TczxLEBhlnzfBWbm1TQVfvqERm-jEwLISZTEWx73ofV4Ng9H0JaXA/pub
 
 ## Deliberately excluded
 

@@ -279,6 +279,89 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
 <!-- New suggestions from hydrology colleagues will be tracked here -->
 <!-- Format: - [ ] Description (source: section name in guidelines doc) -->
 
+**Synced 2026-08-31 — the guidelines doc MOVED to a NEW publish URL** (declared ground
+truth by the user; snapshot overwritten, sync URL repointed in CLAUDE.md / README.md /
+docs/DATA_SOURCES.md / docs/SIGNATURES.md). Major revision incorporating the
+2026-08-30/31 review session (baseflow filter parameters + per-year application,
+pulse/reversal definitions, elasticity equations, 16-statistic glossary incl. Pettitt
+fields, rewritten QA-flags section; the storage section was REMOVED). Full three-way
+alignment review run same day. Findings, by direction of fix:
+
+*Doc-side fixes queued for Arik to apply in the Google Doc (code is correct):*
+- [ ] **Flow-volume units**: Qann/Qwin/Qspr/Qsum/Qfal are period TOTALS in **mm**
+  (summed daily mm/day), not "mm / day"; only the Qxx percentiles are mm/day.
+- [ ] **Pulse glossary mis-pairs thresholds**: the headline definitions attach
+  "the 90th/10th percentile from the full period of record" to the `_year` metrics,
+  contradicting their own sub-bullets — `_year` = year-specific percentiles,
+  `_all` = period-of-record percentiles.
+- [ ] **Low-pulse sub-bullet errors**: says "A high-pulse day…below the 10th
+  percentile" (copy-paste; should be low-pulse), and "for intermittent streams,
+  0 flow days are excluded" is wrong — zero-flow days are included everywhere;
+  they merely fail the strict `<` comparison when the p10 threshold is exactly 0.
+- [ ] **Recession REGRESSION**: the merged sentence "Parameters a and b are
+  determined using the line of best fit…" lost the b=1 convention (July 2026
+  decision). Correct: b = free power-law fit; a = b fixed at 1 (linear reservoir),
+  log(a) = median(log(−dQ/dt) − log(Q)) — a median, not a regression intercept.
+- [ ] **NA-handling "items i, iii, iv flag (not remove)"** still wrong for item i
+  (>3-day gap unconditionally REJECTS the year); adopt the manuscript's corrected
+  wording (removal = >3-day gap + >30 NAs; flag-only = negative Q + constant SD).
+- [ ] **Leftover Part 3 8-stat table** (R-package methods) is now redundant with /
+  contradicts the new 16-stat Section 2 — delete or reconcile.
+- [ ] **avg_storage vanished from the doc entirely but ships in the product** —
+  reinstate one line ("computed but omitted from major analyses; no ET term");
+  same issue as manuscript finding #3 (2026-08-28).
+- [ ] **Snow (14 metrics) and drought (10 metrics + 5 scalars) are absent** — the
+  largest completeness gap for a ground-truth signatures document.
+- [ ] **high_na flag wording** (Part 4, session-drafted text — Codex finding): "a
+  gage's signature columns" is imprecise. The denominator is every NUMERIC output
+  column except `gage_id` and the `flagged_*` columns, and `compute_qa_flags`
+  runs AFTER the metadata merge (`run_julia_benchmark.jl:579`), so numeric
+  metadata columns (lat/lon, basin_area, NDAMS_2009, …) are counted too.
+- [ ] **Elasticity rolling window wording** (Codex finding): the "11-year window"
+  is 11 consecutive QUALIFYING observations (`elasticity.jl` indexes the
+  PPT-filtered valid series), usually but not necessarily 11 consecutive water
+  years — same nuance already documented for `elasticity_annual`'s adjacent
+  qualifying years.
+- [ ] Minor: stray "ß" in the Section 2 intro; "Only included changes" grammar;
+  "elastacity_annual" typo; the annual completeness rule is a 30-raw-missing-day
+  ceiling (~92% observed) PLUS the >3-day max-gap and residual-NA rules — not
+  "at least 80%"; title still says "(in helperFunctions.R)" though canonical is
+  the cross-language Julia/Python/R library; `min_Q_value_and_days` in
+  process_gages_rawData() describes the legacy path only (removed April 2026).
+- [ ] Recommended additions: the Pettitt window WY 1980–2024 (+ ≥20 obs / ≥10 per
+  segment ⇒ WY2025 excluded from all Pettitt fields); the 20-value stats floor;
+  recession/elasticity trend-gate exemptions; BFI_*_param variants in the Baseflow
+  glossary; Q95_Q10; references for Eckhardt 2005 / Lyne & Hollick 1979 /
+  Baker et al. 2004 / Pettitt 1979.
+
+*Code-side items the review surfaced (already tracked; nothing new):*
+- Recession R² < 0.8 fit-quality flag — still requested by the doc, still
+  unimplemented (existing TODO below).
+- Ice-affected day count — requested by the doc; `ice_affected_days_total` ships
+  but is structurally always 0 (Known Issue, MEDIUM, 2026-08-26).
+
+**Codex adversarial review of this sync + the proposed doc text (2026-08-31,
+codex exec read-only): GO-WITH-FIXES — 4 MAJOR + 4 MINOR, all addressed same
+day.** Codex independently verified clean: the URL swaps, the flow-volume-units /
+pulse-threshold / zero-flow / recession-b=1 / NA-rejection / Pettitt-window
+findings, the baseflow and MK glossary claims, and all 14 snow definitions. The
+corrections it forced: (1) proposed NA-handling text wrongly said interpolated
+≤3-day gaps "do not count against the year" — the raw NA count is taken BEFORE
+interpolation (`io.jl` step b precedes step d), so interpolated days DO count
+toward the 30-day ceiling; (2) drought deficit/threshold units are mm and mm/day
+only for `area_normalized = TRUE` gages (raw m³/s units otherwise — the family is
+NOT gated on area_normalized); (3) the drought severity-ladder monotonicity must
+be stated as "non-decreasing from p2 to p30" (ambiguous "level" wording read
+backwards against the D0→D4 framing); (4) the high_na denominator wording (new
+queued item above); plus the ~92% annual-rule nuance, the 11-qualifying-
+observation rolling window (queued above), an avg_storage eligibility
+qualification (requires PPT + area-normalized flow + ≥10 candidate years / ≥5
+annual values — NA otherwise), and a mechanical snapshot-fidelity check
+(performed: token ratio 0.988 vs the published doc's extracted text; every
+difference is markdown mechanics or one of three deliberate trivial typo
+normalizations — no content invented or omitted). Corrected paste-ready doc
+blocks delivered in-session.
+
 Synced 2026-07-21 — first doc revision since 2026-04-15. Behavior-changing items:
 
 - [x] **Trend completeness gate: overall series 80% → 60%** (source: NA Handling) —
