@@ -279,6 +279,31 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
 <!-- New suggestions from hydrology colleagues will be tracked here -->
 <!-- Format: - [ ] Description (source: section name in guidelines doc) -->
 
+**Update 2026-08-31 (later same day) — most queued fixes APPLIED in the doc; full
+RESTRUCTURE DRAFT delivered; HISSS external-link decision.** A second sync confirms the
+user applied in the Google Doc: the NA-handling four-condition wording, flow-volume
+totals in mm, the pulse headline mis-pairing + low-pulse copy-paste fix, the recession
+b-free / a-fixed-at-1 sentence (partially — the word "a" was dropped in editing), the
+Storage / Snow / Drought sections, the high_na "numeric output columns" wording, five
+new references, removal of the legacy Part 3 8-stat table, the "elasticity_annual"
+typo, and the title's helperFunctions.R reference. The remaining residuals (Qxx
+percentiles say "mm", should be mm/day; the low-pulse zero-flow note; the dropped "a";
+drought notes truncated with a stray "ß" and missing four caveats + the ≥10-year
+threshold rule; every "recommended addition") are ALL folded into a **full restructured
+draft of the doc**, built on a co-author suggestion to integrate the Glossary and
+Functions sections — one self-contained module per signature family (Metrics → Function
+→ Method and parameters → Requirements and decisions; Parts 1–6, modules 3.1–3.14
+matching the product's 14 categories, `name: definition` lines kept machine-diffable
+for the auto-sync). Delivered as a paste-ready artifact; full text + change list
+recorded at `docs/plans/2026-08-31-guidelines-restructure-draft.md`. Snapshot
+re-synced (its header lists applied fixes and residuals). **DECISION (user,
+2026-08-31): all external-facing repo pointers — including the guidelines doc's header
+links — go to the public golden-standard repo https://github.com/CZ-Sync/HISSS**,
+replacing the private-repo and CZ-Sync/code-sandbox links (repo-internal docs were
+already clean from the 2026-08-28 audit; re-verified — zero stale references in the
+tree; the doc-header swap ships with the restructure draft). Checkbox statuses below
+updated accordingly.
+
 **Synced 2026-08-31 — the guidelines doc MOVED to a NEW publish URL** (declared ground
 truth by the user; snapshot overwritten, sync URL repointed in CLAUDE.md / README.md /
 docs/DATA_SOURCES.md / docs/SIGNATURES.md). Major revision incorporating the
@@ -288,51 +313,51 @@ fields, rewritten QA-flags section; the storage section was REMOVED). Full three
 alignment review run same day. Findings, by direction of fix:
 
 *Doc-side fixes queued for Arik to apply in the Google Doc (code is correct):*
-- [ ] **Flow-volume units**: Qann/Qwin/Qspr/Qsum/Qfal are period TOTALS in **mm**
-  (summed daily mm/day), not "mm / day"; only the Qxx percentiles are mm/day.
-- [ ] **Pulse glossary mis-pairs thresholds**: the headline definitions attach
-  "the 90th/10th percentile from the full period of record" to the `_year` metrics,
-  contradicting their own sub-bullets — `_year` = year-specific percentiles,
-  `_all` = period-of-record percentiles.
-- [ ] **Low-pulse sub-bullet errors**: says "A high-pulse day…below the 10th
-  percentile" (copy-paste; should be low-pulse), and "for intermittent streams,
-  0 flow days are excluded" is wrong — zero-flow days are included everywhere;
-  they merely fail the strict `<` comparison when the p10 threshold is exactly 0.
-- [ ] **Recession REGRESSION**: the merged sentence "Parameters a and b are
-  determined using the line of best fit…" lost the b=1 convention (July 2026
-  decision). Correct: b = free power-law fit; a = b fixed at 1 (linear reservoir),
-  log(a) = median(log(−dQ/dt) − log(Q)) — a median, not a regression intercept.
-- [ ] **NA-handling "items i, iii, iv flag (not remove)"** still wrong for item i
-  (>3-day gap unconditionally REJECTS the year); adopt the manuscript's corrected
-  wording (removal = >3-day gap + >30 NAs; flag-only = negative Q + constant SD).
-- [ ] **Leftover Part 3 8-stat table** (R-package methods) is now redundant with /
-  contradicts the new 16-stat Section 2 — delete or reconcile.
-- [ ] **avg_storage vanished from the doc entirely but ships in the product** —
-  reinstate one line ("computed but omitted from major analyses; no ET term");
-  same issue as manuscript finding #3 (2026-08-28).
-- [ ] **Snow (14 metrics) and drought (10 metrics + 5 scalars) are absent** — the
-  largest completeness gap for a ground-truth signatures document.
-- [ ] **high_na flag wording** (Part 4, session-drafted text — Codex finding): "a
-  gage's signature columns" is imprecise. The denominator is every NUMERIC output
-  column except `gage_id` and the `flagged_*` columns, and `compute_qa_flags`
-  runs AFTER the metadata merge (`run_julia_benchmark.jl:579`), so numeric
-  metadata columns (lat/lon, basin_area, NDAMS_2009, …) are counted too.
+- [x] **Flow-volume units** — PARTIALLY APPLIED 2026-08-31: the five totals now say
+  mm, but the Qxx percentiles were overcorrected to "mm" too (should be mm/day).
+  Residual fixed in the restructure draft (§3.1).
+- [x] **Pulse glossary mis-pairs thresholds** — APPLIED 2026-08-31 (headline
+  definitions no longer attach period-of-record thresholds to `_year`).
+- [x] **Low-pulse sub-bullet errors** — PARTIALLY APPLIED 2026-08-31: the
+  high-pulse copy-paste is fixed, but "for intermittent streams, 0 flow days are
+  excluded" survives. Residual fixed in the restructure draft (§3.5).
+- [x] **Recession REGRESSION** — PARTIALLY APPLIED 2026-08-31: the sentence now
+  states b = free fit and the b = 1 constraint for a, but dropped the word "a"
+  ("parameter similarly determined") and still reads as a line-of-best-fit for a
+  (it is a median). Residual fixed in the restructure draft (§3.4).
+- [x] **NA-handling "items i, iii, iv flag (not remove)"** — APPLIED 2026-08-31
+  (the corrected four-condition paragraph, incl. the raw-count-before-
+  interpolation nuance).
+- [x] **Leftover Part 3 8-stat table** — APPLIED 2026-08-31 (removed).
+- [x] **avg_storage reinstated** — APPLIED 2026-08-31 (with the eligibility
+  qualification and OMITTED-FROM-MAJOR-ANALYSES note).
+- [x] **Snow and drought sections** — APPLIED 2026-08-31 (all 14 snow metrics +
+  the drought family), except the drought notes pasted truncated (stray "ß";
+  missing the severity-ladder, intermittent-stream, p10-redundancy, and units
+  caveats and the ≥10-year threshold rule). Residual fixed in the restructure
+  draft (§3.14).
+- [x] **high_na flag wording** — APPLIED 2026-08-31 ("numeric output columns";
+  the fuller denominator description remains available in the restructure draft).
 - [ ] **Elasticity rolling window wording** (Codex finding): the "11-year window"
   is 11 consecutive QUALIFYING observations (`elasticity.jl` indexes the
   PPT-filtered valid series), usually but not necessarily 11 consecutive water
   years — same nuance already documented for `elasticity_annual`'s adjacent
-  qualifying years.
-- [ ] Minor: stray "ß" in the Section 2 intro; "Only included changes" grammar;
-  "elastacity_annual" typo; the annual completeness rule is a 30-raw-missing-day
-  ceiling (~92% observed) PLUS the >3-day max-gap and residual-NA rules — not
-  "at least 80%"; title still says "(in helperFunctions.R)" though canonical is
-  the cross-language Julia/Python/R library; `min_Q_value_and_days` in
-  process_gages_rawData() describes the legacy path only (removed April 2026).
+  qualifying years. In the restructure draft (§3.9); not yet in the doc.
+- [x] Minor — MOSTLY APPLIED 2026-08-31: Section 2 "ß" removed (a new stray "ß"
+  landed at the end of the drought notes), "elastacity_annual" fixed, title no
+  longer says "(in helperFunctions.R)". Still open (all in the restructure
+  draft): "Only included changes" grammar; the ~92%/80% annual-completeness
+  wording; the `min_Q_value_and_days` legacy note.
 - [ ] Recommended additions: the Pettitt window WY 1980–2024 (+ ≥20 obs / ≥10 per
   segment ⇒ WY2025 excluded from all Pettitt fields); the 20-value stats floor;
   recession/elasticity trend-gate exemptions; BFI_*_param variants in the Baseflow
   glossary; Q95_Q10; references for Eckhardt 2005 / Lyne & Hollick 1979 /
-  Baker et al. 2004 / Pettitt 1979.
+  Baker et al. 2004 / Pettitt 1979. ALL included in the restructure draft
+  (Parts 1.3 / 2, §§3.3–3.5, Part 6); land in the doc when it is pasted.
+- [ ] **Header repo links** (new, user decision 2026-08-31): the doc's "github
+  repo here or here" links point at the private repo and CZ-Sync/code-sandbox;
+  they must point at https://github.com/CZ-Sync/HISSS. In the restructure draft
+  (header line); the audit-sheet link is preserved.
 
 *Code-side items the review surfaced (already tracked; nothing new):*
 - Recession R² < 0.8 fit-quality flag — still requested by the doc, still

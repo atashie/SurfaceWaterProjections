@@ -1,7 +1,24 @@
-# Summary Documentation for Streamflow Signatures (in helperFunctions.R)
+# Summary Documentation for Streamflow Signatures
 
 > **Auto-synced from**: [Google Doc](https://docs.google.com/document/d/e/2PACX-1vSVjtqLKk1r9TczxLEBhlnzfBWbm1TQVfvqERm-jEwLISZTEWx73ofV4Ng9H0JaXA/pub)
-> **Last synced**: 2026-08-31 — **NEW PUBLISH URL** (supersedes the doc previously synced from `2PACX-1vQnt…`; declared ground truth by the user 2026-08-31). Major revision: units added to flow volumes; baseflow filter parameters + application detail; pulse/reversal definitions expanded; elasticity equations; 16-statistic glossary (incl. Pettitt fields); QA-flags section rewritten (one wording imprecision remains — the high_na denominator; queued in CHANGELOG); storage section removed.
+> **Last synced**: 2026-08-31 (second sync this date). The user applied most of the
+> 2026-08-31 review's queued fixes in the Google Doc: corrected NA-handling
+> four-condition paragraph, flow-volume totals in mm, pulse headline definitions +
+> low-pulse copy-paste fix, recession b-free / a-fixed-at-1 sentence, NEW
+> Storage / Snow / Drought glossary sections, five new references, high_na
+> "numeric output columns" wording, "elasticity_annual" typo, legacy Part 3
+> 8-stat table removed, title no longer references helperFunctions.R.
+> Remaining imperfections are mirrored as-is below and queued in CHANGELOG:
+> Qxx percentiles say "mm" (should be mm/day); the low-pulse "0 flow days are
+> excluded" note survives; the recession sentence dropped the word "a"; the
+> drought notes are truncated with a stray "ß" (missing the severity-ladder,
+> intermittent-stream, p10-redundancy, and units caveats and the ≥10-year
+> threshold rule); the doc's header repo links still point at the private repo
+> and code-sandbox instead of https://github.com/CZ-Sync/HISSS (user decision
+> 2026-08-31: HISSS is the golden-standard external pointer). All of these are
+> already corrected in the restructured draft delivered 2026-08-31
+> (`docs/plans/2026-08-31-guidelines-restructure-draft.md`), pending paste into
+> the Google Doc.
 
 github repo [here](https://github.com) or [here](https://github.com)
 
@@ -12,7 +29,7 @@ Summary data audit sheet [here](https://docs.google.com)
 - Do not replace NAs with zeros; streamflow that is zero is okay
 - NAs can be for various reasons, we need to use the USGS codes that describe what creates those NAs (e.g. Ice affected, etc.) for each site that has ice effected days we need a total count of the number of days that are ice affected
 - If there is up to 3 days of continuous missing streamflow data, interpolate between the points; tell us if there is a data driven answer to the number of days that would not create problems for trend analysis
-- From USGS data release: remove years with (i) more than 3 consecutive days of NAs, (ii) gaps of more than 30 days in a year, (iii) negative values, (iv) constant monthly standard deviations during periods of non-zero streamflow indicative of data errors. Items i, iii, and iv are set in the config to flag (not remove) by default.
+- Following the USGS data release QA criteria, four conditions are screened per water year: (i) more than 3 consecutive days of missing data, (ii) more than 30 total missing days in the year, (iii) negative flow values, and (iv) constant monthly standard deviations during periods of non-zero streamflow (indicative of data errors or highly controlled discharge). Items i and ii REMOVE the year: any gap longer than 3 consecutive days, or more than 30 missing days in total, excludes that water year from all calculations. Internal gaps of up to 3 days are filled by linear interpolation for years that pass, but interpolated days still count toward the 30-missing-day limit (the count is taken on the raw data, before interpolation). Items iii and iv FLAG but do not remove: negative values are retained by default (config option reject_negative_flow, default false) and are counted in Negative_ann; a constant monthly standard deviation sets a QA flag only and never rejects a year.
 - Flag years with constant monthly standard deviations during periods of non-zero streamflow indicative highly controlled discharges.
 - Negative_ann: Calculate the number of days with negative values per gage per year
 - For any seasonal or annual metrics the period must have at least 80% of the data.
@@ -28,12 +45,12 @@ Summary data audit sheet [here](https://docs.google.com)
 
 ### Flow Volume Metrics
 
-- Qann: Annual total streamflow in mm / day.
-- Qwin: Winter total streamflow in mm / day.
-- Qspr: Spring total streamflow in mm / day.
-- Qsum: Summer total streamflow in mm / day.
-- Qfal: Fall total streamflow in mm / day.
-- Qxx: Flow percentiles (e.g., Q10, Q50, Q90) in mm / day.
+- Qann: Annual total streamflow in mm.
+- Qwin: Winter total streamflow in mm.
+- Qspr: Spring total streamflow in mm.
+- Qsum: Summer total streamflow in mm.
+- Qfal: Fall total streamflow in mm.
+- Qxx: Flow percentiles (e.g., Q10, Q50, Q90) in mm.
 
 ### Baseflow Metrics
 
@@ -66,10 +83,10 @@ Summary data audit sheet [here](https://docs.google.com)
 
 ### Pulse Metrics
 
-- n_high_pulses_year: Number of high-flow pulses per year, with high-flow pulses defined as flow above the 90th percentile from the full period of record.
+- n_high_pulses_year: Number of high-flow pulses per year:
   - A high-pulse day is defined as a day with flow above the 90th percentile of flow; \*_year and \*_all calculate percentiles based on Q for the specified year or the period of record, respectively
-- n_low_pulses_year: Number of low-flow pulses per year, with low-flow pulses defined as flow less than the 10th percentile from the full period of record.
-  - A high-pulse day is defined as a day with flow below the 10th percentile of flow; \*_year and \*_all calculate percentiles based on Q for the specified year or the period of record, respectively. Note: for intermittent streams, 0 flow days are excluded
+- n_low_pulses_year: Number of low-flow pulses per year:
+  - A low-pulse day is defined as a day with flow below the 10th percentile of flow; \*_year and \*_all calculate percentiles based on Q for the specified year or the period of record, respectively. Note: for intermittent streams, 0 flow days are excluded
 - dur_high_pulses_year: Mean duration in days of high-flow pulses per year.
 - dur_low_pulses_year: Mean duration in days of low-flow pulses per year.
 - TQmean: Percentage of days with flow above the annual mean.
@@ -107,6 +124,41 @@ Summary data audit sheet [here](https://docs.google.com)
 - spring_runoff_ratio: Spring (Mar-May) total streamflow divided by spring precipitation.
 - summer_runoff_ratio: Summer (Jun-Aug) total streamflow divided by summer precipitation.
 - fall_runoff_ratio: Fall (Sep-Nov) total streamflow divided by fall precipitation.
+
+### Storage Metric:
+
+- avg_storage: Mean annual catchment storage (mm), from the simplified water balance S = cumulative sum of (P − Q) within each water year; annual storage is interpolated at mean discharge and averaged across years (Peters & Aulenbach 2011). Computed only for gages with valid precipitation data and area-normalized flow (NA otherwise), and included in the data product, but OMITTED FROM MAJOR ANALYSES: the water balance carries no evapotranspiration term, so values overestimate storage wherever ET losses are significant. Retained in the output for completeness; interpret with caution.
+
+### Snow Metrics
+
+Fourteen per-water-year metrics computed from daily snow water equivalent (SWE; Daymet V4, a model product, calendar years 1980–2023). All metrics operate on a thresholded series SWE\* = SWE if SWE ≥ 10 mm, else 0; days below 10 mm are treated as snow-free for both durations and magnitudes. A "snow day" is a day with SWE\* > 0; a "spell" is a maximal run of consecutive snow days; the "anchor spell" is the spell containing the annual SWE maximum (ties resolved to the first day). Gages without Daymet coverage carry NA for all snow metrics.
+
+- swe_max: Maximum daily SWE in the water year (mm). A snow-free year reports a valid 0.
+- swe_max_dowy: Day of water year of the SWE peak. NA in snow-free years.
+- snow_cover_days: Number of days with SWE ≥ 10 mm. A snow-free year reports a valid 0.
+- snow_on_dowy: First day of the anchor spell.
+- snow_off_dowy: First snow-free day after the anchor spell.
+- melt_season_days: snow_off_dowy − swe_max_dowy.
+- melt_rate: swe_max divided by melt_season_days (mm/day; net ablation rate between peak and snow-off).
+- ssm: Snow seasonality metric = (seasonal snow days − ephemeral snow days) / total snow days, where a seasonal spell lasts at least 60 continuous days (Hatchett 2021; Petersky & Harpold 2018). Ranges −1 (fully ephemeral) to +1 (fully seasonal).
+- swe_apr1: SWE on calendar April 1 (leap-year safe).
+- melt_before_peak: Total melt (sum of daily SWE decreases) occurring before the peak day (mm).
+- melt_before_peak_pct: melt_before_peak as a percentage of total water-year melt.
+- melt_before_peak_to_max_swe: melt_before_peak divided by swe_max.
+- melt_com_dowy: Day of water year when cumulative melt reaches 50% of the water-year total.
+- swe_max_to_ppt: swe_max divided by total water-year precipitation (years with PPT ≤ 10 mm return NA).
+
+Notes: snow_on_dowy and snow_off_dowy are censored (NA) when the anchor spell touches Oct 1 or Sep 30, since the snowpack predates or outlasts the water year. Timing and melt metrics are NA in snow-free years; magnitude metrics (swe_max, snow_cover_days, swe_apr1, swe_max_to_ppt) report valid zeros. In addition to the standard trend-completeness requirements, the ten timing/melt/regime metrics require at least 80% of SWE-valid years in both the first and last decade of the gage's SWE record to be snowy before trend statistics are reported (prevents trends conditioned only on snow-present years at gages whose snow is disappearing or appearing).
+
+### Streamflow Drought Metrics
+
+Per-water-year drought duration and deficit against fixed percentile thresholds. Daily flow is first smoothed with a 7-day centered moving average, applied within continuous runs of consecutive dates only (the window never averages across a gap left by a rejected year). Thresholds are magnitude percentiles of the smoothed flow pooled over the gage's whole record, computed with the unbiased Weibull plotting position p = i/(n+1) (Laaha et al. 2017). Five severity levels mirror the U.S. Drought Monitor classes: p30 (D0, abnormally dry), p20 (D1), p10 (D2), p5 (D3), p2 (D4, exceptional).
+
+- drought_duration_fixed_p{2,5,10,20,30}: Number of days in the water year with smoothed flow strictly below the threshold (days).
+- drought_deficit_fixed_p{2,5,10,20,30}: Sum of (threshold − smoothed flow) over those days (mm) — the magnitude-weighted counterpart to duration, separating long shallow droughts from short severe ones.
+- drought_threshold_fixed_p{2,5,10,20,30}: The threshold values themselves (mm/day; one per gage), reported so thresholds are auditable.
+
+Notes: a year with no sub-threshold days reports a valid 0, not NA. Thresholds come from each analysis window's own record, so drought values are comparable within a product but must not be compared across the WY 1993–2025 and WY 1980–2025 products.ß
 
 ## 2. Glossary of Statistical Metrics
 
@@ -197,7 +249,7 @@ The following 16 statistics are calculated for every streamflow signature metric
 - Split recession events temporally (first vs. second half) for concavity analysis.
 - Fits sinusoidal models to analyze seasonal variation in log(a).
 - Count the number of recession events in each year.
-- Parameters a and b are determined using the line of best fit to the log-log plot of −dq̂/dt versus q̂.
+- Parameter b is determined using the line of best fit to the log-log plot of −dq∕dt versus q; parameter similarly determined, but constrained with b = 1.
 - To control the quality of fitted parameters, calculate recession fits and create a flag for any R2 < 0.8.
 
 ### analyze_flashiness()
@@ -245,8 +297,8 @@ The following 16 statistics are calculated for every streamflow signature metric
 
 **Definitions:**
 - elasticity_static: Overall catchment elasticity - median of annual elasticity values. Measures how sensitively streamflow responds to precipitation changes. Values ~1.0 indicate proportional response; >1 indicates amplified response.
-- elasticity: Rolling window (11-year) elasticity values, used to detect trends in catchment sensitivity over time.
-- elastacity_annual: measures year-to-year sensitivity rather than deviation-from-mean sensitivity
+- elasticity_rolling: Rolling window (11-year) elasticity values, used to detect trends in catchment sensitivity over time.
+- elasticity_annual: measures year-to-year sensitivity rather than deviation-from-mean sensitivity
 
 **Requirements and Decisions:**
 - Requires daily streamflow (Q) and precipitation (PPT) data. Calculating differences between years, so need minimum of two years of "good data."
@@ -260,7 +312,7 @@ The following 16 statistics are calculated for every streamflow signature metric
 - To proceed with the additional calculation of using the previous years precip/Q then you would need to pass the minimum data requirements for both years (consecutive years)
 - Year qualification handled by centralized preprocessor (config).
 - Count the number of years each site doesn't have sufficient data within a year, and what the number of excluded years would be if the value was <30% data missing — added as documentation not filter
-- Output: Returns 'elasticity_static' (single value) plus the 8 standard metric statistics (mean, median, linear trend, theil sen, p value); 'elasticity_rolling' (one value per 11 year windows); 'elasticity_annual' plus the 8 standard stats
+- Output: Returns 'elasticity_static` (single value) plus the 8 standard metric statistics (mean, median, linear trend, theil sen, p value); 'elasticity_rolling' (one value per 11 year windows); 'elasticity_annual' plus the 8 standard stats
 
 ### calculate_qp_seasonality()
 
@@ -305,25 +357,15 @@ The following 16 statistics are calculated for every streamflow signature metric
 - Output:
 - Single parquet file (~3.9 GB) containing ~98 million rows for 6,087 sites.
 
-## Part 3: Definitions
-
-### Statistical Metrics
-
-| Suffix | Metric | Method | Purpose |
-|--------|--------|--------|---------|
-| _senn_slp | Theil-Sen slope | zyp::zyp.sen | Robust non-parametric trend detection |
-| _linear_slp | Linear regression slope | lm() | Parametric trend for comparison |
-| _spearman_rho | Spearman's rho | cor.test | Rank correlation with time |
-| _spearman_pval | Spearman p-value | cor.test | Significance of Spearman correlation |
-| _mk_rho | Mann-Kendall tau | Kendall::MannKendall | Non-parametric trend strength |
-| _mk_pval | Mann-Kendall p-value | Kendall::MannKendall | Significance of Mann-Kendall test |
-| _mean | Arithmetic mean | mean() | Central tendency across all years |
-| _median | Median | median() | Robust central tendency |
-
 ## Part 3: References
 
 - Sawicz, K., Wagener, T., Sivapalan, M., Troch, P. A., & Carrillo, G. (2011). Catchment classification: empirical analysis of hydrologic similarity based on catchment function in the eastern USA. Hydrology and Earth System Sciences, 15(9), 2895-2911.
 - Wrede, S., Fenicia, F., Martinez-Carreras, N., Juilleret, J., Hissler, C., Krein, A., ... & Pfister, L. (2015). Towards more systematic perceptual model development: a case study using 3 Luxembourgish catchments. Hydrological Processes, 29(12), 2731-2750.
+- Hatchett, B.J. (2021). Seasonal and Ephemeral Snowpacks of the Conterminous United States. Hydrology, 8(1), 32.
+- Petersky, R., & Harpold, A. (2018). Now you see it, now you don't: a case study of ephemeral snowpacks and soil moisture response in the Great Basin, USA. Hydrology and Earth System Sciences, 22, 4891–4906.
+- Adelsperger, S., et al. (in review). A novel severity-based approach for assessing streamflow drought characteristics and drivers.
+- Laaha, G., et al. (2017). Unbiased plotting positions for low-flow frequency analysis.
+- Peters, N.E., & Aulenbach, B.T. (2011). Water storage at the Panola Mountain Research Watershed, Georgia, USA. Hydrological Processes, 25(25), 3878–3889.
 
 ## Part 4: Automated Data Quality Flags
 
@@ -340,4 +382,4 @@ All checks run on per-gage summary values (the _mean statistic, except where not
 - flagged_for_seasonal_sum: the sum of the four seasonal totals (Qwin_mean + Qspr_mean + Qsum_mean + Qfal_mean) deviates from Qann_mean by more than 20%
 - flagged_for_percentile_order: non-decreasing order Q5 ≤ Q25 ≤ Q50 ≤ Q75 ≤ Q95 violated (on _mean values; ties are allowed and do not flag)
 - flagged_for_timing_order: non-decreasing order D5 ≤ D50 ≤ D95 violated (on _day_mean values; ties are allowed and do not flag)
-- flagged_for_high_na: more than 30% of a gage's signature columns are NA — often indicates missing climate/SWE coverage rather than bad streamflow data
+- flagged_for_high_na: more than 30% of a gage's numeric output columns are NA — often indicates missing climate/SWE coverage rather than bad streamflow data
