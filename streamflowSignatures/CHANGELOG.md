@@ -685,6 +685,61 @@ is manuscript-side. One repo-side stale comment found on the way and **fixed sam
 day**: `config/signatures_config.json` → `annual_values.comment` no longer says
 "Julia only; Python/rpkg ports deferred".
 
+**2026-09-01 — user-requested review of the published doc for technical inaccuracies;
+fourth pass.** The published body is IDENTICAL to the 2026-08-28 snapshot except one
+grammar polish of §2.2.1's leftover duplicate BFI-statistics sentence ("wateryears
+which represent the highest (proportion of sites)" → "water years, which represent the
+highest proportion of sites, …"). The polish does not fix the sentence's three
+technical problems: it duplicates the correct BFI paragraph above it, understates the
+16 statistics as "slope, Spearman's Rho, p-value, mean, and median", and describes the
+windows as "the full period of record and a subset from 1993-2025" where §2.1.2
+correctly states WY 1980–2025 and WY 1993–2025 — still delete/merge (open item 4 of
+the 2026-08-28 pass). All 12 open items from the 2026-08-28 pass re-verified still
+present in the published text (106/90/16/13-categories counts, drought family absent
+from §2, area-normalization source misattributed to the boundary polygons, 47%-vs-53%
+arithmetic, avg_storage sentence missing, `Claude Code 0.145.0` misattribution,
+missing references + nonexistent "Linke et al. 2013", §3 garbled
+checksums-sentence/filename/`teh`/`ot`/`WSG84`/`MOIDS` typos, Usage Notes §5 still a
+stub with no `area_normalized == TRUE` caveat, CC-BY/DOI-labeling to confirm). One
+NEW minor finding this pass: §2.1.4's opening "include all five land cover
+classifications from MODIS MCD12Q1" contradicts the correct "eight schemes, all of
+which HISSS retains" two sentences later — should say all eight (5 LC_Type + 3
+LC_Prop). Snapshot updated (sentence + sync date). Note: the published URL can lag
+the live doc (memory: manuscript-doc-access-via-chrome), so co-author edits made
+after the last publish would not be visible here.
+
+**Same day — paste-ready correction blocks drafted for items 1–7** (user request):
+`docs/plans/2026-09-01-manuscript-correction-blocks.md` (durable record, excluded
+from the public mirror with the rest of docs/plans/) + a paste-ready artifact page.
+Ten blocks total: 1a/1b (121-signature / 14-category counts, resolving the "(name)"
+placeholder to hisss_data_dictionary.csv), 1c (NEW drought methods paragraph — the
+queued edit #8 text), 2a (area-normalization source, both spots), 2b (§5 Usage
+Notes starters: area_normalized filter + record-dependent-signature caveat), 3
+(53% reduction), 4 (DELETE the duplicate BFI paragraph + optional 16-statistics
+replacement), 5 (Daymet 6,087-candidate / 5,965-of-8,014 coverage), 6 (avg_storage
+reinstated with the no-ET caveat), 7 (Acknowledgements: Claude Code unversioned,
+Codex CLI 0.145.0 credited as the second review tool). Plus the five
+reference-list entries the blocks introduce (Adelsperger in-review; Hatchett 2021;
+Laaha 2017 short-form; Peters & Aulenbach 2011; Petersky & Harpold 2018). Blocks
+resolve open items 1–4 of the 2026-08-28 pass once pasted; items 8–12 (remaining
+references, §3 mechanical fixes, license confirmation) stay open.
+
+**Same day — the §2 workflow schematic corrected + committed.** The draft mermaid
+schematic (`~/Downloads/dataset_workflow_schematic.{md,mmd}`) carried three of the
+same stale claims the text blocks fix: "~100 signatures across 13 families" (→ 121
+across 14), the pre-July-2026 trend gate "≥80% of series and each decade" (→ ≥20
+values / ≥60% of series / ≥80% of first and last decade), and no Annual NLCD among
+the sources/outputs. Corrected in place (plus: Daymet edge labeled as area-weighted
+basin averages; "gauge"→"gage"; the open library linked as "reproducible via" the
+summary table instead of downstream of it) and committed as
+`docs/plans/dataset_workflow_schematic.md` (GitHub-rendered mermaid fence) with a
+3x PNG render beside it (`docs/plans/` keeps it out of the public mirror until the
+manuscript ships). Rendering note: this Mac has no browser/node, so a
+Playwright-Chromium mermaid renderer was set up (venv in the session scratchpad);
+the headless shell never applies mermaid's font CSS to foreignObject labels
+(defaults to Times) and collapses the SVG to container width — the renderer forces
+a concrete sans page-wide before layout and pins the SVG to its viewBox size.
+
 ---
 
 ## [August 2026]

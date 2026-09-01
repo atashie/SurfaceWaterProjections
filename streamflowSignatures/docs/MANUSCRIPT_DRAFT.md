@@ -1,7 +1,9 @@
 # HISSS Manuscript Draft (auto-synced snapshot)
 
 > **Auto-synced from**: [Google Doc](https://docs.google.com/document/d/e/2PACX-1vS7j4FRp7SEwlXoBUVA8NA7cj_I0XzyS0u58r3bl8SOz4BfpZPrdPJge4RMcFocnX8Gnllkc1M-CTJ3/pub)
-> **Last synced**: 2026-08-28
+> **Last synced**: 2026-09-01 (only change since 2026-08-28: grammar polish of the
+> leftover duplicate BFI-statistics sentence in §2.2.1 — the sentence itself is
+> still queued for deletion/merge, see the Reconciliation Log)
 >
 > This is a read-only snapshot of the collaborative manuscript draft used for
 > change detection and reconciliation review (see CLAUDE.md → Session-Start
@@ -123,7 +125,7 @@ We calculated a comprehensive suite of 106 streamflow and hydroclimate signature
 
 We calculated baseflow indices (BFI) using both the Lyne-Hollick and the Eckhardt filters, each in two variants: a default parameterization (Eckhardt: BFImax = 0.8, a = 0.98; Lyne-Hollick: a = 0.925) and a recession-parameterized variant in which the filter constant is replaced by a site-specific recession constant, estimated as the median of event-based recession ratios under the assumption of a linear reservoir. In the parameterized Eckhardt filter, only the recession constant is replaced (BFImax remains 0.8); the Lyne-Hollick parameterization is heuristic, as that filter's parameter has no formal derivation from recession analysis.
 
-For the Eckhardt filter, we used both default parameters (BFImax = 0.8, a = 0.98) and a parametrized version that includes recession parameters calculated for each site. We then calculated statistics for each metric across both the full period of record and a subset from 1993-2025 wateryears which represent the highest (proportion of sites) including slope, Spearman's Rho, p-value, mean and median.
+For the Eckhardt filter, we used both default parameters (BFImax = 0.8, a = 0.98) and a parametrized version that includes recession parameters calculated for each site. We then calculated statistics for each metric across both the full period of record and a subset from 1993-2025 water years, which represent the highest proportion of sites, including slope, Spearman's Rho, p-value, mean, and median.
 
 2.2.2 Computing Long-Term Signatures and Trends
 
