@@ -11,13 +11,21 @@ HydroShare resources' core tables. GitHub renders the diagram below natively.
   source and to the land-cover output table; Daymet source noted as pre-computed
   area-weighted basin averages; "gauge" → "gage" (USGS convention); the open
   library linked as "reproducible via" rather than a downstream consumer.
-- **GitHub-compatible form (2026-09-01)**: the source deliberately carries NO
-  `%%{init}%%` directive and NO edge labels — GitHub's pinned mermaid crashes at
-  render time ("Unable to render rich display") on init directives combined with
-  labeled edges (mermaid-js/mermaid#6452 / #6022, a dagre labeled-edge bug its
-  build predates the fix for), even though the diagram parses cleanly in stock
-  mermaid 10/11. Branch outcomes live in node text instead ("Rejected:", "Kept:",
-  "Not normalized:"). Do not reintroduce either construct.
+- **GitHub rendering note (2026-09-01)**: "Unable to render rich display" on this
+  file was NOT caused by this source. Verified directly: the diagram renders
+  cleanly under stock mermaid 10.9.3, 11.12.0, AND 11.17.2 — GitHub's exact
+  pinned version, extracted from its live viewscreen bundle — in strict security
+  mode. GitHub's production bundle
+  (`viewscreen.githubusercontent.com/static/assets/mermaidMarkdown-7fad2455….js`)
+  currently crashes during its own bootstrap (TypeError in its octicons module
+  init, before mermaid ever runs), reproduced on GitHub's own public mermaid
+  README where ALL diagrams fail with the identical symptom — a platform-wide
+  outage; re-check after GitHub ships a fixed bundle (hard refresh, the old
+  bundle may be cached). The source is nonetheless kept directive-free and
+  edge-label-free as the maximally compatible form (an earlier GitHub-pinned
+  mermaid had a dagre bug with `%%{init}%%` + labeled edges,
+  mermaid-js/mermaid#6452 / #6022); branch outcomes live in node text instead
+  ("Rejected:", "Kept:", "Not normalized:").
 - **PNG render**: `dataset_workflow_schematic.png` (same folder, 3× resolution,
   white ground) — regenerate with `render_mermaid.py` (same folder; needs a venv
   with `playwright` + `playwright install chromium`, plus `mermaid.min.js`

@@ -740,6 +740,25 @@ the headless shell never applies mermaid's font CSS to foreignObject labels
 (defaults to Times) and collapses the SVG to container width — the renderer forces
 a concrete sans page-wide before layout and pins the SVG to its viewBox size.
 
+**Same day — GitHub "Unable to render rich display" on the schematic: ROOT CAUSE
+IS A GITHUB PLATFORM OUTAGE, not this file.** After a first defensive rewrite
+(dropping the `%%{init}%%` directive + edge labels per a known GitHub-pinned-
+mermaid dagre bug) still failed, the diagnosis was taken to ground truth: (1) the
+committed source renders cleanly under stock mermaid 10.9.3, 11.12.0, and
+11.17.2 — GitHub's EXACT pinned version, read out of its live viewscreen bundle —
+in strict security mode; (2) GitHub's production bundle
+(`mermaidMarkdown-7fad2455….js`) crashes during its own bootstrap (TypeError in
+its octicons module init, before mermaid runs), verified by driving the real
+`viewscreen.githubusercontent.com` iframe locally (Playwright harness speaking
+GitHub's `render:cmd` postMessage protocol, frame-ancestors CSP stripped via
+route interception); and (3) on GitHub's own public mermaid README, ALL 10
+diagrams — trivial `flowchart LR` examples included — fail with the identical
+two init crashes per iframe and the same banner after the ~45 s client timeout.
+The directive-free/edge-label-free form is retained as maximally compatible; the
+schematic doc's earlier (wrong) causal claim was corrected. Re-check rendering
+after GitHub ships a fixed bundle; until then the committed 3x PNG beside the
+doc is the review copy.
+
 ---
 
 ## [August 2026]
