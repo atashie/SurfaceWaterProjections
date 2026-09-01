@@ -735,7 +735,8 @@ summary table instead of downstream of it) and committed as
 `docs/plans/dataset_workflow_schematic.md` (GitHub-rendered mermaid fence) with a
 3x PNG render beside it (`docs/plans/` keeps it out of the public mirror until the
 manuscript ships). Rendering note: this Mac has no browser/node, so a
-Playwright-Chromium mermaid renderer was set up (venv in the session scratchpad);
+Playwright-Chromium mermaid renderer was set up (now committed as
+`docs/plans/render_mermaid.py`, usage in the schematic doc);
 the headless shell never applies mermaid's font CSS to foreignObject labels
 (defaults to Times) and collapses the SVG to container width — the renderer forces
 a concrete sans page-wide before layout and pins the SVG to its viewBox size.

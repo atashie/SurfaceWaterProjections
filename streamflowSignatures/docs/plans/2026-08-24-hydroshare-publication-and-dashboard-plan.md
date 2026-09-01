@@ -276,9 +276,13 @@ Target journal: Scientific Data (Special Collection on Water Storage, **due Nov 
 deadline of **Sept 30** for a full draft, co-author review through October.
 
 **Structural gaps (from the live draft)**
-- [ ] §2 opening: write the methods summary paragraph.
-- [ ] §2 schematic: workflow diagram (**Kendra**) — offer to generate a draft figure
-      from the repo's data-flow docs as a starting point.
+- [x] §2 opening: write the methods summary paragraph. — DONE by co-authors
+      (2026-08-24 sync); count/area-normalization corrections queued in the
+      2026-09-01 correction blocks.
+- [x] §2 schematic: workflow diagram (**Kendra**) — DONE 2026-09-01: draft
+      mermaid schematic corrected for technical accuracy (121 sigs / 14 families,
+      current trend gate, Annual NLCD) and committed as
+      `docs/plans/dataset_workflow_schematic.md` + 3× PNG for the manuscript.
 - [ ] §2.1: input-data table — generate directly from `docs/DATA_SOURCES.md` (11
       sources + access modes already tabulated there).
 - [ ] §2.2.1 "Basin, Gage, and Climate Data Filtering" — currently EMPTY. Write from
