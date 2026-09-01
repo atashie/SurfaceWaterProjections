@@ -8,22 +8,30 @@ HydroShare resources' core tables. GitHub renders the diagram below natively.
   (100 annual series + 21 scalars) across **14** families (was "~100 across 13");
   trend gate stated as ≥20 values / **≥60% of series** / ≥80% of first and last
   decade (was "≥80% of series and each decade"); **Annual NLCD** added as a raw
-  source and to the land-cover output table; Daymet edge labeled as pre-computed
+  source and to the land-cover output table; Daymet source noted as pre-computed
   area-weighted basin averages; "gauge" → "gage" (USGS convention); the open
-  library is linked as "reproducible via" rather than a downstream consumer.
+  library linked as "reproducible via" rather than a downstream consumer.
+- **GitHub-compatible form (2026-09-01)**: the source deliberately carries NO
+  `%%{init}%%` directive and NO edge labels — GitHub's pinned mermaid crashes at
+  render time ("Unable to render rich display") on init directives combined with
+  labeled edges (mermaid-js/mermaid#6452 / #6022, a dagre labeled-edge bug its
+  build predates the fix for), even though the diagram parses cleanly in stock
+  mermaid 10/11. Branch outcomes live in node text instead ("Rejected:", "Kept:",
+  "Not normalized:"). Do not reintroduce either construct.
 - **PNG render**: `dataset_workflow_schematic.png` (same folder, 3× resolution,
   white ground) — regenerate with `render_mermaid.py` (same folder; needs a venv
   with `playwright` + `playwright install chromium`, plus `mermaid.min.js`
   downloaded beside the script — cdnjs mermaid 10.9.3 UMD):
-  `python render_mermaid.py <in.mmd> <out.png> 3`. Any mermaid-cli works too.
-  The script works around two headless-shell quirks: mermaid's font CSS never
-  reaches the foreignObject labels (falls back to Times), and the SVG collapses
-  to container width unless pinned to its viewBox size.
+  `python render_mermaid.py <in.mmd> <out.png> 3`. The theme/spacing/curve config
+  the init directive used to carry is injected by the renderer via
+  `mermaid.initialize()`, so the PNG keeps the styled look. The script also works
+  around two headless-shell quirks: mermaid's font CSS never reaches the
+  foreignObject labels (falls back to Times), and the SVG collapses to container
+  width unless pinned to its viewBox size.
 - This folder (`docs/plans/`) is excluded from the public CZ-Sync/HISSS mirror,
   so the figure stays private until the manuscript ships.
 
 ```mermaid
-%%{init: {"theme":"base","themeVariables":{"fontFamily":"ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif","fontSize":"13px","lineColor":"#7f8ea4"},"flowchart":{"htmlLabels":true,"nodeSpacing":40,"rankSpacing":52,"curve":"basis"}}}%%
 flowchart TB
 
 classDef raw fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#14274e;
@@ -39,7 +47,7 @@ subgraph SRC["RAW DATA SOURCES"]
   USGS[("USGS NWIS<br/>US daily discharge")]:::raw
   HYDAT[("HYDAT<br/>Canada daily discharge")]:::raw
   BND[("Basin boundaries<br/>GAGES-II · ECCC · HydroBASINS")]:::raw
-  DAY[("Daymet ~1 km<br/>precip · temp · SWE")]:::raw
+  DAY[("Daymet ~1 km<br/>precip · temp · SWE<br/>area-weighted basin averages")]:::raw
   ATL[("HydroATLAS v10<br/>physiographic attributes")]:::raw
   LAI[("MODIS MCD15A3H<br/>LAI, 4-day")]:::raw
   LC[("MODIS MCD12Q1<br/>LULC, annual")]:::raw
@@ -57,17 +65,17 @@ DDP --> QC["Preprocess per gage:<br/>daily grid · interpolate gaps ≤3 d"]:::p
 
 QC -.-> FL{{"Flag only:<br/>negative Q ·<br/>constant monthly SD"}}:::flag
 QC --> YR{"Reject year?<br/>over 3 consecutive NA days<br/>or over 30 NA days total"}:::filt
-YR -->|reject| XY["Excluded years"]:::drop
-YR -->|keep| WYS[/"Clean<br/>water-year series"/]:::inter
+YR --> XY["Rejected:<br/>excluded years"]:::drop
+YR --> WYS[/"Kept: clean<br/>water-year series"/]:::inter
 
 WYS --> GG{"Include gage?<br/>≥20 qualifying years ·<br/>≥60% of window qualifying"}:::filt
-GG -->|no| XG["Excluded gages"]:::drop
-GG -->|yes| SIG["Compute 121 signatures<br/>(100 annual series + 21 scalars)<br/>across 14 families"]:::proc
+GG --> XG["Excluded gages"]:::drop
+GG --> SIG["Compute 121 signatures<br/>(100 annual series + 21 scalars)<br/>across 14 families"]:::proc
 
-DAY -->|"area-weighted<br/>basin averages"| SIG
+DAY --> SIG
 SIG --> AN{"Area-normalized<br/>gage?"}:::filt
-AN -->|"no"| SKIP["Skip Q-to-PPT<br/>signatures"]:::drop
-AN -->|"yes"| ST["Summarize each annual series:<br/>mean · median · Theil-Sen ·<br/>linear · Spearman · Mann-Kendall ·<br/>Pettitt changepoint"]:::proc
+AN --> SKIP["Not normalized:<br/>skip Q-to-PPT signatures"]:::drop
+AN --> ST["Summarize each annual series:<br/>mean · median · Theil-Sen ·<br/>linear · Spearman · Mann-Kendall ·<br/>Pettitt changepoint"]:::proc
 SKIP --> ST
 
 ST -.-> QAF{{"12 QA/QC range and<br/>consistency flags"}}:::flag
@@ -82,5 +90,5 @@ NLCD --> ZON
 TG --> O1[["Signature summary table<br/>+ annual-values parquet"]]:::out
 ZON --> O2[["Watershed attribute table"]]:::out
 ZON --> O3[["MODIS LAI monthly ·<br/>MODIS + NLCD land cover annual"]]:::out
-O1 -. reproducible via .-> LIB[["Open library<br/>Julia · Python · R"]]:::out
+O1 -.-> LIB[["Reproducible via open library<br/>Julia · Python · R"]]:::out
 ```

@@ -12,13 +12,25 @@ out_path = Path(sys.argv[2])
 scale = int(sys.argv[3]) if len(sys.argv) > 3 else 3
 
 diagram = src_path.read_text(encoding="utf-8")
-# The headless shell mishandles the ui-sans-serif/system-ui stack (falls back to
-# serif); substitute a concrete face BEFORE mermaid measures text.
-diagram = diagram.replace(
-    "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
-    "Helvetica Neue, Helvetica, Arial, sans-serif",
-)
 mermaid_js = (SCRATCH / "mermaid.min.js").read_text(encoding="utf-8")
+
+# Styling injected here rather than as an in-source %%{init}%% directive:
+# GitHub's pinned mermaid crashes at render time on init directives combined
+# with labeled edges (mermaid-js/mermaid#6452/#6022), so the committed source
+# stays directive-free and the PNG render carries the theme config instead.
+# Concrete font face because the headless shell mishandles ui-sans-serif/
+# system-ui stacks (falls back to serif).
+MERMAID_CONFIG = {
+    "startOnLoad": False,
+    "securityLevel": "loose",
+    "theme": "base",
+    "themeVariables": {
+        "fontFamily": "Helvetica Neue, Helvetica, Arial, sans-serif",
+        "fontSize": "13px",
+        "lineColor": "#7f8ea4",
+    },
+    "flowchart": {"htmlLabels": True, "nodeSpacing": 40, "rankSpacing": 52, "curve": "basis"},
+}
 
 html = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8">
@@ -35,7 +47,7 @@ html = f"""<!DOCTYPE html>
 <div id="wrap"><div id="target"></div></div>
 <script>
   const src = {json.dumps(diagram)};
-  mermaid.initialize({{ startOnLoad: false, securityLevel: "loose" }});
+  mermaid.initialize({json.dumps(MERMAID_CONFIG)});
   mermaid.render("theSvg", src).then(({{ svg }}) => {{
     document.getElementById("target").innerHTML = svg;
     const el = document.querySelector("#target svg");
