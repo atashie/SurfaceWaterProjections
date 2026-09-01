@@ -12,8 +12,13 @@ HydroShare resources' core tables. GitHub renders the diagram below natively.
   area-weighted basin averages; "gauge" → "gage" (USGS convention); the open
   library is linked as "reproducible via" rather than a downstream consumer.
 - **PNG render**: `dataset_workflow_schematic.png` (same folder, 3× resolution,
-  white ground) — regenerate with the Playwright/Chromium mermaid renderer
-  (scratchpad tool `render_mermaid.py`; any mermaid-cli works too).
+  white ground) — regenerate with `render_mermaid.py` (same folder; needs a venv
+  with `playwright` + `playwright install chromium`, plus `mermaid.min.js`
+  downloaded beside the script — cdnjs mermaid 10.9.3 UMD):
+  `python render_mermaid.py <in.mmd> <out.png> 3`. Any mermaid-cli works too.
+  The script works around two headless-shell quirks: mermaid's font CSS never
+  reaches the foreignObject labels (falls back to Times), and the SVG collapses
+  to container width unless pinned to its viewBox size.
 - This folder (`docs/plans/`) is excluded from the public CZ-Sync/HISSS mirror,
   so the figure stays private until the manuscript ships.
 
