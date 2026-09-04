@@ -58,6 +58,16 @@ the canonical union of metadata `processing_status == success` (8,014) and all s
 CSVs (adds 4 `processing`-status USGS gages that carry signatures). From
 `combined_watershed_metadata_09feb2026.csv` (16,994 rows); `no_data` 8,787 etc. excluded.
 
+> **⚠ CORRECTION (2026-09-04)**: the `zfill(8)` rule below cannot restore the leading zero
+> of USGS site numbers that are 9–10 digits long (`021650905`, `0212433550`): after
+> stripping they are 8–9 digits and `zfill(8)` leaves them unchanged. The delivered EO
+> tables therefore store **44** such ids un-padded in `gage_id` (and the rebuilt boundary
+> layer 9). **Decision (user, 2026-09-04): the delivered files stay byte-identical; users
+> join on the zero-stripped form (`canon_id`, or strip leading zeros on both sides) — never
+> re-pad.** Documented in the root README → "Reading and Joining the Data" and in the
+> HydroShare resource READMEs. Any future EO build should carry the agency id from the
+> streamflow parquet instead of re-deriving it.
+
 **Canonical `gage_id` key (IMPORTANT):** the metadata + the watershed-geometry source
 files store gage_ids **zero-stripped** (`1011000`); the signature CSVs store them
 **zero-padded** (`01011000`). Reconciled rule: numeric → strip leading zeros for the

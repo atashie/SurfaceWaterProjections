@@ -182,6 +182,19 @@ Interpretation keys:
   recession-parameterized BFIs (whole-record alpha), and the drought metrics
   (whole-record percentile thresholds). Never mix these across window products.
 
+### Filtering-Stage Census (September 2026)
+
+How many gages survive each stage (measured 2026-09-04, reproducing both products exactly;
+full table in `docs/plans/2026-09-04-filtering-stage-census.md`):
+16,994 candidates → 8,014 usable records (8,787 no data, 80 < 20 years, 113 never
+retrieved) → 7,964 watershed boundaries (54 basins > 100,000 km² dropped) → per-year
+screening rejects 10.6 % of gage-years over WY 1980–2025 (>30 NA days 92 %, gap > 3 d
+5 %, boundary NA 3 %) → 6,678 gages (WY 1993–2025) / 6,250 (WY 1980–2025); the longer
+window loses 1,063 gages with ≥ 20 valid years to the window-anchored 60 % rule alone.
+Daymet reaches 5,517 / 5,638 of the product gages; trend statistics survive the
+completeness gate for ~93 % of gages on dense signatures. Rerun with
+`docs/benchmarks/qualification_census.jl`.
+
 ## Interpreting Results
 
 ### Trend Statistics

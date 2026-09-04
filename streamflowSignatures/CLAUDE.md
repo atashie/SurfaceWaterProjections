@@ -145,8 +145,11 @@ to main to keep the mirror current.** Never commit to HISSS directly.
 6. Run the Julia unit suite (`julia --project=julia julia/test/runtests.jl`), then the
    benchmark (`docs/benchmarks/run_julia_benchmark.jl`, ~27 min) to verify
 7. **Prove additivity, don't assume it** — diff the benchmark output against the previous
-   canonical run: every pre-existing column must be unchanged (only `flagged_for_high_na`
-   is expected to shift, since its denominator counts all fields), AND the new columns
+   canonical run: every pre-existing column must be unchanged (in principle
+   `flagged_for_high_na` may shift because its denominator is meant to count all
+   fields — but see the 2026-09-04 Known Issue: the Julia runner currently feeds
+   it `Vector{Any}` columns, so no signature field enters the denominator and the
+   flag cannot move), AND the new columns
    must be populated. The orchestrator's per-signature `try/catch` turns an unexpected
    failure into silently missing columns, so a green unit suite proves nothing here.
    Smoke tests should assert new values are FINITE, not merely that the keys exist.

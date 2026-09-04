@@ -155,6 +155,66 @@ Two delivered products (both 1,653 columns, 60% qualifying fraction), published 
 
 Neither is a subset of the other, and record-dependent signatures must never be compared across them (thresholds come from each run's own window).
 
+## Reading and Joining the Data (gage identifiers)
+
+Every HISSS table is keyed by `gage_id`, the agency station identifier (USGS site number
+or HYDAT station number). Three rules make joins reliable across the whole dataset:
+
+1. **Read `gage_id` as a string, never as a number.** USGS site numbers carry leading
+   zeros (`01011000`); numeric parsing destroys them.
+2. **Join on the zero-stripped form, on both sides of every join** — remove leading
+   zeros from all-digit ids and leave HYDAT ids (`01AD002`) as they are. HISSS station
+   ids are unique under this rule (17,166 distinct stations across all tables, zero
+   collisions), so it is always safe.
+3. **Do not re-pad.** Padding to 8 digits does not recover the agency form of the 9- and
+   10-digit USGS site numbers that begin with a zero (`021650905`, `0212433550`): the
+   stripped form is ambiguous. The pad-to-8 shortcut silently mismatches 66 of the 8,014
+   compiled gages against the gage metadata table and 44 gages in the vegetation and
+   land-cover tables.
+
+Rule 3 matters because the stored form differs between tables:
+
+| Table(s) | Stored `gage_id` form |
+|---|---|
+| Signature summary CSVs, annual-values parquets, daily streamflow parquet, Daymet parquet (`site_id`), HydroATLAS attribute table, HYDAT interference CSV | Agency form, zero-padded (`01011000`, `021650905`) |
+| Gage metadata CSV (`combined_watershed_metadata_*.csv` / `hisss_gage_metadata.csv`) | US ids **as retrieved, zero-stripped** (`1011000`, `21650905`) |
+| Watershed boundary layer (GeoPackage, GeoParquet, QA CSV) | Agency form except **9** long USGS ids stored stripped; also carries `canon_id` (stripped) |
+| MODIS LAI, MODIS LULC, Annual NLCD tables | Agency form except **44** long USGS ids stored stripped; also carry `canon_id` (stripped) |
+
+The stripped ids in the boundary and land-cover tables are an artefact of an 8-digit
+padding rule in the Earth-observation pipelines (found 2026-09-04). The delivered files
+are kept byte-identical to their validated builds; the recipe below is the supported way
+to join them, and `canon_id` in those tables is already the stripped key.
+
+```python
+import pandas as pd
+def key(s):
+    s = str(s).strip()
+    return s.lstrip("0") if s.isdigit() else s.upper()
+sig  = pd.read_csv("hisss_signatures_wy1993_2025.csv", dtype={"gage_id": str})
+lulc = pd.read_parquet("hisss_modis_lulc_annual.parquet")
+sig["key"], lulc["key"] = sig.gage_id.map(key), lulc.gage_id.map(key)
+merged = sig.merge(lulc[lulc.year == 2020], on="key", how="left")
+```
+
+```r
+key  <- function(x) ifelse(grepl("^[0-9]+$", x), sub("^0+", "", x), toupper(x))
+sig  <- readr::read_csv("hisss_signatures_wy1993_2025.csv",
+                        col_types = readr::cols(gage_id = readr::col_character()))
+lulc <- arrow::read_parquet("hisss_modis_lulc_annual.parquet")
+sig$key <- key(sig$gage_id); lulc$key <- key(lulc$gage_id)
+merged <- dplyr::left_join(sig, dplyr::filter(lulc, year == 2020), by = "key")
+```
+
+```julia
+using CSV, DataFrames, Parquet2
+key(s) = all(isdigit, s) ? lstrip(s, '0') : uppercase(s)
+sig  = CSV.read("hisss_signatures_wy1993_2025.csv", DataFrame; types = Dict("gage_id" => String))
+lulc = DataFrame(Parquet2.Dataset("hisss_modis_lulc_annual.parquet"))
+sig.key = key.(string.(sig.gage_id)); lulc.key = key.(string.(lulc.gage_id))
+merged = leftjoin(sig, lulc[lulc.year .== 2020, :], on = :key)
+```
+
 ## Human Interference Metadata
 
 Watershed metadata is automatically enriched with human interference indicators:

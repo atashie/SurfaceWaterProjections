@@ -151,6 +151,64 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
 - BFImax estimation via Collischonn & Fan (2013) backward filter — would give BFI_Eckhardt_param per-gage BFImax instead of fixed 0.8, improving discriminating power (currently range [0.47–0.80] due to BFImax saturation)
 
 ### Known Issues (discovered 2026-07-14, Codex review — not yet fixed)
+- **HIGH (canonical Julia + both ports, discovered 2026-09-04 during the guidelines
+  Parts 4–5 review) — `flagged_for_high_na` means three different things in the three
+  languages, and in the DELIVERED products it does not measure signature NA at all.**
+  Measured on the WY 1993–2025 reference set (`processedOuts_portref_24aug2026`, 6,678
+  gages): Julia flags **1,224**, Python **787**, rpkg **90**; the other 11 flags agree
+  cell-for-cell across all three (0 disagreements). Root causes, each verified by
+  reproducing the language's flag exactly from its own CSV:
+  - **Julia (the products)**: `run_julia_benchmark.jl` builds `results_df` from
+    `Dict{String, Vector{Any}}`, so every signature column has eltype `Any` and fails
+    `compute_qa_flags`' `eltype(col) <: Union{Missing, Number}` filter. The denominator is
+    therefore the **16 numeric metadata columns only** (lat/lon/area/WY counts,
+    `area_normalized`, the 7 GAGES-II attributes, RHBN, REGULATED). Every Canadian gage
+    (7 of 16 missing = 44 %) is flagged, plus 41 USGS gages lacking GAGES-II attributes;
+    the flag is a nationality/attribute-coverage indicator, not the ">30 % of signature
+    fields NA" the guidelines, SIGNATURES.md, the HydroShare READMEs and
+    `hisss_data_dictionary.csv` (row `flagged_for_high_na`) all describe. The unit test
+    (`test_snow_metrics.jl`, "QA flag semantics") passes because it hands the function a
+    typed DataFrame — the `Vector{Any}` path is untested.
+  - **Python**: correct in spirit — all non-flag, non-`gage_id` columns of the merged
+    frame (1,640 incl. 3 string metadata columns); reproduces the documented rule.
+  - **rpkg**: `_mean`/`_median` keys only, evaluated per gage on the keys that gage
+    EMITTED (absent families such as snow/climate are not counted as NA), so structurally
+    missing coverage never trips it.
+  This slipped through the port campaign because the acceptance gates compare column
+  SETS and numeric identity-R²; boolean flag columns were never value-compared.
+  **Fix direction**: define the denominator once (proposed: all signature columns —
+  100 bases × 16 + 21 scalars — with NaN and missing both counted, excluding metadata and
+  flags), implement it identically in all three languages, add a test that goes through
+  the runner's `Vector{Any}` path, and re-derive the flag in the two delivered products
+  (a post-hoc recompute from the CSVs, like `refresh_qa_flags.jl`, is enough — no signature
+  value changes). **Before HydroShare upload**: either recompute the column in the staged
+  CSVs or reword the dictionary/README rows to what the shipped column actually encodes.
+  Not yet fixed — user decision pending (changes a delivered column).
+- **HIGH (staged HydroShare deposit, discovered 2026-09-04) — mis-padded `gage_id` in
+  Resource 5 (44 ids in all three EO tables) and the Resource 4 boundary layer (9 ids).**
+  9–10-digit USGS site numbers with a leading zero (e.g. `011055566`) are stored
+  re-padded to 8 digits (`11055566`) because the geometry build's fallback
+  `c.zfill(8)` (`EO_data_processing/geometry/build_v3.py:25`;
+  `~/Downloads/geometry_rebuild/rebuild_watershed_polygons.py:137`) is a no-op on a
+  stripped id that already has 8–9 digits. `canon_id` is correct everywhere. A direct
+  `gage_id` join therefore silently loses **35** WY 1993–2025 and **9** WY 1980–2025
+  product gages from LAI/LULC/NLCD (and 2 from the boundaries in #2), and the R5
+  README's coverage counts (6,599 / 5,419 / 6,196 / 4,998) are understated by exactly
+  those amounts (true: 6,634 / 5,454 / 6,205 / 5,007). Independently found the same day by
+  the filtering-stage census (`docs/plans/2026-09-04-filtering-stage-census.md` §5.1).
+  **DECISION (user, 2026-09-04): the staged data files stay as delivered; the join rule is
+  DOCUMENTED instead** — root README → "Reading and Joining the Data" (mirrored to
+  CZ-Sync/HISSS), EO README §1 correction, and the Resource 3/4/5 READMEs, the R4
+  abstract and the dictionaries now all say: read ids as text, join on the zero-stripped
+  form on BOTH sides, never re-pad (ids are collision-free under stripping — 17,166
+  stations, 0 collisions). The R5 README coverage counts were corrected to the canonical
+  6,634 / 6,205 (MODIS) and 5,454 / 5,007 (NLCD). Related, also fixed in the R3 README:
+  its `zfill(8) if len <= 8` recipe for the zero-stripped metadata ids loses 57 / 29
+  product gages (66 of the 8,014 compiled gages) for the same reason — replaced with
+  strip-leading-zeros-on-both-sides. Still to relay: manuscript §3 "all tables join on
+  gage_id, the zero-padded …" and the draft §5.1.3 join text in
+  `docs/plans/2026-09-04-dataset-join-guidance.md` §4 (written assuming a re-pad) need
+  the same strip-on-both-sides wording.
 - **ACCEPTED DIVERGENCE (rpkg vs Julia, 1 annual row in 18.9M) — the storage
   distinct-value guard and signed zeros.** `julia/src/storage.jl` gates a year on
   `length(unique(Q_valid)) < 10`, and Julia's `unique` uses `isequal`, under which
@@ -276,6 +334,90 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
   delivered standard products are unaffected.
 
 ### Guidelines Document TODOs
+**2026-09-04 (later) — user-requested accuracy review of Parts 4 and 5 (live doc
+re-fetched; three small edits since the morning sync mirrored into the snapshot).**
+Findings, by direction of fix:
+
+*Part 4 (doc-side — the code is the legacy R ingestion and behaves as read):*
+- [ ] **Wrong entry point named.** The production compilation (`run_ingest_usgs_hydat.R`)
+  calls `process_gages_rawToRaw()`, which writes the daily parquet + the metadata table
+  (`processing_status`, `area_normalized`) and computes NO signatures. The documented
+  `process_gages_rawData()` is the legacy end-to-end R path (retrieval + R signatures +
+  HydroBasins lookup) that did not produce HISSS. Part 4 should describe `rawToRaw` (or
+  say the R utilities only compile inputs; signatures come from the Julia/Python/R library).
+- [ ] **The `min_Q_value_and_days` legacy note is wrong for the compilation stage.** The
+  gate is STILL applied there: a gage is `success` only if ≥ 20 calendar years each hold
+  ≥ 30 days with Q > 0.0001 (`MIN_Q_VALUE_AND_DAYS = c(0.0001, 30)`, `MIN_NUM_YEARS = 20`);
+  80 gages carry `insufficient_years` ("Only N years with valid data", max 19) in the
+  production metadata. What April 2026 removed is the per-year application inside the
+  SIGNATURE path. The note should say so, and the manuscript's "fewer than 20 total years
+  containing valid daily observations" glosses the ≥ 30-day/0.0001 rule (relay).
+- [ ] "Missing or invalid years are excluded from analysis" — not at ingestion:
+  `rawToRaw` keeps every day in the window once the gage qualifies; year exclusion is the
+  preprocessor's job (Part 1.2). True only of the legacy `rawData` path.
+- [ ] `generate_streamflow_dt()` "handles flagged data": the qualifier mask (keep A, A e,
+  P, P e) is applied to USGS only; HYDAT `Symbol` values are carried in `flag` but never
+  mask Q. The "required years" check is a row-count proxy (`nrow > 365 × min_num_years`).
+- [ ] `process_caravan_gages()` "handles redundancy between CAMELS and HYSETS" —
+  overstated: it only skips a (watershed, project) pair already in the output file on
+  resume; the same USGS gage present in both projects is processed twice. Also
+  `run_caravan_processing.R` calls `process_caravan_to_annual()` (a 328-valid-day annual
+  aggregator), not `process_caravan_gages()`. Caravan is not part of HISSS — consider
+  saying so or dropping the module.
+- [ ] `integrate_daymet_with_streamflow()` is not on the production path either — the
+  Julia runner joins climate itself (`gage_id` + `date`, keeping PPT and SWE only). The
+  R function's behaviour is otherwise as described (site_id match, join on Date, < 95 %
+  coverage warning, prcp → PPT). The path "data_out/daymet_1980_2023.parquet" is a
+  parameter; config.R points at `D:/processedOuts_feb2026/…`, and the products used the
+  `_rebuilt_10aug2026` file (the canonical file is truncated).
+- Dropping `convert_daymet_zip_to_parquet()` is fine, but the doc now says nothing about
+  how the climate parquet was built; the current input came from the Python
+  `docs/benchmarks/convert_daymet_csvs_to_parquet.py` (365-day Daymet calendar).
+
+*Part 5 (thresholds all match `config/signatures_config.json`; 11 of 12 flags verified
+identical across languages on the reference set):*
+- [ ] **`flagged_for_high_na` is NOT "identical across the Julia, Python, and R
+  implementations" and, in the delivered products, does not mean ">30 % of numeric
+  output columns NA"** — see the HIGH Known Issue above. Doc-side: until the code is
+  fixed, the sentence must describe what the shipped column encodes; code-side: fix.
+- [x] Everything else verified against code: ranges, the BFI defensive note (per-year
+  `clamp(bfi, 0, 1)` in `baseflow.jl`), `elasticity_static` as the one non-`_mean` input,
+  ties allowed in both order checks, NA never triggers a flag, seasonal-sum tolerance 0.2.
+  One negligible edge: Python flags `seasonal_sum` when `Qann_mean == 0` and the seasonal
+  sum is nonzero (inf ratio) where Julia/rpkg return false — unreachable in practice.
+- Note: the legacy `R/tests/qa_qc_signatures.R` uses STRICT ordering (ties flag); the
+  doc's "R implementation" must mean rpkg, which matches Julia/Python.
+
+**Synced 2026-09-04 — the doc now carries the 2026-08-31 RESTRUCTURE (pasted between
+`START/END: NEW DOCUMENT` banners) followed by the previous document verbatim under a
+`START: ORIGINAL DOCUMENT` banner; header link now https://github.com/CZ-Sync/HISSS.**
+Snapshot overwritten. Substantive deviations from the delivered draft, **reconciliation
+review PENDING** (surfaced during the 2026-09-04 dataset-join session, not yet
+adjudicated): the entire 3.11 Storage module (`avg_storage`) was DROPPED from the new
+part (modules renumbered; avg_storage survives only in the ORIGINAL part); Part 2's
+Pettitt evaluation-window sentence (WY 1980–2024, ≥ 20 / ≥ 10 obs, WY 2025 excluded)
+dropped; the "T-1 moving window" baseflow bullet and the elasticity decision note
+dropped; `recession_alpha_point_cloud_linear_reservoir` renamed to
+"recession_alpha_point_cloud" (no longer marked per-gage scalar) — the CSV column name
+is unchanged, so this is a doc-side naming discrepancy; snow Purpose rewritten (tie rule
+spelled out; `swe_apr1` lost "leap-year safe"; unclosed parenthesis in melt_season_days);
+Yilmaz et al. (2008) added; typo "Method and parameters→".
+Adjudication queued (2026-09-04, from the census session's own diff of the pasted text vs
+the draft — 48 differing regions, most of them wording):
+- [ ] **Storage module dropped** — the product still ships `avg_storage` (+16 columns)
+  and the manuscript (synced the same day) now lists "catchment storage" among its
+  **14** categories, so the guidelines (13 modules) and manuscript disagree on the family
+  count. [Doc-side: restore the module (recommended) or state that storage is shipped but
+  undocumented there.]
+- [ ] **Pettitt evaluation-window paragraph dropped** — a product-level fact already in
+  both HydroShare READMEs and all 800 Pettitt dictionary rows; Part 2 should carry it.
+- [ ] Minor wording drift (all still consistent with the code as read): Lyne-Hollick
+  "a = 0.925" (conventionally alpha); drought thresholds described as "calculated
+  per-water-year" — they are whole-record (fixed) thresholds applied per water year.
+- The legacy document trailing the new one should eventually be deleted from the Google
+  Doc so the auto-sync diff stops carrying ~4,000 words of superseded text. [Doc-side.]
+
+
 <!-- New suggestions from hydrology colleagues will be tracked here -->
 <!-- Format: - [ ] Description (source: section name in guidelines doc) -->
 
@@ -760,6 +902,79 @@ schematic doc's earlier (wrong) causal claim was corrected. Re-check rendering
 after GitHub ships a fixed bundle; until then the committed 3x PNG beside the
 doc is the review copy.
 
+**2026-09-04 — filtering-stage watershed census + fifth reconciliation pass (user
+request: count the watersheds at every stage of the workflow schematic and confirm the
+manuscript matches).** Full record: `docs/plans/2026-09-04-filtering-stage-census.md`;
+new tools `docs/benchmarks/qualification_census.jl` (runs the canonical preprocessor on
+ALL 8,014 gages and re-implements the runner's inclusion gates — reproduces both products'
+gage sets EXACTLY, 0 mismatches) and `summarize_qualification_census.py`. The manuscript
+was revised by the co-authors since 2026-09-01 (snapshot overwritten): correction blocks
+1a/1b/1c/2a/2b/3/4/5/6 are APPLIED (121 signatures / 14 categories incl. drought,
+agency-published drainage areas, Daymet coverage 5,965 / 5,517 / 5,638, duplicate BFI
+paragraph deleted, avg_storage listed, new Usage Notes 5.1.1 + 5.1.2, HISSS repo link,
+"eight" MODIS schemes); block 7 (Acknowledgements) is NOT — "Claude Code 0.145.0" still
+appears twice. **Every checkable count in the published text is CORRECT** (16,994 =
+9,154 + 7,840; 8,980 excluded; 8,014 = 6,160 + 1,854; 111,624,189; 73 / 32 / 28;
+6,678 / 6,250; 54 / 7,964; 100 % / 98.3 %; 6,087 / 5,965 / 5,517 / 5,638; 6,119;
+1,653; 18,898,406 / 24,366,487; 2,150,280; 191,136; 250,879). Measured stage counts not
+in the text, for the figure/Data Overview: 33,732 of 317,182 gage-years (10.6 %)
+rejected by the preprocessor over WY 1980–2025 (31,091 >30 NA days, 1,803 gap >3 d, 838
+boundary NA); within the products only 3.2 % / 2.9 % of gage-years are rejected;
+exclusions 1,336 (924 both gates, 412 only <20 yr, 0 only <60 %) and 1,764 (1,063 only
+<60 % with ≥20 valid years, 674 both, 27 only <20 yr); trend statistics survive for
+6,183 / 5,851 gages on the dense signatures. Findings, by direction of fix:
+- **DEPOSIT DEFECT (staging, fix before upload)**: `gage_id` is NOT zero-padded for 9
+  gages in Resource 4's boundary layer (+ its QA CSV) and 44 gages in each Resource 5
+  table (`zfill(8)` cannot restore the leading zero of 9–10-digit USGS ids), so the
+  manuscript's and the READMEs' "join directly on gage_id" claim fails for those gages
+  and the R5 README's coverage counts (6,599 / 6,196 MODIS, 5,419 / 4,998 NLCD — also
+  quoted in this file's 2026-08-25 R5 entry) undercount; canonical values are 6,634 /
+  6,205 and 5,454 / 5,007. `canon_id`, HydroATLAS and Resource 3 are clean. User decision same day: keep the
+  files, document the strip-on-both-sides join rule in both repos' README and the
+  resource READMEs (done — see Known Issues).
+- Manuscript (relay): §2.1.2's "8,980 … fewer than 20 total years" bucket includes 113
+  USGS gages whose retrieval never completed (`processing` status; 4 of them carry
+  GAGES-II polygons and sit in the EO layers) — add "or could not be retrieved"; the
+  year-rejection rule list omits the third rule (≤3-day NA run touching Oct 1 / Sep 30
+  is not interpolated ⇒ `residual_na`, 838 gage-years); §3's "211 watershed-scale
+  attributes" = 211 columns (198 attributes + 13 keys/diagnostics); new typos "wtih",
+  "diagnostics.We", plus the surviving "s(e.g.,", "MOIDS", "fitted checksums …" garble,
+  "Linke et al., 2013", "[tbd]" citations and the missing references (McMillan,
+  Hatchett, Petersky & Harpold, Adelsperger, Laaha, Peters & Aulenbach, HYSETS, Caravan,
+  CAMELS-SPAT, DeCicco, Albers, gdptools, Annual NLCD).
+- Code/docs-side: none. The schematic is not contradicted by any measured count.
+
+**2026-09-04 — co-author revision synced; dataset-join guidance drafted (§5 stub).**
+The published draft changed since 2026-09-01: §2 preamble and §2.1.2 now state the
+agency-published drainage areas as the normalization source (queued #1 core error
+RESOLVED; the §5 caveat also landed as 5.1.1); counts corrected to **121 signatures /
+14 categories incl. drought** and the "(name)" placeholder resolved to
+`hisss_data_dictionary.csv` (queued #8 + open items 1a/1b RESOLVED; the drought
+*methods* paragraph 1c is still absent); §2.1.3 Daymet coverage numbers added
+(6,087 candidates / 5,965 of 8,014 / 5,517 and 5,638 — matches the repo); the 47 %
+sentence replaced by the explicit "8,980 of 16,994 excluded" (item 3 RESOLVED); §2.2.1
+/ §2.2.2 rewritten and the duplicate BFI-statistics paragraph deleted (item 4
+RESOLVED); §2.1.4 "all five" → "all eight" (the 2026-09-01 finding RESOLVED); §3
+mechanical typos fixed (`wy{window}`, WGS84, teh/ot, "[tbd])"); `<LINK TO REPO>` filled
+with https://github.com/CZ-Sync/HISSS; **§5 Usage Notes drafted** — 5.1.1 unnormalized
+gages and 5.1.2 record-dependent signatures (both verbatim from block 2b), with the
+dataset-join item still a one-line stub. Still open: avg_storage sentence (item 6),
+Acknowledgements "Claude Code 0.145.0" (item 7), missing references + "Linke et al.
+2013" (item 5), CC-BY/DOI labelling (item 11), §2.1.2 end date, "(e.g., CAMELS-Chem,"
+unclosed paren, ">6,000stream".
+
+*Dataset-join guidance (user request, same day)*: CAMELS-Chem, MacroSheds, and the
+Daymet-VPD product were reviewed against their own documentation and files, the
+identifier conventions of HYSETS / CAMELS / CAMELS-SPAT / Caravan / CANOPEX / GAGES-II
+/ WQP / NLDI→COMID / HydroBASINS were verified, and the actual join behaviour of the
+five staged HydroShare resources was audited. Measured overlaps: CAMELS-Chem 507 / 516
+(WY 1993–2025) and 515 / 516 (WY 1980–2025), all GAGES-II Ref; MacroSheds stream
+gauges 146 / 224 inside ≥ 1 product watershed but almost always *nested* (median
+smallest containing polygon 799 km²), only 11 co-located within 500 m. The audit found
+two deposit defects (Known Issues, HIGH: mis-padded `gage_id` in R5/R4; R3 README
+recipe). Verified facts, numbers, and the first-draft §5.1.3 paragraph:
+`docs/plans/2026-09-04-dataset-join-guidance.md`.
+
 ---
 
 ## [August 2026]
@@ -1024,7 +1239,10 @@ gaps handled: the original `nlcd_out_of_footprint.csv` was not in the Drive back
 from the NLCD table = 45 gages, all verified in Alaska, lat 55.2–70.3° N); the MODIS
 granule manifest was also absent — documented in the README as repo-level provenance
 rather than shipped. Coverage measured for the README: MODIS covers 6,599/6,678 of
-product #1's gages and 6,196/6,250 of #2's; NLCD covers 5,419 and 4,998. Deposit choice:
+product #1's gages and 6,196/6,250 of #2's; NLCD covers 5,419 and 4,998 **[CORRECTION
+2026-09-04: those were exact-string joins that miss 44 un-padded `gage_id`s in the EO
+tables — canonical coverage is 6,634 / 6,205 (MODIS) and 5,454 / 5,007 (NLCD); see the
+Known Issue and the 2026-09-04 reconciliation entry]**. Deposit choice:
 parquet-only for the data tables (the backup's CSV twins are exact re-serializations;
 the 695 MB LAI CSV in particular is redundant). **User sign-off 2026-08-25 on the full
 R5 staging — including the NLCD human QA via `hisss_nlcd_explorer.html`** (the pass owed
@@ -1715,7 +1933,12 @@ decisions.
   fields — the April 2026 Pettitt / July 2026 snow precedent), but direct per-gage
   recomputation found **zero crossings** (1,224 flagged before and after). Do not
   generalize this to other windows — the closest gage sits only ~6.1e-5 from the 30 %
-  threshold, so the outcome is window-specific.
+  threshold, so the outcome is window-specific. **[CORRECTION 2026-09-04: the
+  "denominator counts all signature fields" premise is FALSE for the shipped Julia
+  output — the runner's `Vector{Any}` columns are excluded by the numeric-eltype
+  filter, so the flag is computed over the 16 numeric metadata columns only and
+  1,224 = every Canadian gage + 41 USGS gages lacking GAGES-II attributes. That is
+  why it could not move. See `[Unreleased]` → Known Issues.]**
 - **Tests**: `julia/test/test_drought_metrics.jl` — hand-derived Weibull quantiles and
   the below-plotting-range guard; exact smoothing values incl. the never-blend-across-a-
   gap and duplicate-date cases; and two record invariants that pin the threshold
