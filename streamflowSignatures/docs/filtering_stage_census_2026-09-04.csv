@@ -1,37 +1,13 @@
-section,stage,window_or_universe,count,us,canada,source,notes
-streamflow path,Candidate gages retrieved (USGS NWIS + HYDAT),all,16994,9154,7840,"combined_watershed_metadata_09feb2026.csv (16,994 rows)",
-streamflow path,Excluded at retrieval: no valid daily data (no_data),all,8787,2812,5975,metadata processing_status,'No valid streamflow data retrieved'
-streamflow path,Excluded at retrieval: fewer than 20 years of valid data (insufficient_years),all,80,69,11,metadata processing_status,"0-19 years (8 with 0, 6 with 19)"
-streamflow path,Excluded at retrieval: retrieval never completed (processing),all,113,113,0,metadata processing_status,"no year counts, no error message; 110 CONUS + 3 AK; 4 of them carry GAGES-II polygons"
-streamflow path,Usable daily records (standardized daily streamflow),all,8014,6160,1854,streamflow parquet gage set,"111,624,189 rows; 1979-10-01 to 2025-10-01"
-streamflow path,Usable records NOT area-normalized (no published drainage area),all,73,0,73,metadata area_normalized = FALSE among success,"1,601 across all 16,994 candidates"
-streamflow path,"Water years with data, WY 1980-2025, all usable gages (gage-years)",WY 1980-2025,317182,,,qualification_census.jl,"plus 5,381 one-day WY 2026 stubs (2025-10-01), all rejected"
-streamflow path,Gage-years rejected by the preprocessor (WY 1980-2025),WY 1980-2025,33732,,,qualification_census.jl,"10.6%: 31,091 >30 raw NA days; 1,803 NA run >3 days; 838 residual boundary NA"
-streamflow path,"Gage-years kept (valid water years, WY 1980-2025)",WY 1980-2025,283450,,,qualification_census.jl,
-streamflow path,Gages with >=20 valid years over the full record (no window),full record,7313,,,qualification_census.jl,= April 2026 full-record canonical gage count
-streamflow path,Include gage? INCLUDED,WY 1993-2025,6678,5495,1183,product #1 signatures CSV; census reproduces exactly,"valid years per gage 20-33 (median 32); 158 gages at exactly 20; 200,834 gage-years"
-streamflow path,Include gage? EXCLUDED,WY 1993-2025,1336,665,671,qualification_census.jl,924 fail both gates; 412 fail only the 20-year floor; 0 fail only the 60% rule; 374 have zero valid years in window
-streamflow path,Rejected years within included gages,WY 1993-2025,6668,,,qualification_census.jl,"of 207,502 gage-years (3.2%): 5,268 NA-count, 1,059 gap, 341 boundary; 3,336 gages lose no year"
-streamflow path,Include gage? INCLUDED,WY 1980-2025,6250,5043,1207,product #2 signatures CSV; census reproduces exactly,"valid years per gage 20-46 (median 44); 38 gages at exactly 20; 254,195 gage-years"
-streamflow path,Include gage? EXCLUDED,WY 1980-2025,1764,1117,647,qualification_census.jl,"1,063 fail only the 60% rule (have >=20 valid years); 674 fail both; 27 fail only the 20-year floor; 341 have zero valid years"
-streamflow path,Rejected years within included gages,WY 1980-2025,7689,,,qualification_census.jl,"of 261,884 gage-years (2.9%): 6,095 NA-count, 981 gap, 613 boundary; 2,866 gages lose no year"
-streamflow path,Area-normalized gage? NOT normalized in product,WY 1993-2025,32,0,32,product #1 area_normalized,Q-to-PPT signatures skipped
-streamflow path,Area-normalized gage? NOT normalized in product,WY 1980-2025,28,0,28,product #2 area_normalized,Q-to-PPT signatures skipped; 37 in the full-record canonical
-streamflow path,Trend gate: gages carrying trend statistics on dense signatures (e.g. Qann),WY 1993-2025,6183,,,product #1 Qann_senn_slp non-NA,"495 fail the 60%-series / 80%-decade / 20-value gate; Pettitt fields present for 6,590 (WY 1980-2024 window)"
-streamflow path,Trend gate: gages carrying trend statistics on dense signatures (e.g. Qann),WY 1980-2025,5851,,,product #2 Qann_senn_slp non-NA,"399 fail the gate; Pettitt fields present for all 6,250"
-streamflow path,Trend gate: sparsest signature (dur_low_pulses_all) gages with trends,WY 1993-2025,2614,,,product #1,"of 4,727 with a mean; snow timing/melt metrics 2,763-3,373"
-streamflow path,Trend gate: sparsest signature (dur_low_pulses_all) gages with trends,WY 1980-2025,2449,,,product #2,"of 5,293 with a mean; snow timing/melt metrics 2,741-3,544"
-coverage branch,Watershed boundaries (Resource 4),universe,7964,6164,1800,hisss_watershed_boundaries.parquet,"8,018 minus 54 basins >100,000 km2; sources gagesii 6,164 / wsc_eccc 1,771 / hydrobasins 29; 4 geometry-only gages never compiled"
-coverage branch,Watershed boundaries in product,WY 1993-2025,6634,,,canonical-id join,44 of the 54 excluded big basins qualify
-coverage branch,Watershed boundaries in product,WY 1980-2025,6205,,,canonical-id join,45 of the 54 excluded big basins qualify
-coverage branch,HydroATLAS attribute table (Resource 4),universe,8014,6160,1854,hisss_watershed_hydroatlas_attributes.parquet,211 columns = 198 attributes + 13 key/diagnostic; covers every product gage
-coverage branch,Daymet basin series: aggregated sites (Resource 3),universe,6087,,,daymet parquet distinct site_id,"122 belong to never-compiled candidates; CY 1980-2023; 97,757,220 rows"
-coverage branch,Daymet basin series: usable gages with a series,all,5965,,,"site_id join to the 8,014",
-coverage branch,Daymet basin series in product,WY 1993-2025,5517,4489,1028,site_id join,"snow metrics computed for 5,485 (4,457 US / 1,028 CAN); runoff ratios for 5,471"
-coverage branch,Daymet basin series in product,WY 1980-2025,5638,4549,1089,site_id join,"snow metrics computed for 5,635 (4,546 US / 1,089 CAN); runoff ratios for 5,619"
-coverage branch,MODIS LAI / LULC (Resource 5),universe,7964,6164,1800,hisss_modis_lai_monthly.parquet / hisss_modis_lulc_annual.parquet,"2,150,280 monthly rows (270 months); 191,136 annual rows"
-coverage branch,MODIS LAI / LULC in product,WY 1993-2025,6634,,,canonical-id join,"exact-string join gives only 6,599 (44 un-padded ids)"
-coverage branch,MODIS LAI / LULC in product,WY 1980-2025,6205,,,canonical-id join,"exact-string join gives only 6,196"
-coverage branch,Annual NLCD (Resource 5),universe,6119,6119,0,hisss_nlcd_annual.parquet,"CONUS = 6,164 US minus 45 Alaska; 250,879 rows (1985-2025)"
-coverage branch,Annual NLCD in product,WY 1993-2025,5454,5454,0,canonical-id join,"41 US product gages uncovered (Alaska/big basins); exact-string join gives only 5,419"
-coverage branch,Annual NLCD in product,WY 1980-2025,5007,5007,0,canonical-id join,"36 uncovered; exact-string join gives only 4,998"
+Stage,Count,Notes
+Candidate gages retrieved,"16,994","9,154 USGS, 7,840 HYDAT"
+Excluded at retrieval,"8,980","8,787 no data, 80 under 20 years, 113 never finished processing"
+Usable daily records,"8,014","6,160 US, 1,854 Canada; 73 not area-normalized"
+Watershed boundaries,"7,964","8,018 universe minus 54 basins over 100,000 km²"
+"Year rejection (WY 1980–2025, all gages)","33,732 of 317,182 gage-years (10.6%)","31,091 over 30 NA days, 1,803 gaps over 3 days, 838 boundary NA"
+"Include gage, WY 1993–2025","6,678","1,336 excluded: 924 fail both gates, 412 only the 20-year floor"
+"Include gage, WY 1980–2025","6,250","1,764 excluded: 1,063 have 20+ valid years but fail the 60% rule"
+Rejected years inside the products,3.2% / 2.9% of gage-years,"3,336 / 2,866 gages lose no year"
+Not area-normalized in product,32 / 28,all Canadian
+Daymet coverage in product,"5,517 / 5,638","snow metrics computed for 5,485 / 5,635"
+"Trend gate, dense signatures","6,183 / 5,851 gages","495 / 399 lose trend statistics; sparsest is dur_low_pulses_all at 2,614"
+MODIS / NLCD coverage in product,"6,634 & 5,454 / 6,205 & 5,007","joined on the zero-stripped gage id (see README, Reading and Joining the Data)"
