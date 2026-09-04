@@ -260,7 +260,8 @@ A: Its `area_normalized` column is FALSE — HYDAT publishes no drainage area fo
 
 The output may include flags for:
 - `flagged_for_qann_range`: Annual flow outside expected range (0-2000 mm) — does NOT catch all un-normalized (raw m³/s) Canadian gages; check `area_normalized` too
-- `flagged_for_bfi_range`: Baseflow index outside [0, 1]
+- `flagged_for_bfi_eckhardt_range` / `flagged_for_bfi_lynehollick_range`: Baseflow index outside [0, 1] (defensive — per-year BFI is clamped, so these cannot fire)
+- `flagged_for_high_na`: more than 30 % of the gage's signature-derived columns are NA (every column except the gage metadata and the flag columns; 1,621 of 1,653) — usually "no Daymet / no SWE coverage", not bad streamflow. ⚠ KNOWN ISSUE in both delivered products (WY 1993–2025 and WY 1980–2025): this column was computed over the 16 numeric metadata columns only, so it marks every Canadian gage (plus USGS gages lacking GAGES-II attributes) and says nothing about signature completeness — do not use it to screen gages. Code fixed 2026-09-04; the column is regenerated at the next rerun of any portion of the data.
 - `area_normalized`: FALSE = flow in raw m³/s (no drainage area in HYDAT) — exclude from cross-gage comparison of unit-carrying signatures
 - `processing_status`: "success" or error description
 

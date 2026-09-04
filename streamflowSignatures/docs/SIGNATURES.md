@@ -672,6 +672,29 @@ five levels mirror the operational U.S. Drought Monitor classes:
 
 ---
 
+## Automated QA/QC Flags (12 columns)
+
+Twelve boolean `flagged_for_*` columns are computed on the assembled output table by
+`compute_qa_flags()` in all three languages, from the thresholds in
+`config/signatures_config.json` → `qa_qc`. They never remove a gage, and a missing
+input never triggers a flag. Definitions are in the guidelines document (Part 5); the
+one that needs care is:
+
+- **`flagged_for_high_na`** — more than 30 % of the gage's **signature columns** are
+  NA/NaN. The denominator is every signature-derived column present in the table —
+  everything except the gage metadata and the flag columns (1,621 of the 1,653 product
+  columns: the 16 statistics of each signature plus the single-value-per-gage outputs) —
+  selected by name from the config manifest `qa_qc.high_na_denominator`. Families
+  NA-filled for a gage (no Daymet, no SWE) DO count, which is why the flag mostly marks
+  missing climate coverage rather than bad streamflow.
+- **Known issue in the delivered products (cataloged 2026-09-04).** Until 2026-09-04 each
+  language counted something different, and the Julia-built standard products counted
+  the 16 numeric metadata columns only — so in both delivered products this one column
+  is TRUE for every Canadian gage and for USGS gages lacking GAGES-II attributes (1,224
+  and 1,243 gages) and carries no information about signature completeness. Decision:
+  the products are not rewritten; the column will be regenerated the next time any
+  portion of the data is rerun (see CHANGELOG → Known Issues and → September 2026).
+
 ## Changepoint Detection
 
 The non-parametric Pettitt test is applied to every signature's annual time series via `generate_stats()`.

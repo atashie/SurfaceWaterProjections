@@ -129,6 +129,8 @@ A full run writes **two** files to its output folder:
 
 > **Un-normalized gages**: 37 Canadian gages have no published drainage area and carry flow in raw m³/s (`area_normalized = FALSE`); their Q-to-PPT signatures are NA by design. **Filter on `area_normalized == TRUE` before any cross-gage comparison of unit-carrying signatures.**
 
+> **Known issue (one column) — `flagged_for_high_na` in the products released before the next data rerun.** It was computed over the 16 numeric metadata columns rather than the signature fields, so it is TRUE for every Canadian gage and for USGS gages lacking GAGES-II attributes, and does not indicate signature completeness. Do not use it to screen gages; compute the NA fraction of the signature columns directly. The code is corrected (2026-09-04; one shared definition in Julia, Python and R) and the column will be regenerated at the next rerun of any portion of the data. See CHANGELOG → Known Issues.
+
 ### 2. Annual values parquet — `{prefix}_signatures_annual.parquet`
 
 The per-year value of every signature, **before** aggregation into trends — long format (all three languages):

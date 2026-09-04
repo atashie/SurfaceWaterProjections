@@ -18,6 +18,8 @@ from .config import (
     QAQC_RUNOFF_RATIO_RANGE,
     QAQC_SEASONAL_SUM_TOLERANCE,
     QAQC_MAX_NA_FRACTION,
+    QAQC_HIGH_NA_SUFFIXES,
+    QAQC_HIGH_NA_SCALARS,
 )
 
 
@@ -149,13 +151,37 @@ def compute_qa_flags(signatures: pd.DataFrame) -> pd.DataFrame:
             (df["D50_day_mean"] > df["D95_day_mean"])
         ).fillna(False)
 
-    # 12. High NA fraction (>30% of signature columns are NA)
-    signature_cols = [c for c in df.columns if not c.startswith("flagged_") and c != "gage_id"]
+    # 12. High NA fraction: > max_na_fraction of the gage's SIGNATURE columns are NA.
+    # Denominator = the signature columns PRESENT in the table (16 statistic suffixes
+    # + the per-gage scalar registry, config qa_qc.high_na_denominator — one manifest
+    # shared with julia/src/qa_qc.jl and rpkg/R/qa_qc.R). Metadata, unregistered
+    # diagnostics and flag columns never enter it; families NA-filled by the table
+    # union DO count. Before 2026-09-04 this counted every non-flag column (incl.
+    # string metadata) and differed from Julia (metadata only) and rpkg (mean/median).
+    signature_cols = high_na_denominator_columns(df.columns)
     if signature_cols:
         na_fraction = df[signature_cols].isna().mean(axis=1)
         df["flagged_for_high_na"] = (na_fraction > QAQC_MAX_NA_FRACTION)
 
     return df
+
+
+def high_na_denominator_columns(columns) -> list:
+    """
+    Columns that enter the ``flagged_for_high_na`` denominator: every name ending in
+    one of the statistic suffixes (``QAQC_HIGH_NA_SUFFIXES``) plus the per-gage scalar
+    registry (``QAQC_HIGH_NA_SCALARS``), in input order; ``flagged_*`` columns excluded.
+    Shared definition with ``julia/src/qa_qc.jl`` and ``rpkg/R/qa_qc.R``.
+    """
+    scalars = set(QAQC_HIGH_NA_SCALARS)
+    out = []
+    for c in columns:
+        name = str(c)
+        if name.startswith("flagged_"):
+            continue
+        if name in scalars or any(name.endswith(sfx) for sfx in QAQC_HIGH_NA_SUFFIXES):
+            out.append(name)
+    return out
 
 
 def get_flag_columns() -> list:

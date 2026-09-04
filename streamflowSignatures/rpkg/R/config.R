@@ -76,6 +76,48 @@ pkg_env <- new.env(parent = emptyenv())
   pkg_env$qa_runoff_ratio_range   <- cfg$qa_qc$runoff_ratio_range
   pkg_env$qa_seasonal_sum_tolerance <- cfg$qa_qc$seasonal_sum_tolerance
   pkg_env$qa_max_na_fraction      <- cfg$qa_qc$max_na_fraction
+  # flagged_for_high_na denominator manifest (2026-09-04; mirrors julia/src/config.jl —
+  # an absent section falls back to the same lists).
+  hn <- cfg$qa_qc$high_na_denominator
+  pkg_env$qa_high_na_suffixes <- if (is.null(hn$statistic_suffixes)) c(
+    "_senn_slp",
+    "_linear_slp",
+    "_spearman_rho",
+    "_spearman_pval",
+    "_mk_rho",
+    "_mk_pval",
+    "_mean",
+    "_median",
+    "_pettitt_cp_year",
+    "_pettitt_pval",
+    "_pettitt_pre_mean",
+    "_pettitt_post_mean",
+    "_pettitt_delta_mean",
+    "_pettitt_pct_change",
+    "_pettitt_pre_mk_pval",
+    "_pettitt_post_mk_pval") else as.character(hn$statistic_suffixes)
+  pkg_env$qa_high_na_scalars <- if (is.null(hn$per_gage_scalars)) c(
+    "elasticity_static",
+    "log_a_seasonality_amplitude_all",
+    "log_a_seasonality_amplitude_first_half",
+    "log_a_seasonality_amplitude_last_half",
+    "log_a_seasonality_minimum_all",
+    "log_a_seasonality_minimum_first_half",
+    "log_a_seasonality_minimum_last_half",
+    "runoff_ratio_high_count",
+    "elasticity_years_total",
+    "elasticity_years_low_ppt",
+    "ice_affected_days_total",
+    "recession_alpha_point_cloud_linear_reservoir",
+    "season_excluded_years_winter",
+    "season_excluded_years_spring",
+    "season_excluded_years_summer",
+    "season_excluded_years_fall",
+    "drought_threshold_fixed_p2",
+    "drought_threshold_fixed_p5",
+    "drought_threshold_fixed_p10",
+    "drought_threshold_fixed_p20",
+    "drought_threshold_fixed_p30") else as.character(hn$per_gage_scalars)
 
   # Metadata
   pkg_env$metadata_gages_ii_dir   <- cfg$metadata$gages_ii_dir

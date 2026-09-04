@@ -73,8 +73,8 @@ pettitt_test <- function(years, values, min_total_obs = 20, min_segment_obs = 10
 #' given changepoint year. Mirrors \code{segment_differential_metrics} in
 #' \code{julia/src/changepoint.jl}, including the >= 3 values-per-segment guard
 #' and the \code{abs(pre_mean) > 1e-10} percentage guard. Each language reuses
-#' its own MK implementation (here \code{Kendall::MannKendall}, as
-#' \code{generate_stats} does).
+#' its own MK implementation (here \code{mann_kendall_test}, the wrapper
+#' \code{generate_stats} uses, so constant segments give NA as in Julia).
 #'
 #' @param years Numeric vector of years.
 #' @param values Numeric vector of values.
@@ -99,10 +99,8 @@ segment_differential_metrics <- function(years, values, cp_year) {
   delta_mean <- post_m - pre_m
   pct_change <- if (abs(pre_m) > 1e-10) delta_mean / abs(pre_m) * 100 else NA_real_
 
-  mk_p <- function(v) {
-    mk <- tryCatch(Kendall::MannKendall(v), error = function(e) NULL)
-    if (is.null(mk)) NA_real_ else as.numeric(mk$sl)
-  }
+  # Same NA contract as generate_stats (n < 3 or constant segment -> NA)
+  mk_p <- function(v) mann_kendall_test(v)$pval
 
   list(delta_mean = delta_mean, pct_change = pct_change,
        pre_mk_pval = mk_p(pre_vals), post_mk_pval = mk_p(post_vals))

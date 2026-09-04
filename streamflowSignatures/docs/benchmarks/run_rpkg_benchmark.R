@@ -406,15 +406,11 @@ for (i in seq_along(all_gages)) {
       }
     }
 
-    # QA/QC flags. compute_qa_flags ALREADY returns names prefixed with
-    # "flagged_for_" — the previous `paste0("flagged_for_", nm)` produced
-    # `flagged_for_flagged_for_*` for all 12 flags. Pre-existing; invisible to
-    # the intersection-based comparison scripts, caught 2026-08-25 by the
-    # strict schema gate (check_schema_equality.py) on the rpkg baseline.
-    qa <- compute_qa_flags(sigs)
-    for (nm in names(qa)) {
-      sigs[[nm]] <- qa[[nm]]
-    }
+    # QA/QC flags are computed on the ASSEMBLED table in Phase 4 (2026-09-04),
+    # not per gage here: flagged_for_high_na must see the NA-filled columns of
+    # families this gage never emitted, exactly as the Julia and Python runners
+    # do. (History: the per-gage call once double-prefixed the names —
+    # `flagged_for_flagged_for_*` — caught 2026-08-25 by the strict schema gate.)
 
     results_list[[gage]] <- sigs
     processed <- processed + 1
@@ -531,6 +527,13 @@ if (!is.null(gages_ii) && nrow(gages_ii) > 0 && "STAID" %in% names(gages_ii)) {
 } else {
   cat("  Warning: GAGES-II data not available\n")
 }
+
+# QA/QC flags on the assembled table (after the metadata merge, mirroring
+# run_julia_benchmark.jl / run_python_benchmark.py). compute_qa_flags() returns
+# names already prefixed "flagged_for_".
+cat("  Computing QA/QC flags...\n")
+qa <- compute_qa_flags(out_dt)
+for (nm in names(qa)) out_dt[[nm]] <- qa[[nm]]
 
 # Order columns: metadata first, then signatures (sorted), then flags
 meta_cols <- intersect(c("gage_id", "latitude", "longitude", "basin_area", "gage_type",

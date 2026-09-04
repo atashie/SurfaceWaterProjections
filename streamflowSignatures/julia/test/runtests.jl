@@ -290,3 +290,4 @@ include("test_snow_record_decade_gate.jl")
 include("test_drought_metrics.jl")
 include("test_changepoint.jl")  # was never wired in — found by Codex review 2026-08-24
 include("test_runoff_ratio_seasonal_mask.jl")
+include("test_qa_high_na.jl")  # flagged_for_high_na denominator, 2026-09-04

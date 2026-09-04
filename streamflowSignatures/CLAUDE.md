@@ -145,11 +145,11 @@ to main to keep the mirror current.** Never commit to HISSS directly.
 6. Run the Julia unit suite (`julia --project=julia julia/test/runtests.jl`), then the
    benchmark (`docs/benchmarks/run_julia_benchmark.jl`, ~27 min) to verify
 7. **Prove additivity, don't assume it** — diff the benchmark output against the previous
-   canonical run: every pre-existing column must be unchanged (in principle
-   `flagged_for_high_na` may shift because its denominator is meant to count all
-   fields — but see the 2026-09-04 Known Issue: the Julia runner currently feeds
-   it `Vector{Any}` columns, so no signature field enters the denominator and the
-   flag cannot move), AND the new columns
+   canonical run: every pre-existing column must be unchanged (only
+   `flagged_for_high_na` may legitimately shift — since 2026-09-04 its denominator is
+   the signature columns present in the table, selected by name from the config
+   manifest `qa_qc.high_na_denominator`, so a new family with NA-heavy columns can
+   move it), AND the new columns
    must be populated. The orchestrator's per-signature `try/catch` turns an unexpected
    failure into silently missing columns, so a green unit suite proves nothing here.
    Smoke tests should assert new values are FINITE, not merely that the keys exist.
@@ -177,6 +177,14 @@ three languages since the August 2026 port campaign) — see DEVELOPMENT.md → 
 ⚠️ **Climate input**: the canonical `daymet_1980_2023.parquet` is TRUNCATED; use
 `daymet_1980_2023_rebuilt_10aug2026.parquet` (product #1 predates the rebuild, product #2
 uses it; difference bounded at ≤ 3.4e-13). See DEVELOPMENT.md → Active Parquet Files.
+
+⚠️ **Known issue in BOTH delivered products — `flagged_for_high_na` (one column).** It
+was computed over the 16 numeric metadata columns only (runner `Vector{Any}` bug), so it
+is TRUE for every Canadian gage + USGS gages lacking GAGES-II attributes (1,224 / 1,243)
+and says nothing about signature completeness. Code fixed 2026-09-04; **user decision:
+the products are NOT rewritten — regenerate the column the next time any portion of the
+data is rerun** (`docs/benchmarks/recompute_high_na_flag.py` or a benchmark). Cataloged
+in CHANGELOG → Known Issues; the HydroShare READMEs and dictionary row carry the caveat.
 
 ## References
 

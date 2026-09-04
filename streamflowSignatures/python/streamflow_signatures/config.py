@@ -131,6 +131,51 @@ QAQC_ELASTICITY_RANGE: List[float] = _config["qa_qc"]["elasticity_range"]
 QAQC_RUNOFF_RATIO_RANGE: List[float] = _config["qa_qc"]["runoff_ratio_range"]
 QAQC_SEASONAL_SUM_TOLERANCE: float = _config["qa_qc"]["seasonal_sum_tolerance"]
 QAQC_MAX_NA_FRACTION: float = _config["qa_qc"]["max_na_fraction"]
+# flagged_for_high_na denominator manifest (2026-09-04; mirrors julia/src/config.jl —
+# an absent section falls back to the same lists so old config variants keep the
+# documented semantics).
+_high_na_cfg = _config["qa_qc"].get("high_na_denominator", {})
+QAQC_HIGH_NA_SUFFIXES: List[str] = list(_high_na_cfg.get("statistic_suffixes", [
+    "_senn_slp",
+    "_linear_slp",
+    "_spearman_rho",
+    "_spearman_pval",
+    "_mk_rho",
+    "_mk_pval",
+    "_mean",
+    "_median",
+    "_pettitt_cp_year",
+    "_pettitt_pval",
+    "_pettitt_pre_mean",
+    "_pettitt_post_mean",
+    "_pettitt_delta_mean",
+    "_pettitt_pct_change",
+    "_pettitt_pre_mk_pval",
+    "_pettitt_post_mk_pval",
+]))
+QAQC_HIGH_NA_SCALARS: List[str] = list(_high_na_cfg.get("per_gage_scalars", [
+    "elasticity_static",
+    "log_a_seasonality_amplitude_all",
+    "log_a_seasonality_amplitude_first_half",
+    "log_a_seasonality_amplitude_last_half",
+    "log_a_seasonality_minimum_all",
+    "log_a_seasonality_minimum_first_half",
+    "log_a_seasonality_minimum_last_half",
+    "runoff_ratio_high_count",
+    "elasticity_years_total",
+    "elasticity_years_low_ppt",
+    "ice_affected_days_total",
+    "recession_alpha_point_cloud_linear_reservoir",
+    "season_excluded_years_winter",
+    "season_excluded_years_spring",
+    "season_excluded_years_summer",
+    "season_excluded_years_fall",
+    "drought_threshold_fixed_p2",
+    "drought_threshold_fixed_p5",
+    "drought_threshold_fixed_p10",
+    "drought_threshold_fixed_p20",
+    "drought_threshold_fixed_p30",
+]))
 
 
 # =============================================================================

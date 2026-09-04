@@ -1,12 +1,26 @@
-#' Compute QA/QC flags for a named list of signature results
+#' Columns that enter the \code{flagged_for_high_na} denominator
 #'
-#' Checks ranges for common signatures and returns a named logical list
-#' of 12 flags matching the Python/Julia \code{flagged_for_*} convention.
+#' Every name ending in one of the statistic suffixes
+#' (\code{pkg_env$qa_high_na_suffixes}) plus the per-gage scalar registry
+#' (\code{pkg_env$qa_high_na_scalars}), in input order; \code{flagged_*} columns
+#' excluded. Shared definition with \code{julia/src/qa_qc.jl} and
+#' \code{python/streamflow_signatures/qa_qc.py} (config
+#' \code{qa_qc.high_na_denominator}).
 #'
-#' @param sigs Named list of signature values (output of calculate_all_signatures).
-#' @return Named list of 12 logical flags (TRUE = potential issue).
+#' @param cols Character vector of column / key names.
+#' @return Character vector (subset of \code{cols}).
 #' @export
-compute_qa_flags <- function(sigs) {
+high_na_denominator_columns <- function(cols) {
+  cols <- as.character(cols)
+  is_flag <- startsWith(cols, "flagged_")
+  is_scalar <- cols %in% pkg_env$qa_high_na_scalars
+  is_stat <- vapply(cols, function(nm) any(endsWith(nm, pkg_env$qa_high_na_suffixes)),
+                    logical(1), USE.NAMES = FALSE)
+  cols[!is_flag & (is_scalar | is_stat)]
+}
+
+# Internal: the 11 range/consistency flags for ONE gage given as a named list.
+.qa_row_flags <- function(sigs) {
   # Initialize all 12 flags to FALSE (always present, matching Python/Julia)
   flag_names <- c(
     "flagged_for_qann_range",
@@ -98,11 +112,59 @@ compute_qa_flags <- function(sigs) {
     flags$flagged_for_timing_order <- (d5 > d50_t) || (d50_t > d95)
   }
 
-  # 12. NA fraction
-  sig_vals <- unlist(sigs[grep("_(mean|median)$", names(sigs))])
-  if (length(sig_vals) > 0) {
-    flags$flagged_for_high_na <- sum(is.na(sig_vals)) / length(sig_vals) > pkg_env$qa_max_na_fraction
+  flags
+}
+
+#' Compute QA/QC flags for signature results
+#'
+#' Checks ranges for common signatures and returns the 12 \code{flagged_for_*}
+#' flags matching the Python/Julia convention.
+#'
+#' Two input shapes:
+#' \itemize{
+#'   \item a named \strong{list} (one gage, the output of
+#'     \code{calculate_all_signatures}) — returns a named list of 12 logicals;
+#'     \code{flagged_for_high_na} is evaluated over the signature keys the gage
+#'     EMITTED (families it never computed are absent, not NA);
+#'   \item a \strong{data.frame} (the assembled output table, one row per gage) —
+#'     returns a data.frame of 12 logical columns; \code{flagged_for_high_na} is
+#'     evaluated over the signature columns PRESENT in the table, so families
+#'     NA-filled by the table union DO count. This is the production path (the
+#'     benchmark runner) and matches the Julia and Python runners exactly.
+#' }
+#' The denominator is \code{high_na_denominator_columns(names)}: the 16 statistic
+#' suffixes plus the per-gage scalar registry. Metadata, unregistered diagnostics
+#' and flag columns never enter it (before 2026-09-04 rpkg counted only the
+#' \code{_mean}/\code{_median} keys the gage emitted).
+#'
+#' @param sigs Named list (one gage) or data.frame (one row per gage).
+#' @return Named list of 12 logicals, or a data.frame with 12 logical columns.
+#' @export
+compute_qa_flags <- function(sigs) {
+  if (is.data.frame(sigs)) {
+    df <- as.data.frame(sigs, stringsAsFactors = FALSE)
+    rows <- lapply(seq_len(nrow(df)), function(i) .qa_row_flags(as.list(df[i, , drop = FALSE])))
+    out <- as.data.frame(do.call(rbind, lapply(rows, function(r) unlist(r))),
+                         stringsAsFactors = FALSE)
+    out[] <- lapply(out, as.logical)
+    if (nrow(df) == 0) {
+      out <- as.data.frame(setNames(replicate(12, logical(0), simplify = FALSE),
+                                    names(.qa_row_flags(list()))))
+    }
+    cols <- high_na_denominator_columns(names(df))
+    if (length(cols) > 0) {
+      na_frac <- rowMeans(is.na(df[, cols, drop = FALSE]))
+      out$flagged_for_high_na <- na_frac > pkg_env$qa_max_na_fraction
+    }
+    rownames(out) <- NULL
+    return(out)
   }
 
+  flags <- .qa_row_flags(sigs)
+  cols <- high_na_denominator_columns(names(sigs))
+  if (length(cols) > 0) {
+    vals <- unlist(lapply(cols, function(nm) { v <- sigs[[nm]]; if (is.null(v)) NA else v[1] }))
+    flags$flagged_for_high_na <- sum(is.na(vals)) / length(vals) > pkg_env$qa_max_na_fraction
+  }
   flags
 }

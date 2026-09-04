@@ -86,7 +86,7 @@ export calculate_average_storage
 export calculate_snow_metrics
 
 # Export QA/QC functions
-export compute_qa_flags, get_flag_columns
+export compute_qa_flags, get_flag_columns, high_na_denominator_columns
 
 # Export metadata functions
 export load_gages_ii_interference, load_canadian_interference, enrich_signatures_with_metadata

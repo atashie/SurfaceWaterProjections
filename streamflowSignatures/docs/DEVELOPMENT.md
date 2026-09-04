@@ -523,10 +523,10 @@ once loaded). For a lighter file, trim the variable list in `assemble_explorer.R
    ```
 
 6. **Prove additivity against the previous canonical run** — every pre-existing column
-   unchanged (in principle `flagged_for_high_na` may shift because its denominator is
-   meant to count all fields — but see CHANGELOG → Known Issues, 2026-09-04: the Julia
-   runner feeds it `Vector{Any}` columns, so no signature field currently enters the
-   denominator and the flag cannot move), and the new columns fully populated. The orchestrator catches per-signature
+   unchanged (only `flagged_for_high_na` may legitimately shift — since 2026-09-04 its
+   denominator is the signature columns present in the table, selected by name from
+   the config manifest `qa_qc.high_na_denominator`; register any new per-gage scalar
+   there too), and the new columns fully populated. The orchestrator catches per-signature
    exceptions, so a failure on some production gage shows up as silently missing columns
    that a green unit suite will not reveal. Smoke checks should require new values to be
    FINITE, not merely present as keys.

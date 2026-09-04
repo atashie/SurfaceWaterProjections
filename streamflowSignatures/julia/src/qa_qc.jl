@@ -25,7 +25,8 @@ DataFrame
     - flagged_for_seasonal_sum: |seasonal_sum/annual - 1| > tolerance
     - flagged_for_percentile_order: Q5 < Q25 < Q50 < Q75 < Q95 violated
     - flagged_for_timing_order: D5 < D50 < D95 violated
-    - flagged_for_high_na: NA fraction > 30%
+    - flagged_for_high_na: NA/NaN fraction of the SIGNATURE columns > 30%
+      (see high_na_denominator_columns)
 
 A flag value of true indicates a potential quality issue.
 """
@@ -170,11 +171,16 @@ function compute_qa_flags(df::DataFrame)
         )
     end
 
-    # 12. High NA fraction (>30% of signature columns are NA)
-    # Only consider numeric columns for NA fraction calculation
-    signature_cols = [c for c in names(result)
-                      if !startswith(c, "flagged_") && c != "gage_id" &&
-                         eltype(result[!, c]) <: Union{Missing, Number}]
+    # 12. High NA fraction: > max_na_fraction of the gage's SIGNATURE columns are NA.
+    # Denominator = the signature columns PRESENT in the table (16 statistic suffixes +
+    # the per-gage scalar registry, config qa_qc.high_na_denominator — one manifest
+    # shared by all three languages). Metadata, unregistered diagnostics and flag
+    # columns never enter it; families NA-filled by the table union DO count (that
+    # structural NA is what the flag is meant to surface). The NA test is value-level
+    # so it works on untyped Vector{Any} columns: the benchmark runner builds them that
+    # way, and the previous per-column eltype filter silently excluded every signature
+    # column, leaving only the 16 numeric metadata columns (found 2026-09-04).
+    signature_cols = high_na_denominator_columns(names(result))
     if !isempty(signature_cols)
         na_fraction = map(1:n) do i
             na_count = 0
@@ -190,6 +196,28 @@ function compute_qa_flags(df::DataFrame)
     end
 
     return result
+end
+
+
+"""
+    high_na_denominator_columns(colnames) -> Vector{String}
+
+The columns that enter the `flagged_for_high_na` denominator: every name ending in
+one of the statistic suffixes (`CFG_QAQC_HIGH_NA_SUFFIXES`) plus the per-gage scalar
+registry (`CFG_QAQC_HIGH_NA_SCALARS`), in input order; `flagged_*` columns excluded.
+Shared definition with `python/streamflow_signatures/qa_qc.py` and `rpkg/R/qa_qc.R`.
+"""
+function high_na_denominator_columns(colnames)
+    scalars = Set(CFG_QAQC_HIGH_NA_SCALARS)
+    out = String[]
+    for c in colnames
+        name = String(c)
+        startswith(name, "flagged_") && continue
+        if name in scalars || any(sfx -> endswith(name, sfx), CFG_QAQC_HIGH_NA_SUFFIXES)
+            push!(out, name)
+        end
+    end
+    return out
 end
 
 

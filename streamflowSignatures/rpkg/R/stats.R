@@ -1,3 +1,29 @@
+#' Mann-Kendall trend test with the canonical NA contract
+#'
+#' Thin wrapper around \code{Kendall::MannKendall} that mirrors
+#' \code{mann_kendall_test} in \code{julia/src/stats.jl} (and the Python port):
+#' NA values are dropped; fewer than 3 values, or a CONSTANT series (zero
+#' tie-corrected variance of S), return \code{NA} for both tau and the p-value.
+#' Without the constant guard \code{Kendall::MannKendall} warns
+#' (\code{tauk2 IFAULT = 12}) and returns tau = 1, sl = 1 for an all-equal
+#' series — the rpkg output carried those values in ~59,000 cells of the
+#' WY 1993–2025 benchmark (mostly \code{negative_ann}, which is all-zero at most
+#' gages) where Julia and Python emit NA (found 2026-09-04).
+#'
+#' @param values Numeric vector (annual values, time order).
+#' @return Named list \code{tau}, \code{pval} (each \code{NA_real_} when not computable).
+#' @export
+mann_kendall_test <- function(values) {
+  v <- as.numeric(values)
+  v <- v[!is.na(v)]
+  if (length(v) < 3 || length(unique(v)) < 2) {
+    return(list(tau = NA_real_, pval = NA_real_))
+  }
+  mk <- tryCatch(Kendall::MannKendall(v), error = function(e) NULL)
+  if (is.null(mk)) return(list(tau = NA_real_, pval = NA_real_))
+  list(tau = as.numeric(mk$tau), pval = as.numeric(mk$sl))
+}
+
 #' Generate 8 summary statistics for each metric column
 #'
 #' For each value column, produces Theil-Sen slope, linear slope, Spearman
@@ -157,12 +183,10 @@ generate_stats <- function(data, value_cols = NULL, year_col = "water_year",
     sp_rho  <- if (!is.null(sp)) unname(sp$estimate) else NA_real_
     sp_pval <- if (!is.null(sp)) sp$p.value          else NA_real_
 
-    # Mann-Kendall
-    mk <- tryCatch({
-      Kendall::MannKendall(w_values)
-    }, error = function(e) NULL)
-    mk_tau  <- if (!is.null(mk)) as.numeric(mk$tau) else NA_real_
-    mk_pval <- if (!is.null(mk)) as.numeric(mk$sl)  else NA_real_
+    # Mann-Kendall (canonical contract: NA for n < 3 or a constant series)
+    mk <- mann_kendall_test(w_values)
+    mk_tau  <- mk$tau
+    mk_pval <- mk$pval
 
     mean_val   <- mean(w_values, na.rm = TRUE)
     median_val <- median(w_values, na.rm = TRUE)

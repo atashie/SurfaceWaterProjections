@@ -8,6 +8,13 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
 ## [Unreleased]
 
 ### Planned
+- **At the NEXT rerun of any portion of the data: regenerate `flagged_for_high_na` in
+  both standard products** (user decision 2026-09-04 — the delivered column is a
+  cataloged known issue, not rewritten in place). Either the full benchmark (the code
+  is fixed) or `docs/benchmarks/recompute_high_na_flag.py --write` on the existing CSVs
+  produces the corrected column (product #1: 1,224 → 791; #2: 1,243 → 598); then update
+  the HydroShare READMEs/dictionary row and the run-notes counts, and re-run the rpkg
+  benchmark so its reference CSV picks up the constant-series Mann-Kendall fix.
 - **Canonical cleanup (LOW priority, non-blocking): make Julia's storage
   `unique` use `==` semantics rather than `isequal`.** `julia/src/storage.jl`
   builds `Q_unique = unique(Q_valid)` and gates the year on
@@ -183,7 +190,38 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
   (a post-hoc recompute from the CSVs, like `refresh_qa_flags.jl`, is enough — no signature
   value changes). **Before HydroShare upload**: either recompute the column in the staged
   CSVs or reword the dictionary/README rows to what the shipped column actually encodes.
-  Not yet fixed — user decision pending (changes a delivered column).
+  **RESOLVED in code 2026-09-04 (same day)** — see `[September 2026]`: one shared
+  definition, tests in all three languages, runners aligned. **DECISION (user,
+  2026-09-04): the delivered products are NOT rewritten now.** This one, singular
+  column is cataloged as a known issue everywhere the products are described (this
+  file, README.md, SIGNATURES.md, CLAUDE.md, the claude-skill, the HydroShare
+  Resource 1/2 READMEs and the `flagged_for_high_na` row of
+  `hisss_data_dictionary.csv`) and **will be regenerated the next time any portion of
+  the data is rerun** (a full benchmark, or the byte-preserving
+  `docs/benchmarks/recompute_high_na_flag.py` on the existing CSVs — both give the
+  corrected column). Until then: in product #1 the column is TRUE for all 1,183
+  Canadian gages + 41 USGS gages (1,224); in product #2 for 1,243 gages; it carries no
+  information about signature completeness and must not be used to screen gages.
+- **MEDIUM (rpkg, surfaced 2026-09-04 by the shared high-NA rule) — rpkg emits
+  Mann-Kendall tau = 1, p = 1 for CONSTANT annual series where canonical Julia (and
+  Python since the 2026-08-26 MK fix) emit NaN.** `rpkg/R/stats.R` passes the series
+  straight to `Kendall::MannKendall`, which on a zero-variance input warns
+  (`tauk2 IFAULT = 12`) and returns tau = 1, sl = 1; Julia's `mann_kendall_test`
+  returns `(NaN, NaN)` when `var_S <= 0`. Measured on the WY 1993–2025 reference set:
+  `negative_ann` is all-zero at 6,621 of 6,678 gages, so `negative_ann_mk_rho`,
+  `_mk_pval` and both Pettitt segment MK p-values differ in NA-pattern at ~6,100 cells
+  each, plus smaller counts on `swe_apr1` and the drought `p2`/`p5` levels (59,191
+  NA-pattern mismatches over 10.8 M signature cells in total, all of this class). The
+  port-campaign gates missed it because the summary comparison scores finite pairs
+  only. Under the new high-NA rule it flips the flag for 20 gages (rpkg 771 vs 791).
+  **RESOLVED in code 2026-09-04 (same day)**: new exported `mann_kendall_test()` wrapper
+  in `rpkg/R/stats.R` (NA drop; n < 3 or constant series → NA tau and p-value, else
+  `Kendall::MannKendall`), used by both `generate_stats()` and
+  `segment_differential_metrics()`; parity test `test-mk_constant_series.R` (rpkg suite
+  1,098 passed against the installed package). No delivered product is affected (they
+  are Julia-built). **Still pending**: re-run the rpkg benchmark so the rpkg reference
+  CSV reflects the contract (the 2026-08-27 rpkg CSV still carries tau = 1 / p = 1 on
+  constant series, which is why it shows 771 rather than 791 high-NA flags).
 - **HIGH (staged HydroShare deposit, discovered 2026-09-04) — mis-padded `gage_id` in
   Resource 5 (44 ids in all three EO tables) and the Resource 4 boundary layer (9 ids).**
   9–10-digit USGS site numbers with a leading zero (e.g. `011055566`) are stored
@@ -377,10 +415,17 @@ Findings, by direction of fix:
 
 *Part 5 (thresholds all match `config/signatures_config.json`; 11 of 12 flags verified
 identical across languages on the reference set):*
-- [ ] **`flagged_for_high_na` is NOT "identical across the Julia, Python, and R
-  implementations" and, in the delivered products, does not mean ">30 % of numeric
-  output columns NA"** — see the HIGH Known Issue above. Doc-side: until the code is
-  fixed, the sentence must describe what the shipped column encodes; code-side: fix.
+- [ ] **`flagged_for_high_na`** — code fixed the same day (one shared definition; see
+  `[September 2026]`); three doc-side edits queued for the Google Doc: (1) redefine the
+  flag as ">30 % of a gage's signature-derived columns (every column except the gage
+  metadata and the flag columns) are NA"; (2) append the known-issue sentence for the
+  released products (column computed over the 16 metadata columns; marks every
+  Canadian gage; regenerated at the next data rerun); (3) qualify "identical across the
+  Julia, Python, and R implementations" with a pointer to that known issue. Optional
+  nit: the `flagged_for_elasticity_range` parenthetical should read "the only range
+  check not on a _mean column".
+- Part 4: the six concise replacement edits are in
+  `docs/plans/2026-09-04-guidelines-part4-edits.md` (delivered to the user in-session).
 - [x] Everything else verified against code: ranges, the BFI defensive note (per-year
   `clamp(bfi, 0, 1)` in `baseflow.jl`), `elasticity_static` as the one non-`_mean` input,
   ties allowed in both order checks, NA never triggers a flag, seasonal-sum tolerance 0.2.
@@ -995,6 +1040,59 @@ six-minute re-poll of the published copy showed no change, so the snapshot stand
 the next sync will confirm what landed.
 
 ---
+
+## [September 2026]
+
+### Fixed (HIGH): `flagged_for_high_na` now has ONE definition in all three languages (2026-09-04)
+Found during the guidelines Parts 4–5 accuracy review and independently confirmed by a
+Codex adversarial review (8/8 findings CONFIRMED, GO-WITH-FIXES) before the user
+approved the fix. The flag meant three different things — Julia (the delivered
+products) counted NA over the **16 numeric metadata columns only** (every signature
+column arrived as `Vector{Any}` from the runner and failed the numeric-eltype filter,
+so 1,224 = every Canadian gage + 41 USGS gages missing GAGES-II attributes), Python
+counted every non-flag column incl. string metadata, and rpkg counted only the
+`_mean`/`_median` keys each gage happened to emit. The other 11 flags agreed
+cell-for-cell across the three languages.
+
+- **Definition (config `qa_qc.high_na_denominator`, one manifest shared by
+  Julia/Python/rpkg):** the fraction of the SIGNATURE columns present in the assembled
+  output table — every column ending in one of the 16 statistic suffixes plus the 21
+  registered per-gage scalars (1,621 of the 1,653 product columns) — whose value is
+  NA or NaN, flagged when strictly greater than `max_na_fraction` (0.30). Metadata,
+  unregistered diagnostics and flag columns never enter the denominator; families
+  NA-filled by the table union DO count (that structural NA — no Daymet, no SWE — is
+  exactly what the guidelines say the flag surfaces). Column selection is by NAME and
+  the NA test is value-level, so untyped columns can no longer drop out.
+- **Code**: `julia/src/qa_qc.jl` (+ `high_na_denominator_columns`, exported),
+  `python/streamflow_signatures/qa_qc.py`, `rpkg/R/qa_qc.R` (now also accepts the
+  assembled data.frame; the per-gage list path keeps emitted-key semantics, matching
+  Julia's `include_qa_flags` path), config constants in all three languages with
+  identical fallbacks, the manifest synced into the two bundled config copies, and
+  `run_rpkg_benchmark.R` now computes the flags on the assembled table like the Julia
+  and Python runners. **Tests** (`julia/test/test_qa_high_na.jl`,
+  `python/tests/test_qa_flags.py`, `rpkg/tests/testthat/test-qa_flags.R`) go through
+  the runner's untyped-column shape, pin metadata exclusion, NaN-counts-as-NA, the
+  1,621-of-1,653 selection, and (Python) that the manifest equals the schema
+  registries. Suites: Julia green (new file 14/14), Python 160 passed, rpkg 1,078
+  passed against the installed package.
+- **Measured on the WY 1993–2025 reference set** (new rule applied to each
+  language's own CSV): Julia 1,224 → **791**, Python 787 → 791, rpkg 90 → 771 — Julia
+  and Python now agree on all 6,678 gages. The 20 rpkg differences are a SEPARATE
+  pre-existing divergence surfaced by the new rule — rpkg emitted tau = 1, p = 1 for
+  constant annual series where canonical emits NaN — **also fixed the same day**
+  (`mann_kendall_test()` wrapper in rpkg with the canonical NA contract, used by
+  `generate_stats()` and the Pettitt segment p-values; parity test added; rpkg suite
+  1,098 passed). The rpkg reference CSV still needs a benchmark re-run to reflect it.
+- **Delivered products (dry run of `docs/benchmarks/recompute_high_na_flag.py`, a
+  byte-preserving text-level rewrite of that one column):** WY 1993–2025 product #1
+  1,224 → 791 (1,011 Canadian gages un-flagged, 611 USGS gages newly flagged, 33 USGS
+  un-flagged); WY 1980–2025 product #2 1,243 → 598. **Deliberately NOT applied
+  (user decision, 2026-09-04)**: the delivered CSVs and their staged HydroShare copies
+  keep the column as shipped; it is cataloged as a known issue in the product docs
+  and the dictionary row, and will be regenerated at the next rerun of any portion of
+  the data. `recompute_high_na_flag.py` stays ready for that moment.
+- Tooling: `refresh_qa_flags.jl` gained `--dry-run` (it re-serializes every value, so
+  it is the canonical cross-check, not the rewrite tool).
 
 ## [August 2026]
 

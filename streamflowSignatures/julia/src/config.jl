@@ -226,6 +226,24 @@ const CFG_QAQC_ELASTICITY_RANGE = Tuple(_config.qa_qc.elasticity_range)
 const CFG_QAQC_RUNOFF_RATIO_RANGE = Tuple(_config.qa_qc.runoff_ratio_range)
 const CFG_QAQC_SEASONAL_SUM_TOLERANCE = _config.qa_qc.seasonal_sum_tolerance
 const CFG_QAQC_MAX_NA_FRACTION = _config.qa_qc.max_na_fraction
+# flagged_for_high_na denominator manifest (2026-09-04). Absent section -> the
+# same defaults, so old config variants keep the documented semantics.
+const _high_na_cfg = get(_config.qa_qc, "high_na_denominator", Dict())
+const CFG_QAQC_HIGH_NA_SUFFIXES = String.(collect(get(_high_na_cfg, "statistic_suffixes",
+    ["_senn_slp", "_linear_slp", "_spearman_rho", "_spearman_pval", "_mk_rho", "_mk_pval",
+     "_mean", "_median", "_pettitt_cp_year", "_pettitt_pval", "_pettitt_pre_mean",
+     "_pettitt_post_mean", "_pettitt_delta_mean", "_pettitt_pct_change",
+     "_pettitt_pre_mk_pval", "_pettitt_post_mk_pval"])))
+const CFG_QAQC_HIGH_NA_SCALARS = String.(collect(get(_high_na_cfg, "per_gage_scalars",
+    ["elasticity_static", "log_a_seasonality_amplitude_all",
+     "log_a_seasonality_amplitude_first_half", "log_a_seasonality_amplitude_last_half",
+     "log_a_seasonality_minimum_all", "log_a_seasonality_minimum_first_half",
+     "log_a_seasonality_minimum_last_half", "runoff_ratio_high_count",
+     "elasticity_years_total", "elasticity_years_low_ppt", "ice_affected_days_total",
+     "recession_alpha_point_cloud_linear_reservoir", "season_excluded_years_winter",
+     "season_excluded_years_spring", "season_excluded_years_summer",
+     "season_excluded_years_fall", "drought_threshold_fixed_p2", "drought_threshold_fixed_p5",
+     "drought_threshold_fixed_p10", "drought_threshold_fixed_p20", "drought_threshold_fixed_p30"])))
 
 # =============================================================================
 # Metadata Parameters
