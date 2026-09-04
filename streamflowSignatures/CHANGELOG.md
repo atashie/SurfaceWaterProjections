@@ -975,6 +975,18 @@ two deposit defects (Known Issues, HIGH: mis-padded `gage_id` in R5/R4; R3 READM
 recipe). Verified facts, numbers, and the first-draft §5.1.3 paragraph:
 `docs/plans/2026-09-04-dataset-join-guidance.md`.
 
+**2026-09-04 (second sync, afternoon) — user edits; manuscript otherwise unchanged.**
+Two typo fixes only (a missing space after "diagnostics." in the §2 preamble; "MOIDS" →
+"MODIS" in §2.1.4); no methods claim changed, nothing to reconcile. The §5 "How to join
+with other datasets" item is still the one-line stub — the paste-ready §5.1.3 text
+(revised to the strip-leading-zeros-on-both-sides join rule after the user's decision
+to leave the staged deposit files as delivered) is in
+`docs/plans/2026-09-04-dataset-join-guidance.md` §4. The snapshot rebuild also removed
+~170 lines of Google's page JavaScript that the morning rebuild had appended below the
+body (the extractor did not skip a `<script>` block inside the contents div; the
+paragraph-level diff was unaffected because the JS lines had no counterpart on either
+side).
+
 ---
 
 ## [August 2026]
@@ -993,18 +1005,6 @@ reconciliation), all findings fixed same day:
   (personal Windows-profile paths removed with the deleted April logs and the
   `prod_1980_60pct` wrapper fix; Drive folder ID published as-is per user decision).
 - **Stale port-status claims corrected everywhere** — README.md (rewritten in full as
-**2026-09-04 (second sync, afternoon) — user edits; manuscript otherwise unchanged.**
-Two typo fixes only (a missing space after "diagnostics." in the §2 preamble; "MOIDS" →
-"MODIS" in §2.1.4); no methods claim changed, nothing to reconcile. The §5 "How to join
-with other datasets" item is still the one-line stub — the paste-ready §5.1.3 text
-(revised to the strip-leading-zeros-on-both-sides join rule after the user's decision
-to leave the staged deposit files as delivered) is in
-`docs/plans/2026-09-04-dataset-join-guidance.md` §4. The snapshot rebuild also removed
-~170 lines of Google's page JavaScript that the morning rebuild had appended below the
-body (the extractor did not skip a `<script>` block inside the contents div; the
-paragraph-level diff was unaffected because the JS lines had no counterpart on either
-side).
-
   the public HISSS README: current 1,653-column parity numbers, complete 14-category
   signature table incl. snow + drought, 16-statistics convention, standard products +
   HydroShare link, MPL-2.0 LICENSE added), CLAUDE.md ("rpkg not yet gated" contradiction,
