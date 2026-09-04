@@ -114,32 +114,38 @@ Fix: replace the recipe (Python and R blocks) with strip-both-sides.
   R4 polygon; the rest are the > 100,000 km² exclusions (agency polygons must be
   fetched directly for those). Daymet aggregation used the 6,087 basins < 85,000 km².
 
-## 4. Draft §5.1.3 text (first draft, delivered 2026-09-04; assumes Defect 1 is fixed)
+## 4. Draft §5.1.3 text (revised 2026-09-04 after the user's decision: files stay as delivered, join rule = strip leading zeros on both sides)
 
-> 5.1.3 Joining HISSS with other datasets. All HISSS tables share one key, gage_id: the
-> agency station identifier stored as a zero-padded character string (USGS site number,
-> e.g. 01013500; HYDAT station number, e.g. 01AD002). Read it as text — numeric parsing
-> silently drops the leading zero carried by most US sites. Any dataset keyed to the same
-> agency identifiers joins directly once its identifiers are normalized to this form:
-> CAMELS and CAMELS-Chem (Addor et al. 2017; Sterle et al. 2024) store the USGS site
-> number as an integer that must be re-padded to eight digits; HYSETS (Official_ID),
-> CAMELS-SPAT (USA_/CAN_ prefix) and Caravan (camels_/hysets_ prefix) carry the same
-> identifier under other names; the Water Quality Portal uses USGS-{site}; and the USGS
-> Network-Linked Data Index maps CONUS sites to the NHDPlus COMID used by StreamCat and
-> other reach-based products. Of the 516 CAMELS-Chem catchments, 507 are in the
-> WY 1993–2025 product and 515 in WY 1980–2025. Datasets that are not gage-keyed join
-> spatially through the watershed polygons of Resource 4: gridded products such as the
-> Daymet-derived VPD of Corak et al. (2025), which shares Daymet's 1 km grid and 365-day
-> calendar, can be aggregated with the same area-weighted workflow used for Daymet
-> (Sect. 2.1.3), and point records such as MacroSheds sites (Vlah et al. 2023) can be
-> located within the (nested) polygons or matched to the nearest gage by coordinates.
+> 5.1.3 Joining HISSS with other datasets. Every HISSS table is keyed by the agency
+> station identifier, gage_id (USGS site number, e.g. 01013500; HYDAT station number,
+> e.g. 01AD002). Read it as a character string and join on the leading-zero-stripped form
+> on both sides: most US site numbers begin with a zero that numeric parsing silently
+> drops, the gage metadata table and a small number of identifiers in the geometry and
+> land-cover tables are stored without it (see the resource READMEs), and partner datasets
+> differ in the same way, so stripping rather than re-padding is the one rule that works
+> everywhere. Any dataset keyed to the same agency identifiers then joins directly: CAMELS
+> and CAMELS-Chem (Addor et al. 2017; Sterle et al. 2024) store the USGS site number as an
+> integer; HYSETS (Official_ID), CAMELS-SPAT (USA_/CAN_ prefix) and Caravan
+> (camels_/hysets_ prefix) carry it under other names; the Water Quality Portal uses
+> USGS-{site}; and the USGS Network-Linked Data Index maps CONUS sites to the NHDPlus
+> COMID used by StreamCat and other reach-based products. Of the 516 CAMELS-Chem
+> catchments, 507 are in the WY 1993–2025 product and 515 in WY 1980–2025. Datasets that
+> are not gage-keyed join spatially through the watershed polygons of Resource 4: gridded
+> products such as the Daymet-derived VPD of Corak et al. (2025), which shares Daymet's
+> 1 km grid and 365-day calendar, can be aggregated with the area-weighted workflow used
+> for Daymet (Sect. 2.1.3), and point records such as MacroSheds sites (Vlah et al. 2023)
+> can be located within the nested polygons or matched to the nearest gage by coordinates.
 > HydroATLAS-based products join on the HydroBASINS level-12 outlet identifier
-> (Downstream_HB_ID) carried in the Resource 4 attribute table. When combining data,
-> aggregate partner records to the water year (October–September, labeled by the ending
-> year); re-normalize fluxes to a common drainage area, since HISSS reports both the
+> (Downstream_HB_ID) in the Resource 4 attribute table. When combining data, aggregate
+> partner records to the water year (October–September, labeled by the ending year);
+> re-normalize fluxes to a common drainage area, since HISSS reports both the
 > agency-published area used for normalization (basin_area) and the polygon area
 > (geom_area_km2); and pair record-dependent signatures (Sect. 5.1.2) with the product
 > whose window matches the partner record.
+
+The first-draft wording ("all tables share one key … joins directly on gage_id") assumed
+the ids would be re-padded; it was withdrawn when the user decided the delivered files
+stay byte-identical.
 
 References the paragraph introduces (check the list): Arsenault et al. 2020 (HYSETS,
 already cited in §1); Knoben et al. 2025 (CAMELS-SPAT, cited in §1); Kratzert et al.
