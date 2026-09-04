@@ -147,6 +147,37 @@ The first-draft wording ("all tables share one key … joins directly on gage_id
 the ids would be re-padded; it was withdrawn when the user decided the delivered files
 stay byte-identical.
 
+## 4b. Replacement for the §3 "Conventions and key fields" join sentence (delivered 2026-09-04)
+
+The current sentence — "All tables join on gage_id, the zero-padded agency station
+identifier (USGS site numbers; HYDAT station numbers); files derived from the geometry
+layer also carry canon_id, a zero-stripped variant (for USGS sites) retained for joins to
+legacy metadata." — is wrong under the decision to leave the deposit files as delivered
+(storage of the key is not uniform across the resources), and an interim edit the user
+quoted ("All tables join on a zero-stripped gage_id, the zero-padded agency station
+identifier …") contradicts itself. The accurate statement is about how to JOIN, not how
+the key is stored. Full version:
+
+> All tables join on gage_id, the agency station identifier (USGS site number; HYDAT
+> station number), which must be read as a character string. Most tables store it as
+> issued by the agency, with leading zeros; the gage metadata table, and a small number
+> of nine- and ten-digit USGS identifiers in the geometry and land-cover tables, store it
+> without them. Identifiers are unique once leading zeros are removed, so the robust join
+> is on the zero-stripped form on both sides; the geometry and land-cover tables carry
+> that form directly as canon_id. Do not re-pad identifiers to eight digits, which
+> corrupts nine- and ten-digit USGS site numbers.
+
+Short version (the which-tables detail lives in the resource READMEs):
+
+> All tables join on gage_id, the agency station identifier (USGS site number; HYDAT
+> station number). Read it as a character string and join on the form with leading zeros
+> removed from both sides, which is unique across all stations; the geometry and
+> land-cover tables also carry this form as canon_id. Do not re-pad identifiers to a
+> fixed width, which corrupts nine- and ten-digit USGS site numbers.
+
+The following sentence about water_year is unaffected. Both versions are consistent with
+§4 above and with the root README's "Reading and Joining the Data" section.
+
 References the paragraph introduces (check the list): Arsenault et al. 2020 (HYSETS,
 already cited in §1); Knoben et al. 2025 (CAMELS-SPAT, cited in §1); Kratzert et al.
 2023 (Caravan, cited in §1); Hill et al. 2016 (StreamCat) if named; USGS NLDI

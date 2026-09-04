@@ -207,8 +207,9 @@ For full historical detail (Dec 2025 – April 2026), see [docs/CHANGELOG_ARCHIV
   product gages (66 of the 8,014 compiled gages) for the same reason — replaced with
   strip-leading-zeros-on-both-sides. The draft §5.1.3 join text in
   `docs/plans/2026-09-04-dataset-join-guidance.md` §4 was revised to the
-  strip-on-both-sides wording the same day; still to relay: manuscript §3 "all tables
-  join on gage_id, the zero-padded …" needs the same qualification.
+  strip-on-both-sides wording the same day; manuscript §3's key-fields sentence
+  ("All tables join on gage_id, the zero-padded …") needs the same qualification —
+  replacement text delivered 2026-09-04 (plan doc §4b), pending paste.
 - **ACCEPTED DIVERGENCE (rpkg vs Julia, 1 annual row in 18.9M) — the storage
   distinct-value guard and signed zeros.** `julia/src/storage.jl` gates a year on
   `length(unique(Q_valid)) < 10`, and Julia's `unique` uses `isequal`, under which
@@ -986,6 +987,12 @@ to leave the staged deposit files as delivered) is in
 body (the extractor did not skip a `<script>` block inside the contents div; the
 paragraph-level diff was unaffected because the JS lines had no counterpart on either
 side).
+Later the same day the user asked for a replacement for §3's "Conventions and key
+fields" join sentence (their interim edit — "All tables join on a zero-stripped gage_id,
+the zero-padded agency station identifier …" — contradicts itself); two variants were
+delivered and recorded in `docs/plans/2026-09-04-dataset-join-guidance.md` §4b. A
+six-minute re-poll of the published copy showed no change, so the snapshot stands and
+the next sync will confirm what landed.
 
 ---
 
