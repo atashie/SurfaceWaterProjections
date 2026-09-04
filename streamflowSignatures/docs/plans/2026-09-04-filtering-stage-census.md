@@ -157,8 +157,8 @@ Myneni / Friedl "[tbd]"; "Claude Code 0.145.0" ×2 (that is the codex-cli versio
 "diagnostics.We" (missing space), "s(e.g.,", "MOIDS"; §3 CC-BY licence and the
 collection "DOI" label to confirm; Table [X] / schematic / input-data table placeholders.
 
-The stage table is also provided as `2026-09-04-filtering-stage-census.csv` (same folder)
-for sharing.
+The stage table is also provided as a CSV for sharing: `docs/filtering_stage_census_2026-09-04.csv`
+(kept outside `docs/plans/` so it is included in the public CZ-Sync/HISSS mirror).
 
 ## Reproduce
 ```bash
