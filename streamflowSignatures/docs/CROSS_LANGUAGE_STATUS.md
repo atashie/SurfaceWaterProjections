@@ -328,6 +328,10 @@ Note: Rounds 0-6 used Spearman rank correlation. Post-Round 6, the primary metri
 
 ## Per-Category Results (Identity R², April 2026, Three-Way)
 
+> "Category" in the tables below is the comparison scripts' **function-family** grouping
+> (flow percentiles split from flow volumes, etc.), not the eight signature categories of
+> `docs/signature_categories.csv`.
+
 Post R monolithic fixes + Julia tau-b fix. 551 common columns across 5,707 common gages.
 
 | Category | Total Cols | Perfect (>=0.999) | Good (>=0.99) | Poor (<0.99) | Min R² |

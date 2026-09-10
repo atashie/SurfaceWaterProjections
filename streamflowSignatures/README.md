@@ -81,22 +81,37 @@ Rscript docs/benchmarks/run_rpkg_benchmark.R
 
 ## Signature Categories
 
-| Category | Metrics | Climate needed | Description |
-|----------|---------|----------------|-------------|
-| **Flow Volumes** | Qann, Qwin, Qspr, Qsum, Qfal, Q1–Q99 (15 percentiles), Q95_Q10 | No | Annual/seasonal totals and percentiles (21 metrics) |
-| **FDC** | FDCall, FDC90th, FDCmid | No | Flow duration curve slopes |
-| **Baseflow** | BFI_Eckhardt, BFI_LyneHollick (+ recession-parameterized variants) | No | Groundwater contribution indices |
-| **Recession** | log_a, b, concavity, alpha_linear, n_recession_events, seasonality | No | Recession parameters (alpha under the b=1 linear-reservoir convention) |
-| **Pulse Metrics** | n/dur high & low pulses (per-year and period-of-record), TQmean, flow reversals | No | High/low flow event characteristics |
-| **Flashiness** | flashinessRB | No | Richards-Baker flashiness index |
-| **Flow Timing** | D1–D99_day (13 percentiles), D25_to_D75, Dmax | No | Cumulative flow timing (15 metrics) |
-| **Negative Flow Days** | negative_ann | No | Days with Q < 0 per year |
-| **Runoff Ratios** | annual + 4 seasonal | Yes | Q/P ratios |
-| **Elasticity** | elasticity_rolling, elasticity_annual, elasticity_static | Yes | Streamflow sensitivity to precipitation |
-| **Q-P Seasonality** | qp_slope_sd, qp_bimodality | Yes | Precipitation-runoff relationship |
-| **Average Storage** | avg_storage | Yes | Mean catchment storage (computed, but omitted from major analyses — no ET term) |
-| **Snow Metrics** | swe_max, snow on/off timing, melt rate/timing, SSM, … (14 metrics) | SWE (Daymet) | Snowpack magnitude, timing, and regime |
-| **Streamflow Drought** | duration + deficit at 5 fixed severity levels (+ 5 threshold scalars) | No | Days below and departure from fixed percentile thresholds (USDM-analog ladder) |
+Every output belongs to one of **eight signature categories** (the grouping adopted
+2026-09-10; canonical machine-readable mapping in
+[`docs/signature_categories.csv`](docs/signature_categories.csv)). Each category is
+computed by one or more **function families** — the 15 functions that
+`calculate_all_signatures()` calls (documented function by function in
+[`docs/SIGNATURES.md`](docs/SIGNATURES.md)).
+
+| Category | Function family | Metrics | Climate needed |
+|----------|-----------------|---------|----------------|
+| **Flow Volume** | `calculate_flow_vols_by_year` | Qann, Qwin, Qspr, Qsum, Qfal, Q1–Q99 (15 percentiles), Q95_Q10; 4 `season_excluded_years_*` scalars | No |
+| | `calculate_negative_days` | negative_ann | No |
+| | `calculate_pulse_metrics` (TQmean only) | TQmean | No |
+| **Flow Duration** | `analyze_fdc_trends` | FDCall, FDC90th, FDCmid | No |
+| **Storage** | `analyze_baseflow_indices`, `analyze_baseflow_indices_with_parameters` | BFI_Eckhardt, BFI_LyneHollick, BFI_Eckhardt_param, BFI_LyneHollick_param; `recession_alpha_point_cloud_linear_reservoir` scalar | No |
+| | `analyze_recession_parameters` | log_a_pointcloud, log_a_events, b_pointcloud, b_events, concavity, alpha_linear, n_recession_events; 6 `log_a_seasonality_*` scalars | No |
+| | `analyze_Q_PPT_relationships` | annual + 4 seasonal runoff ratios; `runoff_ratio_high_count` scalar | Yes |
+| | `calculate_average_storage` | avg_storage (computed, but omitted from major analyses — no ET term) | Yes |
+| **Flashiness** | `calculate_pulse_metrics` | n/dur high & low pulses (per-year and period-of-record), Flow_Reversals (annual + 4 seasonal) | No |
+| | `analyze_flashiness_trends` | flashinessRB | No |
+| | `calculate_streamflow_elasticity` | elasticity_rolling, elasticity_annual; elasticity_static + 2 diagnostic scalars | Yes |
+| **Drought** | `calculate_drought_metrics` | duration + deficit at 5 fixed severity levels; 5 `drought_threshold_*` scalars | No |
+| **Flow Timing** | `analyze_flow_timing_trends` | D1–D99_day (13 percentiles), D25_to_D75, Dmax | No |
+| **Precipitation Streamflow** | `calculate_qp_seasonality` | qp_slope_sd, qp_bimodality | Yes |
+| **Snow** | `calculate_snow_metrics` | swe_max, snow on/off timing, melt rate/timing, SSM, … (14 metrics) | SWE (Daymet) |
+
+That is 100 annually resolved signatures plus 20 per-gage scalars across the eight
+categories. One further scalar, `ice_affected_days_total`, is a preprocessing
+diagnostic outside the categories (and structurally 0 in the delivered products — see
+CHANGELOG → Known Issues). **Terminology**: *category* is one of the eight above (the
+term used by the manuscript, the guidelines document, and the HydroShare data
+dictionary); *function family* is the function that computes a metric.
 
 Every time-series signature produces **16 statistics**: 8 trend/summary statistics — `_senn_slp` (Theil-Sen), `_linear_slp`, `_spearman_rho`, `_spearman_pval`, `_mk_rho` (Mann-Kendall tau), `_mk_pval`, `_mean`, `_median` — plus 8 Pettitt changepoint fields (`_pettitt_cp_year`, `_pettitt_pval`, pre/post means, delta, percent change, pre/post MK p-values). A 20-value stats floor and 60%/80% trend-completeness gates govern when statistics are emitted; see `docs/SIGNATURES.md`.
 
@@ -234,7 +249,7 @@ Watershed metadata is automatically enriched with human interference indicators:
 ├── config/signatures_config.json  # Shared cross-language config (single source of truth)
 ├── docs/                          # Extended documentation
 │   ├── DEVELOPMENT.md             #   architecture, workflows, common tasks
-│   ├── SIGNATURES.md              #   detailed signature documentation (14 categories)
+│   ├── SIGNATURES.md              #   detailed signature documentation (8 categories, by function family)
 │   ├── SIGNATURE_GUIDELINES.md    #   domain-expert guidelines (auto-synced)
 │   ├── CROSS_LANGUAGE_STATUS.md   #   cross-language validation detail
 │   └── benchmarks/                #   benchmark runners, comparison tools, validation gates

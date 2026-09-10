@@ -20,6 +20,20 @@ detail is in [docs/CHANGELOG_ARCHIVE.md](docs/CHANGELOG_ARCHIVE.md).
 ## [Unreleased]
 
 ### Planned
+- **HydroShare documentation updates PENDING (not applied 2026-09-10 — user decision to
+  leave the staged files untouched this session).** (H1) Category terminology: regenerate
+  `hisss_data_dictionary.csv` `category` + `hisss_signature_categories.csv` (root/R1/R2)
+  from `docs/signature_categories.csv` (8 categories incl. the scalars; today they carry
+  the 9-class grouping); R1/R2 README lede (14-family list → the eight) and the file-table
+  row ("nine-class exploratory grouping … separate taxonomy"); rebuild the explorer HTML
+  with the updated builder; relabel or annotate the validation summary/dashboard groupings
+  as function families. (H2) The `flagged_for_high_na` known-issue text in the R1/R2
+  READMEs + dictionary row, rewritten when the column is regenerated (already planned
+  above). The user noted a further aspect of the HydroShare docs also needs updating —
+  record it here when specified. (H3, added 2026-09-10 evening) R3 README + input
+  dictionary: state the HYDAT release used (2025-10-14; retrieval 2026-02-07) and that
+  Canadian records end 2024-12-31, so Canadian gages have no WY 2025 in either product;
+  R1/R2 READMEs could carry the same one-liner. Details: `docs/plans/2026-09-10-manuscript-category-edits.md` §C.
 - **At the NEXT rerun of any portion of the data: regenerate `flagged_for_high_na` in
   both standard products** (user decision 2026-09-04 — the delivered column is a
   cataloged known issue, not rewritten in place). Either the full benchmark (the code
@@ -235,6 +249,35 @@ detail is in [docs/CHANGELOG_ARCHIVE.md](docs/CHANGELOG_ARCHIVE.md).
   events in that window). Record: changelog-old.md → August 2026.
 
 ### Guidelines Document TODOs
+**Synced 2026-09-10 (pm) — the doc was RESTRUCTURED to the colleague's 8 categories; full
+category crosswalk run (user request).** Part 3 now has eight modules (Flow Volume, Flow
+Duration, Storage, Flashiness, Drought, Flow Timing, Precipitation Streamflow, Snow) with
+the former 13 modules nested as function blocks; the legacy tail and START/END markers
+are gone. Snapshot overwritten. Manuscript unchanged. Live HydroShare is private and
+Chrome was not connected, so the deposit side was checked on the STAGED folder. Record
+and per-output CSV: `docs/plans/2026-09-10-signature-category-review.md` (afternoon
+section) + `2026-09-10-signature-category-crosswalk-pm.csv`. Open items, by product:
+- [ ] **Manuscript** still says 14 categories in the §2 preamble and §2.2.1 (and points to
+  the dictionary for details); the §4 "sites and signature categories" figure scheme is
+  unknown. Needs the 8-category wording once the vocabulary is settled.
+- [ ] **HydroShare R1/R2 (staged)**: dictionary `category` + `hisss_signature_categories.csv`
+  carry the 9-class grouping (7 bases differ from the doc: flashinessRB, six "Snow
+  Timing" bases); the 21 scalars have no group; README lede lists the 14 families; the
+  README file-table row says "nine-class … finer methodological categories are a
+  separate taxonomy"; the shipped explorer / validation summary / dashboard embed the
+  repo's 16- and 15-group schemes.
+- [ ] **Guidelines doc internal**: `avg_storage` / `calculate_average_storage()` absent
+  (sheet + dictionary + manuscript all carry storage); TQmean in 3.4 Flashiness vs Flow
+  Volume in the sheet and dictionary (the one annual base where doc and sheet disagree);
+  Part 1.2 "(see 3.12)" → 3.1; `ice_affected_days_total` has no module; names
+  "recession_alpha_point_cloud" / "Negative_ann" vs the shipped columns
+  `recession_alpha_point_cloud_linear_reservoir` / `negative_ann`.
+- [x] **Repo docs on the public mirror** — DONE 2026-09-10 (later): the user ruled that
+  the eight are the categories; README.md, SIGNATURES.md, CLAUDE.md, claude-skill, the
+  schematic and the explorer builder are aligned (see `[September 2026]`). Manuscript and
+  guidelines-doc edits catalogued in `docs/plans/2026-09-10-manuscript-category-edits.md`;
+  HydroShare docs deliberately untouched (Planned → HydroShare documentation updates).
+
 **Synced 2026-09-10 — 19 wording regions + two Part 4 corrections landed; signature-category
 review (user request).** Snapshot overwritten (header lists the edits; the legacy tail no
 longer carries the page JavaScript the 2026-09-04 rebuild appended). Applied in the doc
@@ -450,6 +493,31 @@ fails GitHub's rich rendering because of a GitHub-side mermaid bundle crash (ver
 against GitHub's own mermaid README, not this file) — re-check after GitHub ships a fixed
 bundle; until then the 3x PNG beside the doc is the review copy.
 
+**2026-09-10 (evening) — HYDAT citation check (user request).** The manuscript's
+"tbd: ECC hydat citation" and the proposed reference "ECCC (2026). HYDAT: National
+Hydrometric Database [2026-07-17]" name the WRONG release: 2026-07-17 is the release
+current today (the only one WSC serves), five months after the 2026-02-07 retrieval. The
+release actually used is **2025-10-14** (inferred: tidyhydat 1.0.0's CRAN build of
+2026-02-03 still queried "HYDAT released on 2025-10-14", the next release was 2026-04-17,
+and the compiled Canadian records end 2024-12-31 with no 2025 data, which the 2026-04-17
+release already carries). Definitive confirmation = `tidyhydat::hy_version()` on the
+Windows ingestion machine. Relay: (1) cite the 2025-10-14 release with a 2025 year and the
+February 2026 retrieval date; (2) `Albers et al., 2026` → Albers, S. (2017), JOSS 2(20),
+511, doi:10.21105/joss.00511 (single author; add the package version if desired — 0.7.2 or
+1.0.0, whichever was installed on 2026-02-07); (3) §2.1.2 "retrieved … to 30 September
+2025 for all candidate gages" holds for USGS only — Canadian records end 31 December
+2024, so **no Canadian gage has a qualifying WY 2025 in either product** (end_water_year
+≤ 2024; 813 / 772 Canadian gages end in WY 2023). Recorded in docs/DATA_SOURCES.md (HYDAT
+row); HydroShare R3 README/dictionary need the same statement (Planned → HydroShare
+documentation updates, H3).
+
+**2026-09-10 (pm) — re-synced: manuscript unchanged.** **Catalogue of the eight manuscript
+locations that must change to the eight categories (user decision, later the same day):
+`docs/plans/2026-09-10-manuscript-category-edits.md` §A.** Category crosswalk against the
+restructured guidelines doc and the staged HydroShare deposit: the manuscript's 14-category
+wording (§2 preamble, §2.2.1, §4 figure) is now the outlier — see Guidelines Document
+TODOs (2026-09-10 pm) and `docs/plans/2026-09-10-signature-category-review.md`.
+
 **2026-09-10 — sync; no methods change.** Since the 2026-09-04 second sync: §3
 Resources 1–2 now reads "21 signatures and related outputs that do not carry statistics"
 (was "per-gage scalar diagnostics"; consistent with §2.2.1's "21 stand-alone diagnostic
@@ -564,6 +632,37 @@ the next sync will confirm what landed.
 ---
 
 ## [September 2026]
+
+### Changed: signature categories are the co-authors' EIGHT; repo docs aligned (2026-09-10)
+**DECISION (user, 2026-09-10)**: the colleague's 8-category sheet is the reference
+grouping — Flow Volume, Flow Duration, Storage, Flashiness, Drought, Flow Timing,
+Precipitation Streamflow, Snow. Vocabulary from here on: *category* = one of the eight
+(manuscript, guidelines doc, HydroShare dictionary); *function family* = the computing
+function (15 functions of `calculate_all_signatures()`), a sub-level. The 21 scalars
+inherit their function's category (`season_excluded_years_*` → Flow Volume;
+`ice_affected_days_total` stays outside as a preprocessing diagnostic). TQmean → Flow
+Volume and avg_storage → Storage follow the sheet.
+- **New canonical mapping** `docs/signature_categories.csv` (121 rows: signature, kind,
+  category, function, module, function_family, category_source) — the source for
+  regenerating the HydroShare dictionary/categories CSV later.
+- **Repo docs aligned (applied)**: README.md "Signature Categories" table rebuilt as
+  8 categories × function families (+ line 237 pointer); docs/SIGNATURES.md gained a
+  "Signature categories" map in the Overview, its Summary Table carries a Category column,
+  and the Pettitt signal table is labeled by function family; CLAUDE.md pointer;
+  claude-skill overview lists the eight; `docs/plans/dataset_workflow_schematic.md` +
+  PNG re-rendered ("in 8 categories"; playwright + chromium installed into `.venv`,
+  mermaid byproducts git-ignored); CROSS_LANGUAGE_STATUS "Per-Category Results" note
+  (those tables are by function family). `build_signature_explorer.py` `category_of`
+  now reads the canonical CSV (rule-based fallback kept), so the next explorer build
+  shows the eight; the comparison scripts' function-family groupings are unchanged
+  (diagnostics).
+- **Not editable from here — catalogued** in
+  `docs/plans/2026-09-10-manuscript-category-edits.md`: 8 manuscript locations (§2
+  preamble, §2.2.1, §3, §4 figure, §5.1.1, §5.1.3, §1) and 8 residual guidelines-doc
+  edits (TQmean to 3.1, add the avg_storage block to 3.3, "(see 3.12)" → 3.1,
+  ice_affected_days_total, two column names, module/family wording, Part 5 high_na).
+- **HydroShare documents NOT changed this session (user decision)** — pending list in
+  the same file (§C) and under Planned.
 
 ### Fixed (HIGH): `flagged_for_high_na` now has ONE definition in all three languages (2026-09-04)
 Found during the guidelines Parts 4–5 accuracy review and independently confirmed by a

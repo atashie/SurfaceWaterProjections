@@ -59,7 +59,31 @@ SCALARS = ["elasticity_static", "recession_alpha_point_cloud_linear_reservoir",
            "drought_threshold_fixed_p30"]
 
 
+_CANONICAL_CATEGORIES = None
+
+
+def _load_canonical_categories():
+    """Signature -> category from docs/signature_categories.csv (the eight signature
+    categories adopted 2026-09-10). Returns {} if the file is not beside this repo."""
+    global _CANONICAL_CATEGORIES
+    if _CANONICAL_CATEGORIES is None:
+        _CANONICAL_CATEGORIES = {}
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
+                            "signature_categories.csv")
+        if os.path.exists(path):
+            import csv
+            with open(path, newline="", encoding="utf-8") as f:
+                for row in csv.DictReader(f):
+                    _CANONICAL_CATEGORIES[row["signature"]] = row["category"]
+    return _CANONICAL_CATEGORIES
+
+
 def category_of(base):
+    # Eight signature categories (docs/signature_categories.csv) when available; the
+    # function-family rules below are the fallback for bases not listed there.
+    canon = _load_canonical_categories().get(base)
+    if canon and not canon.startswith("("):
+        return canon
     b = base.lower()
     # drought first: `dur_*`/`d*` rules below would otherwise not match, but the
     # explicit rule keeps the family together regardless of future renames

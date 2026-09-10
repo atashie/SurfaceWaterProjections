@@ -6,6 +6,30 @@ Detailed documentation of all hydrological signatures calculated by this project
 
 ## Overview
 
+### Signature categories
+
+Every output belongs to one of **eight signature categories** (grouping adopted
+2026-09-10 from the co-authors' categorization; canonical mapping in
+[`signature_categories.csv`](signature_categories.csv)). The numbered sections of this
+file are **function families** — one per computing function — and each category
+gathers one or more of them:
+
+| Category | Function families (sections below) | Annual signatures | Per-gage scalars |
+|----------|-------------------------------------|-------------------|------------------|
+| Flow Volume | 1 Flow Volumes; Negative Flow Days (`calculate_negative_days`); TQmean from 5 Pulse Metrics | 21 + 1 + 1 | 4 (`season_excluded_years_*`) |
+| Flow Duration | 2 Flow Duration Curve | 3 | — |
+| Storage | 3 Baseflow (both variants); 4 Recession; 8 Q-PPT Relationships (runoff ratios); 11 Average Storage | 4 + 7 + 5 + 1 | 1 + 6 + 1 |
+| Flashiness | 5 Pulse Metrics (pulses + reversals); 6 Flashiness; 9 Streamflow Elasticity | 13 + 1 + 2 | 3 (elasticity) |
+| Drought | 13 Streamflow Drought | 10 | 5 (thresholds) |
+| Flow Timing | 7 Flow Timing | 15 | — |
+| Precipitation Streamflow | 10 Q-P Seasonality | 2 | — |
+| Snow | 12 Snow Metrics | 14 | — |
+
+Totals: 100 annual signatures and 20 scalars; the 21st scalar,
+`ice_affected_days_total`, is a preprocessing diagnostic outside the categories.
+*Category* is the term used by the manuscript, the guidelines document, and the
+HydroShare data dictionary; *function family* names the computing function.
+
 Each signature produces **8 statistics** via `generate_stats()`:
 
 > **Per-year annual values** (July 2026): the annual series behind these statistics
@@ -652,23 +676,24 @@ five levels mirror the operational U.S. Drought Monitor classes:
 
 ## Summary Table
 
-| Category | Function | Requires Climate | Notes |
-|----------|----------|------------------|-------|
-| Flow Volumes | `calculate_flow_vols_by_year` | No | 21 metrics (5 totals + 15 percentiles + Q95_Q10) + 4 season exclusion diagnostics |
-| FDC | `analyze_fdc_trends` | No | 3 metrics (FDCall, FDC90th, FDCmid) |
-| Baseflow (Fixed) | `analyze_baseflow_indices` | No | 2 metrics |
-| Baseflow (Recession-Parameterized) | `analyze_baseflow_indices_with_parameters` | No | 2 metrics + 1 scalar |
-| Recession | `analyze_recession_parameters` | No | 7 metrics + 6 seasonality (the per-gage recession alpha scalar is counted under Baseflow (Recession-Parameterized)) |
-| Pulse Metrics | `calculate_pulse_metrics` | No | 14 metrics (8 pulse + TQmean + 5 flow reversals); negative_ann is counted under Negative Flow Days |
-| Flashiness | `analyze_flashiness_trends` | No | 1 metric |
-| Flow Timing | `analyze_flow_timing_trends` | No | 15 metrics |
-| Q-PPT Relationships | `analyze_Q_PPT_relationships` | Yes | 5 metrics + 1 diagnostic |
-| Elasticity | `calculate_streamflow_elasticity` | Yes | 3 metrics (rolling + annual + static) + 2 diagnostics |
-| Q-P Seasonality | `calculate_qp_seasonality` | Yes | 2 metrics |
-| Average Storage | `calculate_average_storage` | Yes | 1 metric |
-| Negative Flow Days | `calculate_negative_days` | No | 1 metric (negative_ann) |
-| Snow Metrics | `calculate_snow_metrics` | SWE (Daymet) | 14 metrics (July 2026; all 3 languages since Aug 2026) |
-| Streamflow Drought | `calculate_drought_metrics` | No | 10 metrics (2 measures × 5 severity levels) + 5 threshold scalars (July 2026; all 3 languages since Aug 2026) |
+| Category | Function family | Function | Requires Climate | Notes |
+|----------|-----------------|----------|------------------|-------|
+| Flow Volume | Flow Volumes | `calculate_flow_vols_by_year` | No | 21 metrics (5 totals + 15 percentiles + Q95_Q10) + 4 season exclusion diagnostics |
+| Flow Volume | Negative Flow Days | `calculate_negative_days` | No | 1 metric (negative_ann) |
+| Flow Volume | Pulse Metrics (TQmean only) | `calculate_pulse_metrics` | No | TQmean (the rest of the function's output is Flashiness) |
+| Flow Duration | FDC | `analyze_fdc_trends` | No | 3 metrics (FDCall, FDC90th, FDCmid) |
+| Storage | Baseflow (Fixed) | `analyze_baseflow_indices` | No | 2 metrics |
+| Storage | Baseflow (Recession-Parameterized) | `analyze_baseflow_indices_with_parameters` | No | 2 metrics + 1 scalar |
+| Storage | Recession | `analyze_recession_parameters` | No | 7 metrics + 6 seasonality (the per-gage recession alpha scalar is counted under Baseflow (Recession-Parameterized)) |
+| Storage | Q-PPT Relationships | `analyze_Q_PPT_relationships` | Yes | 5 metrics + 1 diagnostic |
+| Storage | Average Storage | `calculate_average_storage` | Yes | 1 metric (computed; omitted from major analyses — no ET term) |
+| Flashiness | Pulse Metrics | `calculate_pulse_metrics` | No | 13 metrics (8 pulse + 5 flow reversals); TQmean is counted under Flow Volume |
+| Flashiness | Flashiness | `analyze_flashiness_trends` | No | 1 metric |
+| Flashiness | Elasticity | `calculate_streamflow_elasticity` | Yes | 3 metrics (rolling + annual + static) + 2 diagnostics |
+| Drought | Streamflow Drought | `calculate_drought_metrics` | No | 10 metrics (2 measures × 5 severity levels) + 5 threshold scalars (July 2026; all 3 languages since Aug 2026) |
+| Flow Timing | Flow Timing | `analyze_flow_timing_trends` | No | 15 metrics |
+| Precipitation Streamflow | Q-P Seasonality | `calculate_qp_seasonality` | Yes | 2 metrics |
+| Snow | Snow Metrics | `calculate_snow_metrics` | SWE (Daymet) | 14 metrics (July 2026; all 3 languages since Aug 2026) |
 
 ---
 
@@ -762,9 +787,9 @@ From `config/signatures_config.json` → `changepoint` section:
 
 ### Signal Robustness & Known Limitations
 
-**Overall significance rate**: ~13.4% of evaluations have p < 0.05 (vs 5% expected under null). The excess is concentrated in physically interpretable categories:
+**Overall significance rate**: ~13.4% of evaluations have p < 0.05 (vs 5% expected under null). The excess is concentrated in physically interpretable function families (the April 2026 analysis grouping, finer than the eight signature categories):
 
-| Category | Sig. Rate | Notes |
+| Function family | Sig. Rate | Notes |
 |----------|-----------|-------|
 | Flow Timing | 3.7% | Below null — timing is stationary; useful calibration anchor |
 | Q-P Seasonality | 7.7% | Near null — weak signal |

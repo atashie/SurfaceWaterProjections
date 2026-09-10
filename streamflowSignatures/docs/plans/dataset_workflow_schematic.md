@@ -4,6 +4,10 @@ Workflow figure for the HISSS manuscript (§2 Methods) — from raw sources thro
 QA screening, signature extraction, and watershed aggregation to the five
 HydroShare resources' core tables. GitHub renders the diagram below natively.
 
+- **Corrected 2026-09-10**: "across 14 families" → "in 8 categories" — the signature
+  categories are the eight of the co-authors' categorization (Flow Volume, Flow Duration,
+  Storage, Flashiness, Drought, Flow Timing, Precipitation Streamflow, Snow); the 15
+  computing functions are "function families", a sub-level. PNG re-rendered.
 - **Corrected 2026-09-01** (from the draft schematic): 121 signatures
   (100 annual series + 21 scalars) across **14** families (was "~100 across 13");
   trend gate stated as ≥20 values / **≥60% of series** / ≥80% of first and last
@@ -78,7 +82,7 @@ YR --> WYS[/"Kept: clean<br/>water-year series"/]:::inter
 
 WYS --> GG{"Include gage?<br/>≥20 qualifying years ·<br/>≥60% of window qualifying"}:::filt
 GG --> XG["Excluded gages"]:::drop
-GG --> SIG["Compute 121 signatures<br/>(100 annual series + 21 scalars)<br/>across 14 families"]:::proc
+GG --> SIG["Compute 121 signatures<br/>(100 annual series + 21 scalars)<br/>in 8 categories"]:::proc
 
 DAY --> SIG
 SIG --> AN{"Area-normalized<br/>gage?"}:::filt

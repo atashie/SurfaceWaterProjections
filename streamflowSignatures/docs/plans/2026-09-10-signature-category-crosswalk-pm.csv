@@ -1,0 +1,122 @@
+function,signature,kind,manuscript_14,guidelines_module,sheet_8,dictionary_9,flags
+calculate_flow_vols_by_year,Qann,annual,Flow volumes & percentiles,3.1 Flow Volume,Flow Volume,Flow Volume,
+calculate_flow_vols_by_year,Qwin,annual,Flow volumes & percentiles,3.1 Flow Volume,Flow Volume,Flow Volume,
+calculate_flow_vols_by_year,Qspr,annual,Flow volumes & percentiles,3.1 Flow Volume,Flow Volume,Flow Volume,
+calculate_flow_vols_by_year,Qsum,annual,Flow volumes & percentiles,3.1 Flow Volume,Flow Volume,Flow Volume,
+calculate_flow_vols_by_year,Qfal,annual,Flow volumes & percentiles,3.1 Flow Volume,Flow Volume,Flow Volume,
+calculate_flow_vols_by_year,Q1,annual,Flow volumes & percentiles,3.1 Flow Volume,Flow Volume,Flow Volume,
+calculate_flow_vols_by_year,Q5,annual,Flow volumes & percentiles,3.1 Flow Volume,Flow Volume,Flow Volume,
+calculate_flow_vols_by_year,Q10,annual,Flow volumes & percentiles,3.1 Flow Volume,Flow Volume,Flow Volume,
+calculate_flow_vols_by_year,Q20,annual,Flow volumes & percentiles,3.1 Flow Volume,Flow Volume,Flow Volume,
+calculate_flow_vols_by_year,Q25,annual,Flow volumes & percentiles,3.1 Flow Volume,Flow Volume,Flow Volume,
+calculate_flow_vols_by_year,Q30,annual,Flow volumes & percentiles,3.1 Flow Volume,Flow Volume,Flow Volume,
+calculate_flow_vols_by_year,Q40,annual,Flow volumes & percentiles,3.1 Flow Volume,Flow Volume,Flow Volume,
+calculate_flow_vols_by_year,Q50,annual,Flow volumes & percentiles,3.1 Flow Volume,Flow Volume,Flow Volume,
+calculate_flow_vols_by_year,Q60,annual,Flow volumes & percentiles,3.1 Flow Volume,Flow Volume,Flow Volume,
+calculate_flow_vols_by_year,Q70,annual,Flow volumes & percentiles,3.1 Flow Volume,Flow Volume,Flow Volume,
+calculate_flow_vols_by_year,Q75,annual,Flow volumes & percentiles,3.1 Flow Volume,Flow Volume,Flow Volume,
+calculate_flow_vols_by_year,Q80,annual,Flow volumes & percentiles,3.1 Flow Volume,Flow Volume,Flow Volume,
+calculate_flow_vols_by_year,Q90,annual,Flow volumes & percentiles,3.1 Flow Volume,Flow Volume,Flow Volume,
+calculate_flow_vols_by_year,Q95,annual,Flow volumes & percentiles,3.1 Flow Volume,Flow Volume,Flow Volume,
+calculate_flow_vols_by_year,Q99,annual,Flow volumes & percentiles,3.1 Flow Volume,Flow Volume,Flow Volume,
+calculate_flow_vols_by_year,Q95_Q10,annual,Flow volumes & percentiles,3.1 Flow Volume,Flow Volume,Flow Volume,
+analyze_flashiness_trends,flashinessRB,annual,Flashiness,3.4 Flashiness,Flashiness,Storage,guidelines ≠ dictionary
+analyze_flow_timing_trends,D1_day,annual,Flow timing,3.6 Flow Timing,Flow Timing,Flow Timing,
+analyze_flow_timing_trends,D5_day,annual,Flow timing,3.6 Flow Timing,Flow Timing,Flow Timing,
+analyze_flow_timing_trends,D10_day,annual,Flow timing,3.6 Flow Timing,Flow Timing,Flow Timing,
+analyze_flow_timing_trends,D20_day,annual,Flow timing,3.6 Flow Timing,Flow Timing,Flow Timing,
+analyze_flow_timing_trends,D30_day,annual,Flow timing,3.6 Flow Timing,Flow Timing,Flow Timing,
+analyze_flow_timing_trends,D40_day,annual,Flow timing,3.6 Flow Timing,Flow Timing,Flow Timing,
+analyze_flow_timing_trends,D50_day,annual,Flow timing,3.6 Flow Timing,Flow Timing,Flow Timing,
+analyze_flow_timing_trends,D60_day,annual,Flow timing,3.6 Flow Timing,Flow Timing,Flow Timing,
+analyze_flow_timing_trends,D70_day,annual,Flow timing,3.6 Flow Timing,Flow Timing,Flow Timing,
+analyze_flow_timing_trends,D80_day,annual,Flow timing,3.6 Flow Timing,Flow Timing,Flow Timing,
+analyze_flow_timing_trends,D90_day,annual,Flow timing,3.6 Flow Timing,Flow Timing,Flow Timing,
+analyze_flow_timing_trends,D95_day,annual,Flow timing,3.6 Flow Timing,Flow Timing,Flow Timing,
+analyze_flow_timing_trends,D99_day,annual,Flow timing,3.6 Flow Timing,Flow Timing,Flow Timing,
+analyze_flow_timing_trends,D25_to_D75,annual,Flow timing,3.6 Flow Timing,Flow Timing,Flow Timing,
+analyze_flow_timing_trends,Dmax,annual,Flow timing,3.6 Flow Timing,Flow Timing,Flow Timing,
+analyze_fdc_trends,FDCall,annual,Flow duration curve,3.2 Flow Duration,Flow Duration,Flow Duration,
+analyze_fdc_trends,FDC90th,annual,Flow duration curve,3.2 Flow Duration,Flow Duration,Flow Duration,
+analyze_fdc_trends,FDCmid,annual,Flow duration curve,3.2 Flow Duration,Flow Duration,Flow Duration,
+analyze_baseflow_indices,BFI_Eckhardt,annual,Baseflow,3.3 Storage,Storage,Storage,
+analyze_baseflow_indices,BFI_LyneHollick,annual,Baseflow,3.3 Storage,Storage,Storage,
+analyze_recession_parameters,log_a_pointcloud,annual,Recession,3.3 Storage,Storage,Storage,
+analyze_recession_parameters,log_a_events,annual,Recession,3.3 Storage,Storage,Storage,
+analyze_recession_parameters,b_pointcloud,annual,Recession,3.3 Storage,Storage,Storage,
+analyze_recession_parameters,b_events,annual,Recession,3.3 Storage,Storage,Storage,
+analyze_recession_parameters,concavity,annual,Recession,3.3 Storage,Storage,Storage,
+analyze_recession_parameters,alpha_linear,annual,Recession,3.3 Storage,Storage,Storage,
+analyze_recession_parameters,n_recession_events,annual,Recession,3.3 Storage,Storage,Storage,
+analyze_recession_parameters,log_a_seasonality_amplitude_all,scalar,Recession,3.3 Storage,— (not in sheet),Per-gage scalar,dictionary: no group for scalar
+analyze_recession_parameters,log_a_seasonality_amplitude_first_half,scalar,Recession,3.3 Storage,— (not in sheet),Per-gage scalar,dictionary: no group for scalar
+analyze_recession_parameters,log_a_seasonality_amplitude_last_half,scalar,Recession,3.3 Storage,— (not in sheet),Per-gage scalar,dictionary: no group for scalar
+analyze_recession_parameters,log_a_seasonality_minimum_all,scalar,Recession,3.3 Storage,— (not in sheet),Per-gage scalar,dictionary: no group for scalar
+analyze_recession_parameters,log_a_seasonality_minimum_first_half,scalar,Recession,3.3 Storage,— (not in sheet),Per-gage scalar,dictionary: no group for scalar
+analyze_recession_parameters,log_a_seasonality_minimum_last_half,scalar,Recession,3.3 Storage,— (not in sheet),Per-gage scalar,dictionary: no group for scalar
+analyze_recession_parameters,recession_alpha_point_cloud_linear_reservoir,scalar,Baseflow,3.3 Storage,— (not in sheet),Per-gage scalar,dictionary: no group for scalar
+analyze_baseflow_indices_with_parameters,BFI_Eckhardt_param,annual,Baseflow,3.3 Storage,Storage,Storage,
+analyze_baseflow_indices_with_parameters,BFI_LyneHollick_param,annual,Baseflow,3.3 Storage,Storage,Storage,
+calculate_pulse_metrics,n_high_pulses_year,annual,Pulses & reversals,3.4 Flashiness,Flashiness,Flashiness,
+calculate_pulse_metrics,n_low_pulses_year,annual,Pulses & reversals,3.4 Flashiness,Flashiness,Flashiness,
+calculate_pulse_metrics,dur_high_pulses_year,annual,Pulses & reversals,3.4 Flashiness,Flashiness,Flashiness,
+calculate_pulse_metrics,dur_low_pulses_year,annual,Pulses & reversals,3.4 Flashiness,Flashiness,Flashiness,
+calculate_pulse_metrics,n_high_pulses_all,annual,Pulses & reversals,3.4 Flashiness,Flashiness,Flashiness,
+calculate_pulse_metrics,n_low_pulses_all,annual,Pulses & reversals,3.4 Flashiness,Flashiness,Flashiness,
+calculate_pulse_metrics,dur_high_pulses_all,annual,Pulses & reversals,3.4 Flashiness,Flashiness,Flashiness,
+calculate_pulse_metrics,dur_low_pulses_all,annual,Pulses & reversals,3.4 Flashiness,Flashiness,Flashiness,
+calculate_pulse_metrics,TQmean,annual,Pulses & reversals,3.4 Flashiness,Flow Volume,Flow Volume,guidelines ≠ sheet; guidelines ≠ dictionary
+calculate_pulse_metrics,Flow_Reversals_annual,annual,Pulses & reversals,3.4 Flashiness,Flashiness,Flashiness,
+calculate_pulse_metrics,Flow_Reversals_winter,annual,Pulses & reversals,3.4 Flashiness,Flashiness,Flashiness,
+calculate_pulse_metrics,Flow_Reversals_spring,annual,Pulses & reversals,3.4 Flashiness,Flashiness,Flashiness,
+calculate_pulse_metrics,Flow_Reversals_summer,annual,Pulses & reversals,3.4 Flashiness,Flashiness,Flashiness,
+calculate_pulse_metrics,Flow_Reversals_fall,annual,Pulses & reversals,3.4 Flashiness,Flashiness,Flashiness,
+calculate_drought_metrics,drought_duration_fixed_p2,annual,Streamflow drought,3.5 Drought,Drought,Drought,
+calculate_drought_metrics,drought_duration_fixed_p5,annual,Streamflow drought,3.5 Drought,Drought,Drought,
+calculate_drought_metrics,drought_duration_fixed_p10,annual,Streamflow drought,3.5 Drought,Drought,Drought,
+calculate_drought_metrics,drought_duration_fixed_p20,annual,Streamflow drought,3.5 Drought,Drought,Drought,
+calculate_drought_metrics,drought_duration_fixed_p30,annual,Streamflow drought,3.5 Drought,Drought,Drought,
+calculate_drought_metrics,drought_deficit_fixed_p2,annual,Streamflow drought,3.5 Drought,Drought,Drought,
+calculate_drought_metrics,drought_deficit_fixed_p5,annual,Streamflow drought,3.5 Drought,Drought,Drought,
+calculate_drought_metrics,drought_deficit_fixed_p10,annual,Streamflow drought,3.5 Drought,Drought,Drought,
+calculate_drought_metrics,drought_deficit_fixed_p20,annual,Streamflow drought,3.5 Drought,Drought,Drought,
+calculate_drought_metrics,drought_deficit_fixed_p30,annual,Streamflow drought,3.5 Drought,Drought,Drought,
+calculate_drought_metrics,drought_threshold_fixed_p2,scalar,Streamflow drought,3.5 Drought,— (not in sheet),Per-gage scalar,dictionary: no group for scalar
+calculate_drought_metrics,drought_threshold_fixed_p5,scalar,Streamflow drought,3.5 Drought,— (not in sheet),Per-gage scalar,dictionary: no group for scalar
+calculate_drought_metrics,drought_threshold_fixed_p10,scalar,Streamflow drought,3.5 Drought,— (not in sheet),Per-gage scalar,dictionary: no group for scalar
+calculate_drought_metrics,drought_threshold_fixed_p20,scalar,Streamflow drought,3.5 Drought,— (not in sheet),Per-gage scalar,dictionary: no group for scalar
+calculate_drought_metrics,drought_threshold_fixed_p30,scalar,Streamflow drought,3.5 Drought,— (not in sheet),Per-gage scalar,dictionary: no group for scalar
+calculate_negative_days,negative_ann,annual,Negative flow days,3.1 Flow Volume,Flow Volume,Flow Volume,
+analyze_Q_PPT_relationships,annual_runoff_ratio,annual,Runoff ratios,3.3 Storage,Storage,Storage,
+analyze_Q_PPT_relationships,winter_runoff_ratio,annual,Runoff ratios,3.3 Storage,Storage,Storage,
+analyze_Q_PPT_relationships,spring_runoff_ratio,annual,Runoff ratios,3.3 Storage,Storage,Storage,
+analyze_Q_PPT_relationships,summer_runoff_ratio,annual,Runoff ratios,3.3 Storage,Storage,Storage,
+analyze_Q_PPT_relationships,fall_runoff_ratio,annual,Runoff ratios,3.3 Storage,Storage,Storage,
+analyze_Q_PPT_relationships,runoff_ratio_high_count,scalar,Runoff ratios,3.3 Storage,— (not in sheet),Per-gage scalar,dictionary: no group for scalar
+calculate_streamflow_elasticity,elasticity_rolling,annual,Elasticity,3.4 Flashiness,Flashiness,Flashiness,
+calculate_streamflow_elasticity,elasticity_annual,annual,Elasticity,3.4 Flashiness,Flashiness,Flashiness,
+calculate_streamflow_elasticity,elasticity_static,scalar,Elasticity,3.4 Flashiness,— (not in sheet),Per-gage scalar,dictionary: no group for scalar
+calculate_streamflow_elasticity,elasticity_years_total,scalar,Elasticity,3.4 Flashiness,— (not in sheet),Per-gage scalar,dictionary: no group for scalar
+calculate_streamflow_elasticity,elasticity_years_low_ppt,scalar,Elasticity,3.4 Flashiness,— (not in sheet),Per-gage scalar,dictionary: no group for scalar
+calculate_qp_seasonality,qp_slope_sd,annual,Q-P seasonality,3.7 Precipitation Streamflow,Precipitation Streamflow,Precipitation Streamflow,
+calculate_qp_seasonality,qp_bimodality,annual,Q-P seasonality,3.7 Precipitation Streamflow,Precipitation Streamflow,Precipitation Streamflow,
+calculate_average_storage,avg_storage,annual,Storage,— (function absent from the doc),Storage,Storage,no guidelines module
+calculate_snow_metrics,swe_max,annual,Snow,3.8 Snow,Snow,Snow,
+calculate_snow_metrics,swe_max_dowy,annual,Snow,3.8 Snow,Snow,Snow Timing,guidelines ≠ dictionary
+calculate_snow_metrics,snow_cover_days,annual,Snow,3.8 Snow,Snow,Snow,
+calculate_snow_metrics,snow_on_dowy,annual,Snow,3.8 Snow,Snow,Snow Timing,guidelines ≠ dictionary
+calculate_snow_metrics,snow_off_dowy,annual,Snow,3.8 Snow,Snow,Snow Timing,guidelines ≠ dictionary
+calculate_snow_metrics,melt_season_days,annual,Snow,3.8 Snow,Snow,Snow Timing,guidelines ≠ dictionary
+calculate_snow_metrics,melt_rate,annual,Snow,3.8 Snow,Snow,Snow,
+calculate_snow_metrics,ssm,annual,Snow,3.8 Snow,Snow,Snow Timing,guidelines ≠ dictionary
+calculate_snow_metrics,swe_apr1,annual,Snow,3.8 Snow,Snow,Snow,
+calculate_snow_metrics,melt_before_peak,annual,Snow,3.8 Snow,Snow,Snow,
+calculate_snow_metrics,melt_before_peak_pct,annual,Snow,3.8 Snow,Snow,Snow,
+calculate_snow_metrics,melt_before_peak_to_max_swe,annual,Snow,3.8 Snow,Snow,Snow,
+calculate_snow_metrics,melt_com_dowy,annual,Snow,3.8 Snow,Snow,Snow Timing,guidelines ≠ dictionary
+calculate_snow_metrics,swe_max_to_ppt,annual,Snow,3.8 Snow,Snow,Snow,
+calculate_all_signatures,season_excluded_years_winter,scalar,Flow volumes & percentiles,3.1 Flow Volume,— (not in sheet),Per-gage scalar,dictionary: no group for scalar
+calculate_all_signatures,season_excluded_years_spring,scalar,Flow volumes & percentiles,3.1 Flow Volume,— (not in sheet),Per-gage scalar,dictionary: no group for scalar
+calculate_all_signatures,season_excluded_years_summer,scalar,Flow volumes & percentiles,3.1 Flow Volume,— (not in sheet),Per-gage scalar,dictionary: no group for scalar
+calculate_all_signatures,season_excluded_years_fall,scalar,Flow volumes & percentiles,3.1 Flow Volume,— (not in sheet),Per-gage scalar,dictionary: no group for scalar
+run_julia_benchmark.jl,ice_affected_days_total,scalar,(preprocessing diagnostic),— (Part 1.2 mentions the count; no module),— (not in sheet),Per-gage scalar,no guidelines module; dictionary: no group for scalar

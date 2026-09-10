@@ -189,7 +189,7 @@ in CHANGELOG → Known Issues; the HydroShare READMEs and dictionary row carry t
 ## References
 
 - **@docs/DEVELOPMENT.md** - Architecture, file structure, common tasks, workflows
-- **@docs/SIGNATURES.md** - Detailed signature documentation (14 categories)
+- **@docs/SIGNATURES.md** - Detailed signature documentation (8 signature categories, sections by function family; canonical mapping `docs/signature_categories.csv`)
 - **@CHANGELOG.md** - Current work, roadmap — kept SHORT: `[Unreleased]` live items, the current month in full, condensed summaries of the two months before it. Older full-text entries: `changelog-old.md` (NOT auto-loaded — read it only when a pointer sends you there); Dec 2025 – Apr 2026: `docs/CHANGELOG_ARCHIVE.md`
 - **@docs/SIGNATURE_GUIDELINES.md** - Collaborative guidelines from hydrology colleagues (auto-synced)
 - **@docs/MANUSCRIPT_DRAFT.md** - HISSS manuscript draft snapshot (auto-synced; reconciliation review)

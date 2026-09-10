@@ -1,18 +1,14 @@
 # HISSS Manuscript Draft (auto-synced snapshot)
 
 > **Auto-synced from**: [Google Doc](https://docs.google.com/document/d/e/2PACX-1vS7j4FRp7SEwlXoBUVA8NA7cj_I0XzyS0u58r3bl8SOz4BfpZPrdPJge4RMcFocnX8Gnllkc1M-CTJ3/pub)
-> **Last synced**: 2026-09-04, second sync (user edits since the morning sync: two
-> typo fixes — a missing space after "diagnostics." in the §2 preamble and "MOIDS" →
-> "MODIS" in §2.1.4; no methods change; the §5 "How to join with other datasets" item
-> is still a one-line stub, draft text delivered in
-> `docs/plans/2026-09-04-dataset-join-guidance.md` §4). This rebuild also removed
-> ~170 lines of Google's page JavaScript that the morning rebuild had appended below
-> the body. Morning sync note: co-author revision since 2026-09-01 — most of the
-> 2026-09-01 correction blocks applied — 121 signatures / 14 categories incl. drought,
-> agency-published drainage areas as the normalization source, Daymet coverage counts,
-> HISSS repo link, duplicate BFI paragraph removed, "eight" MODIS schemes, new Usage
-> Notes 5.1.1 (un-normalized gages) and 5.1.2 (record-dependent signatures); see the
-> Reconciliation Log entries of the same date
+> **Last synced**: 2026-09-10. Changes since 2026-09-04 (second sync): §3 Resources 1–2 now
+> says "21 signatures and related outputs that do not carry statistics" (was "21 per-gage
+> scalar diagnostics"); **§5.1.2 is now "How to join HISSS with other datasets"** — the
+> join paragraph from `docs/plans/2026-09-04-dataset-join-guidance.md` §4 landed (with
+> co-author edits), and the record-dependent-signatures note moved to §5.1.3, reworded;
+> the Acknowledgements double period is fixed ("Claude Code 0.145.0" still stands); one new
+> typo in §2.1.1 ("7, 964"). No methods claim changed. See CHANGELOG → Manuscript
+> Reconciliation Log (2026-09-10) for the relay items.
 >
 > This is a read-only snapshot of the collaborative manuscript draft used for
 > change detection and reconciliation review (see CLAUDE.md → Session-Start
@@ -104,7 +100,7 @@ We assembled daily mean streamflow records for 16,994 gages across the United St
 
 2.1.1 Watershed Boundaries
 
-To define the spatial extents of gaged watersheds in this work, we combined official agency basin polygons from the United States and Canada. For the US, we used watershed polygons from the USGS GAGES-II dataset (Falcone, 2011) and merged the individual shapefiles for reference and non-reference gages across all US regions into a single US-wide shapefile (covering 100% of US gages). For Canada, we used the Water Survey of Canada’s Hydrometric Network Basin Polygons dataset (Environment and Climate Change Canada, 2016) and merged them into a single Canada-wide layer (covering 98.3% of Canadian gages). Gages lacking an official polygon were delineated from the HydroBASINS level-12 drainage network (Lehner and Grill, 2013; detailed methods below) by aggregating all basins upstream of the gage’s outlet. The source of the watershed geometry is recorded for every watershed. We excluded 54 basins that exceeded 100,000 km2, then transformed all remaining 7,964 watershed boundaries into a common projection and merged them into one full-domain shapefile. We used all of these boundaries to aggregate remotely sensed LULC and LAI data, and a subset to aggregate gridded climate data only where we had sufficient streamflow data coverage (see Section 2.1.2). We leveraged HydroATLAS (Linke et al., 2019) to define static basin attributes within the data product domain.
+To define the spatial extents of gaged watersheds in this work, we combined official agency basin polygons from the United States and Canada. For the US, we used watershed polygons from the USGS GAGES-II dataset (Falcone, 2011) and merged the individual shapefiles for reference and non-reference gages across all US regions into a single US-wide shapefile (covering 100% of US gages). For Canada, we used the Water Survey of Canada’s Hydrometric Network Basin Polygons dataset (Environment and Climate Change Canada, 2016) and merged them into a single Canada-wide layer (covering 98.3% of Canadian gages). Gages lacking an official polygon were delineated from the HydroBASINS level-12 drainage network (Lehner and Grill, 2013; detailed methods below) by aggregating all basins upstream of the gage’s outlet. The source of the watershed geometry is recorded for every watershed. We excluded 54 basins that exceeded 100,000 km2, then transformed all remaining 7, 964 watershed boundaries into a common projection and merged them into one full-domain shapefile. We used all of these boundaries to aggregate remotely sensed LULC and LAI data, and a subset to aggregate gridded climate data only where we had sufficient streamflow data coverage (see Section 2.1.2). We leveraged HydroATLAS (Linke et al., 2019) to define static basin attributes within the data product domain.
 
 2.1.2 Streamflow data
 
@@ -140,7 +136,7 @@ The HISSS dataset is published in HydroShare, the repository for water data oper
 
 Table [x]: hisss_data_resources_table
 
-Resources 1 and 2 (streamflow signatures). These parallel resources implement the two analysis windows described in Section 2.2 (water years 1993-2025 and 1980-2025); gages qualify independently under each window’s completeness criteria, so neither product is a subset of the other. Each resource contains: (i) a signature summary table (hiss_signatures_wy{window}.csv) with one row per gage and 1,653 columns comprising gage metadata, the 100 annually resolved signatures x 16 statistics each, 21 per-gage scalar diagnostics, and 12 automated quality-assurance flags; (ii) a long-format annual-values table (Parquet) holding the yearly value behind every signature-statistic pair, with columns gage_id, signature, water_year, and value (18,898,406 and 24,366,487 rows for the two windows, respectively); (iii) a self-contained interactive HTML explorer that maps every signature-statistic combination and plots per-gage annual series with fitted checksums, configuration, and software versions) and validation reports.
+Resources 1 and 2 (streamflow signatures). These parallel resources implement the two analysis windows described in Section 2.2 (water years 1993-2025 and 1980-2025); gages qualify independently under each window’s completeness criteria, so neither product is a subset of the other. Each resource contains: (i) a signature summary table (hiss_signatures_wy{window}.csv) with one row per gage and 1,653 columns comprising gage metadata, the 100 annually resolved signatures x 16 statistics each, 21 signatures and related outputs that do not carry statistics, and 12 automated quality-assurance flags; (ii) a long-format annual-values table (Parquet) holding the yearly value behind every signature-statistic pair, with columns gage_id, signature, water_year, and value (18,898,406 and 24,366,487 rows for the two windows, respectively); (iii) a self-contained interactive HTML explorer that maps every signature-statistic combination and plots per-gage annual series with fitted checksums, configuration, and software versions) and validation reports.
 
 Resource 3 (harmonized input data). Daily discharge for all 8,014 processed gages (111,624,189 records; 1980 through 2025) compiled from the USGS National Water Information System via dataRetrieval (DeCicco et al. 2026) and the Water Survey of Canada HYDAT database via tidyhydat (Albers et al. 2026; tbd: ECC hydat citation), expressed in mm d-1 (see area_normalized below). The accompanying gage metadata table (16,994 candidate gages) records station coordinates, published drainage areas, processing status, and human-interference indicators drawn from GAGES-II attributes (Falcone 2011, 2017) and Reference Hydrometric Basin Network (RHBN) and regulation status via HYDAT. Daily Basin-averaged Daymet Version 4 R1 (Thornton et al. 2022) for the variables precipitation, temperature, snow water equivalent (SWE), vapor pressure, and shortwave radiation is provided for 6,087 basins (97,757,220 records, calendar years 1980-2023) as produced by the area-weighted aggregation described in Section 2.1.3.
 
@@ -162,15 +158,17 @@ Rough draft of figure summarizing sites and signature categories, needs to be cl
 
 73 of the 8,014 processed gages have no agency-published drainage area (32 and 28 of them qualify for the WY 1993–2025 and WY 1980–2025 products, respectively). Most are irrigation or diversion canals, dam and powerhouse outflows, or channel splits of large rivers, where a contributing area is undefined or unpublished. These gages are retained with discharge in native m3 s-1 and flagged area_normalized = FALSE. Their unit-carrying signatures (flow volumes, flow percentiles, recession log(a), drought deficits) are not comparable with the mm d-1 values at other gages, and their precipitation-dependent signatures (runoff ratios, elasticity, Q-P seasonality, storage) are structurally NA. Users should filter on area_normalized == TRUE before any cross-gage comparison of unit-carrying signatures.
 
-How to join with other datasets (CAMELS-Chem etc.)
+5.1.2 How to join HISSS with other datasets
 
-5.1.2 Record-dependent signatures
+Every HISSS table is keyed by the agency station identifier named “gage_id” (USGS site number, e.g. 0103500; HYDAT station number, e.g. 01AD002). This station identifier or gage_id may be read as a character string and joined on the leading-zero-stripped form on both sides (most US site numbers begin with a zero that numeric parsing silently ignores (see resource READMEs for details). Any dataset keyed to the same agency identifiers then joins directly. Datasets that are not gage-keyed join spatially through the watershed polygons of Resource 4: gridded products such as the Daymet-derived VPD of Corak et al. (2025), which shares Daymet's 1 km grid and 365-day calendar, can be aggregated with the area-weighted workflow used for Daymet (Sect. 2.1.3), and point records such as MacroSheds sites (Vlah et al. 2023) can be located within the nested polygons or matched to the nearest gage by coordinates. HydroATLAS-based products join on the HydroBASINS level-12 outlet identifier (Downstream_HB_ID) in the Resource 4 attribute table. When combining data, aggregate partner records to the water year (October–September, labeled by the ending year); re-normalize fluxes to a common drainage area, since HISSS reports both the agency-published area used for normalization (basin_area) and the polygon area (geom_area_km2); and pair record-dependent signatures (Sect. 5.1.3) with the product whose window matches the partner record.
 
-Signatures whose definition uses thresholds or means from the full analysis window — the period-of-record (*_all) pulse metrics, elasticity, the recession-parameterized baseflow indices, and all drought metrics — are valid within a product but must not be compared between the WY 1993–2025 and WY 1980–2025 products, nor re-derived from the annual values over a different window.
+5.1.3 Record-dependent signatures
+
+Hydroclimate signatures whose definition uses thresholds or means from the full analysis window are valid within the product for that time window and should not be compared against the WY 1993–2025 and WY 1980–2025 products, nor re-derived from the annual values over a different window. The specific signatures include the period-of-record (*_all) pulse metrics, elasticity, the recession-parameterized baseflow indices, and all drought metrics.
 
 Acknowledgements
 
-AI-assisted coding tools (Claude Code 0.145.0, Anthropic) were employed to generate code used in data ingestion and processing, hydrological signature extraction, cross-language validation and benchmarking, and interactive visualization.. All code was reviewed, tested, and validated by the authors to ensure correctness and reproducibility. Generative AI tools (Claude Code 0.145.0, Anthropic) were used to support data analysis and visualization. These tools were applied under the supervision of the authors, and all outputs were reviewed and validated against established scientific methods to ensure reproducibility and transparency.
+AI-assisted coding tools (Claude Code 0.145.0, Anthropic) were employed to generate code used in data ingestion and processing, hydrological signature extraction, cross-language validation and benchmarking, and interactive visualization. All code was reviewed, tested, and validated by the authors to ensure correctness and reproducibility. Generative AI tools (Claude Code 0.145.0, Anthropic) were used to support data analysis and visualization. These tools were applied under the supervision of the authors, and all outputs were reviewed and validated against established scientific methods to ensure reproducibility and transparency.
 
 Disclaimers
 

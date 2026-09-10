@@ -10,12 +10,24 @@ This skill assists scientists working with hydrological signature extraction fro
 
 Streamflow signatures are quantitative metrics that characterize watershed hydrology. Each signature captures a different aspect of streamflow behavior:
 
-- **Flow Volumes**: How much water flows annually and seasonally
-- **Baseflow**: Groundwater contribution to streamflow
-- **Recession**: How quickly flow decreases after precipitation
-- **Flashiness**: How rapidly flow rises and falls
-- **Timing**: When during the year flow occurs
-- **Elasticity**: How streamflow responds to precipitation changes
+The 121 outputs (100 annual signatures + 21 per-gage scalars) fall into **eight
+signature categories** (adopted 2026-09-10 from the co-authors' categorization;
+canonical mapping `docs/signature_categories.csv`):
+
+- **Flow Volume**: annual/seasonal totals, flow percentiles, TQmean, negative-flow days
+- **Flow Duration**: flow-duration-curve slopes (FDCall, FDC90th, FDCmid)
+- **Storage**: baseflow indices, recession parameters, runoff ratios, avg_storage
+- **Flashiness**: high/low pulses, flow reversals, the Richards-Baker index, elasticity
+- **Drought**: duration and deficit at five fixed severity levels (+ threshold scalars)
+- **Flow Timing**: day of water year at cumulative-flow percentiles, Dmax
+- **Precipitation Streamflow**: Q-P seasonality (qp_slope_sd, qp_bimodality)
+- **Snow**: 14 SWE-derived metrics
+
+Terminology: *category* = one of the eight (the term used by the manuscript, the
+guidelines document, and the HydroShare dictionary); *function family* = the function
+that computes a metric (the 15 functions called by `calculate_all_signatures()`, the
+numbered sections of `docs/SIGNATURES.md`). `ice_affected_days_total` is a
+preprocessing diagnostic outside the categories.
 
 ## The 8-Statistic Rule
 
@@ -135,6 +147,11 @@ threshold values (mm/day). Interpretation keys:
   Intermittent gages legitimately fall short of it.
 
 ### The Two Standard Output Products (July 2026; #1 re-promoted Aug 2026)
+
+- **Canadian gages have no WY 2025 in either product.** The HYDAT release used
+  (2025-10-14, current at the February 2026 retrieval) carries Canadian data only
+  through 2024-12-31, so Canadian `end_water_year` ≤ 2024 (most end in WY 2023);
+  USGS gages run to WY 2025. See docs/DATA_SOURCES.md → HYDAT.
 
 Two production windows are the project's standard products (both @ 60% qualifying
 fraction, 20-year floor, one self-contained folder each):

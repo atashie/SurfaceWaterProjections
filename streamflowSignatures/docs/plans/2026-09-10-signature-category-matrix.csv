@@ -1,0 +1,122 @@
+function_order,function,module,signature_order,signature,kind,family,guidelines_module,colleague_sheet,staged_categories,hydroshare_dict,dashboard,explorer,compare
+1,calculate_flow_vols_by_year,flow_volumes.jl,1,Qann,annual,Flow volumes & percentiles,3.1,Flow Volume,Flow Volume,Flow Volume,Flow Volumes,Flow volumes,Flow Volumes
+1,calculate_flow_vols_by_year,flow_volumes.jl,2,Qwin,annual,Flow volumes & percentiles,3.1,Flow Volume,Flow Volume,Flow Volume,Flow Volumes,Flow volumes,Flow Volumes
+1,calculate_flow_vols_by_year,flow_volumes.jl,3,Qspr,annual,Flow volumes & percentiles,3.1,Flow Volume,Flow Volume,Flow Volume,Flow Volumes,Flow volumes,Flow Volumes
+1,calculate_flow_vols_by_year,flow_volumes.jl,4,Qsum,annual,Flow volumes & percentiles,3.1,Flow Volume,Flow Volume,Flow Volume,Flow Volumes,Flow volumes,Flow Volumes
+1,calculate_flow_vols_by_year,flow_volumes.jl,5,Qfal,annual,Flow volumes & percentiles,3.1,Flow Volume,Flow Volume,Flow Volume,Flow Volumes,Flow volumes,Flow Volumes
+1,calculate_flow_vols_by_year,flow_volumes.jl,6,Q1,annual,Flow volumes & percentiles,3.1,Flow Volume,Flow Volume,Flow Volume,Flow Percentiles,Flow percentiles,Flow Percentiles
+1,calculate_flow_vols_by_year,flow_volumes.jl,7,Q5,annual,Flow volumes & percentiles,3.1,Flow Volume,Flow Volume,Flow Volume,Flow Percentiles,Flow percentiles,Flow Percentiles
+1,calculate_flow_vols_by_year,flow_volumes.jl,8,Q10,annual,Flow volumes & percentiles,3.1,Flow Volume,Flow Volume,Flow Volume,Flow Percentiles,Flow percentiles,Flow Percentiles
+1,calculate_flow_vols_by_year,flow_volumes.jl,9,Q20,annual,Flow volumes & percentiles,3.1,Flow Volume,Flow Volume,Flow Volume,Flow Percentiles,Flow percentiles,Flow Percentiles
+1,calculate_flow_vols_by_year,flow_volumes.jl,10,Q25,annual,Flow volumes & percentiles,3.1,Flow Volume,Flow Volume,Flow Volume,Flow Percentiles,Flow percentiles,Flow Percentiles
+1,calculate_flow_vols_by_year,flow_volumes.jl,11,Q30,annual,Flow volumes & percentiles,3.1,Flow Volume,Flow Volume,Flow Volume,Flow Percentiles,Flow percentiles,Flow Percentiles
+1,calculate_flow_vols_by_year,flow_volumes.jl,12,Q40,annual,Flow volumes & percentiles,3.1,Flow Volume,Flow Volume,Flow Volume,Flow Percentiles,Flow percentiles,Flow Percentiles
+1,calculate_flow_vols_by_year,flow_volumes.jl,13,Q50,annual,Flow volumes & percentiles,3.1,Flow Volume,Flow Volume,Flow Volume,Flow Percentiles,Flow percentiles,Flow Percentiles
+1,calculate_flow_vols_by_year,flow_volumes.jl,14,Q60,annual,Flow volumes & percentiles,3.1,Flow Volume,Flow Volume,Flow Volume,Flow Percentiles,Flow percentiles,Flow Percentiles
+1,calculate_flow_vols_by_year,flow_volumes.jl,15,Q70,annual,Flow volumes & percentiles,3.1,Flow Volume,Flow Volume,Flow Volume,Flow Percentiles,Flow percentiles,Flow Percentiles
+1,calculate_flow_vols_by_year,flow_volumes.jl,16,Q75,annual,Flow volumes & percentiles,3.1,Flow Volume,Flow Volume,Flow Volume,Flow Percentiles,Flow percentiles,Flow Percentiles
+1,calculate_flow_vols_by_year,flow_volumes.jl,17,Q80,annual,Flow volumes & percentiles,3.1,Flow Volume,Flow Volume,Flow Volume,Flow Percentiles,Flow percentiles,Flow Percentiles
+1,calculate_flow_vols_by_year,flow_volumes.jl,18,Q90,annual,Flow volumes & percentiles,3.1,Flow Volume,Flow Volume,Flow Volume,Flow Percentiles,Flow percentiles,Flow Percentiles
+1,calculate_flow_vols_by_year,flow_volumes.jl,19,Q95,annual,Flow volumes & percentiles,3.1,Flow Volume,Flow Volume,Flow Volume,Flow Percentiles,Flow percentiles,Flow Percentiles
+1,calculate_flow_vols_by_year,flow_volumes.jl,20,Q99,annual,Flow volumes & percentiles,3.1,Flow Volume,Flow Volume,Flow Volume,Flow Percentiles,Flow percentiles,Flow Percentiles
+1,calculate_flow_vols_by_year,flow_volumes.jl,21,Q95_Q10,annual,Flow volumes & percentiles,3.1,Flow Volume,Flow Volume,Flow Volume,Flow Percentiles,Flow percentiles,Flow Percentiles
+2,analyze_flashiness_trends,flashiness.jl,1,flashinessRB,annual,Flashiness,3.6,Flashiness,Storage,Storage,Flashiness,Flashiness,Flashiness
+3,analyze_flow_timing_trends,timing.jl,1,D1_day,annual,Flow timing,3.7,Flow Timing,Flow Timing,Flow Timing,Flow Timing,Flow timing,Flow Timing
+3,analyze_flow_timing_trends,timing.jl,2,D5_day,annual,Flow timing,3.7,Flow Timing,Flow Timing,Flow Timing,Flow Timing,Flow timing,Flow Timing
+3,analyze_flow_timing_trends,timing.jl,3,D10_day,annual,Flow timing,3.7,Flow Timing,Flow Timing,Flow Timing,Flow Timing,Flow timing,Flow Timing
+3,analyze_flow_timing_trends,timing.jl,4,D20_day,annual,Flow timing,3.7,Flow Timing,Flow Timing,Flow Timing,Flow Timing,Flow timing,Flow Timing
+3,analyze_flow_timing_trends,timing.jl,5,D30_day,annual,Flow timing,3.7,Flow Timing,Flow Timing,Flow Timing,Flow Timing,Flow timing,Flow Timing
+3,analyze_flow_timing_trends,timing.jl,6,D40_day,annual,Flow timing,3.7,Flow Timing,Flow Timing,Flow Timing,Flow Timing,Flow timing,Flow Timing
+3,analyze_flow_timing_trends,timing.jl,7,D50_day,annual,Flow timing,3.7,Flow Timing,Flow Timing,Flow Timing,Flow Timing,Flow timing,Flow Timing
+3,analyze_flow_timing_trends,timing.jl,8,D60_day,annual,Flow timing,3.7,Flow Timing,Flow Timing,Flow Timing,Flow Timing,Flow timing,Flow Timing
+3,analyze_flow_timing_trends,timing.jl,9,D70_day,annual,Flow timing,3.7,Flow Timing,Flow Timing,Flow Timing,Flow Timing,Flow timing,Flow Timing
+3,analyze_flow_timing_trends,timing.jl,10,D80_day,annual,Flow timing,3.7,Flow Timing,Flow Timing,Flow Timing,Flow Timing,Flow timing,Flow Timing
+3,analyze_flow_timing_trends,timing.jl,11,D90_day,annual,Flow timing,3.7,Flow Timing,Flow Timing,Flow Timing,Flow Timing,Flow timing,Flow Timing
+3,analyze_flow_timing_trends,timing.jl,12,D95_day,annual,Flow timing,3.7,Flow Timing,Flow Timing,Flow Timing,Flow Timing,Flow timing,Flow Timing
+3,analyze_flow_timing_trends,timing.jl,13,D99_day,annual,Flow timing,3.7,Flow Timing,Flow Timing,Flow Timing,Flow Timing,Flow timing,Flow Timing
+3,analyze_flow_timing_trends,timing.jl,14,D25_to_D75,annual,Flow timing,3.7,Flow Timing,Flow Timing,Flow Timing,Flow Timing,Flow timing,Flow Timing
+3,analyze_flow_timing_trends,timing.jl,15,Dmax,annual,Flow timing,3.7,Flow Timing,Flow Timing,Flow Timing,Flow Timing,Flow timing,Flow Timing
+4,analyze_fdc_trends,fdc.jl,1,FDCall,annual,Flow duration curve,3.2,Flow Duration,Flow Duration,Flow Duration,FDC,Flow duration curve,FDC
+4,analyze_fdc_trends,fdc.jl,2,FDC90th,annual,Flow duration curve,3.2,Flow Duration,Flow Duration,Flow Duration,FDC,Flow duration curve,FDC
+4,analyze_fdc_trends,fdc.jl,3,FDCmid,annual,Flow duration curve,3.2,Flow Duration,Flow Duration,Flow Duration,FDC,Flow duration curve,FDC
+5,analyze_baseflow_indices,baseflow.jl,1,BFI_Eckhardt,annual,Baseflow,3.3,Storage,Storage,Storage,Baseflow,Baseflow,Baseflow
+5,analyze_baseflow_indices,baseflow.jl,2,BFI_LyneHollick,annual,Baseflow,3.3,Storage,Storage,Storage,Baseflow,Baseflow,Baseflow
+6,analyze_recession_parameters,recession.jl,1,log_a_pointcloud,annual,Recession,3.4,Storage,Storage,Storage,Recession,Recession,Recession
+6,analyze_recession_parameters,recession.jl,2,log_a_events,annual,Recession,3.4,Storage,Storage,Storage,Recession,Recession,Recession
+6,analyze_recession_parameters,recession.jl,3,b_pointcloud,annual,Recession,3.4,Storage,Storage,Storage,Recession,Recession,Recession
+6,analyze_recession_parameters,recession.jl,4,b_events,annual,Recession,3.4,Storage,Storage,Storage,Recession,Recession,Recession
+6,analyze_recession_parameters,recession.jl,5,concavity,annual,Recession,3.4,Storage,Storage,Storage,Recession,Recession,Recession
+6,analyze_recession_parameters,recession.jl,6,alpha_linear,annual,Recession,3.4,Storage,Storage,Storage,Recession,Recession,Recession
+6,analyze_recession_parameters,recession.jl,7,n_recession_events,annual,Recession,3.4,Storage,Storage,Storage,Recession,Recession,Recession
+6,analyze_recession_parameters,recession.jl,8,log_a_seasonality_amplitude_all,scalar,Recession,3.4,—,—,Per-gage scalar,—,Recession,Recession
+6,analyze_recession_parameters,recession.jl,9,log_a_seasonality_amplitude_first_half,scalar,Recession,3.4,—,—,Per-gage scalar,—,Recession,Recession
+6,analyze_recession_parameters,recession.jl,10,log_a_seasonality_amplitude_last_half,scalar,Recession,3.4,—,—,Per-gage scalar,—,Recession,Recession
+6,analyze_recession_parameters,recession.jl,11,log_a_seasonality_minimum_all,scalar,Recession,3.4,—,—,Per-gage scalar,—,Recession,Recession
+6,analyze_recession_parameters,recession.jl,12,log_a_seasonality_minimum_first_half,scalar,Recession,3.4,—,—,Per-gage scalar,—,Recession,Recession
+6,analyze_recession_parameters,recession.jl,13,log_a_seasonality_minimum_last_half,scalar,Recession,3.4,—,—,Per-gage scalar,—,Recession,Recession
+6,analyze_recession_parameters,recession.jl,14,recession_alpha_point_cloud_linear_reservoir,scalar,Baseflow,3.3,—,—,Per-gage scalar,—,Other,Recession
+7,analyze_baseflow_indices_with_parameters,baseflow.jl,1,BFI_Eckhardt_param,annual,Baseflow,3.3,Storage,Storage,Storage,Baseflow,Baseflow,Baseflow
+7,analyze_baseflow_indices_with_parameters,baseflow.jl,2,BFI_LyneHollick_param,annual,Baseflow,3.3,Storage,Storage,Storage,Baseflow,Baseflow,Baseflow
+8,calculate_pulse_metrics,pulses.jl,1,n_high_pulses_year,annual,Pulses & reversals,3.5,Flashiness,Flashiness,Flashiness,Pulses,Pulses,Pulse Metrics
+8,calculate_pulse_metrics,pulses.jl,2,n_low_pulses_year,annual,Pulses & reversals,3.5,Flashiness,Flashiness,Flashiness,Pulses,Pulses,Pulse Metrics
+8,calculate_pulse_metrics,pulses.jl,3,dur_high_pulses_year,annual,Pulses & reversals,3.5,Flashiness,Flashiness,Flashiness,Pulses,Pulses,Pulse Metrics
+8,calculate_pulse_metrics,pulses.jl,4,dur_low_pulses_year,annual,Pulses & reversals,3.5,Flashiness,Flashiness,Flashiness,Pulses,Pulses,Pulse Metrics
+8,calculate_pulse_metrics,pulses.jl,5,n_high_pulses_all,annual,Pulses & reversals,3.5,Flashiness,Flashiness,Flashiness,Pulses,Pulses,Pulse Metrics
+8,calculate_pulse_metrics,pulses.jl,6,n_low_pulses_all,annual,Pulses & reversals,3.5,Flashiness,Flashiness,Flashiness,Pulses,Pulses,Pulse Metrics
+8,calculate_pulse_metrics,pulses.jl,7,dur_high_pulses_all,annual,Pulses & reversals,3.5,Flashiness,Flashiness,Flashiness,Pulses,Pulses,Pulse Metrics
+8,calculate_pulse_metrics,pulses.jl,8,dur_low_pulses_all,annual,Pulses & reversals,3.5,Flashiness,Flashiness,Flashiness,Pulses,Pulses,Pulse Metrics
+8,calculate_pulse_metrics,pulses.jl,9,TQmean,annual,Pulses & reversals,3.5,Flow Volume,Flow Volume,Flow Volume,Pulses,Pulses,Pulse Metrics
+8,calculate_pulse_metrics,pulses.jl,10,Flow_Reversals_annual,annual,Pulses & reversals,3.5,Flashiness,Flashiness,Flashiness,Pulses,Pulses,Pulse Metrics
+8,calculate_pulse_metrics,pulses.jl,11,Flow_Reversals_winter,annual,Pulses & reversals,3.5,Flashiness,Flashiness,Flashiness,Pulses,Pulses,Pulse Metrics
+8,calculate_pulse_metrics,pulses.jl,12,Flow_Reversals_spring,annual,Pulses & reversals,3.5,Flashiness,Flashiness,Flashiness,Pulses,Pulses,Pulse Metrics
+8,calculate_pulse_metrics,pulses.jl,13,Flow_Reversals_summer,annual,Pulses & reversals,3.5,Flashiness,Flashiness,Flashiness,Pulses,Pulses,Pulse Metrics
+8,calculate_pulse_metrics,pulses.jl,14,Flow_Reversals_fall,annual,Pulses & reversals,3.5,Flashiness,Flashiness,Flashiness,Pulses,Pulses,Pulse Metrics
+9,calculate_drought_metrics,drought.jl,1,drought_duration_fixed_p2,annual,Streamflow drought,3.13,Drought,Drought,Drought,Streamflow Drought,Streamflow drought,Streamflow Drought
+9,calculate_drought_metrics,drought.jl,2,drought_duration_fixed_p5,annual,Streamflow drought,3.13,Drought,Drought,Drought,Streamflow Drought,Streamflow drought,Streamflow Drought
+9,calculate_drought_metrics,drought.jl,3,drought_duration_fixed_p10,annual,Streamflow drought,3.13,Drought,Drought,Drought,Streamflow Drought,Streamflow drought,Streamflow Drought
+9,calculate_drought_metrics,drought.jl,4,drought_duration_fixed_p20,annual,Streamflow drought,3.13,Drought,Drought,Drought,Streamflow Drought,Streamflow drought,Streamflow Drought
+9,calculate_drought_metrics,drought.jl,5,drought_duration_fixed_p30,annual,Streamflow drought,3.13,Drought,Drought,Drought,Streamflow Drought,Streamflow drought,Streamflow Drought
+9,calculate_drought_metrics,drought.jl,6,drought_deficit_fixed_p2,annual,Streamflow drought,3.13,Drought,Drought,Drought,Streamflow Drought,Streamflow drought,Streamflow Drought
+9,calculate_drought_metrics,drought.jl,7,drought_deficit_fixed_p5,annual,Streamflow drought,3.13,Drought,Drought,Drought,Streamflow Drought,Streamflow drought,Streamflow Drought
+9,calculate_drought_metrics,drought.jl,8,drought_deficit_fixed_p10,annual,Streamflow drought,3.13,Drought,Drought,Drought,Streamflow Drought,Streamflow drought,Streamflow Drought
+9,calculate_drought_metrics,drought.jl,9,drought_deficit_fixed_p20,annual,Streamflow drought,3.13,Drought,Drought,Drought,Streamflow Drought,Streamflow drought,Streamflow Drought
+9,calculate_drought_metrics,drought.jl,10,drought_deficit_fixed_p30,annual,Streamflow drought,3.13,Drought,Drought,Drought,Streamflow Drought,Streamflow drought,Streamflow Drought
+9,calculate_drought_metrics,drought.jl,11,drought_threshold_fixed_p2,scalar,Streamflow drought,3.13,—,—,Per-gage scalar,—,Streamflow drought,Streamflow Drought
+9,calculate_drought_metrics,drought.jl,12,drought_threshold_fixed_p5,scalar,Streamflow drought,3.13,—,—,Per-gage scalar,—,Streamflow drought,Streamflow Drought
+9,calculate_drought_metrics,drought.jl,13,drought_threshold_fixed_p10,scalar,Streamflow drought,3.13,—,—,Per-gage scalar,—,Streamflow drought,Streamflow Drought
+9,calculate_drought_metrics,drought.jl,14,drought_threshold_fixed_p20,scalar,Streamflow drought,3.13,—,—,Per-gage scalar,—,Streamflow drought,Streamflow Drought
+9,calculate_drought_metrics,drought.jl,15,drought_threshold_fixed_p30,scalar,Streamflow drought,3.13,—,—,Per-gage scalar,—,Streamflow drought,Streamflow Drought
+10,calculate_negative_days,pulses.jl,1,negative_ann,annual,Negative flow days,3.11,Flow Volume,Flow Volume,Flow Volume,Pulses,Negative flow,Negative Flow
+11,analyze_Q_PPT_relationships,runoff_ratios.jl,1,annual_runoff_ratio,annual,Runoff ratios,3.8,Storage,Storage,Storage,Runoff Ratios,Runoff ratios,Runoff Ratios
+11,analyze_Q_PPT_relationships,runoff_ratios.jl,2,winter_runoff_ratio,annual,Runoff ratios,3.8,Storage,Storage,Storage,Runoff Ratios,Runoff ratios,Runoff Ratios
+11,analyze_Q_PPT_relationships,runoff_ratios.jl,3,spring_runoff_ratio,annual,Runoff ratios,3.8,Storage,Storage,Storage,Runoff Ratios,Runoff ratios,Runoff Ratios
+11,analyze_Q_PPT_relationships,runoff_ratios.jl,4,summer_runoff_ratio,annual,Runoff ratios,3.8,Storage,Storage,Storage,Runoff Ratios,Runoff ratios,Runoff Ratios
+11,analyze_Q_PPT_relationships,runoff_ratios.jl,5,fall_runoff_ratio,annual,Runoff ratios,3.8,Storage,Storage,Storage,Runoff Ratios,Runoff ratios,Runoff Ratios
+11,analyze_Q_PPT_relationships,runoff_ratios.jl,6,runoff_ratio_high_count,scalar,Runoff ratios,3.8,—,—,Per-gage scalar,—,Runoff ratios,Runoff Ratios
+12,calculate_streamflow_elasticity,elasticity.jl,1,elasticity_rolling,annual,Elasticity,3.9,Flashiness,Flashiness,Flashiness,Elasticity,Elasticity,Elasticity
+12,calculate_streamflow_elasticity,elasticity.jl,2,elasticity_annual,annual,Elasticity,3.9,Flashiness,Flashiness,Flashiness,Elasticity,Elasticity,Elasticity
+12,calculate_streamflow_elasticity,elasticity.jl,3,elasticity_static,scalar,Elasticity,3.9,—,—,Per-gage scalar,—,Elasticity,Elasticity
+12,calculate_streamflow_elasticity,elasticity.jl,4,elasticity_years_total,scalar,Elasticity,3.9,—,—,Per-gage scalar,—,Elasticity,Elasticity
+12,calculate_streamflow_elasticity,elasticity.jl,5,elasticity_years_low_ppt,scalar,Elasticity,3.9,—,—,Per-gage scalar,—,Elasticity,Elasticity
+13,calculate_qp_seasonality,qp_seasonality.jl,1,qp_slope_sd,annual,Q-P seasonality,3.10,Precipitation Streamflow,Precipitation Streamflow,Precipitation Streamflow,Q-P Seasonality,Q-P seasonality,Q-P Seasonality
+13,calculate_qp_seasonality,qp_seasonality.jl,2,qp_bimodality,annual,Q-P seasonality,3.10,Precipitation Streamflow,Precipitation Streamflow,Precipitation Streamflow,Q-P Seasonality,Q-P seasonality,Q-P Seasonality
+14,calculate_average_storage,storage.jl,1,avg_storage,annual,Storage,— dropped (legacy text only),Storage,Storage,Storage,Storage,Storage,Storage
+15,calculate_snow_metrics,snow.jl,1,swe_max,annual,Snow,3.12,Snow,Snow,Snow,Snow,Snow,Snow
+15,calculate_snow_metrics,snow.jl,2,swe_max_dowy,annual,Snow,3.12,Snow,Snow Timing,Snow Timing,Snow,Snow,Snow
+15,calculate_snow_metrics,snow.jl,3,snow_cover_days,annual,Snow,3.12,Snow,Snow,Snow,Snow,Snow,Snow
+15,calculate_snow_metrics,snow.jl,4,snow_on_dowy,annual,Snow,3.12,Snow,Snow Timing,Snow Timing,Snow,Snow,Snow
+15,calculate_snow_metrics,snow.jl,5,snow_off_dowy,annual,Snow,3.12,Snow,Snow Timing,Snow Timing,Snow,Snow,Snow
+15,calculate_snow_metrics,snow.jl,6,melt_season_days,annual,Snow,3.12,Snow,Snow Timing,Snow Timing,Snow,Snow,Snow
+15,calculate_snow_metrics,snow.jl,7,melt_rate,annual,Snow,3.12,Snow,Snow,Snow,Snow,Snow,Snow
+15,calculate_snow_metrics,snow.jl,8,ssm,annual,Snow,3.12,Snow,Snow Timing,Snow Timing,Snow,Snow,Snow
+15,calculate_snow_metrics,snow.jl,9,swe_apr1,annual,Snow,3.12,Snow,Snow,Snow,Snow,Snow,Snow
+15,calculate_snow_metrics,snow.jl,10,melt_before_peak,annual,Snow,3.12,Snow,Snow,Snow,Snow,Snow,Snow
+15,calculate_snow_metrics,snow.jl,11,melt_before_peak_pct,annual,Snow,3.12,Snow,Snow,Snow,Snow,Snow,Snow
+15,calculate_snow_metrics,snow.jl,12,melt_before_peak_to_max_swe,annual,Snow,3.12,Snow,Snow,Snow,Snow,Snow,Snow
+15,calculate_snow_metrics,snow.jl,13,melt_com_dowy,annual,Snow,3.12,Snow,Snow Timing,Snow Timing,Snow,Snow,Snow
+15,calculate_snow_metrics,snow.jl,14,swe_max_to_ppt,annual,Snow,3.12,Snow,Snow,Snow,Snow,Snow,Snow
+16,calculate_all_signatures (from preprocess_daily_data seasonal flags),signatures.jl,1,season_excluded_years_winter,scalar,Flow volumes & percentiles,3.1,—,—,Per-gage scalar,—,Other,Other
+16,calculate_all_signatures (from preprocess_daily_data seasonal flags),signatures.jl,2,season_excluded_years_spring,scalar,Flow volumes & percentiles,3.1,—,—,Per-gage scalar,—,Other,Other
+16,calculate_all_signatures (from preprocess_daily_data seasonal flags),signatures.jl,3,season_excluded_years_summer,scalar,Flow volumes & percentiles,3.1,—,—,Per-gage scalar,—,Other,Other
+16,calculate_all_signatures (from preprocess_daily_data seasonal flags),signatures.jl,4,season_excluded_years_fall,scalar,Flow volumes & percentiles,3.1,—,—,Per-gage scalar,—,Other,Other
+17,run_julia_benchmark.jl (from preprocess_daily_data diagnostics),io.jl / runner,1,ice_affected_days_total,scalar,(preprocessing diagnostic),Part 1.2 (NA handling),—,—,Per-gage scalar,—,Other,Other
