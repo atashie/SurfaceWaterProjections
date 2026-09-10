@@ -190,7 +190,7 @@ in CHANGELOG → Known Issues; the HydroShare READMEs and dictionary row carry t
 
 - **@docs/DEVELOPMENT.md** - Architecture, file structure, common tasks, workflows
 - **@docs/SIGNATURES.md** - Detailed signature documentation (14 categories)
-- **@CHANGELOG.md** - Current work, roadmap (historical: `docs/CHANGELOG_ARCHIVE.md`)
+- **@CHANGELOG.md** - Current work, roadmap — kept SHORT: `[Unreleased]` live items, the current month in full, condensed summaries of the two months before it. Older full-text entries: `changelog-old.md` (NOT auto-loaded — read it only when a pointer sends you there); Dec 2025 – Apr 2026: `docs/CHANGELOG_ARCHIVE.md`
 - **@docs/SIGNATURE_GUIDELINES.md** - Collaborative guidelines from hydrology colleagues (auto-synced)
 - **@docs/MANUSCRIPT_DRAFT.md** - HISSS manuscript draft snapshot (auto-synced; reconciliation review)
 - **@EO_data_processing/README.md** - Earth Observation (MODIS LULC & LAI) per-watershed ingestion and processing
@@ -259,6 +259,7 @@ The first manuscript leveraging this workflow (Scientific Data, "HISSS", submiss
 4. **Severity labels** - Use HIGH/MEDIUM/LOW for bug fixes
 5. **New suggestions** - Add under `[Unreleased]` → `### Guidelines Document TODOs`
 6. **Manuscript reconciliation** - Log implemented and planned updates from manuscript syncs under `[Unreleased]` → `### Manuscript Reconciliation Log` (dated entries)
+7. **Keep it short — it is loaded into every session** (user convention, 2026-09-10). `CHANGELOG.md` holds only the `[Unreleased]` items still open, the current month in full, and condensed headline summaries of the two months before it. When a month closes, condense it here (headline bullets + pointers) and move its full text VERBATIM, newest first, to `changelog-old.md`; move completed Planned items, resolved Known Issues (leave a short product-caveat entry if one still applies), applied guidelines items and superseded dated reconciliation entries there too. Never `@`-reference `changelog-old.md` — that would load it. Dec 2025 – Apr 2026 detail stays in `docs/CHANGELOG_ARCHIVE.md`.
 
 ## Claude Skill Maintenance
 

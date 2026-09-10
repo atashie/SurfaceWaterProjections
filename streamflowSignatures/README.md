@@ -281,7 +281,7 @@ Key conventions:
 
 - `docs/DEVELOPMENT.md` — architecture, workflows, and common tasks
 - `docs/SIGNATURES.md` — detailed signature documentation
-- `CHANGELOG.md` — change history and known issues
+- `CHANGELOG.md` — current changes and known issues (kept short); `changelog-old.md` — full text of older entries
 - `docs/CROSS_LANGUAGE_STATUS.md` — cross-language alignment detail
 - Per-language quickstarts: `julia/README.md`, `python/README.md`, `rpkg/README.md`
 
