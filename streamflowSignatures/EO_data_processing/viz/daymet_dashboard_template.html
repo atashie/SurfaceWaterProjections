@@ -1,0 +1,495 @@
+<title>Daymet __YEAR__ Reprocess Check</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: an instrument panel. A sticky control strip scopes everything below it; summary
+   tiles; scatter and map side by side; full-width daily series; the least-agreeing basins. */
+:root {
+  --plane: #f9f9f7;
+  --surface: #fcfcfb;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.10);
+  --hover: rgba(11, 11, 11, 0.045);
+  --orig: #2a78d6;
+  --fresh: #eb6834;
+  --neg: #2a78d6;
+  --mid: #898781;
+  --pos: #e34948;
+  --chip-bg: #0b0b0b;
+  --chip-fg: #fcfcfb;
+  --focus: #2a78d6;
+  --font-ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --plane: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255, 255, 255, 0.10); --hover: rgba(255, 255, 255, 0.06);
+    --orig: #3987e5; --fresh: #d95926; --neg: #3987e5; --mid: #898781; --pos: #e66767;
+    --chip-bg: #ffffff; --chip-fg: #1a1a19; --focus: #3987e5;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --plane: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --border: rgba(255, 255, 255, 0.10); --hover: rgba(255, 255, 255, 0.06);
+  --orig: #3987e5; --fresh: #d95926; --neg: #3987e5; --mid: #898781; --pos: #e66767;
+  --chip-bg: #ffffff; --chip-fg: #1a1a19; --focus: #3987e5;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--plane); color: var(--ink); font-family: var(--font-ui); font-size: 14px; line-height: 1.5; }
+.wrap { max-width: 1240px; margin-inline: auto; padding-inline: max(16px, 3vw); }
+header.page { padding-block: 28px 18px; }
+.eyebrow { font: 500 12px/1.4 var(--font-data); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); margin: 0 0 8px; }
+h1 { font-size: clamp(24px, 3.2vw, 32px); line-height: 1.15; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 10px; text-wrap: balance; }
+.lede { max-width: 70ch; color: var(--ink-2); margin: 0; }
+.controls { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10; background: var(--plane); border-block: 1px solid var(--border); }
+.controls .wrap { display: flex; flex-wrap: wrap; gap: 10px 28px; align-items: center; padding-block: 10px; }
+.ctl { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.ctl-label { font: 500 12px var(--font-data); text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-2); }
+.seg { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.seg button { font: 500 13px var(--font-ui); color: var(--ink-2); background: transparent; border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+.seg button:hover { background: var(--hover); color: var(--ink); }
+.seg button[aria-pressed="true"] { background: var(--chip-bg); color: var(--chip-fg); border-color: var(--chip-bg); }
+button:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+main { display: grid; gap: 20px; padding-block: 20px 48px; }
+figure { margin: 0; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+.tile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+.tile .k { font-size: 12.5px; color: var(--ink-2); margin: 0; }
+.tile .v { font-size: 26px; font-weight: 600; line-height: 1.2; margin: 6px 0 4px; overflow-wrap: anywhere; }
+.tile .s { font-size: 12.5px; color: var(--ink-2); margin: 0; }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+@media (max-width: 900px) { .pair { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 16px 12px; min-width: 0; }
+.card h2 { font-size: 16px; font-weight: 600; margin: 0 0 2px; }
+.card .sub { font-size: 13px; color: var(--ink-2); margin: 0 0 8px; max-width: 72ch; }
+.plot { width: 100%; }
+#scatter, #map { height: 430px; }
+#series { height: 470px; }
+.series-head { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: flex-end; justify-content: space-between; }
+.series-head > div { min-width: 0; }
+select { font: 400 14px var(--font-data); color: var(--ink); background: var(--surface); border: 1px solid var(--axis); border-radius: 8px; padding: 6px 10px; max-width: 100%; }
+.meta { font: 400 12.5px/1.5 var(--font-data); color: var(--ink-2); margin: 4px 0 0; overflow-wrap: anywhere; }
+.note { font-size: 13px; color: var(--ink-2); margin: 8px 0 0; min-height: 1.5em; }
+.tbl-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: right; padding: 7px 10px; border-bottom: 1px solid var(--grid); white-space: nowrap; font-variant-numeric: tabular-nums; }
+th { font-weight: 500; color: var(--ink-2); font-size: 12px; }
+#worst th:nth-child(-n+2), #worst td:nth-child(-n+2), #ts-table th:first-child, #ts-table td:first-child { text-align: left; }
+td.id button { font: 500 13px var(--font-data); color: var(--ink); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-decoration-color: var(--axis); text-underline-offset: 3px; }
+tbody tr:hover, tbody tr.sel { background: var(--hover); }
+details summary { cursor: pointer; font-size: 13px; color: var(--ink-2); margin-top: 8px; }
+details .tbl-wrap { max-height: 360px; overflow-y: auto; margin-top: 8px; }
+.notes { font-size: 13px; color: var(--ink-2); max-width: 80ch; }
+.notes h2 { font-size: 14px; color: var(--ink); margin: 0 0 6px; }
+.notes p { margin: 0 0 8px; }
+.mono { font-family: var(--font-data); font-size: 0.95em; }
+.offline { display: grid; place-items: center; height: 100%; color: var(--ink-2); font-size: 13px; text-align: center; padding: 16px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<header class="page wrap">
+  <p class="eyebrow">HISSS · Daymet V4 R1 · calendar __YEAR__</p>
+  <h1>Daymet __YEAR__ reprocess check</h1>
+  <p class="lede" id="lede"></p>
+</header>
+
+<nav class="controls" aria-label="Filters">
+  <div class="wrap">
+    <div class="ctl"><span class="ctl-label" id="lbl-var">Variable</span><div class="seg" id="seg-var" role="group" aria-labelledby="lbl-var"></div></div>
+    <div class="ctl" id="ctl-cfg"><span class="ctl-label" id="lbl-cfg">Polygons</span><div class="seg" id="seg-cfg" role="group" aria-labelledby="lbl-cfg"></div></div>
+  </div>
+</nav>
+
+<main class="wrap">
+  <section class="tiles" id="tiles" aria-label="Summary"></section>
+
+  <section class="pair">
+    <figure class="card">
+      <h2 id="sc-title">Annual mean, original vs fresh</h2>
+      <p class="sub">One dot per basin; the line is 1:1. Hover for the difference and the daily R², click a dot to open its series.</p>
+      <div id="scatter" class="plot"></div>
+    </figure>
+    <figure class="card">
+      <h2 id="map-title">Where the annual means differ</h2>
+      <p class="sub" id="map-sub"></p>
+      <div id="map" class="plot"></div>
+    </figure>
+  </section>
+
+  <section class="card" id="series-card">
+    <div class="series-head">
+      <div>
+        <h2 id="ts-title">Daily series</h2>
+        <p class="meta" id="ts-meta"></p>
+      </div>
+      <label class="ctl" for="basin-select"><span class="ctl-label">Basin</span><select id="basin-select"></select></label>
+    </div>
+    <p class="note" id="ts-note" aria-live="polite"></p>
+    <div id="series" class="plot"></div>
+    <details id="ts-details"><summary>Daily values as a table</summary><div class="tbl-wrap" id="ts-table"></div></details>
+  </section>
+
+  <section class="card">
+    <h2 id="worst-title">Basins that agree least</h2>
+    <p class="sub" id="worst-sub"></p>
+    <div class="tbl-wrap"><table id="worst"></table></div>
+  </section>
+
+  <section class="notes">
+    <h2>How these numbers were made</h2>
+    <p><b>Fresh</b>: the Daymet V4 R1 North America daily mosaics for __YEAR__ (each file's SHA-256 matches NASA CMR's), polygons reprojected to the Daymet Lambert Conformal Conic grid without resampling it, weights = exactextract coverage × true cell area, and the daily basin value = the weighted mean of the cells that are valid that day.</p>
+    <p><b>Original</b>: the co-author basin series (gdptools), <span class="mono">daymet_1980_2023_rebuilt_10aug2026.parquet</span>. It returned NaN for any basin touching a single fill cell.</p>
+    <p><b>Polygons</b>: <i>full resolution</i> uses the unsimplified source polygons, as the 1980–2025 reprocess does; <i>published</i> uses the 200 m-simplified HydroShare Resource 4 layer.</p>
+    <p><b>Metrics</b>: daily R² = 1 − SSE/SST about the 1:1 line over the 365 days; Δ = fresh − original. The map's colour range is ± the 99th percentile of |Δ| for the current view.</p>
+    <p id="notes-curated"></p>
+  </section>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/3.1.0/plotly.min.js"></script>
+<script id="dash-data" type="application/json">__DATA__</script>
+<script>
+(function () {
+  "use strict";
+  const D = JSON.parse(document.getElementById("dash-data").textContent);
+  const M = D.meta, VARS = M.vars, CFGS = M.cfgs, NDAY = 365, MINUS = "−";
+  const f32 = (s) => { const bin = atob(s); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new Float32Array(u.buffer); };
+  const S = {}, SER = {};
+  for (const v of VARS) {
+    S[v] = {}; for (const k in D.summary[v]) S[v][k] = f32(D.summary[v][k]);
+    SER[v] = {}; for (const k in D.series[v]) SER[v][k] = f32(D.series[v][k]);
+  }
+  const B = D.basins, SH = D.shared_idx, CUR = D.curated;
+  const curPos = new Map(CUR.map((c, k) => [c.i, k]));
+  const shPos = new Map(SH.map((b, k) => [b, k]));
+  const t0 = Date.UTC(M.year, 0, 1);
+  const dates = Array.from({ length: NDAY }, (_, d) => new Date(t0 + d * 864e5).toISOString().slice(0, 10));
+  const cfgLabel = Object.fromEntries(CFGS.map((c) => [c.key, c.label]));
+  const st = { v: "prcp", cfg: CFGS[0].key, basin: null };
+  const tag = (v, cfg) => "worst:" + v + ":" + cfg;
+  st.basin = (CUR.find((c) => c.why.includes(tag("prcp", st.cfg))) || CUR[0]).i;
+
+  // ---------- formatting ----------
+  const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const SUP = { "-": "⁻", "+": "", "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹" };
+  const nfCache = {};
+  const nf = (d) => (nfCache[d] = nfCache[d] || new Intl.NumberFormat("en-US", { maximumSignificantDigits: d }));
+  function fmt(x, d = 3) {
+    if (x == null || !Number.isFinite(x)) return "—";
+    const a = Math.abs(x);
+    if (a === 0) return "0";
+    if (a < 1e-3) {
+      const [m, e] = x.toExponential(d - 1).split("e");
+      return (m + "×10" + [...e].map((ch) => SUP[ch] ?? ch).join("")).replace("-", MINUS);
+    }
+    return nf(d).format(x).replace("-", MINUS);
+  }
+  function fmtR2(omr2) {
+    if (omr2 == null || !Number.isFinite(omr2)) return "undefined";
+    if (omr2 <= 0) return "1";
+    const r2 = 1 - omr2;
+    if (omr2 < 0.01) return r2.toFixed(Math.min(10, Math.max(3, Math.ceil(-Math.log10(omr2)) + 1)));
+    return r2.toFixed(4).replace("-", MINUS);
+  }
+  const pct = (x) => (100 * x).toFixed(x > 0.999 && x < 1 ? 2 : 1) + " %";
+  const el = (tag, text, cls) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };
+  const SRC = { gagesii: "GAGES-II", wsc_eccc: "ECCC", hydrobasins: "HydroBASINS" };
+  const WHY = (w) => {
+    if (w.startsWith("worst:")) { const [, v, c] = w.split(":"); return "least-agreeing " + M.short[v] + (CFGS.length > 1 ? " (" + (cfgLabel[c] || c).toLowerCase() + ")" : ""); }
+    return { orignan: "original all NaN", sample: "random sample", wettest: "wettest", snowiest: "snowiest", coldest: "coldest", hottest: "hottest" }[w] || w;
+  };
+
+  function whyText(why) {
+    const worst = {}, other = [];
+    for (const w of why) {
+      if (w.startsWith("worst:")) { const [, v, c] = w.split(":"); (worst[c] = worst[c] || []).push(M.short[v]); }
+      else other.push(WHY(w));
+    }
+    return Object.entries(worst).map(([c, vs]) => "least-agreeing " + vs.join(", ") +
+      (CFGS.length > 1 ? " (" + (cfgLabel[c] || c).toLowerCase() + ")" : "")).concat(other).join("; ");
+  }
+  function current() {
+    const s = S[st.v];
+    return { old: s.old_mean, d: s["dmean_" + st.cfg], omr2: s["omr2_" + st.cfg], mx: s["max_" + st.cfg] };
+  }
+
+  // ---------- static text ----------
+  document.getElementById("lede").textContent =
+    "Basin means recomputed from the Daymet mosaics (" + M.generated + ") against the original co-author series, for the " +
+    M.n_shared.toLocaleString("en-US") + " basins both cover. " + M.n_polygons.toLocaleString("en-US") +
+    " polygons in all; " + M.n_new.toLocaleString("en-US") + " of them have no original series.";
+  document.getElementById("notes-curated").textContent =
+    "Daily series are embedded for " + CUR.length + " basins: the " + M.worstN + " least-agreeing per variable" +
+    (CFGS.length > 1 ? " and polygon version" : "") + ", the basins whose original is NaN on every day, a random sample stratified by size and country, and the wettest, snowiest, coldest and hottest basin. Click any of them in the charts or the table.";
+
+  // ---------- controls ----------
+  function segButtons(id, items, key) {
+    const box = document.getElementById(id);
+    box.replaceChildren();
+    for (const [val, label] of items) {
+      const b = el("button", label);
+      b.type = "button";
+      b.setAttribute("aria-pressed", String(st[key] === val));
+      b.addEventListener("click", () => { st[key] = val; renderAll(); });
+      box.append(b);
+    }
+  }
+  function renderControls() {
+    segButtons("seg-var", VARS.map((v) => [v, M.short[v]]), "v");
+    if (CFGS.length > 1) segButtons("seg-cfg", CFGS.map((c) => [c.key, c.label]), "cfg");
+    else document.getElementById("ctl-cfg").hidden = true;
+  }
+  (function buildSelect() {
+    const sel = document.getElementById("basin-select");
+    const groups = [["Least agreeing", (c) => c.why.some((w) => w.startsWith("worst:"))],
+                    ["Original all NaN", (c) => c.why.includes("orignan")],
+                    ["Extremes", (c) => c.why.some((w) => ["wettest", "snowiest", "coldest", "hottest"].includes(w))],
+                    ["Random sample", (c) => c.why.includes("sample")]];
+    const used = new Set();
+    for (const [name, test] of groups) {
+      const og = document.createElement("optgroup"); og.label = name;
+      const members = CUR.filter((c) => !used.has(c.i) && test(c)).sort((a, b) => B.id[a.i].localeCompare(B.id[b.i]));
+      for (const c of members) {
+        used.add(c.i);
+        const o = el("option", B.id[c.i] + " · " + B.country[c.i] + " · " + fmt(B.area[c.i]) + " km²");
+        o.value = String(c.i); og.append(o);
+      }
+      if (members.length) sel.append(og);
+    }
+    sel.addEventListener("change", () => pick(+sel.value, false));
+  })();
+
+  // ---------- tiles ----------
+  function tile(k, v, s) { const t = el("div", null, "tile"); t.append(el("p", k, "k"), el("p", v, "v"), el("p", s, "s")); return t; }
+  function renderTiles() {
+    const c = current(), unit = M.units[st.v];
+    let compared = 0, defined = 0, good = 0, worst = -Infinity, wk = -1, constant = 0, constMax = 0;
+    const absd = [];
+    for (let k = 0; k < SH.length; k++) {
+      if (!Number.isFinite(c.old[k])) continue;
+      compared++;
+      if (Number.isFinite(c.d[k])) absd.push(Math.abs(c.d[k]));
+      if (Number.isFinite(c.omr2[k])) {
+        defined++;
+        if (c.omr2[k] <= 1e-3) good++;
+        if (c.omr2[k] > worst) { worst = c.omr2[k]; wk = k; }
+      } else { constant++; constMax = Math.max(constMax, c.mx[k] || 0); }
+    }
+    absd.sort((a, b) => a - b);
+    const med = absd.length ? absd[Math.floor((absd.length - 1) / 2)] : NaN;
+    const wb = wk >= 0 ? SH[wk] : null;
+    document.getElementById("tiles").replaceChildren(
+      tile("Basins compared", compared.toLocaleString("en-US"), "+ " + M.n_orignan + " whose original is NaN on every day"),
+      tile("Daily R² ≥ 0.999", pct(good / Math.max(1, defined)),
+           constant ? constant.toLocaleString("en-US") + " basins with a constant original (R² undefined); largest |Δ| there " + fmt(constMax) + " " + unit : "of basins, over 365 daily values each"),
+      tile("Median |Δ| of the annual mean", fmt(med) + " " + unit, "fresh − original, per basin"),
+      tile("Lowest daily R²", wb == null ? "—" : fmtR2(worst), wb == null ? "" : B.id[wb] + " · " + fmt(B.area[wb]) + " km² · " + B.country[wb]));
+  }
+
+  // ---------- charts ----------
+  const CONFIG = { displaylogo: false, responsive: true, modeBarButtonsToRemove: ["toImage", "lasso2d", "select2d", "autoScale2d", "toggleSpikelines"] };
+  function base(extra) {
+    return Object.assign({
+      paper_bgcolor: css("--surface"), plot_bgcolor: css("--surface"),
+      font: { family: css("--font-ui"), size: 12, color: css("--ink-2") },
+      hoverlabel: { bgcolor: css("--surface"), bordercolor: css("--axis"), font: { family: css("--font-ui"), size: 12, color: css("--ink") } },
+      margin: { l: 64, r: 16, t: 8, b: 52 }, hovermode: "closest"
+    }, extra);
+  }
+  function axis(title, extra) {
+    return Object.assign({ title: { text: title, font: { size: 12, color: css("--ink-2") } }, gridcolor: css("--grid"), linecolor: css("--axis"),
+      zeroline: false, ticks: "", tickfont: { size: 11, color: css("--muted") }, automargin: true, exponentformat: "power" }, extra || {});
+  }
+  const hasPlotly = typeof window.Plotly !== "undefined";
+  if (!hasPlotly) for (const id of ["scatter", "map", "series"]) {
+    document.getElementById(id).replaceChildren(el("div", "Charts need the Plotly library from cdnjs.cloudflare.com, which did not load. The tables still work.", "offline"));
+  }
+
+  function renderScatter() {
+    const c = current(), unit = M.units[st.v];
+    const xs = [], ys = [], cd = [];
+    let lo = Infinity, hi = -Infinity;
+    for (let k = 0; k < SH.length; k++) {
+      const x = c.old[k], d = c.d[k];
+      if (!Number.isFinite(x) || !Number.isFinite(d)) continue;
+      const y = x + d;
+      xs.push(x); ys.push(y); lo = Math.min(lo, x, y); hi = Math.max(hi, x, y);
+      cd.push([SH[k], B.id[SH[k]], fmt(d), fmtR2(c.omr2[k])]);
+    }
+    const pad = (hi - lo) * 0.03 || 1;
+    document.getElementById("sc-title").textContent = M.names[st.v] + ": annual mean, original vs fresh";
+    Plotly.react("scatter", [
+      { x: [lo - pad, hi + pad], y: [lo - pad, hi + pad], mode: "lines", line: { color: css("--muted"), width: 1 }, hoverinfo: "skip", showlegend: false },
+      { x: xs, y: ys, customdata: cd, mode: "markers", type: "scatter", showlegend: false,
+        marker: { size: 6, color: css("--ink-2"), opacity: 0.55, line: { width: 0 } },
+        hovertemplate: "<b>%{customdata[1]}</b><br>original %{x:.4~g} " + unit + "<br>fresh %{y:.4~g} " + unit +
+          "<br>Δ %{customdata[2]} " + unit + "<br>daily R² %{customdata[3]}<extra></extra>" }
+    ], base({ xaxis: axis("Original " + M.year + " mean (" + unit + ")"), yaxis: axis("Fresh " + M.year + " mean (" + unit + ")") }), CONFIG);
+  }
+
+  let mapExtent = null;
+  function renderMap() {
+    const c = current(), unit = M.units[st.v];
+    const ad = [];
+    for (let k = 0; k < SH.length; k++) if (Number.isFinite(c.d[k]) && Number.isFinite(c.old[k])) ad.push(Math.abs(c.d[k]));
+    ad.sort((a, b) => a - b);
+    let q = ad.length ? ad[Math.floor(0.99 * (ad.length - 1))] : 0;
+    if (!(q > 0)) q = (ad.length && ad[ad.length - 1] > 0) ? ad[ad.length - 1] : 1e-12;
+    const pts = [];
+    for (let k = 0; k < SH.length; k++) {
+      const b = SH[k];
+      if (B.status[b] !== 0 || !Number.isFinite(c.d[k])) continue;
+      pts.push([b, c.d[k], k]);
+    }
+    pts.sort((p, r) => Math.abs(p[1]) - Math.abs(r[1]));        // largest differences draw on top
+    const nx = [], ny = [], ncd = [], ox = [], oy = [], ocd = [];
+    for (let b = 0; b < B.id.length; b++) {
+      if (B.status[b] === 2) { nx.push(B.x[b]); ny.push(B.y[b]); ncd.push([b, B.id[b], fmt(B.area[b])]); }
+      else if (B.status[b] === 1) { ox.push(B.x[b]); oy.push(B.y[b]); ocd.push([b, B.id[b], fmt(B.area[b])]); }
+    }
+    if (!mapExtent) {
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      for (let b = 0; b < B.x.length; b++) { x0 = Math.min(x0, B.x[b]); x1 = Math.max(x1, B.x[b]); y0 = Math.min(y0, B.y[b]); y1 = Math.max(y1, B.y[b]); }
+      mapExtent = [[x0 - 150, x1 + 150], [y0 - 150, y1 + 150]];
+    }
+    document.getElementById("map-sub").textContent = "Colour = fresh − original annual mean (" + unit + "), blue below, red above, grey ≈ 0. Scale: ±" + fmt(q) + " " + unit + " (99th percentile of |Δ|).";
+    Plotly.react("map", [
+      { x: D.outlines.x, y: D.outlines.y, mode: "lines", line: { color: css("--axis"), width: 0.8 }, hoverinfo: "skip", showlegend: false },
+      { x: nx, y: ny, customdata: ncd, mode: "markers", name: "No original series", marker: { size: 4, color: css("--muted"), opacity: 0.45 },
+        hovertemplate: "<b>%{customdata[1]}</b> · %{customdata[2]} km²<br>no original series<extra></extra>" },
+      { x: pts.map((p) => B.x[p[0]]), y: pts.map((p) => B.y[p[0]]), mode: "markers", name: "Compared",
+        customdata: pts.map((p) => [p[0], B.id[p[0]], fmt(p[1]), fmtR2(c.omr2[p[2]]), fmt(B.area[p[0]])]),
+        marker: { size: 6, color: pts.map((p) => p[1]), cmin: -q, cmax: q, line: { width: 0 },
+          colorscale: [[0, css("--neg")], [0.5, css("--mid")], [1, css("--pos")]],
+          colorbar: { title: { text: "Δ (" + unit + ")", side: "top", font: { size: 11, color: css("--ink-2") } }, thickness: 10, len: 0.55,
+            outlinewidth: 0, tickfont: { size: 10, color: css("--muted") }, tickformat: "~g", exponentformat: "power" } },
+        hovertemplate: "<b>%{customdata[1]}</b> · %{customdata[4]} km²<br>Δ mean %{customdata[2]} " + unit + "<br>daily R² %{customdata[3]}<extra></extra>" },
+      { x: ox, y: oy, customdata: ocd, mode: "markers", name: "Original all NaN", marker: { size: 10, symbol: "diamond", color: css("--ink"), line: { width: 1.5, color: css("--surface") } },
+        hovertemplate: "<b>%{customdata[1]}</b> · %{customdata[2]} km²<br>original is NaN on every day<extra></extra>" }
+    ], base({ xaxis: { visible: false, range: mapExtent[0] }, yaxis: { visible: false, range: mapExtent[1], scaleanchor: "x", scaleratio: 1 },
+              legend: { orientation: "h", x: 0, y: 0, yanchor: "top", font: { size: 11, color: css("--ink-2") } },
+              margin: { l: 4, r: 8, t: 4, b: 40 }, dragmode: "pan" }), CONFIG);
+  }
+
+  function seriesData() {
+    const k = curPos.get(st.basin), off = k * NDAY, s = SER[st.v], info = CUR[k];
+    const o = s.old.subarray(off, off + NDAY), d = s["d_" + st.cfg].subarray(off, off + NDAY);
+    const orig = [], fresh = [], diff = [];
+    for (let i = 0; i < NDAY; i++) {
+      if (info.oldMissing) { orig.push(null); fresh.push(Number.isFinite(d[i]) ? d[i] : null); diff.push(null); }
+      else {
+        orig.push(Number.isFinite(o[i]) ? o[i] : null);
+        fresh.push(Number.isFinite(o[i]) && Number.isFinite(d[i]) ? o[i] + d[i] : null);
+        diff.push(Number.isFinite(d[i]) ? d[i] : null);
+      }
+    }
+    return { info, orig, fresh, diff };
+  }
+  function renderSeries() {
+    const unit = M.units[st.v], b = st.basin, { info, orig, fresh, diff } = seriesData();
+    const sk = shPos.get(b), c = current();
+    document.getElementById("ts-title").textContent = "Daily " + M.names[st.v].toLowerCase() + " · " + B.id[b];
+    document.getElementById("ts-meta").textContent = [B.country[b], fmt(B.area[b]) + " km²", (SRC[B.src[b]] || B.src[b]) + " polygon",
+      B.simp[b] ? "simplified in Resource 4" : "full resolution in Resource 4",
+      sk != null && Number.isFinite(c.omr2[sk]) ? "daily R² " + fmtR2(c.omr2[sk]) + ", max |Δ| " + fmt(c.mx[sk]) + " " + unit : "",
+      "listed as: " + whyText(info.why)].filter(Boolean).join(" · ");
+    const sel = document.getElementById("basin-select");
+    if (sel.value !== String(b)) sel.value = String(b);
+    if (hasPlotly) {
+      const layout = base({
+        hovermode: "x unified",
+        xaxis: axis("", { anchor: "y2", type: "date", tickformat: "%b", dtick: "M1", ticklabelmode: "period" }),
+        yaxis: axis(M.short[st.v] + " (" + unit + ")", { domain: [0.42, 1] }),
+        yaxis2: axis("Δ (" + unit + ")", { domain: [0, 0.3], zeroline: true, zerolinecolor: css("--axis"), zerolinewidth: 1 }),
+        legend: { orientation: "h", x: 0, y: 1.02, yanchor: "bottom", font: { size: 12, color: css("--ink-2") } },
+        margin: { l: 72, r: 16, t: 30, b: 36 }
+      });
+      if (info.oldMissing) layout.annotations = [{ text: "The original series is NaN on every day for this basin", xref: "paper", yref: "paper", x: 0.5, y: 0.15, showarrow: false, font: { size: 12, color: css("--ink-2") } }];
+      Plotly.react("series", [
+        { x: dates, y: orig, name: "Original (co-author)", mode: "lines", line: { color: css("--orig"), width: 5 }, opacity: 0.5, hovertemplate: "%{y:.4~g} " + unit },
+        { x: dates, y: fresh, name: "Fresh (recomputed)", mode: "lines", line: { color: css("--fresh"), width: 1.6 }, hovertemplate: "%{y:.4~g} " + unit },
+        { x: dates, y: diff, name: "Fresh − original", mode: "lines", line: { color: css("--ink-2"), width: 1.2 }, yaxis: "y2", hovertemplate: "%{y:.3~g} " + unit }
+      ], layout, CONFIG);
+    }
+    if (document.getElementById("ts-details").open) renderDailyTable();
+    for (const tr of document.querySelectorAll("#worst tbody tr")) tr.classList.toggle("sel", tr.dataset.b === String(b));
+  }
+  function renderDailyTable() {
+    const unit = M.units[st.v], { orig, fresh, diff } = seriesData();
+    const t = el("table"), th = el("thead"), hr = el("tr");
+    for (const h of ["Date", "Original (" + unit + ")", "Fresh (" + unit + ")", "Δ (" + unit + ")"]) hr.append(el("th", h));
+    th.append(hr); t.append(th);
+    const tb = el("tbody");
+    for (let i = 0; i < NDAY; i++) {
+      const tr = el("tr");
+      tr.append(el("td", dates[i]), el("td", fmt(orig[i], 5)), el("td", fmt(fresh[i], 5)), el("td", fmt(diff[i], 3)));
+      tb.append(tr);
+    }
+    t.append(tb);
+    document.getElementById("ts-table").replaceChildren(t);
+  }
+  document.getElementById("ts-details").addEventListener("toggle", (e) => { if (e.target.open) renderDailyTable(); });
+
+  function pick(b, scroll) {
+    const note = document.getElementById("ts-note");
+    if (!curPos.has(b)) { note.textContent = "No daily series is embedded for " + B.id[b] + "; pick one of the listed basins."; return; }
+    note.textContent = "";
+    st.basin = b;
+    renderSeries();
+    if (scroll) document.getElementById("series-card").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  // ---------- least-agreeing table ----------
+  function renderWorst() {
+    const c = current(), unit = M.units[st.v];
+    const ks = [];
+    for (let k = 0; k < SH.length; k++) if (Number.isFinite(c.omr2[k])) ks.push(k);
+    ks.sort((a, b) => c.omr2[b] - c.omr2[a]);
+    document.getElementById("worst-title").textContent = "The " + M.worstN + " basins that agree least · " + M.names[st.v];
+    document.getElementById("worst-sub").textContent = "Ranked by daily R² (" + (CFGS.length > 1 ? cfgLabel[st.cfg].toLowerCase() : "fresh vs original") + "). Select a basin to open its daily series.";
+    const t = document.getElementById("worst");
+    const th = el("thead"), hr = el("tr");
+    for (const h of ["Basin", "Country", "Area (km²)", "Daily R²", "Max |Δ| (" + unit + ")", "Mean original", "Mean fresh", "Δ mean"]) hr.append(el("th", h));
+    th.append(hr);
+    const tb = el("tbody");
+    for (const k of ks.slice(0, M.worstN)) {
+      const b = SH[k], tr = el("tr");
+      tr.dataset.b = String(b);
+      if (b === st.basin) tr.classList.add("sel");
+      const idc = el("td", null, "id"), btn = el("button", B.id[b]);
+      btn.type = "button";
+      btn.addEventListener("click", () => pick(b, true));
+      idc.append(btn);
+      tr.append(idc, el("td", B.country[b]), el("td", fmt(B.area[b])), el("td", fmtR2(c.omr2[k])), el("td", fmt(c.mx[k])),
+                el("td", fmt(c.old[k], 4)), el("td", fmt(c.old[k] + c.d[k], 4)), el("td", fmt(c.d[k])));
+      tb.append(tr);
+    }
+    t.replaceChildren(th, tb);
+  }
+
+  // ---------- wiring ----------
+  let wired = false;
+  function renderCharts() {
+    if (!hasPlotly) return;
+    renderScatter(); renderMap(); renderSeries();
+    if (!wired) {
+      for (const id of ["scatter", "map"]) document.getElementById(id).on("plotly_click", (ev) => {
+        const p = ev.points && ev.points[0];
+        if (p && p.customdata) pick(p.customdata[0], true);
+      });
+      wired = true;
+    }
+  }
+  function renderAll() { renderControls(); renderTiles(); renderWorst(); if (hasPlotly) renderCharts(); else renderSeries(); }
+  renderAll();
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", renderCharts);
+  new MutationObserver(renderCharts).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+})();
+</script>

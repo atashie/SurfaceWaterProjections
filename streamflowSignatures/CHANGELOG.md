@@ -317,6 +317,10 @@ multi-year run.
   Found the five all-NaN stale sites (Known Issues).
 - Results: `docs/plans/2026-09-29-daymet-reprocessing-action-plan.md` §0. Run folder:
   `/Volumes/Untitled/daymet_processed_sep2026/` (`RUN_NOTES.md`).
+- Comparison dashboard: `EO_data_processing/viz/build_daymet_comparison_dashboard.py` (+ its
+  HTML template) — one year, one or more polygon versions: summary tiles, original-vs-fresh
+  scatter, difference map, daily series for curated basins, least-agreeing table. The 2023
+  page is `daymet_2023_comparison_dashboard.html` in the gate run folder.
 
 **DECISIONS (user, 2026-09-29, after the gate)** for the 1980–2025 run: (D1) full-resolution
 polygons; (D2) all six variables in one pass; (D3) the user's Earthdata Login bearer token
