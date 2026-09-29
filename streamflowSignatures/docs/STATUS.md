@@ -14,7 +14,7 @@ Neither is a subset of the other; record-dependent signatures are never compared
 (5 resources, staged): collection `f702201faa5d46069a5ee83ffa4c9768`. Public code mirror https://github.com/CZ-Sync/HISSS.
 
 ## Pending user decisions
-- Daymet reprocess (user decisions 2026-09-29: every polygon, from scratch, one-year gate first; then full-res polygons, all 6 variables, the user's EDL token for 2025 — expires ≈ 2026-10-25, + the 53 basins > 100k km² (measured: fits with `--workers 6`); code in `EO_data_processing/daymet/`, run folder `~/HISSS_data/daymet-processed-29sep2026/` → verified copy to `/Volumes/Untitled/daymet-processed-29sep2026/`) — 1980–2025 run next; then assemble, validate 1980–2023, replay. Action plan §0 (`docs/plans/2026-09-29-daymet-reprocessing-action-plan.md`).
+- Daymet reprocess (user decisions 2026-09-29: every polygon, from scratch, one-year gate first; then full-res polygons, all 6 variables, the user's EDL token for 2025 — expires ≈ 2026-10-25, + the 53 basins > 100k km² (measured: fits with `--workers 6`); code in `EO_data_processing/daymet/`, run folder `~/HISSS_data/daymet-processed-29sep2026/` → verified copy to `/Volumes/Untitled/daymet-processed-29sep2026/`) — 1980–2025 run RUNNING since 2026-09-29 20:23 UTC (≈ 19 h, ORNL-first; log `logs/run_full.log` in the run folder); then assemble, validate 1980–2023 (automatic), replay. Action plan §0 (`docs/plans/2026-09-29-daymet-reprocessing-action-plan.md`).
 - HydroShare doc updates H1–H3 (category terminology, high_na caveat, HYDAT release note) deliberately NOT applied 2026-09-10 — `docs/plans/2026-09-10-manuscript-category-edits.md` §C.
 
 ## Live known issues (full text: CHANGELOG → Known Issues)

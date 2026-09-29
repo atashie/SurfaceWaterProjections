@@ -10,10 +10,11 @@ here.
 uv venv --python 3.12 pyenv
 uv pip install --python pyenv/bin/python -r requirements.txt
 ```
-Calendar 1980–2024 comes from the anonymous NCAR GDEX mirror (byte-identical to ORNL;
-every file is checked against NASA CMR's SHA-256). Calendar 2025 exists only at ORNL and
-needs Earthdata Login: a bearer token in `~/.config/earthdata/edl_token` (mode 600; never in
-the repo) or `~/.netrc` (`machine urs.earthdata.nasa.gov login … password …`).
+Files come from ORNL (Earthdata Login) when auth is available — about three times faster
+than the anonymous NCAR GDEX mirror from the M5 laptop — else from the mirror, which holds
+1980–2024 byte-identically; every file is checked against NASA CMR's SHA-256. Calendar 2025
+exists only at ORNL. Auth: a bearer token in `~/.config/earthdata/edl_token` (mode 600;
+never in the repo) or `~/.netrc` (`machine urs.earthdata.nasa.gov login … password …`).
 
 ## Tools, in run order
 | Tool | Does |
@@ -31,7 +32,8 @@ the repo) or `~/.netrc` (`machine urs.earthdata.nasa.gov login … password …`
 | `../viz/build_daymet_comparison_dashboard.py` | HTML dashboard: fresh vs original values and daily series |
 
 ## Resources (16 GB M5 laptop, measured 2026-09-29)
-A full 1980–2025 run downloads 3.455 TB (~50 h at ~19 MB/s); aggregation takes 15–35 s per
-variable-year and hides behind the downloads. With the 8,017-basin weights (45.8 M
-entries) use `--workers 6`: peak ≈ 4.3 GB parent + < 1 GB per worker on the 1980–2019 chunk
-layout. The one-time weights build peaks at ≈ 8 GB. Start long runs under `caffeinate -i`.
+A full 1980–2025 run downloads 3.455 TB: ~19 h at ORNL's 48–54 MB/s (~50 h at the mirror's
+~19 MB/s); aggregation takes 15–35 s per variable-year and hides behind the downloads. With
+the 8,017-basin weights (45.8 M entries) use `--workers 6`: peak ≈ 4.3 GB parent + < 1 GB
+per worker on the 1980–2019 chunk layout. The one-time weights build peaks at ≈ 8 GB. Start
+long runs under `caffeinate -i`.

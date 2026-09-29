@@ -333,7 +333,8 @@ script is now committed (`EO_data_processing/geometry/rebuild_watershed_polygons
 reproduce Resource 4, `--no-simplify --include-large` gives the 8,017-basin layer); bearer-token
 downloads with the ORNL-only 2025 files first; an aggregator planning fix (int32 keys, slices;
 byte-identical output) that keeps the 8,017-basin runs at 4.3 GB parent + < 1 GB per worker
-with `--workers 6`.
+with `--workers 6`; downloads prefer ORNL (48–54 MB/s here vs ~18 MB/s from the mirror), so
+the 1980–2025 run takes ≈ 19 h instead of ≈ 50 h. The run started 2026-09-29 20:23 UTC.
 
 ### Changed: Claude Code instruction files restructured for the context budget (2026-09-29)
 The eight files auto-loaded at every session start (CLAUDE.md plus seven `@`-imports:

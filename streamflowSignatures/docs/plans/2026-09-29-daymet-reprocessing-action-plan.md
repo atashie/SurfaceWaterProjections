@@ -37,7 +37,9 @@ old-layout + leap-year probe ran on prcp 1980.
 | Output | 8–24 MB zstd parquet per variable-year (7,964 × 365 rows); 110 MB per assembled year → ≈ 5 GB for 1980–2025 |
 
 → Compute ≈ 1.5 min per year of six variables. The job is purely download-bound:
-1980–2025 = 3.455 TB ≈ **50 h** at 19 MB/s (prcp + swe 0.57 TB ≈ 8.5 h). The "dedicated
+1980–2025 = 3.455 TB ≈ 50 h at the mirror's 19 MB/s. **Update (full run, same day): ORNL's
+CloudFront store delivers 48–54 MB/s to this laptop with the Earthdata token, so
+`daymet_stream.py` now prefers ORNL (mirror as fallback) → ≈ 19 h.** The "dedicated
 machine" is unnecessary: this laptop runs it with ≈ 65 GB of free disk (download → verify →
 aggregate → delete, one file ahead).
 
