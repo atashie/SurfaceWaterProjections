@@ -18,8 +18,10 @@ test-data/
 *.nc
 *.gpkg
 
-# Claude Code artifacts
-.claude/
+# Claude Code: .claude/rules and .claude/skills are TRACKED (shared across machines);
+# only per-machine local settings are ignored
+.claude/settings.local.json
+.claude/*.local.*
 
 # Logs
 logs/

@@ -27,81 +27,8 @@ layers) — **Python**, not a cross-language signature, not ported to Julia/R.
 > there. ~~The human-QA pass via `nlcd_explorer.html` is still owed before publication
 > (now targeting HydroShare, not S3).~~ *(Done 25 Aug — see above.)*
 
-> **Status (24 Jul 2026) — BUILD COMPLETE (local); pending human QA + S3 publish.** Extraction
-> pipeline, finalize, and QA/QC explorer are all built and validated. Finalized CONUS product =
-> **250,879 rows (6,119 gages × 41 yr, 1985–2025)**; 45 Alaska gages excluded. **Remaining:**
-> human QA via `nlcd_explorer.html` → `nlcd_finalize.py --upload` (publish to S3) → delete the
-> `temp_lulc_conus/` staging (~93 GB) → CHANGELOG. The dated history below traces how we got here.
->
-> **Status (22 Jul 2026)**: PLAN — design-reviewed + **access/method pilot PASSED + micro-pilot
-> PASSED + source mosaics staged**. Legend manifest (`nlcd_legends.csv`) built. Source data
-> staged to `streamflow/temp_lulc_conus/` (82 mosaics, 93.4 GB, C1V2; delete after final QA/QC).
-> `nlcd_pipeline.py` written + **Codex adversarial review (22 Jul) = FIX-FIRST → all blockers +
-> majors + minors fixed** and re-smoke-tested clean (20 basins, sum100 dev ≤8e-13, imp_oob=0).
-> Fixes: publish-integrity gates (per-year `_validate_year`; final table written ONLY if every
-> requested year has a valid checkpoint, else exit nonzero — no silent partial publish), atomic
-> checkpoint/final writes (tmp+os.replace), download validated vs S3 ContentLength, both rasters
-> schema-checked, C1 window rounded+intersected, `valid_coverage_frac` hard-fails >1.1 instead of
-> silent clip, final concat scoped to requested years, merges `validate="one_to_one"`, columns
-> reindexed to a committed order, `assert`→explicit exceptions. **Next: launch the ~10 h full run
-> (awaiting go-ahead) → `nlcd_finalize.py` + S3 → `build_nlcd_explorer.py` → delete temp_lulc_conus.**
-> Derived product not on S3 yet.
->
-> **Full run COMPLETE + validated (24 Jul):** `watershed_nlcd_annual.parquet` — 252,724 rows =
-> 6,164 gages × 41 yr; class %s exactly 100 on covered rows; impervious 0–68.8%; 45 all-fill
-> Alaska gages isolated. **Codex reviewed results + finalize/explorer plans = GO-with-fixes.**
-> Reconciliation (24 Jul) folded into the finalize/explorer specs below:
-> - **Never publish out-of-footprint zeros as real** → finalize DROPS the 45 Alaska gages
->   (identified by `max(n_nlcd_pixels)==0`) to `nlcd_out_of_footprint.csv` (reason "Alaska —
->   outside CONUS Annual NLCD footprint"; QA-confirmed 45/45 AK, 0 HI/PR) + an all-gage QA
->   companion; CONUS table = 6,119 × 41 = 250,879 rows.
-> - **Separate, documented QA flags** (not a single opaque union): `geom_low_confidence`,
->   `low_pixel_support` (<100 eff px; QA-measured flags 0), `partial_coverage`
->   (`valid_coverage_frac`<0.99; flags 3), `low_confidence` = documented union. Coverage is
->   gage-level stable (0 gages vary across years) and near-complete.
-> - **Join integrity**: gage_id str, assert geometry unique, canon_id equality check, merge
->   validated one-to-one; **provenance** metadata JSON + `nlcd_collection='C1V2'` col +
->   `valid_area_km2`; dictionary states units/valid-pixel-conditional %/impervious semantics.
-> - **Explorer**: smoothed endpoint-difference deltas mean(1985–87) vs mean(2023–25) LABELLED as
->   endpoint-diff (not trend) with the annual-update seam disclosed; developed% and impervious%
->   shown separately (non-additive; QA-confirmed corr 0.963); a largest-one-year-change / shrub↔
->   grass artifact view (QA-confirmed −0.71 swap correlation, 77–90 pp swings); partial-coverage/
->   low-support badges; excluded-45 disclosed; normalized Shannon; compact 0.1% encoding.
-> - **HOLD S3 publish until human QA via the explorer** (Codex advice); build both locally first.
->
-> **Micro-pilot (22 Jul, LOCAL 2023 mosaics, ALL 6,164 US `gage_type=='USGS'` basins):**
-> Per-year both-layer extraction = **58.8 min** (land cover 32.4 min @315 ms/basin; impervious
-> 26.4 min @257 ms/basin). **Full 41-yr run ≈ 40 h single-thread.** This instance = **4 cores /
-> 30 GB**, so ~4 per-year workers → **~10 h here** (3.34 GB/worker × 4 ≈ 13 GB RAM, 4×2.4 GB
-> disk — both fit); a larger instance scales down ~linearly with cores. Per-year download ~13 s
-> (2.4 GB in-region). Peak RSS **3.34 GB/worker**. ✅ Sum-to-100 **exactly 100.000 across all 6,119 in-CONUS basins**,
-> **0 unknown codes**; valid-coverage filter caught **45 AK/HI/out-of-CONUS** USGS basins.
-> ✅ **C1 impervious out-of-range = 0 basins across ALL 6,164** (overall max 100.0) → V2 appears
-> clean; keep the [0,100] clip defensively + assert on a couple more years during the run.
-> Local extraction is **~8× faster than `/vsis3/` streaming** — confirms download/stage-then-extract.
->
-> **Pilot results (22 Jul, live vs `s3://usgs-landcover` C1V2, year 2023, 36+22-basin samples):**
-> ✅ `/vsis3/` requester-pays access works; keys/versions/6-products/41-yr (1985–2025) confirmed.
-> ✅ CRS = `AEA WGS84` (Albers/WGS84, **no EPSG authority** — confirms M1, not 5070); reproject
->   basins to granule WKT works. ✅ nodata=250 set on both COGs. ✅ **Land cover sums to exactly
->   100.000** for US `gage_type=='USGS'` CONUS basins (18/18), **0 unknown class codes**. ✅
->   **CONUS filter = `gage_type=='USGS'`(6,164) + valid-coverage**: cleanly separates US (sum 100)
->   from Canada (sum 0, all-fill) — a lon/lat bbox wrongly kept 652 Canadian basins. ✅ Peak RSS
->   **2.44 GB** even with a 91,268 km² basin — memory is a non-issue. ⚠ **Impervious C1 bug did
->   NOT reproduce in V2-2023** (max=100.0, no >100/underflow in-sample) — keep the [0,100] clip
->   defensively (cheap; guide documents it) but it may be fixed in V2 or rare; validate across the
->   full run. ⚠ **`/vsis3/` streaming is too slow at scale** (~4.7 s/basin → ~330 h single-thread
->   for the full run) → **download-once-per-year local extraction is mandatory** (removes per-basin
->   network latency); run a local-mosaic micro-pilot to get the true per-year wall-clock.
->
-> **Review fixes incorporated (22 Jul 2026):** (C1) Fractional Impervious has a *documented*
-> bug — non-truncated regression predictions produce values >100 and UINT8 underflow
-> (wrapped 251–255) that are **not** the 250 fill; treat valid = [0,100], mask/clip everything
-> else, and validate the **raw pixel distribution** (not just the mean). (M1) CRS is **WGS84
-> Albers**, not EPSG:5070 (5070 = legacy NAD83 NLCD) — reproject basins to the granule WKT
-> read from `src.crs`, never hardcode. (M2) Latest coverage is **1985–2025** (C1V2), not
-> 1985–2023 (that was C1V0) — 41 years. (M3) Add change-detection caveats (shrub↔grass, Great
-> Lakes over-water artifacts) + smoothed deltas + optional Confidence-layer QA.
+> Dated build history (Jul 2026 plan, design-review fixes, pilots, full run): §12 at the end
+> of this file.
 
 ---
 
@@ -415,3 +342,85 @@ Outputs → `data_out/eo_nlcd/` (gitignored); products → `s3://climate-ai-data
 
 Environment (us-east-2): reuse the `geo` conda env (rasterio/geopandas/exactextract/pyarrow/
 boto3). **No `pyhdf`, no earthaccess needed** — GDAL reads NLCD COGs natively.
+
+---
+
+## 12. Build history (dated status notes, July 2026)
+
+_Moved verbatim from the top of this file on 2026-09-29 so the header shows only the current state. Working rules for Claude sessions: `EO_data_processing/CLAUDE.md`._
+
+> **Status (24 Jul 2026) — BUILD COMPLETE (local); pending human QA + S3 publish.** Extraction
+> pipeline, finalize, and QA/QC explorer are all built and validated. Finalized CONUS product =
+> **250,879 rows (6,119 gages × 41 yr, 1985–2025)**; 45 Alaska gages excluded. **Remaining:**
+> human QA via `nlcd_explorer.html` → `nlcd_finalize.py --upload` (publish to S3) → delete the
+> `temp_lulc_conus/` staging (~93 GB) → CHANGELOG. The dated history below traces how we got here.
+>
+> **Status (22 Jul 2026)**: PLAN — design-reviewed + **access/method pilot PASSED + micro-pilot
+> PASSED + source mosaics staged**. Legend manifest (`nlcd_legends.csv`) built. Source data
+> staged to `streamflow/temp_lulc_conus/` (82 mosaics, 93.4 GB, C1V2; delete after final QA/QC).
+> `nlcd_pipeline.py` written + **Codex adversarial review (22 Jul) = FIX-FIRST → all blockers +
+> majors + minors fixed** and re-smoke-tested clean (20 basins, sum100 dev ≤8e-13, imp_oob=0).
+> Fixes: publish-integrity gates (per-year `_validate_year`; final table written ONLY if every
+> requested year has a valid checkpoint, else exit nonzero — no silent partial publish), atomic
+> checkpoint/final writes (tmp+os.replace), download validated vs S3 ContentLength, both rasters
+> schema-checked, C1 window rounded+intersected, `valid_coverage_frac` hard-fails >1.1 instead of
+> silent clip, final concat scoped to requested years, merges `validate="one_to_one"`, columns
+> reindexed to a committed order, `assert`→explicit exceptions. **Next: launch the ~10 h full run
+> (awaiting go-ahead) → `nlcd_finalize.py` + S3 → `build_nlcd_explorer.py` → delete temp_lulc_conus.**
+> Derived product not on S3 yet.
+>
+> **Full run COMPLETE + validated (24 Jul):** `watershed_nlcd_annual.parquet` — 252,724 rows =
+> 6,164 gages × 41 yr; class %s exactly 100 on covered rows; impervious 0–68.8%; 45 all-fill
+> Alaska gages isolated. **Codex reviewed results + finalize/explorer plans = GO-with-fixes.**
+> Reconciliation (24 Jul) folded into the finalize/explorer specs below:
+> - **Never publish out-of-footprint zeros as real** → finalize DROPS the 45 Alaska gages
+>   (identified by `max(n_nlcd_pixels)==0`) to `nlcd_out_of_footprint.csv` (reason "Alaska —
+>   outside CONUS Annual NLCD footprint"; QA-confirmed 45/45 AK, 0 HI/PR) + an all-gage QA
+>   companion; CONUS table = 6,119 × 41 = 250,879 rows.
+> - **Separate, documented QA flags** (not a single opaque union): `geom_low_confidence`,
+>   `low_pixel_support` (<100 eff px; QA-measured flags 0), `partial_coverage`
+>   (`valid_coverage_frac`<0.99; flags 3), `low_confidence` = documented union. Coverage is
+>   gage-level stable (0 gages vary across years) and near-complete.
+> - **Join integrity**: gage_id str, assert geometry unique, canon_id equality check, merge
+>   validated one-to-one; **provenance** metadata JSON + `nlcd_collection='C1V2'` col +
+>   `valid_area_km2`; dictionary states units/valid-pixel-conditional %/impervious semantics.
+> - **Explorer**: smoothed endpoint-difference deltas mean(1985–87) vs mean(2023–25) LABELLED as
+>   endpoint-diff (not trend) with the annual-update seam disclosed; developed% and impervious%
+>   shown separately (non-additive; QA-confirmed corr 0.963); a largest-one-year-change / shrub↔
+>   grass artifact view (QA-confirmed −0.71 swap correlation, 77–90 pp swings); partial-coverage/
+>   low-support badges; excluded-45 disclosed; normalized Shannon; compact 0.1% encoding.
+> - **HOLD S3 publish until human QA via the explorer** (Codex advice); build both locally first.
+>
+> **Micro-pilot (22 Jul, LOCAL 2023 mosaics, ALL 6,164 US `gage_type=='USGS'` basins):**
+> Per-year both-layer extraction = **58.8 min** (land cover 32.4 min @315 ms/basin; impervious
+> 26.4 min @257 ms/basin). **Full 41-yr run ≈ 40 h single-thread.** This instance = **4 cores /
+> 30 GB**, so ~4 per-year workers → **~10 h here** (3.34 GB/worker × 4 ≈ 13 GB RAM, 4×2.4 GB
+> disk — both fit); a larger instance scales down ~linearly with cores. Per-year download ~13 s
+> (2.4 GB in-region). Peak RSS **3.34 GB/worker**. ✅ Sum-to-100 **exactly 100.000 across all 6,119 in-CONUS basins**,
+> **0 unknown codes**; valid-coverage filter caught **45 AK/HI/out-of-CONUS** USGS basins.
+> ✅ **C1 impervious out-of-range = 0 basins across ALL 6,164** (overall max 100.0) → V2 appears
+> clean; keep the [0,100] clip defensively + assert on a couple more years during the run.
+> Local extraction is **~8× faster than `/vsis3/` streaming** — confirms download/stage-then-extract.
+>
+> **Pilot results (22 Jul, live vs `s3://usgs-landcover` C1V2, year 2023, 36+22-basin samples):**
+> ✅ `/vsis3/` requester-pays access works; keys/versions/6-products/41-yr (1985–2025) confirmed.
+> ✅ CRS = `AEA WGS84` (Albers/WGS84, **no EPSG authority** — confirms M1, not 5070); reproject
+>   basins to granule WKT works. ✅ nodata=250 set on both COGs. ✅ **Land cover sums to exactly
+>   100.000** for US `gage_type=='USGS'` CONUS basins (18/18), **0 unknown class codes**. ✅
+>   **CONUS filter = `gage_type=='USGS'`(6,164) + valid-coverage**: cleanly separates US (sum 100)
+>   from Canada (sum 0, all-fill) — a lon/lat bbox wrongly kept 652 Canadian basins. ✅ Peak RSS
+>   **2.44 GB** even with a 91,268 km² basin — memory is a non-issue. ⚠ **Impervious C1 bug did
+>   NOT reproduce in V2-2023** (max=100.0, no >100/underflow in-sample) — keep the [0,100] clip
+>   defensively (cheap; guide documents it) but it may be fixed in V2 or rare; validate across the
+>   full run. ⚠ **`/vsis3/` streaming is too slow at scale** (~4.7 s/basin → ~330 h single-thread
+>   for the full run) → **download-once-per-year local extraction is mandatory** (removes per-basin
+>   network latency); run a local-mosaic micro-pilot to get the true per-year wall-clock.
+>
+> **Review fixes incorporated (22 Jul 2026):** (C1) Fractional Impervious has a *documented*
+> bug — non-truncated regression predictions produce values >100 and UINT8 underflow
+> (wrapped 251–255) that are **not** the 250 fill; treat valid = [0,100], mask/clip everything
+> else, and validate the **raw pixel distribution** (not just the mean). (M1) CRS is **WGS84
+> Albers**, not EPSG:5070 (5070 = legacy NAD83 NLCD) — reproject basins to the granule WKT
+> read from `src.crs`, never hardcode. (M2) Latest coverage is **1985–2025** (C1V2), not
+> 1985–2023 (that was C1V0) — 41 years. (M3) Add change-detection caveats (shrub↔grass, Great
+> Lakes over-water artifacts) + smoothed deltas + optional Confidence-layer QA.

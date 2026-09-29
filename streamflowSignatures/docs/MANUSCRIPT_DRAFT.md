@@ -14,15 +14,13 @@
 > citations resolved (no "tbd" left); **§4 drafted** (ecoregions, size quartiles, Figures
 > 2–3 captions); Data/Code availability + Funding sections added; references reformatted
 > and extended (27 → 39). §5, Acknowledgements ("Claude Code 0.145.0") and Disclaimers
-> unchanged. Methods claims that now DISAGREE with the code are logged in CHANGELOG →
-> Manuscript Reconciliation Log (2026-09-29).
+> unchanged. Methods claims that now DISAGREE with the code are logged in
+> `docs/reconciliation/manuscript_log.md` (2026-09-29).
 >
 > This is a read-only snapshot of the collaborative manuscript draft used for
-> change detection and reconciliation review (see CLAUDE.md → Session-Start
-> Workflow). Do NOT hand-edit the body below the header — it is overwritten at
+> change detection and reconciliation review (the `/sync-docs` skill). Do NOT hand-edit the body below the header — it is overwritten at
 > each sync. Discrepancies between the manuscript's methods and the code/docs
-> are logged in CHANGELOG.md → `[Unreleased]` → `### Manuscript Reconciliation
-> Log`; manuscript-side corrections must be made in the Google Doc by the
+> are logged in `docs/reconciliation/manuscript_log.md`; manuscript-side corrections must be made in the Google Doc by the
 > co-authors (@ Arik convention per the draft's own notes).
 
 ---

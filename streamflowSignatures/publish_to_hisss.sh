@@ -6,7 +6,7 @@
 # it locates itself. Re-run after merging work to keep the public mirror current.
 #
 # Exclusions (decided 2026-08-28, pre-publication audit):
-#   - Claude tooling            (CLAUDE.md, claude-skill/, .claudeignore)
+#   - Claude tooling            (CLAUDE.md, .claude/ rules+skills, claude-skill/, .claudeignore)
 #   - Unpublished manuscript    (docs/MANUSCRIPT_DRAFT.md)
 #   - Internal planning records (docs/plans/)
 #   - Legacy Shiny app          (streamflowAndClimateVisualizationApp/ — defunct S3 backend)
@@ -22,6 +22,7 @@ BRANCH="main"
 
 EXCLUDE_PATTERNS=(
   '^CLAUDE\.md$'
+  '^\.claude/'
   '^\.claudeignore$'
   '^claude-skill/'
   '^docs/MANUSCRIPT_DRAFT\.md$'

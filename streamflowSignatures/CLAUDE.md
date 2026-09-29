@@ -1,274 +1,92 @@
-# Streamflow Signatures Project
+# Streamflow Signatures — HISSS
 
-## Project Context
+@docs/STATUS.md
 
-This project has two primary goals and two secondary goals:
+## What this is
 
-1. **Data Processing** — Ingest raw streamflow data (USGS, HYDAT, Caravan), clean/filter/collate metadata, standardize outputs.
-2. **Signature Extraction** — Extract 100+ hydrological signatures under strict guardrails. Domain experts update methodology via plain-English instructions in `docs/SIGNATURE_GUIDELINES.md`; code implements those definitions.
-3. **Visualization** (secondary) — Shiny dashboard for broader audience exploration.
-4. **Cross-Language Implementations** (secondary) — Julia is canonical; Python and rpkg aim to produce near-identical results for community sharing (future: publishable packages/libraries). Both ports' agreement is **measured at full scale** (Python 2026-08-26, rpkg 2026-08-27).
+Extraction of 100 annual hydrological signatures (+ 21 per-gage scalars → a 1,653-column
+summary CSV and an annual-values parquet) from daily streamflow for ~8,000 US and Canadian
+gages, for the HISSS data paper (Scientific Data, submission target 2026-11-09). Three
+implementations: **Julia is canonical** (`julia/src/`); Python
+(`python/streamflow_signatures/`) and R (`rpkg/`) are ports validated at full scale. The R
+code at the repo root (`R/`, `run_*.R`, `config.R`) is the still-active raw-data INGESTION
+path; `R/helperFunctions.R` is a deprecated shim. `EO_data_processing/` (Python) builds the
+per-watershed MODIS and NLCD products and has its own CLAUDE.md.
 
-## Multi-Language Architecture
+## Ground truth and change flow
 
-This project implements the same signature calculations in Julia (canonical), Python, and R. Numerical agreement is **measured at full scale for both ports** (Python 2026-08-26, rpkg 2026-08-27 — August 2026 port campaign):
+1. **Methodology** = the co-authors' guidelines Google Doc, snapshot
+   `docs/SIGNATURE_GUIDELINES.md`. Code implements it; a disagreement is surfaced to the
+   user, never resolved silently.
+2. **Manuscript** (`docs/MANUSCRIPT_DRAFT.md`, read-only snapshot) must stay consistent
+   with the code and the repo docs; corrections to it are relayed to the user, since the
+   Google Doc cannot be edited from here.
+3. **Julia first**, benchmark, then port to Python and rpkg. A change is done only when all
+   three agree.
+4. **At the start of every session run `/sync-docs`** — it fetches and diffs both Google
+   Docs and is nearly free when nothing changed. Report "guidelines unchanged, manuscript
+   unchanged" in one line when so.
 
-| Directory | Language | Status | Description |
-|-----------|----------|--------|-------------|
-| `julia/` | Julia | **Canonical** | Reference implementation - all changes start here |
-| `python/` | Python | Active | Port of Julia signatures |
-| `rpkg/` | R | Active | R port of Julia signatures |
-| `R/` | R | Deprecated | Legacy shim (still functional for ingestion) |
+## Critical constraints (always)
 
-**Change Workflow**: Julia is canonical. Changes are made in Julia first, then propagated to Python and rpkg. Golden outputs from Julia (April 2026) validate other implementations. Historical note: R was canonical through March 2026; Guidelines Section 3 changes (April 2026) were implemented Julia-first for faster iteration (~10 min benchmark vs hours for R), which drove the transition. Python and rpkg synced April 14-15. **As of the August 2026 port campaign both ports IMPLEMENT all six formerly Julia-only features** — Pettitt changepoint fields, the 20-value stats floor, the annual-values collector, the b=1 recession alpha, snow and drought — i.e. the 1,653-column product, not the April 623-column subset. **BOTH ports are VALIDATED at full scale against canonical Julia** — Python 2026-08-26, rpkg 2026-08-27, each passing strict schema equality, the swallowed-failure gate and the cross-language annual-parquet gate (docs/CROSS_LANGUAGE_STATUS.md).
+- **CSV output contract**: column names and order never change; every annual signature
+  has exactly 16 columns (8 statistics + 8 Pettitt fields) from `generate_stats()`. The
+  single-valued exceptions are enumerated in `docs/SIGNATURES.md` and `config.R` only.
+- **Water year** Oct 1 – Sep 30. **Flow units** mm/day; 37 Canadian gages are raw m³/s
+  (`area_normalized = FALSE`) and their Q-to-PPT signatures are NA by design.
+- **Qualification**: 20+ water years per gage and ≥ 60 % of the window's years. Year
+  rejection happens ONLY in `preprocess_daily_data()` (> 30 raw NAs or a gap > 3 days;
+  negative Q only if configured). No NA filling and no per-year thresholds inside
+  signature functions.
+- **Config** `config/signatures_config.json` is the source of truth, with byte-identical
+  bundled copies in `python/streamflow_signatures/data/` and `rpkg/inst/config/`. Julia
+  bakes it at PRECOMPILE time — purge the compiled cache after a config edit.
+- **Every artifact of a run lives in that run's own folder**; `docs/benchmarks/` holds
+  tools and the long-lived reference CSVs only.
+- **Delivered products are never rewritten** without an explicit user decision; STATUS.md
+  lists the standing ones.
+- **Inputs on the exFAT drive can be silently truncated** — verify sizes and `PAR1`
+  footers before a long run, and use the rebuilt Daymet parquet.
+- **Public mirror**: https://github.com/CZ-Sync/HISSS is a snapshot built by
+  `./publish_to_hisss.sh` — run it after every merge to main; never commit there directly.
+  Every external-facing repo pointer uses that URL.
 
-**Canadian HYDAT Metadata**: RHBN and REGULATED status for Canadian gages is pre-exported to `metadata/canadian_hydat_interference.csv` (via `R/export_hydat_metadata.R` using tidyhydat). Julia reads this CSV directly; R uses tidyhydat at runtime.
+## Signature statistics rule
 
-## Canonical Code
+Suffixes `_senn_slp, _linear_slp, _spearman_rho, _spearman_pval, _mk_rho, _mk_pval, _mean,
+_median` plus `_pettitt_{cp_year, pval, pre_mean, post_mean, delta_mean, pct_change,
+pre_mk_pval, post_mk_pval}`. Trend statistics require 60 % overall and 80 %
+first-and-last-decade completeness and ≥ 20 annual values (recession and elasticity are
+exempt). Eight signature CATEGORIES (`docs/signature_categories.csv`) group the 15
+computing FUNCTION FAMILIES; "category" is the manuscript's and the guidelines' word.
 
-**Julia canonical source:**
-- `julia/src/` - All canonical signature modules (20 modules + `StreamflowSignatures.jl`)
-- `config/signatures_config.json` - Cross-language configuration (source of truth)
-- `config.R` - R-side configuration, logging, validation (still active for R ingestion scripts)
+## Procedures and scoped rules
 
-**R port:**
-- `rpkg/` - Proper R package mirroring Julia structure (active, production-ready)
+- Skills (body loads when invoked): `/sync-docs`, `/add-signature`, `/run-benchmark`,
+  `/cross-language-alignment`.
+- Rules in `.claude/rules/` (load when matching files are touched): `signatures-code.md`
+  for the Julia/Python/rpkg sources and config; `benchmarks.md` for `docs/benchmarks/`;
+  `changelog.md` for CHANGELOG, STATUS and the reconciliation logs.
+- `claude-skill/streamflow-signatures.md` is the USER-facing interpretation skill, not a
+  Claude Code skill — keep it current when methodology, formats or validation change.
+- Record user DECISIONS as such, with the date, in CHANGELOG and as a STATUS.md one-liner.
 
-**Deprecated:**
-- `R/helperFunctions.R` - Legacy monolithic R implementation (deprecated; use rpkg instead)
-- The `archive/` directory of deprecated `helperFunctions*.R` variants was removed in the August 2026 pre-publication cleanup (recoverable from git history).
+## Reference docs — read on demand, never `@`-import
 
-## Key Entry Points
+| Read when you need | File |
+|---|---|
+| a signature's definition, method, units, caveats | `docs/SIGNATURES.md` (per family), then `docs/SIGNATURE_GUIDELINES.md` (ground truth) |
+| architecture, data flow, NA pipeline, parquet inventory, HydroATLAS metadata, explorer builds, benchmark history | `docs/DEVELOPMENT.md` |
+| what changed and why; open items in full | `CHANGELOG.md`; history in `changelog-old.md` and `docs/CHANGELOG_ARCHIVE.md` |
+| cross-language residuals and gate results | `docs/CROSS_LANGUAGE_STATUS.md` |
+| the 11 external data sources | `docs/DATA_SOURCES.md` |
+| open guidelines / manuscript items | `docs/reconciliation/guidelines_todos.md`, `manuscript_log.md` |
+| design records, run plans, manuscript edit lists | `docs/plans/` (excluded from the mirror) |
+| EO products (MODIS LAI/LULC, Annual NLCD) | `EO_data_processing/README.md`, `README_NLCD.md` |
 
-- `julia/src/StreamflowSignatures.jl` - PRIMARY: Julia package module (canonical)
-- `docs/benchmarks/run_julia_benchmark.jl` - Full signature extraction benchmark (~27 min, 7,313 gages)
-- `run_ingest_usgs_hydat.R` - Raw USGS/HYDAT data ingestion to parquet (R, still active)
-- `run_full_processing.R` - Legacy: Full R signature extraction with climate (still functional for ingestion)
-- `run_caravan_processing.R` - Caravan data processing (lower priority)
-- `streamflowAndClimateVisualizationApp/app.R` - Shiny dashboard
+## Tests
 
-## Critical Constraints
-
-1. **CSV Output Format**: MUST remain unchanged - downstream tools depend on exact column names
-2. **Water Year**: Oct 1 - Sep 30
-3. **Flow Units**: mm/day (converted from cfs/m3s)
-4. **Minimum Data Requirements**:
-   - 20+ water years per gage
-   - Year qualification via `preprocess_daily_data()`: rejects years with >30 NAs, >3-day gaps; negative Q rejection conditional on `reject_negative_flow` config (default: false)
-   - No per-signature min_days thresholds — preprocessor is single source of truth
-   - No additional min_Q_value_and_days filter in non-legacy path (removed April 2026 — was causing R to diverge from Python/Julia by excluding low-flow years)
-5. **Experiment outputs live together** (user convention, 2026-07-22): ALL
-   artifacts of a production/experiment run — signatures CSV, annual parquet,
-   timing JSON, run log, signature explorer (+ its `_annual/` sidecar folder),
-   and every comparison dashboard/CSV/summary generated for that run — belong in
-   that experiment's OWN output folder, one unique folder per experiment (e.g.
-   `processedOuts_drought_28jul2026` for the current WY 1993–2025 standard
-   product). Do NOT leave
-   run-specific artifacts in `docs/benchmarks/` — the repo keeps only the tools
-   and the long-lived cross-language reference CSVs (April golden/experiment
-   files).
-6. **NA Handling** (April 2026): `preprocess_daily_data()` runs ONCE per gage BEFORE signatures.
-   - Interpolates internal gaps <= 3 days; rejects years with >30 raw NAs, >3-day gaps
-   - Negative Q rejection is config-driven (`reject_negative_flow: false` by default); `negative_ann` signature counts Q<0 days instead
-   - Constant-SD is a QA flag only (never causes year rejection)
-   - Config: `config/signatures_config.json` → `na_handling` section
-   - `use_legacy_filtering: false` — new preprocessing is the default
-   - Do NOT use fillna(0) in signature functions — the preprocessor handles NAs centrally
-   - Do NOT add per-year min_days or max_na_frac checks in signature functions
-
-## Public Mirror (CZ-Sync/HISSS)
-
-The public code repo for the HISSS manuscript is https://github.com/CZ-Sync/HISSS —
-a snapshot mirror built by `./publish_to_hisss.sh` (tracked files minus the exclusion
-list in the script header: Claude tooling, `docs/MANUSCRIPT_DRAFT.md`, `docs/plans/`,
-the Shiny app, the two large golden-output CSVs). **Run the script after every merge
-to main to keep the mirror current.** Never commit to HISSS directly.
-
-## Signature Statistics Rule
-
-**Every signature MUST produce exactly 8 statistics using `generate_stats()`:**
-
-| Suffix | Statistic |
-|--------|-----------|
-| `_senn_slp` | Theil-Sen slope |
-| `_linear_slp` | Linear regression slope |
-| `_spearman_rho` | Spearman correlation |
-| `_spearman_pval` | Spearman p-value |
-| `_mk_rho` | Mann-Kendall tau |
-| `_mk_pval` | Mann-Kendall p-value |
-| `_mean` | Arithmetic mean |
-| `_median` | Median |
-
-**Exceptions** (documented in `config.R`):
-- `elasticity_static` - single value, not time series
-- `log_a_seasonality_amplitude`, `log_a_seasonality_minimum` - recession seasonality
-- `runoff_ratio_high_count` - per-gage scalar (count of years with ratio > 2.0)
-- `elasticity_years_total`, `elasticity_years_low_ppt` - per-gage diagnostics
-- `ice_affected_days_total` - per-gage diagnostic
-- `recession_alpha_point_cloud_linear_reservoir` - per-gage scalar (whole-record median Q_{i+1}/Q_i)
-
-## Code Status
-
-| File | Status | Notes |
-|------|--------|-------|
-| `julia/src/*.jl` | **CANONICAL** | All canonical signature modules (20 modules + package entry) |
-| `docs/benchmarks/run_julia_benchmark.jl` | **PRIMARY** | Full benchmark entry point |
-| `config/signatures_config.json` | **ACTIVE** | Cross-language configuration |
-| `python/streamflow_signatures/` | **ACTIVE** | Python port |
-| `rpkg/` | **ACTIVE** | R port (proper package) |
-| `config.R` | **ACTIVE** | R-side config (ingestion scripts) |
-| `run_ingest_usgs_hydat.R` | **ACTIVE** | Raw data ingestion (R) |
-| `R/helperFunctions.R` | **DEPRECATED** | Legacy shim - use rpkg instead |
-| `run_full_processing.R` | **LEGACY** | Still functional for R ingestion |
-| `R/tests/smoke_test.R` | **ACTIVE** | Quick R validation |
-| `R/tests/qa_qc_signatures.R` | **ACTIVE** | Output validation |
-| `archive/*` | **REMOVED** | Deleted Aug 2026 (pre-publication cleanup); in git history only |
-
-## Adding New Signatures
-
-1. Create function in appropriate `julia/src/*.jl` module returning annual values
-2. Call `generate_stats()` to produce 8 statistics
-3. Register in `julia/src/signatures.jl` orchestration function
-4. Add base name to `EXPECTED_SIGNATURE_BASES` in `config.R` (per-gage scalars that
-   don't follow the 8-stat pattern need their own `EXPECTED_*` constant, wired into
-   `validate_output_schema`)
-5. **Register in the test/validation registries** — easy to miss, and each one fails
-   loudly only after the fact:
-   - `EXPECTED_DENSE_SIGNATURES` in `julia/test/test_annual_collector.jl` — asserts
-     **set equality** of collected annual series, so any new dense signature fails it
-     until listed
-   - the signature-count gate in `docs/benchmarks/validate_production_run.py`
-     (`ann.signature.nunique() == N`)
-   - the **expected total summary-column count** in the docs — count both the
-     8-stat + 8-Pettitt fields AND any non-8-stat scalars (getting this wrong is easy:
-     the drought family shipped documented as +160 when it is +165)
-6. Run the Julia unit suite (`julia --project=julia julia/test/runtests.jl`), then the
-   benchmark (`docs/benchmarks/run_julia_benchmark.jl`, ~27 min) to verify
-7. **Prove additivity, don't assume it** — diff the benchmark output against the previous
-   canonical run: every pre-existing column must be unchanged (only
-   `flagged_for_high_na` may legitimately shift — since 2026-09-04 its denominator is
-   the signature columns present in the table, selected by name from the config
-   manifest `qa_qc.high_na_denominator`, so a new family with NA-heavy columns can
-   move it), AND the new columns
-   must be populated. The orchestrator's per-signature `try/catch` turns an unexpected
-   failure into silently missing columns, so a green unit suite proves nothing here.
-   Smoke tests should assert new values are FINITE, not merely that the keys exist.
-8. Port to Python (`python/streamflow_signatures/`) and rpkg (`rpkg/R/`)
-
-## Current Standard Products (as of 2026-08-11)
-
-Two delivered products, both @ 60% qualifying fraction, both **1,653 columns** (incl. the
-drought family), each in its own folder with explorer + comparison dashboards + retained
-validation reports:
-
-| # | Window | Folder | Gages | Annual parquet |
-|---|---|---|---|---|
-| 1 | WY 1993–2025 | `processedOuts_drought_28jul2026` | 6,678 | 18,898,406 rows / 100 signatures |
-| 2 | WY 1980–2025 | `processedOuts_1980_2025_11aug2026` | 6,250 | 24,366,487 rows / 100 signatures |
-
-Both supersede the 22 Jul folders (1,488 columns, no drought). **Neither is a subset of the
-other** and **record-dependent signatures (drought thresholds, `*_all` pulses, elasticity,
-parameterized BFI) must never be compared across them — nor re-aggregated from the annual
-values onto a different window, since their thresholds/record means come from the run's own
-window.** Each Julia run also writes the per-signature annual values parquet alongside the
-summary CSV (when `annual_values.save` is on — the shipped default; implemented in all
-three languages since the August 2026 port campaign) — see DEVELOPMENT.md → Annual Values Export.
-
-⚠️ **Climate input**: the canonical `daymet_1980_2023.parquet` is TRUNCATED; use
-`daymet_1980_2023_rebuilt_10aug2026.parquet` (product #1 predates the rebuild, product #2
-uses it; difference bounded at ≤ 3.4e-13). See DEVELOPMENT.md → Active Parquet Files.
-
-⚠️ **Known issue in BOTH delivered products — `flagged_for_high_na` (one column).** It
-was computed over the 16 numeric metadata columns only (runner `Vector{Any}` bug), so it
-is TRUE for every Canadian gage + USGS gages lacking GAGES-II attributes (1,224 / 1,243)
-and says nothing about signature completeness. Code fixed 2026-09-04; **user decision:
-the products are NOT rewritten — regenerate the column the next time any portion of the
-data is rerun** (`docs/benchmarks/recompute_high_na_flag.py` or a benchmark). Cataloged
-in CHANGELOG → Known Issues; the HydroShare READMEs and dictionary row carry the caveat.
-
-## References
-
-- **@docs/DEVELOPMENT.md** - Architecture, file structure, common tasks, workflows
-- **@docs/SIGNATURES.md** - Detailed signature documentation (8 signature categories, sections by function family; canonical mapping `docs/signature_categories.csv`)
-- **@CHANGELOG.md** - Current work, roadmap — kept SHORT: `[Unreleased]` live items, the current month in full, condensed summaries of the two months before it. Older full-text entries: `changelog-old.md` (NOT auto-loaded — read it only when a pointer sends you there); Dec 2025 – Apr 2026: `docs/CHANGELOG_ARCHIVE.md`
-- **@docs/SIGNATURE_GUIDELINES.md** - Collaborative guidelines from hydrology colleagues (auto-synced)
-- **@docs/MANUSCRIPT_DRAFT.md** - HISSS manuscript draft snapshot (auto-synced; reconciliation review)
-- **@EO_data_processing/README.md** - Earth Observation (MODIS LULC & LAI) per-watershed ingestion and processing
-- **@EO_data_processing/README_NLCD.md** - Per-watershed Annual NLCD (CONUS land cover + impervious, 30m, 1985-2025) — MODIS LULC sibling product
-
-## Session-Start Workflow: Document Sync & Reconciliation
-
-Two collaborative Google Docs govern this project and are synced **at the start of each session**. Fetch technique for both: WebFetch paraphrases through a small model, so for faithful sync/diffing download the published page's raw HTML (curl) and extract the text from the `<div id="contents">` block.
-
-### A. Signature Guidelines (ground truth for methodology)
-
-The guidelines document is a core design feature: domain experts write plain-English signature definitions and QA/QC requirements, and those are translated into code. The current doc (declared ground truth 2026-08-31) lives at a NEW publish URL, superseding the July 2026 doc at the old `2PACX-1vQnt…` URL (which itself had supplanted an earlier version at that same URL).
-
-1. **Fetch fresh content** from the Google Doc:
-   ```
-   URL: https://docs.google.com/document/d/e/2PACX-1vSVjtqLKk1r9TczxLEBhlnzfBWbm1TQVfvqERm-jEwLISZTEWx73ofV4Ng9H0JaXA/pub
-   ```
-
-2. **Save to `docs/SIGNATURE_GUIDELINES.md`** (overwrite previous content; update the `Last synced` date in the header)
-
-3. **Compare with previous version** to identify changes:
-   - New signature definitions or requirements
-   - Updated QA/QC flags or thresholds
-   - New function requirements or parameters
-   - Comments or suggestions from colleagues
-
-4. **Add new TODOs to `CHANGELOG.md`** under `[Unreleased]` → `### Guidelines Document TODOs`
-
-5. **Present changes to user**:
-   > "Guidelines document has X new/changed items. Would you like to review and implement?"
-
-6. **Implementation workflow**: For each suggestion:
-   - Create todo item
-   - Implement the change in Julia first (`julia/src/`)
-   - Run Julia benchmark (`docs/benchmarks/run_julia_benchmark.jl`, ~27 min) to verify
-   - Port to Python and rpkg
-   - Mark todo complete
-
-### B. Manuscript Draft (HISSS paper — reconciliation review)
-
-The first manuscript leveraging this workflow (Scientific Data, "HISSS", submission target Nov 9 2026) describes the methods implemented here. Its claims must stay consistent with both the code and the repo documentation.
-
-1. **Fetch fresh content** from the Google Doc:
-   ```
-   URL: https://docs.google.com/document/d/e/2PACX-1vS7j4FRp7SEwlXoBUVA8NA7cj_I0XzyS0u58r3bl8SOz4BfpZPrdPJge4RMcFocnX8Gnllkc1M-CTJ3/pub
-   ```
-
-2. **Compare with the saved snapshot** `docs/MANUSCRIPT_DRAFT.md` (diff the extracted text against the snapshot body below its header). If unchanged, report "manuscript unchanged" and stop here.
-
-3. **If edited**: overwrite the snapshot (update `Last synced`), then run a **reconciliation review** of every changed methods claim in three directions:
-   - **Manuscript vs code** — is the described method correctly and precisely implemented (Julia canonical `julia/src/` + `config/signatures_config.json`)?
-   - **Manuscript vs repo docs** — is it correctly and precisely documented (`docs/SIGNATURES.md`, `docs/DEVELOPMENT.md`, `docs/SIGNATURE_GUIDELINES.md`)?
-   - **Direction of fix** — if the code/docs are right and the manuscript is wrong, the fix belongs in the Google Doc (flag for the user to relay to co-authors — the doc cannot be edited from here); if the manuscript states the agreed methodology and the code/docs lag, it becomes an implementation TODO.
-
-4. **Log all resulting updates (implemented and planned)** in `CHANGELOG.md` under `[Unreleased]` → `### Manuscript Reconciliation Log`, as dated entries. Move entries to the dated release section once resolved.
-
-5. **Present findings to user** with the discrepancies grouped by direction of fix.
-
-## Changelog Maintenance
-
-**CHANGELOG.md must be kept updated consistently:**
-
-1. **Document all code changes** - Every bug fix, feature, or modification
-2. **Track guidelines implementation** - When implementing suggestions from `docs/SIGNATURE_GUIDELINES.md`
-3. **Use date-based versioning** - Format: `[Month Year]` (e.g., `[March 2026]`)
-4. **Severity labels** - Use HIGH/MEDIUM/LOW for bug fixes
-5. **New suggestions** - Add under `[Unreleased]` → `### Guidelines Document TODOs`
-6. **Manuscript reconciliation** - Log implemented and planned updates from manuscript syncs under `[Unreleased]` → `### Manuscript Reconciliation Log` (dated entries)
-7. **Keep it short — it is loaded into every session** (user convention, 2026-09-10). `CHANGELOG.md` holds only the `[Unreleased]` items still open, the current month in full, and condensed headline summaries of the two months before it. When a month closes, condense it here (headline bullets + pointers) and move its full text VERBATIM, newest first, to `changelog-old.md`; move completed Planned items, resolved Known Issues (leave a short product-caveat entry if one still applies), applied guidelines items and superseded dated reconciliation entries there too. Never `@`-reference `changelog-old.md` — that would load it. Dec 2025 – Apr 2026 detail stays in `docs/CHANGELOG_ARCHIVE.md`.
-
-## Claude Skill Maintenance
-
-**Update `claude-skill/streamflow-signatures.md` whenever:**
-
-1. **User feedback** - Recurring questions, confusion points, or feature requests
-2. **Novel findings** - New understanding of signatures, edge cases, or best practices
-3. **Workflow updates** - Changes to processing pipelines, data formats, or validation
-4. **Methodology changes** - Updated formulas, parameters, or statistical approaches
-5. **Cross-language updates** - When Python/Julia implementations are added or modified
-
-The skill helps users interpret outputs, understand methodology, and troubleshoot issues.
+`julia --project=julia julia/test/runtests.jl`; `pytest python/tests`; rpkg `testthat`
+against the installed package (`R CMD INSTALL rpkg` first). A green unit suite does not
+prove a production run — the orchestrator swallows per-family exceptions into missing
+columns; see `/add-signature` §3.

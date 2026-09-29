@@ -2,15 +2,18 @@
 
 All notable changes to the Streamflow Signatures project.
 
-This file holds only the CURRENT state: `[Unreleased]` (open plans, live known issues,
-open guidelines/manuscript items), the most recent month in full, and condensed
+This file holds only the CURRENT state: `[Unreleased]` (open plans, live known issues),
+the most recent month in full, and condensed
 summaries of the two months before it. Everything older — the full August and July 2026
 entries, June–March 2026, and the resolved/superseded `[Unreleased]` items — lives in
 [changelog-old.md](changelog-old.md) (verbatim, newest first); Dec 2025 – April 2026
-detail is in [docs/CHANGELOG_ARCHIVE.md](docs/CHANGELOG_ARCHIVE.md).
+detail is in [docs/CHANGELOG_ARCHIVE.md](docs/CHANGELOG_ARCHIVE.md). Open guidelines and
+manuscript items live in `docs/reconciliation/`; the one-line project status that Claude
+loads every session is `docs/STATUS.md`.
 
-> **Convention** — keep this file short: it is loaded into context at the start of every
-> session (CLAUDE.md → `@CHANGELOG.md`). When a month closes, condense it here to a
+> **Convention** — keep this file short. Since 2026-09-29 it is NOT auto-loaded; the one-liners
+> Claude reads every session live in `docs/STATUS.md` (rule `.claude/rules/changelog.md`).
+> When a month closes, condense it here to a
 > headline-per-change summary with pointers and move its full text to `changelog-old.md`
 > (verbatim, newest first); prune `[Unreleased]` to the items still open, moving resolved
 > entries and superseded dated log entries to `changelog-old.md` as well. File-level change
@@ -270,468 +273,38 @@ detail is in [docs/CHANGELOG_ARCHIVE.md](docs/CHANGELOG_ARCHIVE.md).
   with a regression test; verified inert for the delivered WY 1993–2025 product (zero masking
   events in that window). Record: changelog-old.md → August 2026.
 
-### Guidelines Document TODOs
-**Synced 2026-09-29 — 20 wording regions changed since 2026-09-10; structure unchanged
-(277 vs 270 paragraphs). Snapshot overwritten.** Landed from earlier queues: Part 4
-"missing years excluded" and "handles flagged data" (both 2026-09-04 items, now checked
-below), Part 5 `flagged_for_high_na` redefinition (1) + the cross-language qualifier (3),
-and Part 5 now says the flags "can be recomputed from an output CSV without rerunning any
-signature" (true — `refresh_qa_flags.jl`, `recompute_high_na_flag.py`). Verified against
-code: the §2.2.2-style constant-flow rule is not in the doc, but Part 3.8 snow rewording,
-the b = 1 recession paragraph, and the 2 % reversal note all still match. New doc-side
-items (code is right):
-- [ ] **Part 3.3 parameterized-BFI validity interval changed from (0, 1) to [0, 1] — wrong.**
-  `analyze_baseflow_indices_with_parameters` returns NA when `alpha <= 0 || alpha >= 1`
-  (`julia/src/baseflow.jl:283`), so the OPEN interval was correct; revert to (0, 1).
-- [ ] Part 1.2 now cites "Hecht et al. 2024" for the four QA conditions; no such entry in
-  Part 6 References — add the reference.
-- [ ] Part 3.3 and 3.3-recession now use the name `recession_alpha_point_cloud` twice; the
-  shipped column is `recession_alpha_point_cloud_linear_reservoir` (carried forward).
-- [ ] Part 5 (2): the released-product high_na known-issue sentence still not landed.
-- [ ] Carried forward unchanged: "(see 3.12)" → 3.1; `avg_storage` block absent;
-  `ice_affected_days_total` absent; elasticity "11 consecutive qualifying observations";
-  Pettitt window paragraph in Part 2. Nit: "occurs ." (stray space) in `swe_max_dowy`.
-
-**Synced 2026-09-10 (pm) — the doc was RESTRUCTURED to the colleague's 8 categories; full
-category crosswalk run (user request).** Part 3 now has eight modules (Flow Volume, Flow
-Duration, Storage, Flashiness, Drought, Flow Timing, Precipitation Streamflow, Snow) with
-the former 13 modules nested as function blocks; the legacy tail and START/END markers
-are gone. Snapshot overwritten. Manuscript unchanged. Live HydroShare is private and
-Chrome was not connected, so the deposit side was checked on the STAGED folder. Record
-and per-output CSV: `docs/plans/2026-09-10-signature-category-review.md` (afternoon
-section) + `2026-09-10-signature-category-crosswalk-pm.csv`. Open items, by product:
-- [ ] **Manuscript** still says 14 categories in the §2 preamble and §2.2.1 (and points to
-  the dictionary for details); the §4 "sites and signature categories" figure scheme is
-  unknown. Needs the 8-category wording once the vocabulary is settled.
-- [ ] **HydroShare R1/R2 (staged)**: dictionary `category` + `hisss_signature_categories.csv`
-  carry the 9-class grouping (7 bases differ from the doc: flashinessRB, six "Snow
-  Timing" bases); the 21 scalars have no group; README lede lists the 14 families; the
-  README file-table row says "nine-class … finer methodological categories are a
-  separate taxonomy"; the shipped explorer / validation summary / dashboard embed the
-  repo's 16- and 15-group schemes.
-- [ ] **Guidelines doc internal**: `avg_storage` / `calculate_average_storage()` absent
-  (sheet + dictionary + manuscript all carry storage); TQmean in 3.4 Flashiness vs Flow
-  Volume in the sheet and dictionary (the one annual base where doc and sheet disagree);
-  Part 1.2 "(see 3.12)" → 3.1; `ice_affected_days_total` has no module; names
-  "recession_alpha_point_cloud" / "Negative_ann" vs the shipped columns
-  `recession_alpha_point_cloud_linear_reservoir` / `negative_ann`.
-- [x] **Repo docs on the public mirror** — DONE 2026-09-10 (later): the user ruled that
-  the eight are the categories; README.md, SIGNATURES.md, CLAUDE.md, claude-skill, the
-  schematic and the explorer builder are aligned (see `[September 2026]`). Manuscript and
-  guidelines-doc edits catalogued in `docs/plans/2026-09-10-manuscript-category-edits.md`;
-  HydroShare docs deliberately untouched (Planned → HydroShare documentation updates).
-
-**Synced 2026-09-10 — 19 wording regions + two Part 4 corrections landed; signature-category
-review (user request).** Snapshot overwritten (header lists the edits; the legacy tail no
-longer carries the page JavaScript the 2026-09-04 rebuild appended). Applied in the doc
-since 2026-09-04: Part 4 entry point → `process_gages_rawToRaw()` (new + legacy parts)
-and the compilation gate stated correctly — the two Part 4 items below are now checked;
-flashiness / flow-timing / snow definitions reworded, all still consistent with the code.
-Part 5 unchanged (the three `flagged_for_high_na` edits still pending). New nit: Part 1.2
-says Negative_ann is "(see 3.12)" — the module is 3.11 in the pasted doc (3.12 is Snow);
-the pointer is right only under the draft's numbering that had Storage at 3.11.
-
-*Signature categories — three schemes are in circulation and they are not the same axis*
-(record + 121-row matrix: `docs/plans/2026-09-10-signature-category-review.md` and
-`docs/plans/2026-09-10-signature-category-matrix.csv`):
-- **14 methodological categories** — manuscript §2 preamble + §2.2.1, README.md,
-  SIGNATURES.md summary table, the workflow schematic, and the code's 14 family functions
-  (baseflow's two functions counted once). Every 14-list agrees.
-- **13 guidelines modules** (3.1–3.13) — the same list minus Storage; `avg_storage` is
-  documented only in the legacy tail. That is the whole 13-vs-14 discrepancy (queued
-  2026-09-04, still open).
-- **8 analysis groups** (colleague's sheet `1sFVNL9bp…`, 100 annual bases, no scalars) —
-  a coarser interpretive grouping, NOT a re-cut of the 14: Baseflow + Recession + Runoff
-  ratios + Storage → "Storage"; Pulses + Reversals + Elasticity + flashinessRB →
-  "Flashiness"; TQmean + negative_ann → "Flow Volume"; FDC → "Flow Duration"; Q-P
-  seasonality → "Precipitation Streamflow"; Snow; Drought; Flow Timing. It is a revision
-  of the **9-class exploratory grouping shipped in the staged HydroShare
-  `hisss_signature_categories.csv` AND as the `category` column of
-  `hisss_data_dictionary.csv`**: 7 of 100 rows differ — flashinessRB moves Storage →
-  Flashiness (the staged placement is an error) and the 6 "Snow Timing" bases fold into
-  "Snow".
-- **The inconsistency that bites**: the manuscript says "14 categories … details in
-  hisss_data_dictionary.csv", but the dictionary's only `category` column carries the
-  9-class grouping — a reader finds 9 categories that do not match the 14 named in §2.2.1.
-  The Resource 1/2 READMEs do say the CSV is a "coarse nine-class exploratory grouping"
-  and the paper's categories are "a separate taxonomy", but nothing ships the 14.
-- **Proposed solution (pending user decision)**: keep BOTH axes under distinct names —
-  *signature category* (14; methods, guidelines modules, code families) and *analysis
-  group* (the colleague's 8; figures and exploratory dashboards) — and (1) restore a
-  Storage module to guidelines Part 3 so it reads 14 (renumbering 3.11–3.13 → 3.12–3.14,
-  which also repairs the "(see 3.12)" pointer); (2) adopt the colleague's sheet over the
-  staged 9-class file, extended to the 21 scalars by inheriting each scalar's family
-  group; (3) give the dictionary two columns (`category` = 14, `analysis_group` = 8) and
-  ship both in the categories CSV; (4) add one bridging sentence to the manuscript where
-  the §4 figure uses the 8 groups; (5) align the repo tooling afterwards — dashboard
-  `SIGNATURE_GROUPS` (negative_ann sits in "Pulses"; 21 scalars unselectable), the
-  explorer/compare categorizers (split "Flow percentiles" from "Flow volumes", scalars
-  fall to "Other"), the claude-skill overview (lists 6 categories), SIGNATURES.md (no
-  numbered Negative Flow Days section). Judgment calls to put to the colleague, not
-  errors: elasticity under "Flashiness" while runoff ratios sit in "Storage" and Q-P
-  seasonality in "Precipitation Streamflow" (three P–Q families in three groups); TQmean
-  and negative_ann under "Flow Volume".
-
-**2026-09-04 (later) — user-requested accuracy review of Parts 4 and 5 (live doc
-re-fetched; three small edits since the morning sync mirrored into the snapshot).**
-Findings, by direction of fix:
-
-*Part 4 (doc-side — the code is the legacy R ingestion and behaves as read):*
-- [x] **Wrong entry point named.** APPLIED in the doc 2026-09-10. The production compilation (`run_ingest_usgs_hydat.R`)
-  calls `process_gages_rawToRaw()`, which writes the daily parquet + the metadata table
-  (`processing_status`, `area_normalized`) and computes NO signatures. The documented
-  `process_gages_rawData()` is the legacy end-to-end R path (retrieval + R signatures +
-  HydroBasins lookup) that did not produce HISSS. Part 4 should describe `rawToRaw` (or
-  say the R utilities only compile inputs; signatures come from the Julia/Python/R library).
-- [x] **The `min_Q_value_and_days` legacy note is wrong for the compilation stage.** APPLIED in the doc 2026-09-10. The
-  gate is STILL applied there: a gage is `success` only if ≥ 20 calendar years each hold
-  ≥ 30 days with Q > 0.0001 (`MIN_Q_VALUE_AND_DAYS = c(0.0001, 30)`, `MIN_NUM_YEARS = 20`);
-  80 gages carry `insufficient_years` ("Only N years with valid data", max 19) in the
-  production metadata. What April 2026 removed is the per-year application inside the
-  SIGNATURE path. The note should say so, and the manuscript's "fewer than 20 total years
-  containing valid daily observations" glosses the ≥ 30-day/0.0001 rule (relay).
-- [x] APPLIED in the doc by 2026-09-29. "Missing or invalid years are excluded from analysis" — not at ingestion:
-  `rawToRaw` keeps every day in the window once the gage qualifies; year exclusion is the
-  preprocessor's job (Part 1.2). True only of the legacy `rawData` path.
-- [x] APPLIED in the doc by 2026-09-29. `generate_streamflow_dt()` "handles flagged data": the qualifier mask (keep A, A e,
-  P, P e) is applied to USGS only; HYDAT `Symbol` values are carried in `flag` but never
-  mask Q. The "required years" check is a row-count proxy (`nrow > 365 × min_num_years`).
-- [ ] `process_caravan_gages()` "handles redundancy between CAMELS and HYSETS" —
-  overstated: it only skips a (watershed, project) pair already in the output file on
-  resume; the same USGS gage present in both projects is processed twice. Also
-  `run_caravan_processing.R` calls `process_caravan_to_annual()` (a 328-valid-day annual
-  aggregator), not `process_caravan_gages()`. Caravan is not part of HISSS — consider
-  saying so or dropping the module.
-- [ ] `integrate_daymet_with_streamflow()` is not on the production path either — the
-  Julia runner joins climate itself (`gage_id` + `date`, keeping PPT and SWE only). The
-  R function's behaviour is otherwise as described (site_id match, join on Date, < 95 %
-  coverage warning, prcp → PPT). The path "data_out/daymet_1980_2023.parquet" is a
-  parameter; config.R points at `D:/processedOuts_feb2026/…`, and the products used the
-  `_rebuilt_10aug2026` file (the canonical file is truncated).
-- Dropping `convert_daymet_zip_to_parquet()` is fine, but the doc now says nothing about
-  how the climate parquet was built; the current input came from the Python
-  `docs/benchmarks/convert_daymet_csvs_to_parquet.py` (365-day Daymet calendar).
-
-*Part 5 (thresholds all match `config/signatures_config.json`; 11 of 12 flags verified
-identical across languages on the reference set):*
-- [ ] **`flagged_for_high_na`** — code fixed the same day (one shared definition; see
-  `[September 2026]`); three doc-side edits queued for the Google Doc: (1) redefine the
-  flag as ">30 % of a gage's signature-derived columns (every column except the gage
-  metadata and the flag columns) are NA"; (2) append the known-issue sentence for the
-  released products (column computed over the 16 metadata columns; marks every
-  Canadian gage; regenerated at the next data rerun); (3) qualify "identical across the
-  Julia, Python, and R implementations" with a pointer to that known issue. Optional
-  nit: the `flagged_for_elasticity_range` parenthetical should read "the only range
-  check not on a _mean column".
-- Part 4: the six concise replacement edits are in
-  `docs/plans/2026-09-04-guidelines-part4-edits.md` (delivered to the user in-session).
-- [x] Everything else verified against code: ranges, the BFI defensive note (per-year
-  `clamp(bfi, 0, 1)` in `baseflow.jl`), `elasticity_static` as the one non-`_mean` input,
-  ties allowed in both order checks, NA never triggers a flag, seasonal-sum tolerance 0.2.
-  One negligible edge: Python flags `seasonal_sum` when `Qann_mean == 0` and the seasonal
-  sum is nonzero (inf ratio) where Julia/rpkg return false — unreachable in practice.
-- Note: the legacy `R/tests/qa_qc_signatures.R` uses STRICT ordering (ties flag); the
-  doc's "R implementation" must mean rpkg, which matches Julia/Python.
-
-**Synced 2026-09-04 — the doc now carries the 2026-08-31 RESTRUCTURE (pasted between
-`START/END: NEW DOCUMENT` banners) followed by the previous document verbatim under a
-`START: ORIGINAL DOCUMENT` banner; header link now https://github.com/CZ-Sync/HISSS.**
-Snapshot overwritten. Substantive deviations from the delivered draft, **reconciliation
-review PENDING** (surfaced during the 2026-09-04 dataset-join session, not yet
-adjudicated): the entire 3.11 Storage module (`avg_storage`) was DROPPED from the new
-part (modules renumbered; avg_storage survives only in the ORIGINAL part); Part 2's
-Pettitt evaluation-window sentence (WY 1980–2024, ≥ 20 / ≥ 10 obs, WY 2025 excluded)
-dropped; the "T-1 moving window" baseflow bullet and the elasticity decision note
-dropped; `recession_alpha_point_cloud_linear_reservoir` renamed to
-"recession_alpha_point_cloud" (no longer marked per-gage scalar) — the CSV column name
-is unchanged, so this is a doc-side naming discrepancy; snow Purpose rewritten (tie rule
-spelled out; `swe_apr1` lost "leap-year safe"; unclosed parenthesis in melt_season_days);
-Yilmaz et al. (2008) added; typo "Method and parameters→".
-Adjudication queued (2026-09-04, from the census session's own diff of the pasted text vs
-the draft — 48 differing regions, most of them wording):
-- [ ] **Storage module dropped** — the product still ships `avg_storage` (+16 columns)
-  and the manuscript (synced the same day) now lists "catchment storage" among its
-  **14** categories, so the guidelines (13 modules) and manuscript disagree on the family
-  count. [Doc-side: restore the module (recommended) or state that storage is shipped but
-  undocumented there.]
-- [ ] **Pettitt evaluation-window paragraph dropped** — a product-level fact already in
-  both HydroShare READMEs and all 800 Pettitt dictionary rows; Part 2 should carry it.
-- [ ] Minor wording drift (all still consistent with the code as read): Lyne-Hollick
-  "a = 0.925" (conventionally alpha); drought thresholds described as "calculated
-  per-water-year" — they are whole-record (fixed) thresholds applied per water year.
-- The legacy document trailing the new one should eventually be deleted from the Google
-  Doc so the auto-sync diff stops carrying ~4,000 words of superseded text. [Doc-side.]
-
-<!-- New suggestions from hydrology colleagues will be tracked here -->
-<!-- Format: - [ ] Description (source: section name in guidelines doc) -->
-
-**Synced 2026-08-31 — the guidelines doc MOVED to its current publish URL (declared ground
-truth by the user) and was RESTRUCTURED into one self-contained module per signature
-family; most of the doc-side fixes queued that day were APPLIED the same day** (flow-volume
-units, pulse thresholds, NA-handling four-condition wording, recession b=1 sentence, storage /
-snow / drought sections, high_na wording, references, the legacy 8-stat table, typos). The
-applied-items checklist, the Codex review of that sync (GO-WITH-FIXES, 4 MAJOR + 4 MINOR),
-and the **user decision that every external-facing repo pointer goes to
-https://github.com/CZ-Sync/HISSS** are recorded in changelog-old.md → Guidelines Document
-TODOs. Still open from that sync (doc-side; the code is correct):
-- [ ] **Elasticity rolling window wording** (Codex finding): the "11-year window"
-  is 11 consecutive QUALIFYING observations (`elasticity.jl` indexes the
-  PPT-filtered valid series), usually but not necessarily 11 consecutive water
-  years — same nuance already documented for `elasticity_annual`'s adjacent
-  qualifying years. In the restructure draft (§3.9); not yet in the doc.
-- [ ] Recommended additions: the Pettitt window WY 1980–2024 (+ ≥20 obs / ≥10 per
-  segment ⇒ WY2025 excluded from all Pettitt fields); the 20-value stats floor;
-  recession/elasticity trend-gate exemptions; BFI_*_param variants in the Baseflow
-  glossary; Q95_Q10; references for Eckhardt 2005 / Lyne & Hollick 1979 /
-  Baker et al. 2004 / Pettitt 1979. ALL included in the restructure draft
-  (Parts 1.3 / 2, §§3.3–3.5, Part 6); land in the doc when it is pasted.
-- [ ] **Header repo links** (new, user decision 2026-08-31): the doc's "github
-  repo here or here" links point at the private repo and CZ-Sync/code-sandbox;
-  they must point at https://github.com/CZ-Sync/HISSS. In the restructure draft
-  (header line); the audit-sheet link is preserved.
-
-*Code-side items the review surfaced (already tracked; nothing new):*
-- Recession R² < 0.8 fit-quality flag — still requested by the doc, still
-  unimplemented (existing TODO below).
-- Ice-affected day count — requested by the doc; `ice_affected_days_total` ships
-  but is structurally always 0 (Known Issue, MEDIUM, 2026-08-26).
-
-Synced 2026-07-21 — first doc revision since 2026-04-15; still-open behavior-changing items
-(the two implemented items — the 80 % → 60 % overall trend gate and the confirmed 80 %
-decade gate — and the documentation-only list are in changelog-old.md → Guidelines
-Document TODOs):
-
-- [ ] **Recession fit-quality flag: R² < 0.8** (source: analyze_recession_parameters).
-  "To control the quality of fitted parameters, calculate recession fits and create a
-  flag for any R2 < 0.8." Not currently implemented. Needs design: per-event vs
-  per-gage flag, and note that b=1 alpha fits are medians (no regression R²) — the
-  free-fit b regressions are the natural target. Clarify scope with domain experts.
-- [ ] **avg_storage omitted from major analyses (4/23/26)** (source:
-  calculate_average_storage). Doc header now says "OMITTING VARIABLE FROM MAJOR
-  ANALYSES"; extensive redesign notes added (3 options incl. GLEAM ET water balance;
-  Erin's dormant-season recession storage method needing PET, dormant-season
-  definition, initial-storage assumption; open questions on snow). Decide: gate/flag
-  `avg_storage` in outputs vs leave computed + documented as excluded downstream.
-- [ ] **NA-handling wording conflict — item (i) "flag not remove"** (source: NA
-  Handling). New sentence: "Items i, iii, and iv are set in the config to flag (not
-  remove) by default." Items iii (negative Q) and iv (constant SD) match the current
-  config-driven flag-only behavior, but item i (>3 consecutive days of NAs) currently
-  REJECTS the year in `preprocess_daily_data()` (not config-toggleable). Clarify with
-  domain experts whether item i should become a config-driven flag.
-
-### Manuscript Reconciliation Log
-
-Session-start reconciliation of the HISSS manuscript draft (Scientific Data,
-submission target Nov 9 2026) against code + repo docs. Snapshot:
-`docs/MANUSCRIPT_DRAFT.md`; workflow: CLAUDE.md → Session-Start Workflow → B.
-
-**Earlier passes are in changelog-old.md → Manuscript Reconciliation Log** — the
-2026-07-21 baseline with the eight queued manuscript edits, the 2026-08-24 second pass and
-§2.1.4 / §3 drafting support, the 2026-08-28 third pass with its numbered open-item list
-1–12, and the 2026-09-01 fourth pass with the paste-ready correction blocks 1a–7
-(`docs/plans/2026-09-01-manuscript-correction-blocks.md`) and the §2 workflow schematic
-(`docs/plans/dataset_workflow_schematic.md`). The queued-edit and item numbers cited below
-refer to those lists. One thread carried forward from 2026-09-01: the committed schematic
-fails GitHub's rich rendering because of a GitHub-side mermaid bundle crash (verified
-against GitHub's own mermaid README, not this file) — re-check after GitHub ships a fixed
-bundle; until then the 3x PNG beside the doc is the review copy.
-
-**2026-09-29 — MAJOR co-author revision synced (110 vs 105 paragraphs); reconciliation
-pass.** Abstract, §4 Data Overview, Data/Code availability and Funding sections added;
-front-matter to-do lists removed; §2.1.1 (streamflow) and §2.1.2 (boundaries) swapped;
-references reformatted and extended to 39 (Albers 2017, ECCC HYDAT release 2025-10-14 and
-the 2026-09-10 HYDAT relay all landed; Arsenault, Knoben, Kratzert, McMillan, Omernik,
-Petersky, gdptools 0.3.11 added). Snapshot overwritten. Findings by direction of fix:
-- **Manuscript wrong, code/docs right (relay):**
-  1. §2.1.1 gap rule now reads "if any data gap exceeded three consecutive days those
-     days were set to NA" — the preprocessor REJECTS the whole water year (guidelines
-     Part 1.2 items i–ii; `preprocess_daily_data`); the 2026-09-04 wording was correct.
-  2. §2.2.2 "at least 20 qualifying water years across its full period of record" — the
-     20-year floor is counted WITHIN the analysis window (`run_julia_benchmark.jl`
-     applies `length(valid_years) >= 20` after the window filter; census 2026-09-04: 412
-     gages with ≥ 20 full-record years are excluded from product #1 by the in-window
-     floor). Drop "across its full period of record".
-  3. §2.1.2 "We excluded basins that exceeded 85,000 km2" and the new pre-§2.1.1
-     paragraph "7,964 watersheds had polygons and were smaller than 85,000 km" — the
-     boundary layer (Resource 4) excluded the 54 basins > 100,000 km²; 85,000 km² was the
-     Daymet aggregation cap only (58 success gages exceed 85,000 km² per the metadata, so
-     the 7,964 include basins between the two thresholds). Also "km" → km². "The total
-     number of gages with streamflow, Daymet and MODIS LULC is 5,965" — 5,965 is
-     streamflow ∧ Daymet; the ∧ MODIS count needs checking against Resource 5.
-  4. "6,041" is back (abstract "6,041–7,964"; §2.1.3 "6,087 or 6,041") — settled
-     2026-09-04 as 6,087 (distinct `site_id`s in the parquet).
-  5. §2 preamble "8,014 … usable daily records for watersheds smaller than 85,000 km2"
-     conflates the gage count with the size cut; its cross-references pre-date the swap:
-     "(Sect. 2.1.1)" for boundaries → 2.1.2, "(Sect. 2.1.2)" for the trend windows → 2.2.1;
-     §3 "described in Section 2.1.2" → 2.2.1. The agency-drainage-area normalization
-     sentence dropped from the preamble survives in §2.1.1 and §5.1.1 (fine).
-  6. Title line "Hydroclimate Information, Signatures and Summary Statistics" vs
-     "Hydrologic Information Signatures and Summary Statistics" in the abstract, §1,
-     Figure 1 and Table 1 captions.
-  7. Citations: §2.1.1 still "Albers et al., 2026" (list has Albers 2017); Myneni — the new
-     reference is the MOD15A2H (Terra 8-day) DOI while the product used is MCD15A3H v061
-     (DOI 10.5067/MODIS/MCD15A3H.061), and §3 cites "Myneni et al. 2015" vs §2.1.4 "2021";
-     Hatchett has no year; "Condon … (2010)" → 2020; "htpps://"; "licenceCC-BY 4.0
-     license"; "Chen … & Alejandro N. Flores, A. N."; several trailing-punctuation slips.
-  8. Still open from earlier passes: "Claude Code 0.145.0" (item 7), §5.1.2 seven-digit
-     "0103500", "may be read" → "must", unclosed parenthesis, §5.1.3 "against" →
-     "between".
-- **Verified consistent:** §2.2.2 constant-flow rule ("any calendar month in which at
-  least 15 days of non-zero streamflow held at a single constant value") = config
-  `constant_sd_flag` (`min_nonzero_days_per_month` 15, `max_unique_values` 1); the
-  eight-family list in §2 and §2.2.1 = `docs/signature_categories.csv` (the manuscript
-  says "signature families" where the repo says "categories" — vocabulary only, but the
-  repo reserves "function family" for the 15 computing functions; user to decide whether
-  to align); the Daymet-gap explanation in §2.1.3 ("processed before the streamflow time
-  series requirements were finalized") matches the 2026-09-29 finding that basin size
-  explains almost none of the 2,049-gage hole (see `docs/plans/2026-09-29-daymet-
-  reprocessing-options.md`).
-- **Not verifiable locally:** §4's 12 Level I ecoregions / 62 % / median 698 km² /
-  quartiles 190 and 2,700 km² for the product sets (the 8,014-gage set gives 159 / 613 /
-  2,403 km², so a larger-basin product subset is plausible); check against the product
-  CSVs on the drive.
-- **Code/docs-side: none.** Note for later: §2.1.3 and Resource 3 will need rewriting if
-  the Daymet input is reprocessed (plan above).
-
-**2026-09-10 (evening) — HYDAT citation check (user request).** The manuscript's
-"tbd: ECC hydat citation" and the proposed reference "ECCC (2026). HYDAT: National
-Hydrometric Database [2026-07-17]" name the WRONG release: 2026-07-17 is the release
-current today (the only one WSC serves), five months after the 2026-02-07 retrieval. The
-release actually used is **2025-10-14** (inferred: tidyhydat 1.0.0's CRAN build of
-2026-02-03 still queried "HYDAT released on 2025-10-14", the next release was 2026-04-17,
-and the compiled Canadian records end 2024-12-31 with no 2025 data, which the 2026-04-17
-release already carries). Definitive confirmation = `tidyhydat::hy_version()` on the
-Windows ingestion machine. Relay: (1) cite the 2025-10-14 release with a 2025 year and the
-February 2026 retrieval date; (2) `Albers et al., 2026` → Albers, S. (2017), JOSS 2(20),
-511, doi:10.21105/joss.00511 (single author; add the package version if desired — 0.7.2 or
-1.0.0, whichever was installed on 2026-02-07); (3) §2.1.2 "retrieved … to 30 September
-2025 for all candidate gages" holds for USGS only — Canadian records end 31 December
-2024, so **no Canadian gage has a qualifying WY 2025 in either product** (end_water_year
-≤ 2024; 813 / 772 Canadian gages end in WY 2023). Recorded in docs/DATA_SOURCES.md (HYDAT
-row); HydroShare R3 README/dictionary need the same statement (Planned → HydroShare
-documentation updates, H3).
-
-**2026-09-10 (pm) — re-synced: manuscript unchanged.** **Catalogue of the eight manuscript
-locations that must change to the eight categories (user decision, later the same day):
-`docs/plans/2026-09-10-manuscript-category-edits.md` §A.** Category crosswalk against the
-restructured guidelines doc and the staged HydroShare deposit: the manuscript's 14-category
-wording (§2 preamble, §2.2.1, §4 figure) is now the outlier — see Guidelines Document
-TODOs (2026-09-10 pm) and `docs/plans/2026-09-10-signature-category-review.md`.
-
-**2026-09-10 — sync; no methods change.** Since the 2026-09-04 second sync: §3
-Resources 1–2 now reads "21 signatures and related outputs that do not carry statistics"
-(was "per-gage scalar diagnostics"; consistent with §2.2.1's "21 stand-alone diagnostic
-metrics"); **§5.1.2 "How to join HISSS with other datasets" landed** (the
-`docs/plans/2026-09-04-dataset-join-guidance.md` §4 paragraph with co-author edits) and the
-record-dependent note moved to §5.1.3; the Acknowledgements double period is fixed. Snapshot
-overwritten. Relay (manuscript-side): §5.1.2's example id "0103500" has seven digits (USGS
-site numbers have eight or more — e.g. 01013500); "may be read as a character string" should
-be "must"; an unclosed parenthesis "(most US site numbers begin with a zero … (see resource
-READMEs for details)."; §5.1.3 "should not be compared *against* the WY 1993–2025 and
-WY 1980–2025 products" → "*between*"; new §2.1.1 typo "7, 964". Still open from earlier
-passes: avg_storage sentence (item 6), "Claude Code 0.145.0" (item 7), references +
-"Linke et al. 2013" (item 5), CC-BY/DOI labelling (item 11), §2.1.2 end date,
-"(e.g., CAMELS-Chem,", ">6,000stream". **Category consistency**: §2.2.1's 14 categories
-match the code and README exactly; the guidelines doc has 13 modules and the shipped
-dictionary a 9-class grouping — see Guidelines Document TODOs (2026-09-10) for the
-proposed two-axis resolution; if the §4 "sites and signature categories" figure uses the
-colleague's 8 groups, §2.2.1 or §4 needs one sentence saying the 14 categories are
-aggregated into 8 analysis groups for presentation.
-
-**2026-09-04 — filtering-stage watershed census + fifth reconciliation pass (user
-request: count the watersheds at every stage of the workflow schematic and confirm the
-manuscript matches).** Full record: `docs/plans/2026-09-04-filtering-stage-census.md`;
-new tools `docs/benchmarks/qualification_census.jl` (runs the canonical preprocessor on
-ALL 8,014 gages and re-implements the runner's inclusion gates — reproduces both products'
-gage sets EXACTLY, 0 mismatches) and `summarize_qualification_census.py`. The manuscript
-was revised by the co-authors since 2026-09-01 (snapshot overwritten): correction blocks
-1a/1b/1c/2a/2b/3/4/5/6 are APPLIED (121 signatures / 14 categories incl. drought,
-agency-published drainage areas, Daymet coverage 5,965 / 5,517 / 5,638, duplicate BFI
-paragraph deleted, avg_storage listed, new Usage Notes 5.1.1 + 5.1.2, HISSS repo link,
-"eight" MODIS schemes); block 7 (Acknowledgements) is NOT — "Claude Code 0.145.0" still
-appears twice. **Every checkable count in the published text is CORRECT** (16,994 =
-9,154 + 7,840; 8,980 excluded; 8,014 = 6,160 + 1,854; 111,624,189; 73 / 32 / 28;
-6,678 / 6,250; 54 / 7,964; 100 % / 98.3 %; 6,087 / 5,965 / 5,517 / 5,638; 6,119;
-1,653; 18,898,406 / 24,366,487; 2,150,280; 191,136; 250,879). Measured stage counts not
-in the text, for the figure/Data Overview: 33,732 of 317,182 gage-years (10.6 %)
-rejected by the preprocessor over WY 1980–2025 (31,091 >30 NA days, 1,803 gap >3 d, 838
-boundary NA); within the products only 3.2 % / 2.9 % of gage-years are rejected;
-exclusions 1,336 (924 both gates, 412 only <20 yr, 0 only <60 %) and 1,764 (1,063 only
-<60 % with ≥20 valid years, 674 both, 27 only <20 yr); trend statistics survive for
-6,183 / 5,851 gages on the dense signatures. Findings, by direction of fix:
-- **DEPOSIT DEFECT (staging, fix before upload)**: `gage_id` is NOT zero-padded for 9
-  gages in Resource 4's boundary layer (+ its QA CSV) and 44 gages in each Resource 5
-  table (`zfill(8)` cannot restore the leading zero of 9–10-digit USGS ids), so the
-  manuscript's and the READMEs' "join directly on gage_id" claim fails for those gages
-  and the R5 README's coverage counts (6,599 / 6,196 MODIS, 5,419 / 4,998 NLCD — also
-  quoted in this file's 2026-08-25 R5 entry) undercount; canonical values are 6,634 /
-  6,205 and 5,454 / 5,007. `canon_id`, HydroATLAS and Resource 3 are clean. User decision same day: keep the
-  files, document the strip-on-both-sides join rule in both repos' README and the
-  resource READMEs (done — see Known Issues).
-- Manuscript (relay): §2.1.2's "8,980 … fewer than 20 total years" bucket includes 113
-  USGS gages whose retrieval never completed (`processing` status; 4 of them carry
-  GAGES-II polygons and sit in the EO layers) — add "or could not be retrieved"; the
-  year-rejection rule list omits the third rule (≤3-day NA run touching Oct 1 / Sep 30
-  is not interpolated ⇒ `residual_na`, 838 gage-years); §3's "211 watershed-scale
-  attributes" = 211 columns (198 attributes + 13 keys/diagnostics); new typos "wtih",
-  "diagnostics.We", plus the surviving "s(e.g.,", "MOIDS", "fitted checksums …" garble,
-  "Linke et al., 2013", "[tbd]" citations and the missing references (McMillan,
-  Hatchett, Petersky & Harpold, Adelsperger, Laaha, Peters & Aulenbach, HYSETS, Caravan,
-  CAMELS-SPAT, DeCicco, Albers, gdptools, Annual NLCD).
-- Code/docs-side: none. The schematic is not contradicted by any measured count.
-
-**2026-09-04 — co-author revision synced; dataset-join guidance drafted (§5 stub).**
-The published draft changed since 2026-09-01: §2 preamble and §2.1.2 now state the
-agency-published drainage areas as the normalization source (queued #1 core error
-RESOLVED; the §5 caveat also landed as 5.1.1); counts corrected to **121 signatures /
-14 categories incl. drought** and the "(name)" placeholder resolved to
-`hisss_data_dictionary.csv` (queued #8 + open items 1a/1b RESOLVED; the drought
-*methods* paragraph 1c is still absent); §2.1.3 Daymet coverage numbers added
-(6,087 candidates / 5,965 of 8,014 / 5,517 and 5,638 — matches the repo); the 47 %
-sentence replaced by the explicit "8,980 of 16,994 excluded" (item 3 RESOLVED); §2.2.1
-/ §2.2.2 rewritten and the duplicate BFI-statistics paragraph deleted (item 4
-RESOLVED); §2.1.4 "all five" → "all eight" (the 2026-09-01 finding RESOLVED); §3
-mechanical typos fixed (`wy{window}`, WGS84, teh/ot, "[tbd])"); `<LINK TO REPO>` filled
-with https://github.com/CZ-Sync/HISSS; **§5 Usage Notes drafted** — 5.1.1 unnormalized
-gages and 5.1.2 record-dependent signatures (both verbatim from block 2b), with the
-dataset-join item still a one-line stub. Still open: avg_storage sentence (item 6),
-Acknowledgements "Claude Code 0.145.0" (item 7), missing references + "Linke et al.
-2013" (item 5), CC-BY/DOI labelling (item 11), §2.1.2 end date, "(e.g., CAMELS-Chem,"
-unclosed paren, ">6,000stream".
-
-*Dataset-join guidance (user request, same day)*: CAMELS-Chem, MacroSheds, and the
-Daymet-VPD product were reviewed against their own documentation and files, the
-identifier conventions of HYSETS / CAMELS / CAMELS-SPAT / Caravan / CANOPEX / GAGES-II
-/ WQP / NLDI→COMID / HydroBASINS were verified, and the actual join behaviour of the
-five staged HydroShare resources was audited. Measured overlaps: CAMELS-Chem 507 / 516
-(WY 1993–2025) and 515 / 516 (WY 1980–2025), all GAGES-II Ref; MacroSheds stream
-gauges 146 / 224 inside ≥ 1 product watershed but almost always *nested* (median
-smallest containing polygon 799 km²), only 11 co-located within 500 m. The audit found
-two deposit defects (Known Issues, HIGH: mis-padded `gage_id` in R5/R4; R3 README
-recipe). Verified facts, numbers, and the first-draft §5.1.3 paragraph:
-`docs/plans/2026-09-04-dataset-join-guidance.md`.
-
-**2026-09-04 (second sync, afternoon) — user edits; manuscript otherwise unchanged.**
-Two typo fixes only (a missing space after "diagnostics." in the §2 preamble; "MOIDS" →
-"MODIS" in §2.1.4); no methods claim changed, nothing to reconcile. The §5 "How to join
-with other datasets" item is still the one-line stub — the paste-ready §5.1.3 text
-(revised to the strip-leading-zeros-on-both-sides join rule after the user's decision
-to leave the staged deposit files as delivered) is in
-`docs/plans/2026-09-04-dataset-join-guidance.md` §4. The snapshot rebuild also removed
-~170 lines of Google's page JavaScript that the morning rebuild had appended below the
-body (the extractor did not skip a `<script>` block inside the contents div; the
-paragraph-level diff was unaffected because the JS lines had no counterpart on either
-side).
-Later the same day the user asked for a replacement for §3's "Conventions and key
-fields" join sentence (their interim edit — "All tables join on a zero-stripped gage_id,
-the zero-padded agency station identifier …" — contradicts itself); two variants were
-delivered and recorded in `docs/plans/2026-09-04-dataset-join-guidance.md` §4b. A
-six-minute re-poll of the published copy showed no change, so the snapshot stands and
-the next sync will confirm what landed.
+### Guidelines Document TODOs and Manuscript Reconciliation Log
+Moved 2026-09-29 to `docs/reconciliation/guidelines_todos.md` and
+`docs/reconciliation/manuscript_log.md` (dated entries, newest first, maintained by the
+`/sync-docs` skill). This file no longer carries them.
 
 ---
 
 ## [September 2026]
+
+### Changed: Claude Code instruction files restructured for the context budget (2026-09-29)
+The eight files auto-loaded at every session start (CLAUDE.md plus seven `@`-imports:
+DEVELOPMENT.md, SIGNATURES.md, CHANGELOG.md, both Google-Doc snapshots, both EO READMEs)
+totalled ~354 KB ≈ 88k tokens. Official guidance: keep CLAUDE.md under 200 lines, `@`-imports
+load eagerly, procedures belong in skills, directory-scoped constraints in path-scoped rules.
+Restructured per the user-approved plan the same day:
+- `CLAUDE.md` rewritten to ~100 lines of always-true rules; its only import is the new
+  `docs/STATUS.md` (one-liners: products, pending decisions, live issues, deferred fixes,
+  sync dates; ≤ 60 lines). Startup context is now ≈ 5k tokens.
+- `.claude/` is TRACKED (only `settings.local.json` ignored) and excluded from the HISSS
+  mirror. Path-scoped rules: `signatures-code.md`, `benchmarks.md`, `changelog.md`. Skills
+  (description at startup, body on demand): `/sync-docs` with `sync_google_docs.py` — a
+  stdlib fetch + paragraph diff of both Google Docs, verified to reproduce today's snapshots
+  exactly, so an unchanged sync costs no context — `/add-signature`, `/run-benchmark`, and
+  `/cross-language-alignment` (moved from `claude-skill/`). `claude-skill/streamflow-signatures.md`
+  stays as the user-facing interpretation skill.
+- `[Unreleased] → Guidelines Document TODOs` and `→ Manuscript Reconciliation Log` (461 lines)
+  moved verbatim to `docs/reconciliation/`; CHANGELOG.md itself is no longer auto-loaded.
+- `EO_data_processing/CLAUDE.md` (nested, loads only when working there) carries the id-join
+  and S3-loss rules; the stacked dated status banners of both EO READMEs moved verbatim to a
+  "Build history" section at the end of each file.
+- Nothing was deleted; `docs/DEVELOPMENT.md` and `docs/SIGNATURES.md` are unchanged and are
+  read on demand via the pointers in CLAUDE.md and the rules.
 
 ### Changed: signature categories are the co-authors' EIGHT; repo docs aligned (2026-09-10)
 **DECISION (user, 2026-09-10)**: the colleague's 8-category sheet is the reference

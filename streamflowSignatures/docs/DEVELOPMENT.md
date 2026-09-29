@@ -81,7 +81,7 @@ Every signature's per-year annual values — previously discarded after
 `generate_stats()` collapsed them into the 8 statistics — are exported as one
 long-format parquet alongside the summary CSV:
 `{output_dir}/{prefix}_signatures_annual.parquet` — i.e. the run's own experiment folder
-(the one-folder convention, CLAUDE.md Critical Constraint #5), NOT `docs/benchmarks/`.
+(the one-folder convention, CLAUDE.md → Critical constraints), NOT `docs/benchmarks/`.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -128,7 +128,8 @@ Design + Codex review record: `docs/plans/annual_values_export_plan.md`.
 streamflowSignatures/
 ├── README.md                    # User entry point
 ├── CHANGELOG.md                 # Bug fixes, version history
-├── CLAUDE.md                    # Claude Code instructions
+├── CLAUDE.md                    # Claude Code instructions (always loaded; imports docs/STATUS.md)
+├── .claude/                     # Claude Code rules (path-scoped) + skills (sync-docs, add-signature, run-benchmark, cross-language-alignment)
 ├── .gitignore                   # Git ignore patterns
 │
 │ ## R Workflow (unchanged at root for current users)
@@ -213,7 +214,7 @@ streamflowSignatures/
 │   │   └── diagnostics/        # Archived diagnostic scripts
 │   └── plans/                   # Planning notes
 │
-├── claude-skill/                # Claude AI skill
+├── claude-skill/                # USER-facing Claude AI skill (not a Claude Code skill)
 │   └── streamflow-signatures.md
 │
 ├── streamflowAndClimateVisualizationApp/  # Shiny dashboard

@@ -23,31 +23,9 @@ than R.
 > Treat every S3 URL below as a historical delivery record, and verify the Drive
 > inventory before relying on any file. See CHANGELOG → August 2026.
 
-> **Status (30 Jun 2026)**: ALL THREE DATA LAYERS DONE + on S3 — geometry (7,964 watersheds),
-> LAI (monthly, 270-month panel; **`good_coverage_frac` QA column added → `..._30jun2026.parquet`**),
-> and LULC (annual, 24-yr, Codex-GO). **BOTH QA/QC explorers built + on S3**:
-> `watershed_modis_lai_explorer.html` (builder `viz/build_lai_explorer.py`) and
-> `watershed_modis_lulc_explorer.html` (builder `viz/build_lulc_explorer.py`). The LULC explorer
-> maps 27 variables (10 IGBP-derived summary + all 17 individual IGBP classes; non-overlapping —
-> static `pct_*` roll-ups dropped) and draws per-gage stacked-area class composition 2001–2024 with
-> a band switcher across all 8 MODIS schemes. **EO pipeline + viz COMPLETE.**
->
-> **Status (29 Jun 2026)**: ALL THREE LAYERS DONE + on S3 — geometry (7,964 watersheds),
-> LAI (monthly, 270-month panel), and LULC (annual, 24-yr, Codex-GO). Pipeline COMPLETE.
->
-> **Status (27 Jun 2026)**: Geometry layer DONE + on S3 (7,964 watersheds, §4/§11).
-> **LAI pipeline DONE + backfilled** — 270-month full panel (7,964×270 = 2,150,280 rows;
-> far-N + 2024-11 backfilled from LP DAAC; only 17 urban basins NA).
-> **Delivered to S3** (`watershed_modis_lai_monthly_29jun2026.parquet` + `_na_basins_` +
-> `_dictionary_`); `partial_month` flag added. **LAI COMPLETE.**
-> **LULC pipeline DONE + Codex-GO + DELIVERED to S3 (29 Jun)** — full 24-yr run (2001–2024),
-> finalized + reviewed (gpt-5.5, GO; 2 latent code hazards hardened, output byte-identical).
-> **191,136 rows = 7,964 gages × 24 yr**, all 8 bands sum to exactly 100 across all years, 0 dup
-> keys. On S3 `s3://climate-ai-data-science-shiny-app-data/streamflow/`:
-> `watershed_modis_lulc_annual_29jun2026.{parquet,csv}` + `_dictionary.csv` + `_granule_manifest_29jun2026.parquet`.
-> **Both LAI + LULC products COMPLETE + on S3.**
-> **Resume after a crash → §11 task 5** (re-run the same command; checkpoints persist on
-> `/home`). Durable cross-session notes: memory `eo-data-access-paths`.
+> **Status**: all three layers — geometry (7,964 watersheds), monthly MODIS LAI (2002–2024)
+> and annual MODIS LULC (2001–2024) — are COMPLETE, Codex-reviewed, and staged for HydroShare
+> Resource 5 (Aug 2026). Dated build notes (Jun 2026): §13 at the end of this file.
 
 ---
 
@@ -517,3 +495,35 @@ rasterio/geopandas/s3fs/`climateai.geolately`/pyarrow — reuse or mirror it (ad
   (gage × year) / (gage × year × month) row completeness; `watershed_area_rel_diff`
   within threshold; 100% leading-zero-safe `gage_id` join to the signatures. Emit a QA
   report per run.
+
+---
+
+## 13. Build history (dated status notes, June 2026)
+
+_Moved verbatim from the top of this file on 2026-09-29 so the header shows only the current state. Working rules for Claude sessions: `EO_data_processing/CLAUDE.md`._
+
+> **Status (30 Jun 2026)**: ALL THREE DATA LAYERS DONE + on S3 — geometry (7,964 watersheds),
+> LAI (monthly, 270-month panel; **`good_coverage_frac` QA column added → `..._30jun2026.parquet`**),
+> and LULC (annual, 24-yr, Codex-GO). **BOTH QA/QC explorers built + on S3**:
+> `watershed_modis_lai_explorer.html` (builder `viz/build_lai_explorer.py`) and
+> `watershed_modis_lulc_explorer.html` (builder `viz/build_lulc_explorer.py`). The LULC explorer
+> maps 27 variables (10 IGBP-derived summary + all 17 individual IGBP classes; non-overlapping —
+> static `pct_*` roll-ups dropped) and draws per-gage stacked-area class composition 2001–2024 with
+> a band switcher across all 8 MODIS schemes. **EO pipeline + viz COMPLETE.**
+>
+> **Status (29 Jun 2026)**: ALL THREE LAYERS DONE + on S3 — geometry (7,964 watersheds),
+> LAI (monthly, 270-month panel), and LULC (annual, 24-yr, Codex-GO). Pipeline COMPLETE.
+>
+> **Status (27 Jun 2026)**: Geometry layer DONE + on S3 (7,964 watersheds, §4/§11).
+> **LAI pipeline DONE + backfilled** — 270-month full panel (7,964×270 = 2,150,280 rows;
+> far-N + 2024-11 backfilled from LP DAAC; only 17 urban basins NA).
+> **Delivered to S3** (`watershed_modis_lai_monthly_29jun2026.parquet` + `_na_basins_` +
+> `_dictionary_`); `partial_month` flag added. **LAI COMPLETE.**
+> **LULC pipeline DONE + Codex-GO + DELIVERED to S3 (29 Jun)** — full 24-yr run (2001–2024),
+> finalized + reviewed (gpt-5.5, GO; 2 latent code hazards hardened, output byte-identical).
+> **191,136 rows = 7,964 gages × 24 yr**, all 8 bands sum to exactly 100 across all years, 0 dup
+> keys. On S3 `s3://climate-ai-data-science-shiny-app-data/streamflow/`:
+> `watershed_modis_lulc_annual_29jun2026.{parquet,csv}` + `_dictionary.csv` + `_granule_manifest_29jun2026.parquet`.
+> **Both LAI + LULC products COMPLETE + on S3.**
+> **Resume after a crash → §11 task 5** (re-run the same command; checkpoints persist on
+> `/home`). Durable cross-session notes: memory `eo-data-access-paths`.

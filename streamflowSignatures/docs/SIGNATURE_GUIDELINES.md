@@ -20,8 +20,8 @@
 > scalars)", "confirmatory" BFI notes, and a new Requirements block ("recomputed from an
 > output CSV without rerunning any signature"; "aligned 2026-09-04"). NOT landed: the
 > released-product high_na known-issue sentence; "(see 3.12)"; avg_storage;
-> ice_affected_days_total; the shipped `_linear_reservoir` column name. See CHANGELOG →
-> Guidelines Document TODOs (2026-09-29).
+> ice_affected_days_total; the shipped `_linear_reservoir` column name. See
+> `docs/reconciliation/guidelines_todos.md` (2026-09-29).
 
 ---
 
