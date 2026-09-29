@@ -23,6 +23,16 @@ fails GitHub's rich rendering because of a GitHub-side mermaid bundle crash (ver
 against GitHub's own mermaid README, not this file) — re-check after GitHub ships a fixed
 bundle; until then the 3x PNG beside the doc is the review copy.
 
+**2026-09-29 (later) — data finding from the Daymet single-year test (relay; no doc change
+yet).** Five of the 6,087 stale Daymet basins are NaN on every day of 1980–2023 (02234500,
+02236000, 02236125, 02244040, 01372058), so §2.1.3's "6,087 basins" holds 6,082 with data and
+the "5,965" streamflow + Daymet + MODIS gages hold 5,961 with a usable climate series. Moot if
+the Daymet reprocess lands before submission (every count in §2.1.3, §3 Resource 3 and the
+abstract changes then — action plan §0); otherwise add the caveat.
+- [ ] relay only if the reprocess misses submission — D1–D4 decided 2026-09-29 (full-resolution
+  polygons, all six variables, + the 53 basins > 100,000 km² if RAM allows); if it lands, §2.1.3
+  also changes method (own exactextract area weighting), basin count and years (1980–2025)
+
 **2026-09-29 — MAJOR co-author revision synced (110 vs 105 paragraphs); reconciliation
 pass.** Abstract, §4 Data Overview, Data/Code availability and Funding sections added;
 front-matter to-do lists removed; §2.1.1 (streamflow) and §2.1.2 (boundaries) swapped;

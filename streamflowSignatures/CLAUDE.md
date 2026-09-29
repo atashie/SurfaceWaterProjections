@@ -11,7 +11,7 @@ implementations: **Julia is canonical** (`julia/src/`); Python
 (`python/streamflow_signatures/`) and R (`rpkg/`) are ports validated at full scale. The R
 code at the repo root (`R/`, `run_*.R`, `config.R`) is the still-active raw-data INGESTION
 path; `R/helperFunctions.R` is a deprecated shim. `EO_data_processing/` (Python) builds the
-per-watershed MODIS and NLCD products and has its own CLAUDE.md.
+per-watershed MODIS, NLCD and Daymet products and has its own CLAUDE.md.
 
 ## Ground truth and change flow
 
@@ -82,7 +82,7 @@ computing FUNCTION FAMILIES; "category" is the manuscript's and the guidelines' 
 | the 11 external data sources | `docs/DATA_SOURCES.md` |
 | open guidelines / manuscript items | `docs/reconciliation/guidelines_todos.md`, `manuscript_log.md` |
 | design records, run plans, manuscript edit lists | `docs/plans/` (excluded from the mirror) |
-| EO products (MODIS LAI/LULC, Annual NLCD) | `EO_data_processing/README.md`, `README_NLCD.md` |
+| EO products (MODIS LAI/LULC, Annual NLCD, Daymet climate) | `EO_data_processing/README.md`, `README_NLCD.md`, `README_DAYMET.md` |
 
 ## Tests
 

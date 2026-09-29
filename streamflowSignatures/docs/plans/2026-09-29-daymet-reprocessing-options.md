@@ -5,6 +5,13 @@ polygons are not on this machine) · **Author**: Claude Code session for A. Tash
 
 **Action plan (how to run it on the dedicated machine)**: `2026-09-29-daymet-reprocessing-action-plan.md`.
 
+**Update 2026-09-29 (later)**: option A was run for calendar 2023 on the M5 MacBook (T1, most
+of T0) and passed — the job is download-bound (≈ 50 h for 1980–2025 on this link), the
+co-authors' values are reproduced once cells are weighted by true area over unsimplified
+polygons, and T2 (AWS) / T3 (Earth Engine) are no longer needed for feasibility. User
+decisions the same day: full-resolution polygons, all six variables, the user's EDL token
+for 2025, and the 53 basins > 100,000 km² if RAM allows. Details: action plan §0.
+
 **Purpose.** Replace the stale climate input (`daymet_1980_2023` → 6,087 basins, calendar
 1980–2023) with a fresh Daymet extraction that (1) reaches the latest published year and
 (2) covers **all 7,964 watersheds** of the delivered boundary layer, closing the hole that

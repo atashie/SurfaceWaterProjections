@@ -1,12 +1,122 @@
 # Daymet reprocessing — action plan for the dedicated machine
 
-**Date**: 2026-09-29 · **Status**: PLAN, not started. Written for a later session on a
-machine with more RAM that can be dedicated for a few days. Nothing here has been run
-end-to-end; every number is either *measured* (marked **M**, with how) or *estimated*
-(marked **E**). Unknowns are listed in §9 — read them before trusting any estimate.
+**Date**: 2026-09-29 · **Status**: single-year gate (calendar 2023) PASSED on the M5 MacBook
+the same day — read §0 first; it supersedes §§1–3 and parts of §§5 and 9 where they differ.
+§§1–10 below are the original plan (numbers marked **M** measured, **E** estimated).
 
 **Background and option comparison**: `2026-09-29-daymet-reprocessing-options.md`
 (same folder). This document is the "how", that one is the "why".
+
+---
+
+## 0. Single-year test, 2026-09-29 — results and what changes
+
+**User decisions (2026-09-29).** Reprocess every watershed that has a polygon (the 7,964-basin
+boundary layer), entirely from scratch — no append to the stale series (option E is out).
+Check the new values against the stale co-author product. Before any multi-year run,
+process ONE year, time it, and compare it with the stale product.
+
+**What ran.** Calendar 2023 (last year of the stale product; same chunk layout as 2020–2025),
+all six variables, NCAR mirror → `~/Downloads/daymet_raw/`, processed on the 16 GB M5 MacBook
+(10 cores); run folder `/Volumes/Untitled/daymet_processed_sep2026/` (every file md5-verified
+by re-reading from the drive; staging copy `~/Downloads/daymet_work/`; its `RUN_NOTES.md` has
+the full tables). Tools (written in `docs/benchmarks/daymet/`, moved the same day to
+`EO_data_processing/daymet/`): `daymet_probe`, `_weights`, `_aggregate`, `_crosscheck`,
+`_pixelcheck`, `_validate`, `_assemble`, `_stream` (the §5.5 orchestrator). An extra
+old-layout + leap-year probe ran on prcp 1980.
+
+**Measured** (replaces the **E** cells of §3):
+
+| Step | 2023 |
+|---|---|
+| Download, six files, 72.2 GB | 66 min (3,972 s); 15.0–20.9 MB/s single stream, 18.2 MB/s overall (4 parallel streams ≈ the same total — the link is the cap) |
+| Checksums | SHA-256 of all six = NASA CMR's → mirror ≡ ORNL byte for byte. CMR publishes a SHA-256 for every granule; all 270 mirror files 1980–2024 have exactly the CMR size (2025 is ORNL-only) |
+| Weights (once) | 25.6 M (basin, cell) weights over 9.4 M distinct cells: 4 s on the published layer, 80 s on full-resolution polygons |
+| Aggregation, one variable-year, 8 workers, 2020+ layout (10,300,300) | 13–21 s wall (103 s for all six); 214 of 729 tiles hold basins (29 %) → 28 GB decompressed; peak RSS 3.7 GB parent + ≤ 0.6 GB per worker |
+| Same, 1980–2019 layout (1,1000,1000) — prcp 1980 | 32 s; 29 of 72 tiles (40 %) → 41.8 GB decompressed; peak RSS 3.6 GB parent + 0.75 GB per worker (≈ 9.6 GB with 8 workers — use `--workers 6` if the laptop is also in use) |
+| Output | 8–24 MB zstd parquet per variable-year (7,964 × 365 rows); 110 MB per assembled year → ≈ 5 GB for 1980–2025 |
+
+→ Compute ≈ 1.5 min per year of six variables. The job is purely download-bound:
+1980–2025 = 3.455 TB ≈ **50 h** at 19 MB/s (prcp + swe 0.57 TB ≈ 8.5 h). The "dedicated
+machine" is unnecessary: this laptop runs it with ≈ 65 GB of free disk (download → verify →
+aggregate → delete, one file ahead).
+
+**Correctness, independent of the stale product.** (1) exactextract's own `weighted_mean`
+on five days per variable, all 7,964 basins, matches the chunk-aligned aggregation to
+≤ 5e-11 absolute, ≤ 1e-13 relative (`daymet_crosscheck.py`). (2) ORNL's Single Pixel API
+at six points (TN, WA, CO, QC, FL, YT), all six 2023 variables and prcp 1980: our LCC x/y equal ORNL's to 0.00 m and the
+pixel series match to float32 rounding while the neighbouring pixel differs by up to 18 mm
+(`daymet_pixelcheck.py`). (3) Output is bit-identical across reruns and worker counts
+(partial sums accumulated in a fixed order).
+
+**Agreement with the stale product** (5,969 shared basins; table in `RUN_NOTES.md`) forced
+three method findings:
+1. **Weights must be TRUE AREAS, not coverage fractions.** The co-authors' gdptools values
+   are an area-weighted mean. Coverage fractions of the conformal LCC grid (areal scale
+   0.91–1.21 over the basins) over-weight cells where k < 1 and move annual totals of large
+   northern basins by up to 0.3 %. With coverage × true cell area and full-resolution
+   polygons, all six 2023 variables reproduce the stale values: R² ≥ 0.99999996 in every
+   basin (swe: 0.99979 in a basin whose mean SWE is 4e-8 mm); prcp annual totals within
+   ±0.0011 % (1st–99th percentile).
+2. **The published Resource 4 layer is 200 m-simplified (7,823 of 7,964 basins), and that is
+   the whole remaining difference.** Published layer: prcp annual totals within ±0.1 %
+   (p01–p99), up to 1.2 % in small high-relief basins; swe annual sums within ±2.5 %
+   (p01–p99), far more in trace-snow basins. A full-resolution rebuild — the same rebuild
+   script with the simplification step disabled (`polygons_fullres/` in the run folder,
+   1.3 GB) — removes it.
+3. **Fill handling differs.** The stale product is NaN for every basin that touches even one
+   fill cell: 4 St. Johns River basins in Florida (02234500, 02236000, 02236125, 02244040;
+   99.95–99.98 % valid) are NaN in all 44 years, as is 01372058 (not a usable gage, no
+   polygon). The four sit in the delivered products (4 in #1, 3 in #2) with every climate
+   signature NaN, so the "signatures + climate" counts 5,517 / 5,638 overstate by 4 / 3. The
+   new masked mean renormalises over valid cells, so they gain climate.
+
+**Coverage.** Every one of the 5,965 usable gages that had Daymet keeps it (all have
+polygons). Product #1 goes from 5,513 gages with a non-NaN climate series to 6,634
+(+1,121), product #2 from 5,635 to 6,205 (+570). Still without climate: the 54 usable basins > 100,000 km² that
+the boundary layer excludes (44 / 45 product gages); their source polygons exist.
+
+**Unknowns of §9 now.** U1 closed (sizes above; SHA-256 per file at download). U2
+15–21 MB/s here. U3 absent in prcp 1980 (all 26,280 chunks stored); `daymet_stream.py`
+probes every file and stops if an unstored chunk lies under a basin. U4 29 % (2020+ layout),
+40 % (1980–2019). U5 validity constant in time for every basin in 2023. U6 answered
+(finding 3). U7 answered (finding 2). U8 measured. U9 no date shift (lag-0 r = 0.99999997 vs
+0.15 at ±1 day); leap years verified — 1980 has Feb 29 and no Dec 31, and prcp 1980
+reproduces the stale values (annual totals within ±0.001 %, p01–p99). **U10 open: no
+Earthdata Login on this Mac; the six 2025 files need one.** U12 measured.
+
+**DECISIONS (user, 2026-09-29, after the gate):**
+- **D1 polygons: FULL RESOLUTION.** The Resource 3/4 READMEs will say the climate uses the
+  unsimplified source polygons, of which Resource 4 is a 200 m simplification. The
+  full-resolution layer comes from the now-committed
+  `EO_data_processing/geometry/rebuild_watershed_polygons.py --no-simplify --include-large`
+  (its defaults reproduce Resource 4: same 7,964 basins, ids, order and vertices; areas to
+  ~1e-11, a PROJ-build difference).
+- **D2 variables: ALL SIX in one pass** (≈ 50 h of downloads).
+- **D3 Earthdata Login: the user supplied an EDL bearer token** (account arik.tash@gmail.com;
+  the user states access is free and not rate-limited). The token expires ≈ 2026-10-25, so
+  the run must finish before then; fetch the six 2025 files first. Store it at run time
+  outside the repo (e.g. `~/.config/earthdata/edl_token`, mode 600) and never in docs,
+  memory or git. DONE: `daymet_stream.py` sends the token through a mode-600 header file
+  (never on a command line; curl drops it on the redirect to ORNL's CloudFront store) and
+  downloads the ORNL-only 2025 files first; a 1 MB range request with it returned HTTP 206.
+- **D4 large basins: INCLUDE the 53 correctly delineated basins > 100,000 km² if RAM
+  allows.** 05KH009 stays out: its HydroBASINS fallback drew a 328,000 km² river as 200 km².
+  The 53 (all Canadian, heavily nested; Mackenzie 10LC014 = 1.68 M km²) sum to 16.6 M km²
+  of reported area against 26.1 M km² for the 7,964. MEASURED → INCLUDED: the 8,017-basin
+  weights hold 45.8 M entries over 11.2 M cells (build 118 s, peak ≈ 8 GB once); after a
+  planning fix (int32 keys, slices; output byte-identical) aggregation takes 33 s on the
+  1980–2019 layout with `--workers 6`, peak 4.3 GB parent + < 1 GB per worker, and touches
+  no new tiles. These basins have no stale series to validate against and no polygon in
+  Resource 4, so the deposit documents them separately.
+- **LOCATIONS (user, 2026-09-29):** code in `EO_data_processing/` (`daymet/`, `viz/`,
+  `geometry/`); the run folder on the internal SSD, `~/HISSS_data/daymet-processed-29sep2026/`,
+  then md5-verified copies to `/Volumes/Untitled/daymet-processed-29sep2026/`; commit and
+  merge when ready.
+
+Then: `caffeinate -i python daymet_stream.py --years 1980-2025 --workers 6 …` (keeps the
+laptop awake for the ~2-day run) → `daymet_assemble.py` → `daymet_validate.py --years
+1980-2023` → verified copy to the drive → the Phase 1 replay (§6) against product #1.
 
 ---
 

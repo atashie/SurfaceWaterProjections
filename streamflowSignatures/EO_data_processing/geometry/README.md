@@ -9,6 +9,13 @@ Builds one watershed polygon per QA-passing gage (universe = **8,018** = metadat
 **Deliverable** (on `s3://climate-ai-data-science-shiny-app-data/streamflow/`):
 `watershed_polygons_26jun2026.{gpkg,parquet}` (EPSG:4326) + `_qa.csv`.
 
+**Rebuild script** (committed 2026-09-29): `rebuild_watershed_polygons.py` consolidates the
+pieces below; it regenerated the delivered layer after the S3 loss (2026-08-25) and, with
+default options, reproduces Resource 4 (same 7,964 basins, ids, order and vertices; areas
+agree to ~1e-11 because the PROJ build differs). `--no-simplify --include-large` gives the
+8,017-basin full-resolution layer (the 53 basins > 100,000 km² kept, 05KH009 still out)
+that the Daymet climate input is computed on (`../README_DAYMET.md`).
+
 ## Sources
 | Source | Gages | Where | Key | CRS |
 |---|---|---|---|---|

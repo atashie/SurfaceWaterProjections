@@ -14,12 +14,13 @@ Neither is a subset of the other; record-dependent signatures are never compared
 (5 resources, staged): collection `f702201faa5d46069a5ee83ffa4c9768`. Public code mirror https://github.com/CZ-Sync/HISSS.
 
 ## Pending user decisions
-- Daymet reprocess to calendar 2025 over all 7,964 polygons — options + action plan in `docs/plans/2026-09-29-daymet-reprocessing-*.md`; feasibility tests T0–T4, go/no-go ~2026-10-10.
+- Daymet reprocess (user decisions 2026-09-29: every polygon, from scratch, one-year gate first; then full-res polygons, all 6 variables, the user's EDL token for 2025 — expires ≈ 2026-10-25, + the 53 basins > 100k km² (measured: fits with `--workers 6`); code in `EO_data_processing/daymet/`, run folder `~/HISSS_data/daymet-processed-29sep2026/` → verified copy to `/Volumes/Untitled/daymet-processed-29sep2026/`) — 1980–2025 run next; then assemble, validate 1980–2023, replay. Action plan §0 (`docs/plans/2026-09-29-daymet-reprocessing-action-plan.md`).
 - HydroShare doc updates H1–H3 (category terminology, high_na caveat, HYDAT release note) deliberately NOT applied 2026-09-10 — `docs/plans/2026-09-10-manuscript-category-edits.md` §C.
 
 ## Live known issues (full text: CHANGELOG → Known Issues)
 - `flagged_for_high_na` is wrong in BOTH delivered products (metadata-only denominator; TRUE for every Canadian gage). Code fixed 2026-09-04; products NOT rewritten (user decision) — regenerate at the next rerun of any data (`docs/benchmarks/recompute_high_na_flag.py --write`: #1 1,224 → 791, #2 1,243 → 598), then update the HydroShare READMEs/dictionary row.
 - rpkg constant-series Mann-Kendall fixed in code 2026-09-04; the rpkg reference CSV still needs a benchmark rerun.
+- Stale Daymet input: 5 sites NaN on every day 1980–2023 (NaN-propagating aggregation); 4 FL gages sit in #1 (3 in #2) with every climate signature NaN, so "with climate" counts overstate by 4/3 — fixed by the reprocess.
 - `ice_affected_days_total` is structurally 0 for every gage (Julia; cause not yet pinned; rpkg deliberately matches).
 - 37 Canadian gages carry raw m³/s (`area_normalized = FALSE`, no HYDAT drainage area; user decision: no backfill); their Q-to-PPT signatures are NA by design; `flagged_for_qann_range` catches only 27/37 — downstream must filter on `area_normalized`.
 - Storage year gate: Julia `unique` treats −0.0 ≠ +0.0 (1 annual row in 18.9 M); agreed fix is Julia → `==`, low priority, named waiver at gate time.

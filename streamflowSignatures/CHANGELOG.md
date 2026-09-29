@@ -23,7 +23,10 @@ loads every session is `docs/STATUS.md`.
 ## [Unreleased]
 
 ### Planned
-- **Daymet climate input reprocess (options review 2026-09-29; user decision pending).**
+- **Daymet climate input reprocess (options review 2026-09-29; single-year gate PASSED the
+  same day — see `[September 2026]`; D1–D4 DECIDED 2026-09-29: full-resolution polygons,
+  all six variables, an EDL token for 2025, the 53 large basins if RAM allows; where the
+  code and outputs live is still open; action plan §0).**
   Daymet V4 R1 now ends at calendar 2025 (released 2026-05-22; no 2026 before ~spring
   2027), so WY 1980–2025 climate is achievable — matching the products. The 6,087-basin
   input predates the 7,964-polygon layer (basin size explains ≤ 58 of the 2,049 gages
@@ -136,6 +139,13 @@ loads every session is `docs/STATUS.md`.
 - BFImax estimation via Collischonn & Fan (2013) backward filter — would give BFI_Eckhardt_param per-gage BFImax instead of fixed 0.8, improving discriminating power (currently range [0.47–0.80] due to BFImax saturation)
 
 ### Known Issues
+- **LOW (both delivered products + staged Resource 3, found 2026-09-29) — five Daymet sites
+  are NaN on every day of 1980–2023, all six variables**: 02234500, 02236000, 02236125,
+  02244040 (St. Johns River, FL) and 01372058. The co-authors' aggregation returned NaN for
+  any basin touching a single fill cell (these basins are 99.95–99.98 % valid). The four
+  Florida gages are in product #1 (all four) and #2 (three) with every climate signature
+  NaN, so "gages with climate" counts overstate by 4 / 3. Fixed by the Daymet reprocess
+  (masked mean); until then note it wherever those counts are quoted.
 - **KNOWN ISSUE in BOTH delivered products — `flagged_for_high_na` (one column).** In the
   shipped CSVs it was computed over the 16 numeric metadata columns only (the runner built
   every signature column as `Vector{Any}`, which failed the numeric-eltype filter), so it is
@@ -281,6 +291,45 @@ Moved 2026-09-29 to `docs/reconciliation/guidelines_todos.md` and
 ---
 
 ## [September 2026]
+
+### Added: Daymet reprocessing toolchain; single-year gate on calendar 2023 PASSED (2026-09-29)
+**DECISION (user, 2026-09-29)**: reprocess Daymet for every watershed that has a polygon
+(the 7,964-basin layer), entirely from scratch — no append to the stale series; check the
+result against the stale co-author product; process, time and compare ONE year before any
+multi-year run.
+- New tools in `EO_data_processing/daymet/` (moved there from `docs/benchmarks/daymet/` the
+  same day; user decision): `daymet_probe`, `_weights`, `_aggregate`, `_crosscheck`,
+  `_pixelcheck`, `_validate`, `_assemble`, `_stream`, `copy_verify`; product README
+  `EO_data_processing/README_DAYMET.md`. Method: exactextract
+  coverage × true cell area on the unresampled Daymet LCC grid, chunk-aligned accumulation,
+  mean over the cells valid that day; every raw file's SHA-256 checked against NASA CMR.
+- 2023, six variables (72.2 GB from the NCAR mirror, byte-identical to ORNL): download
+  66 min at 15–21 MB/s; aggregation 13–21 s per variable-year on the 16 GB M5 laptop (32 s
+  for the 1980–2019 chunk layout) → 1980–2025 is download-bound, ≈ 50 h (prcp + swe
+  ≈ 8.5 h). Exactness: exactextract's own weighted mean agrees to ≤ 5e-11 in all basins;
+  ORNL's Single Pixel API agrees at six points; output is bit-identical across reruns.
+  Probe on prcp 1980 (old layout, leap year): all chunks stored, Feb 29 kept / Dec 31
+  dropped as in the stale data, stale values reproduced.
+- Against the stale product (5,969 shared basins): with true-area weights and
+  full-resolution polygons, prcp reproduces it (annual totals within ±0.0011 %, p01–p99).
+  Coverage-only weights shift large northern basins by up to 0.3 %; the published
+  200 m-simplified Resource 4 polygons leave ≈ ±0.1 % (prcp) and ±2.5 % (swe) at p01–p99.
+  Found the five all-NaN stale sites (Known Issues).
+- Results: `docs/plans/2026-09-29-daymet-reprocessing-action-plan.md` §0. Run folder:
+  `/Volumes/Untitled/daymet_processed_sep2026/` (`RUN_NOTES.md`).
+
+**DECISIONS (user, 2026-09-29, after the gate)** for the 1980–2025 run: (D1) full-resolution
+polygons; (D2) all six variables in one pass; (D3) the user's Earthdata Login bearer token
+for the ORNL-only 2025 files (expires ≈ 2026-10-25; kept outside the repo, docs and memory);
+(D4) add the 53 correctly delineated basins > 100,000 km² if RAM allows (05KH009 stays out,
+wrong polygon). **LOCATIONS (user, 2026-09-29):** code in `EO_data_processing/`; run folder
+on the internal SSD `~/HISSS_data/daymet-processed-29sep2026/` with md5-verified copies to
+the exFAT drive; commit and merge when ready. Implemented the same day: the polygon rebuild
+script is now committed (`EO_data_processing/geometry/rebuild_watershed_polygons.py`; defaults
+reproduce Resource 4, `--no-simplify --include-large` gives the 8,017-basin layer); bearer-token
+downloads with the ORNL-only 2025 files first; an aggregator planning fix (int32 keys, slices;
+byte-identical output) that keeps the 8,017-basin runs at 4.3 GB parent + < 1 GB per worker
+with `--workers 6`.
 
 ### Changed: Claude Code instruction files restructured for the context budget (2026-09-29)
 The eight files auto-loaded at every session start (CLAUDE.md plus seven `@`-imports:
