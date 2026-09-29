@@ -20,6 +20,28 @@ detail is in [docs/CHANGELOG_ARCHIVE.md](docs/CHANGELOG_ARCHIVE.md).
 ## [Unreleased]
 
 ### Planned
+- **Daymet climate input reprocess (options review 2026-09-29; user decision pending).**
+  Daymet V4 R1 now ends at calendar 2025 (released 2026-05-22; no 2026 before ~spring
+  2027), so WY 1980–2025 climate is achievable — matching the products. The 6,087-basin
+  input predates the 7,964-polygon layer (basin size explains ≤ 58 of the 2,049 gages
+  without Daymet); a recompute over all 7,964 polygons is the only way to close the hole
+  (no published product substitutes). ORNL THREDDS/NCSS/tiles are gone and pydaymet /
+  daymetr / climateR are broken for gridded pulls; viable routes are the annual NA
+  mosaics (ORNL HTTPS/S3; NCAR GDEX mirror through 2024 via Globus) with our own
+  exactextract zonal statistics, gdptools by the USGS co-author, or Google Earth Engine
+  (through 2025; licensing question for a private-company author). Recommended: prcp +
+  swe first (≈ 0.57 TB), validated by reproducing the co-authors' 2023 values on the
+  6,087 shared basins; four ≤ 1-day feasibility tests (T0–T4) and a go/no-go by
+  ~2026-10-10 are laid out in `docs/plans/2026-09-29-daymet-reprocessing-options.md`.
+  This rerun would also regenerate `flagged_for_high_na` (below).
+  Measured the same day (plan §3 A-addendum): files are gzip-4 NetCDF-4 chunked
+  (1,1000,1000) for 1980–2019 and (10,300,300) for 2020+; six variables total 3.38 TB
+  for 1980–2024 (72–77 GB/yr), prcp+swe 0.564 TB; the NCAR mirror delivers 18–25 MB/s to
+  the Windows laptop, decompression runs 150–170 MB/s per core → a download-bound
+  year-by-year stream needs ≈ 2–3 GB RAM, ≈ 155 GB (six) / 25 GB (prcp+swe) of SSD, and
+  ≈ 2–2.5 days (six) / ≈ 9 h (prcp+swe) of wall-clock.
+  **Action plan for the dedicated machine (tools to write, runbook, acceptance criteria,
+  twelve named unknowns): `docs/plans/2026-09-29-daymet-reprocessing-action-plan.md`.**
 - **HydroShare documentation updates PENDING (not applied 2026-09-10 — user decision to
   leave the staged files untouched this session).** (H1) Category terminology: regenerate
   `hisss_data_dictionary.csv` `category` + `hisss_signature_categories.csv` (root/R1/R2)
@@ -249,6 +271,27 @@ detail is in [docs/CHANGELOG_ARCHIVE.md](docs/CHANGELOG_ARCHIVE.md).
   events in that window). Record: changelog-old.md → August 2026.
 
 ### Guidelines Document TODOs
+**Synced 2026-09-29 — 20 wording regions changed since 2026-09-10; structure unchanged
+(277 vs 270 paragraphs). Snapshot overwritten.** Landed from earlier queues: Part 4
+"missing years excluded" and "handles flagged data" (both 2026-09-04 items, now checked
+below), Part 5 `flagged_for_high_na` redefinition (1) + the cross-language qualifier (3),
+and Part 5 now says the flags "can be recomputed from an output CSV without rerunning any
+signature" (true — `refresh_qa_flags.jl`, `recompute_high_na_flag.py`). Verified against
+code: the §2.2.2-style constant-flow rule is not in the doc, but Part 3.8 snow rewording,
+the b = 1 recession paragraph, and the 2 % reversal note all still match. New doc-side
+items (code is right):
+- [ ] **Part 3.3 parameterized-BFI validity interval changed from (0, 1) to [0, 1] — wrong.**
+  `analyze_baseflow_indices_with_parameters` returns NA when `alpha <= 0 || alpha >= 1`
+  (`julia/src/baseflow.jl:283`), so the OPEN interval was correct; revert to (0, 1).
+- [ ] Part 1.2 now cites "Hecht et al. 2024" for the four QA conditions; no such entry in
+  Part 6 References — add the reference.
+- [ ] Part 3.3 and 3.3-recession now use the name `recession_alpha_point_cloud` twice; the
+  shipped column is `recession_alpha_point_cloud_linear_reservoir` (carried forward).
+- [ ] Part 5 (2): the released-product high_na known-issue sentence still not landed.
+- [ ] Carried forward unchanged: "(see 3.12)" → 3.1; `avg_storage` block absent;
+  `ice_affected_days_total` absent; elasticity "11 consecutive qualifying observations";
+  Pettitt window paragraph in Part 2. Nit: "occurs ." (stray space) in `swe_max_dowy`.
+
 **Synced 2026-09-10 (pm) — the doc was RESTRUCTURED to the colleague's 8 categories; full
 category crosswalk run (user request).** Part 3 now has eight modules (Flow Volume, Flow
 Duration, Storage, Flashiness, Drought, Flow Timing, Precipitation Streamflow, Snow) with
@@ -347,10 +390,10 @@ Findings, by direction of fix:
   production metadata. What April 2026 removed is the per-year application inside the
   SIGNATURE path. The note should say so, and the manuscript's "fewer than 20 total years
   containing valid daily observations" glosses the ≥ 30-day/0.0001 rule (relay).
-- [ ] "Missing or invalid years are excluded from analysis" — not at ingestion:
+- [x] APPLIED in the doc by 2026-09-29. "Missing or invalid years are excluded from analysis" — not at ingestion:
   `rawToRaw` keeps every day in the window once the gage qualifies; year exclusion is the
   preprocessor's job (Part 1.2). True only of the legacy `rawData` path.
-- [ ] `generate_streamflow_dt()` "handles flagged data": the qualifier mask (keep A, A e,
+- [x] APPLIED in the doc by 2026-09-29. `generate_streamflow_dt()` "handles flagged data": the qualifier mask (keep A, A e,
   P, P e) is applied to USGS only; HYDAT `Symbol` values are carried in `flag` but never
   mask Q. The "required years" check is a row-count proxy (`nrow > 365 × min_num_years`).
 - [ ] `process_caravan_gages()` "handles redundancy between CAMELS and HYSETS" —
@@ -492,6 +535,63 @@ refer to those lists. One thread carried forward from 2026-09-01: the committed 
 fails GitHub's rich rendering because of a GitHub-side mermaid bundle crash (verified
 against GitHub's own mermaid README, not this file) — re-check after GitHub ships a fixed
 bundle; until then the 3x PNG beside the doc is the review copy.
+
+**2026-09-29 — MAJOR co-author revision synced (110 vs 105 paragraphs); reconciliation
+pass.** Abstract, §4 Data Overview, Data/Code availability and Funding sections added;
+front-matter to-do lists removed; §2.1.1 (streamflow) and §2.1.2 (boundaries) swapped;
+references reformatted and extended to 39 (Albers 2017, ECCC HYDAT release 2025-10-14 and
+the 2026-09-10 HYDAT relay all landed; Arsenault, Knoben, Kratzert, McMillan, Omernik,
+Petersky, gdptools 0.3.11 added). Snapshot overwritten. Findings by direction of fix:
+- **Manuscript wrong, code/docs right (relay):**
+  1. §2.1.1 gap rule now reads "if any data gap exceeded three consecutive days those
+     days were set to NA" — the preprocessor REJECTS the whole water year (guidelines
+     Part 1.2 items i–ii; `preprocess_daily_data`); the 2026-09-04 wording was correct.
+  2. §2.2.2 "at least 20 qualifying water years across its full period of record" — the
+     20-year floor is counted WITHIN the analysis window (`run_julia_benchmark.jl`
+     applies `length(valid_years) >= 20` after the window filter; census 2026-09-04: 412
+     gages with ≥ 20 full-record years are excluded from product #1 by the in-window
+     floor). Drop "across its full period of record".
+  3. §2.1.2 "We excluded basins that exceeded 85,000 km2" and the new pre-§2.1.1
+     paragraph "7,964 watersheds had polygons and were smaller than 85,000 km" — the
+     boundary layer (Resource 4) excluded the 54 basins > 100,000 km²; 85,000 km² was the
+     Daymet aggregation cap only (58 success gages exceed 85,000 km² per the metadata, so
+     the 7,964 include basins between the two thresholds). Also "km" → km². "The total
+     number of gages with streamflow, Daymet and MODIS LULC is 5,965" — 5,965 is
+     streamflow ∧ Daymet; the ∧ MODIS count needs checking against Resource 5.
+  4. "6,041" is back (abstract "6,041–7,964"; §2.1.3 "6,087 or 6,041") — settled
+     2026-09-04 as 6,087 (distinct `site_id`s in the parquet).
+  5. §2 preamble "8,014 … usable daily records for watersheds smaller than 85,000 km2"
+     conflates the gage count with the size cut; its cross-references pre-date the swap:
+     "(Sect. 2.1.1)" for boundaries → 2.1.2, "(Sect. 2.1.2)" for the trend windows → 2.2.1;
+     §3 "described in Section 2.1.2" → 2.2.1. The agency-drainage-area normalization
+     sentence dropped from the preamble survives in §2.1.1 and §5.1.1 (fine).
+  6. Title line "Hydroclimate Information, Signatures and Summary Statistics" vs
+     "Hydrologic Information Signatures and Summary Statistics" in the abstract, §1,
+     Figure 1 and Table 1 captions.
+  7. Citations: §2.1.1 still "Albers et al., 2026" (list has Albers 2017); Myneni — the new
+     reference is the MOD15A2H (Terra 8-day) DOI while the product used is MCD15A3H v061
+     (DOI 10.5067/MODIS/MCD15A3H.061), and §3 cites "Myneni et al. 2015" vs §2.1.4 "2021";
+     Hatchett has no year; "Condon … (2010)" → 2020; "htpps://"; "licenceCC-BY 4.0
+     license"; "Chen … & Alejandro N. Flores, A. N."; several trailing-punctuation slips.
+  8. Still open from earlier passes: "Claude Code 0.145.0" (item 7), §5.1.2 seven-digit
+     "0103500", "may be read" → "must", unclosed parenthesis, §5.1.3 "against" →
+     "between".
+- **Verified consistent:** §2.2.2 constant-flow rule ("any calendar month in which at
+  least 15 days of non-zero streamflow held at a single constant value") = config
+  `constant_sd_flag` (`min_nonzero_days_per_month` 15, `max_unique_values` 1); the
+  eight-family list in §2 and §2.2.1 = `docs/signature_categories.csv` (the manuscript
+  says "signature families" where the repo says "categories" — vocabulary only, but the
+  repo reserves "function family" for the 15 computing functions; user to decide whether
+  to align); the Daymet-gap explanation in §2.1.3 ("processed before the streamflow time
+  series requirements were finalized") matches the 2026-09-29 finding that basin size
+  explains almost none of the 2,049-gage hole (see `docs/plans/2026-09-29-daymet-
+  reprocessing-options.md`).
+- **Not verifiable locally:** §4's 12 Level I ecoregions / 62 % / median 698 km² /
+  quartiles 190 and 2,700 km² for the product sets (the 8,014-gage set gives 159 / 613 /
+  2,403 km², so a larger-basin product subset is plausible); check against the product
+  CSVs on the drive.
+- **Code/docs-side: none.** Note for later: §2.1.3 and Resource 3 will need rewriting if
+  the Daymet input is reprocessed (plan above).
 
 **2026-09-10 (evening) — HYDAT citation check (user request).** The manuscript's
 "tbd: ECC hydat citation" and the proposed reference "ECCC (2026). HYDAT: National

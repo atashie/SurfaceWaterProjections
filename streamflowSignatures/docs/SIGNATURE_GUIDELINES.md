@@ -1,21 +1,27 @@
 # Summary Documentation for Streamflow Signatures
 
 > **Auto-synced from**: [Google Doc](https://docs.google.com/document/d/e/2PACX-1vSVjtqLKk1r9TczxLEBhlnzfBWbm1TQVfvqERm-jEwLISZTEWx73ofV4Ng9H0JaXA/pub)
-> **Last synced**: 2026-09-10 (afternoon; second sync of the day). **RESTRUCTURED by the
-> user to the 8-category scheme of the colleague's sheet**: Part 3 now has EIGHT modules —
-> 3.1 Flow Volume (calculate_flow_vols_by_year + calculate_negative_days), 3.2 Flow
-> Duration, 3.3 Storage (both baseflow functions + analyze_recession_parameters +
-> analyze_Q_PPT_relationships), 3.4 Flashiness (calculate_pulse_metrics +
-> analyze_flashiness_trends + calculate_streamflow_elasticity), 3.5 Drought, 3.6 Flow
-> Timing, 3.7 Precipitation Streamflow (calculate_qp_seasonality), 3.8 Snow — replacing
-> the 13 modules of the morning sync; each former module survives as a function block
-> inside its new module. `calculate_average_storage()` / `avg_storage` appears nowhere.
-> **The legacy document and the START/END markers are GONE** — the doc is now the new
-> text only (270 extracted lines vs 563). Parts 1, 2, 4, 5, 6 unchanged since the morning
-> sync (Part 1.2 still says "(see 3.12)" for Negative_ann; Part 5 high_na edits still
-> pending). Crosswalk of every category description (manuscript, HydroShare deposit, this
-> doc): CHANGELOG → Guidelines Document TODOs (2026-09-10 pm) and
-> `docs/plans/2026-09-10-signature-category-review.md`.
+> **Last synced**: 2026-09-29 (277 extracted paragraphs vs 270 on 2026-09-10). Structure
+> unchanged (Parts 1–6, eight Part-3 modules); 20 wording regions changed. Substantive:
+> Part 1.2 now cites "Hecht et al. 2024" for the four QA conditions (not in Part 6) and
+> drops the "tell us if there is a data-driven answer" request; Part 3.3 rewrites the
+> b = 1 recession paragraph (same rule), cites Tashie et al. 2020a/b (both added to
+> Part 6), names `recession_alpha_point_cloud` in the L-H param line, and changes the
+> parameterized-BFI validity interval from (0, 1) to **[0, 1] — the code rejects
+> alpha ≤ 0 or ≥ 1, so the open interval was right**; Part 3.4 adds "Threshold of 2%
+> selected to remove error / noise"; Part 3.8 rewords four snow definitions (no rule
+> change); **Part 4 rewritten** — entry-point intro, `Function:` headings, the compilation
+> gate restated ("at least 20 calendar years each have at least 30 days with daily
+> discharge above 0.0001 mm … applies only at compilation"), "All daily records in the
+> retrieval window are kept …", the USGS qualifier mask / HYDAT-never-masked sentence
+> (three 2026-09-04 relay items now landed), the 95 % coverage-warning bullet dropped;
+> **Part 5 rewritten** as a `compute_qa_flags()` block — high_na redefined as ">30 % of a
+> gage's signature columns (the 16 statistics of every signature plus the 21 per-gage
+> scalars)", "confirmatory" BFI notes, and a new Requirements block ("recomputed from an
+> output CSV without rerunning any signature"; "aligned 2026-09-04"). NOT landed: the
+> released-product high_na known-issue sentence; "(see 3.12)"; avg_storage;
+> ice_affected_days_total; the shipped `_linear_reservoir` column name. See CHANGELOG →
+> Guidelines Document TODOs (2026-09-29).
 
 ---
 
@@ -39,9 +45,9 @@ Do not replace NAs with zeros; streamflow that is zero is okay.
 
 NAs can be for various reasons, we need to use the U.S. Geological Survey (USGS) codes that describe what creates those NAs (e.g. Ice affected, etc.); for each site that has ice affected days we need a total count of the number of days that are ice affected.
 
-If there is up to 3 days of continuous missing streamflow data, interpolate between the points; tell us if there is a data driven answer to the number of days that would not create problems for trend analysis.
+If there are up to 3 days of continuous missing streamflow data, interpolate between the points.
 
-Following the USGS data release QA criteria, four conditions are screened per water year: (i) more than 3 consecutive days of missing data, (ii) more than 30 total missing days in the year, (iii) negative flow values, and (iv) constant monthly standard deviations during periods of non-zero streamflow (indicative of data errors or highly controlled discharge). Items i and ii REMOVE the year: any gap longer than 3 consecutive days, or more than 30 missing days in total, excludes that water year from all calculations. Internal gaps of up to 3 days are filled by linear interpolation for years that pass, but interpolated days still count toward the 30-missing-day limit (the count is taken on the raw data, before interpolation). Items iii and iv FLAG but do not remove: negative values are retained by default (config option reject_negative_flow, default false) and are counted in Negative_ann (see 3.12); a constant monthly standard deviation sets a QA flag only and never rejects a year.
+Following Hecht et al. 2024 QA criteria, four conditions are screened per water year: (i) more than 3 consecutive days of missing data, (ii) more than 30 total missing days in the year, (iii) negative flow values, and (iv) constant monthly standard deviations during periods of non-zero streamflow (indicative of data errors or highly controlled discharge). Items i and ii REMOVE the year: any gap longer than 3 consecutive days, or more than 30 missing days in total, excludes that water year from all calculations. Internal gaps of up to 3 days are filled by linear interpolation for years that pass, but interpolated days still count toward the 30-missing-day limit (the count is taken on the raw data, before interpolation). Items iii and iv FLAG but do not remove: negative values are retained by default (config option reject_negative_flow, default false) and are counted in Negative_ann (see 3.12); a constant monthly standard deviation sets a QA flag only and never rejects a year.
 
 Flag years with constant monthly standard deviations during periods of non-zero streamflow, indicative of highly controlled discharges.
 
@@ -171,7 +177,7 @@ BFI_LyneHollick: Baseflow index from the Lyne-Hollick filter with default parame
 
 BFI_Eckhardt_param: Eckhardt filter with the site-specific recession-derived constant in place of a = 0.98.
 
-BFI_LyneHollick_param: Lyne-Hollick filter with the recession-derived alpha in place of a = 0.925. This parameterization is heuristic — the L-H parameter has no formal derivation from recession analysis.
+BFI_LyneHollick_param: Lyne-Hollick filter with the recession-derived constant (recession_alpha_point_cloud) in place of a = 0.925. This parameterization is heuristic — the L-H parameter has no formal derivation from recession analysis.
 
 recession_alpha_point_cloud: Median of day-to-day recession ratios Q(i+1)/Q(i) across all recession events, under the linear-reservoir assumption (b = 1) for each gage. This constant parameterizes the two _param filters.
 
@@ -185,7 +191,7 @@ Eckhardt filter: BFImax = 0.8 (maximum baseflow index), a = 0.98 (recession cons
 
 Lyne-Hollick filter: a= 0.925, passes = 2 (each pass is a forward sweep followed by a backward sweep, so 2 passes = 4 sweeps total). Quickflow constrained to [0, Q] in both directions; baseflow = Q − quickflow, must be ≥0.
 
-Parameterized versions: gages with insufficient recession data (10 or fewer alpha pairs in the whole record), or a derived constant outside (0, 1), produce NA for all parameterized BFI values.
+Parameterized versions: gages with insufficient recession data (10 or fewer alpha pairs in the whole record), or a derived constant outside [0, 1], produce NA for all parameterized BFI values.
 
 Requirements and decisions:
 
@@ -197,7 +203,7 @@ BFI must be between 0 and 1.
 
 Function: analyze_recession_parameters()
 
-Purpose: Analyzes recession events to calculate parameters like log(a), b, and concavity, from the relationship −dQ/dt = a·Q^b.
+Purpose: Analyzes recession events to calculate parameters like log(a), b, concavity, and recession seasonality from the relationship −dQ/dt = a·Q^b following Tashie et al. (2020a).
 
 Metrics:
 
@@ -219,15 +225,15 @@ log_a_seasonality_minimum_all: Water year date of minimum log(a) for all years (
 
 Method and parameters:
 
-Recession events are identified as the longest contiguous windows where both Q and |dQ/dt| are monotonically decreasing, with a minimum length of 5 days. The first day of each event is removed during power law fitting (standard practice — storm peak influence).
+Recession events are identified as the longest contiguous windows where both Q and |dQ/dt| are monotonically decreasing, with a minimum length of 5 days (Tashie et al. 2020b). The first day of each event is removed during power law fitting (standard practice — storm peak influence).
 
 Parameter b is determined using the line of best fit to the log-log plot of −dQ/dt versus Q (free power-law fit).
 
-Parameter a is determined with the exponent constrained to b = 1 (linear reservoir assumption, applied at all locations and periods): log(a) = median of [log(−dQ/dt) − log(Q)] — a median, not a regression intercept. Fixing b = 1 decouples trends and seasonality in a from changes in b.
+Parameter a is determined with the exponent fixed at b = 1, the linear reservoir assumption. The same fixed exponent is used at every gage and in every period. With b = 1, each day of recession gives one estimate of log(a), equal to log(-dQ/dt) - log(Q). The reported log(a) is the median of these daily estimates. The linear reservoir assumption is applied because in a free fit, log(a) is the intercept and b is the slope of the same line, and any change in b therefore also shifts (a). Fixing b = 1 removes this coupling, and therefore trends and seasonal cycles in log(a) reflect changes in log(a) alone, not changes in b.
 
 Splits recession events temporally (first vs. second half) for concavity analysis.
 
-Fits sinusoidal models to analyze seasonal variation in log(a) (fit to the per-event b = 1 values).
+Fits sinusoidal models to analyze seasonal variation in log(a) (fit to the event-scale b = 1 values).
 
 All recession metrics except n_recession_events require at least 25 recession events across the record; gages below the minimum report NA.
 
@@ -241,7 +247,7 @@ To control the quality of fitted parameters, calculate recession fits and create
 
 Function: analyze_Q_PPT_relationships(). Requires precipitation data
 
-Purpose: Analyzes runoff ratios (streamflow divided by precipitation) and their trends.
+Purpose: Analyzes runoff ratios (streamflow divided by precipitation).
 
 Metrics:
 
@@ -285,7 +291,7 @@ dur_low_pulses_year / dur_low_pulses_all: Mean duration in days of low-flow puls
 
 TQmean: Percentage of days with flow above the annual mean.
 
-Flow_Reversals_annual / _winter / _spring / _summer / _fall: Number of flow reversals (annual and seasonal). Only includes changes in flow direction exceeding 2% of current flow: a reversal day requires a sign change between the incoming and outgoing day-to-day flow differences, with the outgoing change larger than 2% of that day's flow.
+Flow_Reversals_annual / _winter / _spring / _summer / _fall: Number of flow reversals (annual and seasonal). Only includes changes in flow direction exceeding 2% of current flow: a reversal day requires a sign change between the incoming and outgoing day-to-day flow differences, with the outgoing change larger than 2% of that day's flow. Threshold of 2% selected to remove error / noise.
 
 Requirements and decisions:
 
@@ -413,7 +419,7 @@ Metrics:
 
 swe_max: Maximum daily SWE in the water year (mm). A snow-free year reports a valid 0.
 
-swe_max_dowy: Day of water year of SWE water year maximum (i.e., swe-max). NA in snow-free years.
+swe_max_dowy: Day of water year when maximum SWE (i.e., swe_max) occurs . NA in snow-free years.
 
 snow_cover_days: Number of days with SWE ≥ 10 mm. A snow-free year reports a valid 0.
 
@@ -421,9 +427,9 @@ snow_on_dowy: First day of the anchor spell.
 
 snow_off_dowy: First snow-free day after the anchor spell.
 
-melt_season_days: Number of days during the melt season (i.e., between peak SWE and no snow). Calculated as: snow_off_dowy − swe_max_dowy.
+melt_season_days: Number of days during the melt season (i.e., between the day of max SWE and the first subsequent day of no snow). Calculated as: snow_off_dowy − swe_max_dowy.
 
-melt_rate: rate of snow melt during the melt season: swe_max divided by melt_season_days (mm/day; net ablation rate between peak and snow-off).
+melt_rate: rate of snowmelt during the melt season: swe_max divided by melt_season_days (mm/day; net ablation rate between peak and snow-off).
 
 ssm: Snow seasonality metric = (seasonal snow days − ephemeral snow days) / total snow days, where a seasonal spell lasts at least 60 continuous days (Hatchett 2021; Petersky & Harpold 2018). Ranges −1 (fully ephemeral) to +1 (fully seasonal).
 
@@ -435,7 +441,7 @@ melt_before_peak_pct: melt_before_peak as a percentage of total water-year melt.
 
 melt_before_peak_to_max_swe: Ratio of total melt to maximum SWE: melt_before_peak divided by swe_max.
 
-melt_com_dowy: Day of water year when cumulative melt reaches 50% of the water-year total.
+melt_com_dowy: Day of water year when cumulative melt reaches 50% of the water-year total (melt center of mass).
 
 swe_max_to_ppt: swe_max divided by total water-year precipitation (years with precipitation ≤ 10 mm return NA).
 
@@ -449,21 +455,23 @@ In addition to the standard trend-completeness requirements, the ten timing/melt
 
 ## Part 4: Data Ingestion and Utility Functions
 
-process_gages_rawToRaw()
+### The ingestion utility functions used to compile the harmonized input tables. They run once, upstream of the signature library.
+
+### Function: process_gages_rawToRaw()
 
 Purpose: Processes raw gage data (United States / Canadian) to calculate streamflow metrics for individual gages and save results to a file. Streamflow data are available up to the present day, but climate data must be processed independently.
 
 Requirements and decisions:
 
-A folder of USGS and HYDAT (Canadian) metadata must be stored locally in order to process watersheds.
+A folder of USGS (United States) and HYDAT (Canadian) metadata must be stored locally in order to process watersheds.
 
-Gage inclusion (compilation gate): a gage is compiled only if at least min_num_years calendar years each contains at least 30 days with discharge above 0.0001 mm / d (MIN_Q_VALUE_AND_DAYS = c(0.0001, 30)). Gages that fail receive processing_status = insufficient_years and are not written to the parquet; a retrieval pre-check also requires more than 365 × 20 daily records inside the retrieval window.
+A gage is compiled only if at least 20 calendar years each have at least 30 days with daily discharge above 0.0001 mm. This rule applies only at compilation.
 
-Missing or invalid years are excluded from analysis.
+All daily records in the retrieval window are kept once a gage qualifies; year rejection happens later in the preprocessor (Part 1.2).
 
-process_caravan_gages()
+### Function: process_caravan_gages()
 
-Purpose: Processes Caravan NetCDF timeseries data for watersheds, calculates streamflow metrics, and saves results. Coincident climate data are generally available, but the record of streamflow is truncated to as early as the early 2000s (as late as 2018 for HYSETS).
+Purpose: Processes Caravan NetCDF timeseries data for watersheds, calculates streamflow metrics, and saves results. Coincident climate data are generally available in Caravan, but Caravan’s record of streamflow is truncated to as early as the early 2000s (as late as 2018 for HYSETS).
 
 Requirements and decisions:
 
@@ -471,11 +479,11 @@ Minimum years of valid data (min_num_years) are required for processing.
 
 Filters years based on minimum flow thresholds and valid days (0.0001 mm / d for 30 days).
 
-Handles redundancy between datasets (e.g., CAMELS and HYSETS).
+Handles redundancy between datasets (e.g., CAMELS and HYSETS) via common identifiers.
 
-generate_streamflow_dt() and generate_streamflow_dt_caravan()
+### Function: generate_streamflow_dt() and generate_streamflow_dt_caravan()
 
-Purpose: Converts raw gage data (USGS/Canadian) or Caravan NetCDF data into a standardized streamflow data.table.
+Purpose: Converts raw streamflow gage data (from both USGS/Canadian) or Caravan NetCDF data into a standardized streamflow data.table.
 
 Requirements and decisions:
 
@@ -483,11 +491,11 @@ Streamflow is provided in appropriate units (or converted, e.g., m³/s to mm/day
 
 Filters data by specified date ranges and required years of data.
 
-Handles missing or invalid values (e.g., flagged data).
+USGS values are kept only for qualifiers A, A e, P, P e (others set to NA); HYDAT values are never masked, their symbol is carried in the flag column.
 
 Adds derived columns (e.g., year, month, day of year).
 
-integrate_daymet_with_streamflow()
+### Function: integrate_daymet_with_streamflow()
 
 Purpose: Joins Daymet climate data (precipitation, temperature) to streamflow data based on date matching.
 
@@ -499,37 +507,45 @@ Matches streamflow gage IDs to Daymet site IDs.
 
 Joins climate variables (prcp, tmin, tmax, swe, vp, srad) to streamflow data.table on Date.
 
-Reports coverage percentage; warns if < 95% of dates have matching climate data.
-
 Renames prcp column to PPT for compatibility with existing Q-PPT analysis functions.
 
 ## Part 5: Automated Data Quality Flags
 
-All checks run on per-gage summary values (the _mean statistic, except where noted). Thresholds are config-driven (qa_qc section of signatures_config.json) and identical across the Julia, Python, and R implementations. A value of true marks a potential quality issue for review; flags never remove a gage from the downstream analysis (data are flagged only), and a missing input value never triggers a flag.
+Function: compute_qa_flags()
 
-flagged_for_qann_range: Qann_mean outside [0, 2000] mm
+Purpose: Adds boolean flagged_for_* columns to the per-gage summary table so that implausible or internally inconsistent results can be reviewed. A value of true marks a potential quality issue; flags never remove a gage from the downstream analysis (data are flagged only).
 
-flagged_for_bfi_eckhardt_range: BFI_Eckhardt_mean outside [0, 1]. Defensive check — per-year BFI values are clamped to [0, 1] during calculation, so this flag cannot fire under current code.
+flagged_for_qann_range: Qann_mean outside [0, 2000] mm.
 
-flagged_for_bfi_lynehollick_range: BFI_LyneHollick_mean outside [0, 1]. Same defensive note as above.
+flagged_for_bfi_eckhardt_range: BFI_Eckhardt_mean outside [0, 1]. This is a confirmatory check; per-year BFI values are constrained to [0, 1] during calculation, so this flag should not appear in current code configuration.
 
-flagged_for_flashiness_range: flashinessRB_mean outside [0, 2]
+flagged_for_bfi_lynehollick_range: BFI_LyneHollick_mean outside [0, 1]. Same confirmatory note as eckhardt bfi above.
 
-flagged_for_tqmean_range: TQmean_mean outside [0, 100]
+flagged_for_flashiness_range: flashinessRB_mean outside [0, 2].
 
-flagged_for_d50_range: D50_day_mean outside [1, 366]
+flagged_for_tqmean_range: TQmean_mean outside [0, 100].
 
-flagged_for_elasticity_range: elasticity_static outside [0.1, 5] (the per-gage scalar — the only flag not based on a _mean column)
+flagged_for_d50_range: D50_day_mean outside [1, 366].
 
-flagged_for_runoff_ratio_range: annual_runoff_ratio_mean outside [0.01, 1.5]
+flagged_for_elasticity_range: elasticity_static outside [0.1, 5] (the per-gage scalar — the only flag not based on a _mean column).
 
-flagged_for_seasonal_sum: the sum of the four seasonal totals (Qwin_mean + Qspr_mean + Qsum_mean + Qfal_mean) deviates from Qann_mean by more than 20%
+flagged_for_runoff_ratio_range: annual_runoff_ratio_mean outside [0.01, 1.5].
 
-flagged_for_percentile_order: non-decreasing order Q5 ≤ Q25 ≤ Q50 ≤ Q75 ≤ Q95 violated (on _mean values; ties are allowed and do not flag)
+flagged_for_seasonal_sum: the sum of the four seasonal totals (Qwin_mean + Qspr_mean + Qsum_mean + Qfal_mean) deviates from Qann_mean by more than 20%.
 
-flagged_for_timing_order: non-decreasing order D5 ≤ D50 ≤ D95 violated (on _day_mean values; ties are allowed and do not flag)
+flagged_for_percentile_order: non-decreasing order Q5 ≤ Q25 ≤ Q50 ≤ Q75 ≤ Q95 violated (on _mean values; ties are allowed and do not flag).
 
-flagged_for_high_na: more than 30% of a gage's numeric output columns are NA — often indicates missing climate/SWE coverage rather than bad streamflow data
+flagged_for_timing_order: non-decreasing order D5 ≤ D50 ≤ D95 violated (on _day_mean values; ties are allowed and do not flag).
+
+flagged_for_high_na: more than 30% of a gage's signature columns (the 16 statistics of every signature plus the 21 per-gage scalars) are NA — often indicates missing climate/SWE coverage rather than bad streamflow data.
+
+Requirements and decisions:
+
+A missing input value never triggers a flag.
+
+Because the flags depend only on the summary table, they can be recomputed from an output CSV without rerunning any signature.
+
+The same function, thresholds, and high-NA denominator are implemented in the Julia, Python, and R libraries (aligned 2026-09-04).
 
 ## Part 6: References
 
@@ -554,6 +570,10 @@ Petersky, R., & Harpold, A. (2018). Now you see it, now you don't: a case study 
 Pettitt, A.N. (1979). A non-parametric approach to the change-point problem. Applied Statistics, 28(2), 126–135.
 
 Sawicz, K., Wagener, T., Sivapalan, M., Troch, P. A., & Carrillo, G. (2011). Catchment classification: empirical analysis of hydrologic similarity based on catchment function in the eastern USA. Hydrology and Earth System Sciences, 15(9), 2895–2911.
+
+Tashie, A., Pavelsky, T., & Band, L. E. (2020)a. An empirical reevaluation of streamflow recession analysis at the continental scale. Water Resources Research, 56(1), e2019WR025448.
+
+Tashie, A., Pavelsky, T., & Emanuel, R. E. (2020)b. Spatial and temporal patterns in baseflow recession in the continental United States. Water Resources Research, 56(3), e2019WR025425.
 
 Wrede, S., Fenicia, F., Martinez-Carreras, N., Juilleret, J., Hissler, C., Krein, A., ... & Pfister, L. (2015). Towards more systematic perceptual model development: a case study using 3 Luxembourgish catchments. Hydrological Processes, 29(12), 2731–2750.
 
