@@ -10,10 +10,11 @@ Earthdata token is still valid; then variable-major (every year of the first var
 then the next), so whole variables complete early. Per (variable, year):
   * skip when <out-dir>/<var>_<year>.done exists (fully resumable; a .part is resumed);
   * expected size and SHA-256 come from NASA CMR (cached in <out-dir>/cmr_manifest.json);
-  * source: the NCAR GDEX mirror (anonymous) when it holds the file at the CMR size,
-    otherwise ORNL over HTTPS with an Earthdata Login: a bearer token read from
-    --edl-token-file (sent through a mode-600 header file, never on a command line), or
-    else ~/.netrc (machine urs.earthdata.nasa.gov) with cookies;
+  * source: ORNL over HTTPS with an Earthdata Login when available (--prefer auto; ~3x
+    faster than the mirror from the M5 laptop), else the anonymous NCAR GDEX mirror when it
+    holds the file at the CMR size; the other source is the fallback. ORNL auth: a bearer
+    token from --edl-token-file (sent through a mode-600 header file, never on a command
+    line), or else ~/.netrc (machine urs.earthdata.nasa.gov) with cookies;
   * curl range-resume with stall detection; size == CMR, then SHA-256 == CMR (fatal);
   * daymet_probe.py: an unstored chunk under the basin weights is fatal (plan U3);
   * daymet_aggregate.py (area weights by default); the raw file is deleted afterwards
@@ -96,40 +97,53 @@ def token_expiry(path):
         return None
 
 
-def fetch(name, exp_bytes, raw_dir, auth):
-    """Download to raw_dir/name (resumable). Returns (source, seconds, attempts)."""
+def fetch(name, exp_bytes, raw_dir, auth, prefer):
+    """Download to raw_dir/name (resumable). Returns (source(s), seconds, attempts).
+
+    Sources are tried in order of preference, up to 30 attempts each; a partial file is
+    resumed across sources (the two serve identical bytes; SHA-256 is checked afterwards).
+    """
     dest = os.path.join(raw_dir, name)
     if os.path.exists(dest) and os.path.getsize(dest) == exp_bytes:
         return "present", 0.0, 0
-    src = "mirror" if mirror_size(name) == exp_bytes else "ornl"
-    url = (MIRROR if src == "mirror" else ORNL) + name
+    on_mirror = mirror_size(name) == exp_bytes
+    order = ["ornl", "mirror"] if prefer == "ornl" else ["mirror", "ornl"]
+    order = [s for s in order if (s != "mirror" or on_mirror) and (s != "ornl" or auth["ornl_ok"])]
     part = dest + ".part"
-    hdr = None
-    try:
-        extra = []
-        if src == "ornl":
-            if auth["token_file"]:
-                fd, hdr = tempfile.mkstemp(prefix=".edl_hdr_", dir=raw_dir)   # mode 600
-                with os.fdopen(fd, "w") as fh:
-                    fh.write("Authorization: Bearer " + open(auth["token_file"]).read().strip() + "\n")
-                extra = ["-H", "@" + hdr]      # curl drops it on the redirect to another host
-            else:
-                extra = ["-n", "-c", auth["cookie"], "-b", auth["cookie"]]
-        t0, n = time.time(), 0
-        while (os.path.getsize(part) if os.path.exists(part) else 0) < exp_bytes and n < 60:
-            n += 1
-            cmd = ["curl", "-sS", "-L", "-f", "-C", "-", "--connect-timeout", "30", "--speed-limit", "200000",
-                   "--speed-time", "60"] + extra + ["-o", part, url]
-            if subprocess.run(cmd).returncode != 0:
-                time.sleep(min(300, 10 * n))
-    finally:
-        if hdr and os.path.exists(hdr):
-            os.remove(hdr)
-    got = os.path.getsize(part) if os.path.exists(part) else 0
+    size = lambda: os.path.getsize(part) if os.path.exists(part) else 0      # noqa: E731
+    t0, n, used = time.time(), 0, []
+    for src in order:
+        url = (MIRROR if src == "mirror" else ORNL) + name
+        hdr = None
+        try:
+            extra = []
+            if src == "ornl":
+                if auth["token_file"]:
+                    fd, hdr = tempfile.mkstemp(prefix=".edl_hdr_", dir=raw_dir)   # mode 600
+                    with os.fdopen(fd, "w") as fh:
+                        fh.write("Authorization: Bearer " + open(auth["token_file"]).read().strip() + "\n")
+                    extra = ["-H", "@" + hdr]      # curl drops it on the redirect to another host
+                else:
+                    extra = ["-n", "-c", auth["cookie"], "-b", auth["cookie"]]
+            tries = 0
+            while size() < exp_bytes and tries < 30:
+                tries += 1
+                n += 1
+                cmd = ["curl", "-sS", "-L", "-f", "-C", "-", "--connect-timeout", "30", "--speed-limit", "200000",
+                       "--speed-time", "60"] + extra + ["-o", part, url]
+                if subprocess.run(cmd).returncode != 0:
+                    time.sleep(min(300, 10 * tries))
+        finally:
+            if hdr and os.path.exists(hdr):
+                os.remove(hdr)
+        used.append(src)
+        if size() >= exp_bytes:
+            break
+    got = size()
     if got != exp_bytes:
-        raise RuntimeError(f"{name}: {got} of {exp_bytes} bytes after {n} attempts from {src}")
+        raise RuntimeError(f"{name}: {got} of {exp_bytes} bytes after {n} attempts from {'+'.join(used)}")
     os.replace(part, dest)
-    return src, time.time() - t0, n
+    return "+".join(used), time.time() - t0, n
 
 
 def git_state():
@@ -150,6 +164,9 @@ def main():
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--weight", choices=["area", "coverage"], default="area")
     ap.add_argument("--edl-token-file", default=os.path.expanduser("~/.config/earthdata/edl_token"))
+    ap.add_argument("--prefer", choices=["auto", "ornl", "mirror"], default="auto",
+                    help="download source to try first; auto = ORNL when Earthdata auth is available "
+                         "(measured 50-54 MB/s from the M5 laptop vs ~18 MB/s from the mirror, 2026-09-29)")
     ap.add_argument("--keep-raw", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--check-mirror", action="store_true",
@@ -175,7 +192,8 @@ def main():
     has_netrc = os.path.exists(netrc) and "urs.earthdata.nasa.gov" in open(netrc).read()
     auth_desc = "EDL token file" if tok else ("~/.netrc" if has_netrc else "NONE")
     print(f"{len(plan)} variable-years to process, {total / 1e12:.3f} TB to download "
-          f"(~{total / 19e6 / 3600:.1f} h at 19 MB/s); {len(need_ornl)} need ORNL (auth: {auth_desc})")
+          f"(~{total / 50e6 / 3600:.1f} h at ORNL's ~50 MB/s, ~{total / 19e6 / 3600:.1f} h at the mirror's ~19 MB/s); "
+          f"{len(need_ornl)} exist only at ORNL (auth: {auth_desc})")
     exp = token_expiry(tok) if tok else None
     if exp:
         print(f"EDL token expires {time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(exp))}"
@@ -208,17 +226,18 @@ def main():
     write_json(os.path.join(a.out_dir, f"run_meta_{stamp}.json"), {
         "started": stamp, "argv": sys.argv, "years": [years[0], years[-1]], "vars": variables,
         "planned": len(planned := [fname(v, yr) for v, yr in plan]), "first_files": planned[:8],
-        "bytes_to_download": total, "auth": auth_desc, "token_expiry_utc": exp,
+        "bytes_to_download": total, "auth": auth_desc, "token_expiry_utc": exp, "prefer": a.prefer,
         "git": git_state(), "host": platform.node(), "software": software_versions()})
 
-    auth = {"token_file": tok, "cookie": os.path.join(a.raw_dir, ".edl_cookies")}
+    auth = {"token_file": tok, "cookie": os.path.join(a.raw_dir, ".edl_cookies"), "ornl_ok": bool(tok or has_netrc)}
+    prefer = ("ornl" if auth["ornl_ok"] else "mirror") if a.prefer == "auto" else a.prefer
     q = queue.Queue(maxsize=1)
 
     def downloader():
         for v, yr in plan:
             name = fname(v, yr)
             try:
-                q.put((v, yr, name) + fetch(name, man[name]["bytes"], a.raw_dir, auth))
+                q.put((v, yr, name) + fetch(name, man[name]["bytes"], a.raw_dir, auth, prefer))
             except Exception as e:            # noqa: BLE001 -- surfaced to the main thread
                 q.put((v, yr, name, "ERROR", str(e), 0))
                 return
