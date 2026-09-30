@@ -24,9 +24,9 @@ loads every session is `docs/STATUS.md`.
 
 ### Planned
 - **Daymet climate input reprocess (options review 2026-09-29; single-year gate PASSED the
-  same day — see `[September 2026]`; D1–D4 DECIDED 2026-09-29: full-resolution polygons,
-  all six variables, an EDL token for 2025, the 53 large basins if RAM allows; where the
-  code and outputs live is still open; action plan §0).**
+  same day; D1–D4 and the locations DECIDED 2026-09-29; the 1980–2025 file BUILT and
+  validated 2026-09-30 — see `[September 2026]`; NEXT: the Phase 1 replay against
+  product #1, then the user's decision on rerunning the products; action plan §0).**
   Daymet V4 R1 now ends at calendar 2025 (released 2026-05-22; no 2026 before ~spring
   2027), so WY 1980–2025 climate is achievable — matching the products. The 6,087-basin
   input predates the 7,964-polygon layer (basin size explains ≤ 58 of the 2,049 gages
@@ -144,8 +144,10 @@ loads every session is `docs/STATUS.md`.
   02244040 (St. Johns River, FL) and 01372058. The co-authors' aggregation returned NaN for
   any basin touching a single fill cell (these basins are 99.95–99.98 % valid). The four
   Florida gages are in product #1 (all four) and #2 (three) with every climate signature
-  NaN, so "gages with climate" counts overstate by 4 / 3. Fixed by the Daymet reprocess
-  (masked mean); until then note it wherever those counts are quoted.
+  NaN, so "gages with climate" counts overstate by 4 / 3. The reprocessed input
+  (2026-09-30, masked mean) has complete series for the four (01372058 has no polygon and
+  is in neither product); the products change only when rerun on it — until then note it
+  wherever those counts are quoted.
 - **KNOWN ISSUE in BOTH delivered products — `flagged_for_high_na` (one column).** In the
   shipped CSVs it was computed over the 16 numeric metadata columns only (the runner built
   every signature column as `Vector{Any}`, which failed the numeric-eltype filter), so it is
@@ -291,6 +293,21 @@ Moved 2026-09-29 to `docs/reconciliation/guidelines_todos.md` and
 ---
 
 ## [September 2026]
+
+### Added: reprocessed Daymet climate input, 8,017 basins, 1980–2025 (run 2026-09-29/30)
+`daymet_1980_2025_29sep2026.parquet` (run folder `~/HISSS_data/daymet-processed-29sep2026/`,
+md5-verified copy `/Volumes/Untitled/daymet-processed-29sep2026/`): 134,605,430 rows
+(8,017 × 46 × 365), no NaN in any variable, md5 `c059076088cd8abd963c64094468e90f`.
+NOT yet the input of any delivered product.
+- Against the stale product 1980–2023 (5,969 shared basins, 262,460 basin-years per
+  variable): R² ≥ 0.9999999 in every basin-year for prcp, tmin, tmax, vp and srad; swe
+  ≥ 0.999 in all but 2 trace-snow basin-years; prcp annual totals within ±0.0011 %
+  (p01–p99); no date offset. Every gage of both products is covered (#1 6,678, #2 6,250;
+  the stale file had 5,513 / 5,635 non-NaN).
+- Run: 25.9 h of downloads (3.379 TB from ORNL) — 6.8 h over the estimate, lost to slow
+  single connections that curl's stall floor does not catch — then 35 min to assemble,
+  validate and copy. Tables: the run folder's `RUN_NOTES.md`; `EO_data_processing/README_DAYMET.md`;
+  action plan §0.
 
 ### Added: Daymet reprocessing toolchain; single-year gate on calendar 2023 PASSED (2026-09-29)
 **DECISION (user, 2026-09-29)**: reprocess Daymet for every watershed that has a polygon

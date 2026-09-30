@@ -32,8 +32,11 @@ never in the repo) or `~/.netrc` (`machine urs.earthdata.nasa.gov login … pass
 | `../viz/build_daymet_comparison_dashboard.py` | HTML dashboard: fresh vs original values and daily series |
 
 ## Resources (16 GB M5 laptop, measured 2026-09-29)
-A full 1980–2025 run downloads 3.455 TB: ~19 h at ORNL's 48–54 MB/s (~50 h at the mirror's
-~19 MB/s); aggregation takes 15–35 s per variable-year and hides behind the downloads. With
-the 8,017-basin weights (45.8 M entries) use `--workers 6`: peak ≈ 4.3 GB parent + < 1 GB
-per worker on the 1980–2019 chunk layout. The one-time weights build peaks at ≈ 8 GB. Start
-long runs under `caffeinate -i`.
+A full 1980–2025 run downloads 3.455 TB (~50 h at the mirror's ~19 MB/s). The 2026-09-29
+run took 25.9 h from ORNL: median 50.5 MB/s per file, but 10 % of the files crawled at
+3–30 MB/s on one slow connection (6.8 h lost) — curl's stall floor (200 KB/s for 60 s)
+does not catch that; a higher floor that drops and resumes the connection would. Then
+assemble 1 min, validate 7 min, drive copy 27 min (13 GB). Aggregation takes 15–56 s per
+variable-year and hides behind the downloads. With the 8,017-basin weights (45.8 M
+entries) use `--workers 6`: peak 5.0 GB parent + 1.5 GB per worker. The one-time weights
+build peaks at ≈ 8 GB. Start long runs under `caffeinate -i`.

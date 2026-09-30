@@ -7,8 +7,9 @@ pipeline. Tools: `daymet/` (see `daymet/README.md`); polygons: `geometry/`.
 
 ## Source
 - Daymet V4 R1 daily, North America, 1 km (ORNL DAAC, doi:10.3334/ORNLDAAC/2129): one
-  NetCDF-4 file per variable and year. 1980–2024 from the NCAR GDEX mirror (dataset
-  d682806), 2025 from ORNL (Earthdata Login). Every file's SHA-256 matches NASA CMR's.
+  NetCDF-4 file per variable and year. The 2026-09-29 run took 269 files from ORNL
+  (Earthdata Login) and reused 7 from the NCAR GDEX mirror (dataset d682806, which holds
+  1980–2024 byte-identically; 2025 is ORNL-only). Every file's SHA-256 matches NASA CMR's.
 - 365 days per year: Daymet drops Dec 31 in leap years; the output keeps that calendar.
 - Canadian inputs change in 2024–2025 (ECCC/CCCS stations replaced the GHCNd `CA0` stations,
   bias-corrected) — a station-network seam to keep in mind for Canadian trend endpoints.
@@ -53,7 +54,21 @@ chunk is decompressed once; the result is bit-reproducible across reruns and wor
   its weights true areas: coverage-only weights would shift large northern basins by up to
   0.3 %, the simplified Resource 4 polygons prcp totals by ~0.1 % and swe by ~2.5 %.
 
-Full-run results (1980–2023 comparison, timings): added when the run completes.
+## The file and its full-run validation (run 2026-09-29/30)
+`daymet_1980_2025_29sep2026.parquet` in `~/HISSS_data/daymet-processed-29sep2026/`
+(md5-verified copy: `/Volumes/Untitled/daymet-processed-29sep2026/`; `RUN_NOTES.md` there
+has the full tables): 134,605,430 rows = 8,017 sites × 46 years × 365 days, no NaN in any
+variable; 5,134,193,404 bytes, md5 `c059076088cd8abd963c64094468e90f`.
+
+Against the co-author product, 1980–2023, 5,969 shared basins (262,460 basin-years per
+variable): per-basin daily R² ≥ 0.9999999 for prcp, tmin, tmax, vp and srad in every
+basin-year; largest daily difference 0.015 mm (prcp), 0.003 °C, 0.26 Pa, 0.09 W/m²; prcp
+annual totals within ±0.0011 % (p01–p99), ±0.012 % at worst; no date offset in any year.
+swe: R² ≥ 0.999 in all but 2 basin-years, both trace-snow basins (mean SWE < 1e-6 mm).
+
+Coverage: every gage of both delivered products is in this file (#1 6,678, #2 6,250); the
+stale file covered 5,517 / 5,638 of them, 4 / 3 all-NaN. Its 118 other sites belong to
+neither product.
 
 ## Caveats
 - 45 basins cover fewer than 4 grid cells (`low_pixel_support` in the basin table).

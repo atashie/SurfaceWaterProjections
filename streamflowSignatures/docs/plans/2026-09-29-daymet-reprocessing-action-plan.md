@@ -1,7 +1,8 @@
 # Daymet reprocessing — action plan for the dedicated machine
 
 **Date**: 2026-09-29 · **Status**: single-year gate (calendar 2023) PASSED on the M5 MacBook
-the same day — read §0 first; it supersedes §§1–3 and parts of §§5 and 9 where they differ.
+the same day; the full 1980–2025 run COMPLETED 2026-09-30 (§0, last part); next: the Phase 1
+replay against product #1 — read §0 first; it supersedes §§1–3 and parts of §§5 and 9 where they differ.
 §§1–10 below are the original plan (numbers marked **M** measured, **E** estimated).
 
 **Background and option comparison**: `2026-09-29-daymet-reprocessing-options.md`
@@ -76,7 +77,9 @@ three method findings:
 **Coverage.** Every one of the 5,965 usable gages that had Daymet keeps it (all have
 polygons). Product #1 goes from 5,513 gages with a non-NaN climate series to 6,634
 (+1,121), product #2 from 5,635 to 6,205 (+570). Still without climate: the 54 usable basins > 100,000 km² that
-the boundary layer excludes (44 / 45 product gages); their source polygons exist.
+the boundary layer excludes (44 / 45 product gages); their source polygons exist. (Superseded
+by D4: with the 53 large basins added, every gage of both products has climate — see the
+full-run results at the end of this section.)
 
 **Unknowns of §9 now.** U1 closed (sizes above; SHA-256 per file at download). U2
 15–21 MB/s here. U3 absent in prcp 1980 (all 26,280 chunks stored); `daymet_stream.py`
@@ -119,6 +122,28 @@ Earthdata Login on this Mac; the six 2025 files need one.** U12 measured.
 Then: `caffeinate -i python daymet_stream.py --years 1980-2025 --workers 6 …` (keeps the
 laptop awake for the ~2-day run) → `daymet_assemble.py` → `daymet_validate.py --years
 1980-2023` → verified copy to the drive → the Phase 1 replay (§6) against product #1.
+
+**Full run, 2026-09-29 20:34 → 2026-09-30 23:05 UTC — COMPLETE** (driver
+`logs/run_full.sh`; full tables in the run folder's `RUN_NOTES.md`).
+- Time: 25.9 h of downloads (269 files, 3.379 TB, all ORNL; 7 gate files reused), then
+  assemble 54 s, validate 7 min, drive copy 27 min. The ≈ 19 h estimate missed by the 6.8 h
+  that 26 slow single-connection downloads (3–30 MB/s; median file 50.5 MB/s) cost — a
+  tighter curl stall floor is the fix for a future run. Every SHA-256 = CMR's, every probe
+  clean; aggregation ≤ 56 s per variable-year, peak 5.0 GB parent + 1.5 GB per worker.
+- Output: `daymet_1980_2025_29sep2026.parquet`, 134,605,430 rows (8,017 × 46 × 365), no
+  NaN anywhere, md5 `c059076088cd8abd963c64094468e90f`; 1,399 files (13.0 GB) md5-verified
+  on the drive.
+- Acceptance (§7): (1) structure ✓ — 8,017 sites (D4), identical site set every year,
+  Dec 31 absent in leap years; (2) coverage ✓ — every basin has a valid cell every day;
+  (3) agreement ✓ — 1980–2023 on the 5,969 shared basins, R² ≥ 0.9999999 in every
+  basin-year for prcp, tmin, tmax, vp, srad (100 % ≥ 0.999 against the ≥ 95 % bar); swe
+  ≥ 0.999 in all but 2 of 262,460 basin-years, both trace-snow basins (mean < 1e-6 mm);
+  prcp annual totals within ±0.0011 % (p01–p99); no date offset in any year; (4) replay —
+  NOT yet run; (5) provenance ✓ (CMR manifest, SHA-256 per file, run meta with commit,
+  per-file timing JSON, assembled-file md5).
+- Coverage: every gage of both delivered products is in the new file — #1 6,678 (was
+  5,513 with a non-NaN series), #2 6,250 (was 5,635). The stale file's 118 other sites are
+  gages of neither product; 01372058 (all-NaN there) has no polygon.
 
 ---
 
