@@ -332,8 +332,9 @@ What was built:
     quantile and lag tables;
   - a map of all 8,017 basins, coloured by coverage or by per-basin record RMSE / largest
     daily |Δ|;
-  - original | new daily series side by side, plus the difference, for 30 embedded basins:
-    10 least matching, 10 random and 10 without an original series (seed 20261001).
+  - original and new daily series overlaid on one chart for 30 embedded basins: 10 least
+    matching, 10 random and 10 without an original series (seed 20261001). A switch adds the
+    anomaly, new − original, on its own right-hand axis.
   The builder re-derives every embedded basin-year's largest |Δ|, which equals the
   validation table. It also decodes every embedded block back against the source series.
 

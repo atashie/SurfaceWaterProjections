@@ -36,7 +36,7 @@ Calendar 2025 exists only at ORNL. Every file is checked against NASA CMR's SHA-
 | `daymet_validate.py` | per-basin comparison with the stale co-author product (1980–2023) |
 | `daymet_outputcheck.py` | the assembled file against ORNL's Single Pixel API for a few small basins (any year; no raw files) |
 | `daymet_basin_flags.py` | `daymet_basin_flags.csv`, the companion table of questionable basins (HydroBASINS fallback, area mismatch, no area reference, < 4 cells) with product membership |
-| `../viz/build_daymet_record_explorer.py` | self-contained HTML explorer of the whole record: the agreement metrics as distributions, a basin map, and original \| new daily series for 3 × N embedded basins (least matching, random, no original). It checks the embedded series against the validation table |
+| `../viz/build_daymet_record_explorer.py` | self-contained HTML explorer of the whole record: the agreement metrics as distributions, a basin map, and the original and new daily series overlaid (with an optional anomaly axis, new − original) for 3 × N embedded basins (least matching, random, no original). It checks the embedded series against the validation table |
 | `daymet_crosscheck.py` | independent check: exactextract's own weighted mean on a few days (needs a raw file) |
 | `daymet_pixelcheck.py` | georeferencing check of a raw file against ORNL's Single Pixel API |
 | `copy_verify.py` | copy run outputs to the exFAT drive and re-read every file from the device (md5 + size); re-copying replaces the manifest line |

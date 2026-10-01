@@ -1,7 +1,7 @@
 <title>Daymet Reprocess Explorer</title>
 <style>
-/* Layout: one working column — headline strip, agreement histograms, map + basin list, then the
-   original | new series side by side over a full-width difference strip. */
+/* Layout: one working column — headline strip, agreement histograms, map + basin list, then one
+   chart with the original and new series overlaid and an optional anomaly axis on the right. */
 :root {
   --page: #f4f4f1;
   --surface: #fcfcfb;
@@ -144,15 +144,26 @@ th { font-weight: 600; color: var(--ink-2); }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; }
 .chip.flag { border-color: var(--status-warning); color: var(--ink); }
-.pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-@media (max-width: 780px) { .pair { grid-template-columns: 1fr; } }
 .panel { display: grid; gap: 6px; }
 .panel .ph { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .panel .ph .k { display: inline-flex; align-items: center; gap: 7px; }
 .panel .ph .s { font-size: 12px; color: var(--muted); }
-.key { display: inline-block; width: 16px; height: 2px; border-radius: 1px; }
-.cv { position: relative; height: 230px; }
-.cv.short { height: 170px; }
+.key { display: inline-block; width: 16px; height: 2px; border-radius: 1px; flex: none; }
+.key.fat { height: 5px; border-radius: 2px; }
+.slegend { display: flex; flex-wrap: wrap; gap: 4px 18px; align-items: baseline; }
+.slegend .k { font-size: 13px; }
+.slegend .k b { font-weight: 600; }
+.cv { position: relative; height: 380px; }
+@media (max-width: 640px) { .cv { height: 290px; } }
+.switch { display: inline-flex; align-items: center; gap: 8px; font: inherit; font-size: 13px; color: var(--ink); background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 3px 12px 3px 4px; cursor: pointer; }
+.switch:hover:not(:disabled) { background: var(--hover); }
+.switch:disabled { opacity: 0.5; cursor: not-allowed; }
+.switch .track { position: relative; width: 30px; height: 18px; border-radius: 999px; background: var(--axis); flex: none; }
+.switch .track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--surface); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25); }
+.switch[aria-checked="true"] .track { background: var(--ink); }
+.switch[aria-checked="true"] .track::after { transform: translateX(12px); }
+.switch:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
+@media (prefers-reduced-motion: no-preference) { .switch .track::after { transition: transform 0.15s; } }
 .cv canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: pan-y; cursor: crosshair; }
 .stats { font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .hint { font-size: 12px; color: var(--muted); }
@@ -244,22 +255,22 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; max-width: 1
         <select class="btn" id="w-year" aria-labelledby="lab-win"></select>
         <button class="btn" id="w-next" type="button" aria-label="Next window">▶</button>
       </div>
+      <div class="ctl"><span class="lab" id="lab-anom">Anomaly</span>
+        <button class="switch" id="anom" type="button" role="switch" aria-checked="false" aria-labelledby="lab-anom anom-text"><span class="track"></span><span id="anom-text">new − original, right axis</span></button>
+      </div>
     </div>
-    <p class="hint">Drag across a chart to zoom to those dates; double-click to return to the full record. With a chart focused, ← → step a day (Shift: a month).</p>
+    <p class="hint">Drag across the chart to zoom to those dates; double-click to return to the full record. With the chart focused, ← → step a day (Shift: a month).</p>
     <div id="series-msg" class="warn" hidden></div>
-    <div class="pair">
-      <div class="card panel">
-        <div class="ph"><span class="k"><span class="key" style="background: var(--s1)"></span><h3>Original</h3></span><span class="s" id="o-sub">co-authors' series, 1980–2023</span></div>
-        <div class="cv"><canvas id="cv-o" tabindex="0" aria-label="Original daily series"></canvas></div>
-      </div>
-      <div class="card panel">
-        <div class="ph"><span class="k"><span class="key" style="background: var(--s2)"></span><h3>New</h3></span><span class="s" id="n-sub">reprocessed, 1980–2025</span></div>
-        <div class="cv"><canvas id="cv-n" tabindex="0" aria-label="New daily series"></canvas></div>
-      </div>
-    </div>
     <div class="card panel">
-      <div class="ph"><span class="k"><span class="key" style="background: var(--ink-2)"></span><h3>Difference, new − original</h3></span><span class="stats" id="d-stats"></span></div>
-      <div class="cv short"><canvas id="cv-d" tabindex="0" aria-label="Daily difference, new minus original"></canvas></div>
+      <div class="ph">
+        <div class="slegend">
+          <span class="k"><span class="key fat" style="background: var(--s1)"></span><b>Original</b> <span class="s" id="o-sub">co-authors' series, 1980–2023</span></span>
+          <span class="k"><span class="key" style="background: var(--s2)"></span><b>New</b> <span class="s" id="n-sub">reprocessed, 1980–2025</span></span>
+          <span class="k" id="a-leg" hidden><span class="key" style="background: var(--ink-2)"></span><b>Anomaly</b> <span class="s">new − original, right axis</span></span>
+        </div>
+        <span class="stats" id="d-stats"></span>
+      </div>
+      <div class="cv"><canvas id="cv-s" tabindex="0" aria-label="Original and new daily series of the selected basin and variable"></canvas></div>
     </div>
     <details id="ann-details">
       <summary id="ann-summary">Annual values for this basin and variable</summary>
@@ -319,7 +330,7 @@ const val = (x, v) => (x == null || !isFinite(x)) ? "—" : x.toLocaleString("en
 function tickFmt(t, step) {
   if (t === 0) return "0";
   const a = Math.abs(step);
-  if (a >= 1e-2 && Math.abs(t) < 1e5) {
+  if (a >= 1e-3 && Math.abs(t) < 1e5) {
     const dec = Math.max(0, -Math.floor(Math.log10(a) + 1e-9));
     return t.toLocaleString("en-US", { minimumFractionDigits: dec, maximumFractionDigits: dec }).replace("-", "−");
   }
@@ -807,7 +818,8 @@ async function decode(k) {
     if (e.hasOld) {
       const q = unshuffle16(u8, off, M.nOld); off += 2 * M.nOld;
       const df = new Float64Array(M.nOld), og = new Float64Array(M.nOld);
-      for (let j = 0; j < M.nOld; j++) { df[j] = q[j] * d.ds; og[j] = a[j] - df[j]; }
+      const floor0 = v !== "tmin" && v !== "tmax";   // prcp, swe, vp, srad cannot be negative
+      for (let j = 0; j < M.nOld; j++) { df[j] = q[j] * d.ds; const o = a[j] - df[j]; og[j] = floor0 && o < 0 ? 0 : o; }
       res.df[v] = df; res.og[v] = og;
     }
   }
@@ -815,77 +827,110 @@ async function decode(k) {
   cache.set(k, res);
   return res;
 }
-const cvO = $("cv-o"), cvN = $("cv-n"), cvD = $("cv-d");
-const PAD = { l: 58, r: 12, t: 10, b: 24 };
-function prepCanvas(cv) {
+const cvS = $("cv-s"), anomBtn = $("anom");
+const PAD0 = { l: 58, r: 14, t: 26, b: 24 };
+let pad = PAD0, showAnom = false;
+function prepCanvas(cv, p) {
   const box = cv.parentElement, w = box.clientWidth, h = box.clientHeight, dpr = window.devicePixelRatio || 1;
   cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
   const ctx = cv.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = cssv("--surface"); ctx.fillRect(0, 0, w, h);
-  return { ctx, w, h, pw: w - PAD.l - PAD.r, ph: h - PAD.t - PAD.b };
+  return { ctx, w, h, pw: w - p.l - p.r, ph: h - p.t - p.b };
 }
 function viewExtent(arrs, i0, i1) {
   let lo = Infinity, hi = -Infinity;
   for (const a of arrs) { if (!a) continue; const e = Math.min(i1, a.length); for (let j = i0; j < e; j++) { const x = a[j]; if (x < lo) lo = x; if (x > hi) hi = x; } }
   return [lo, hi];
 }
-function drawAxes(c, i0, i1, y0, y1, ystep, diffAxis) {
-  const { ctx, pw, ph } = c, X = i => PAD.l + (i - i0) / (i1 - i0) * pw, Y = y => PAD.t + ph - (y - y0) / (y1 - y0) * ph;
+// Left axis (the variable), year/month grid and the x axis.
+const stepTicks = (y0, y1, step) => { const out = []; for (let k = 0; y0 + k * step <= y1 + step * 1e-6; k++) { const t = y0 + k * step; out.push(Math.abs(t) < step * 1e-6 ? 0 : t); } return out; };
+function drawFrame(c, p, i0, i1, y0, y1, step, unit) {
+  const { ctx, pw, ph } = c;
+  const X = i => p.l + (i - i0) / (i1 - i0) * pw, Y = y => p.t + ph - (y - y0) / (y1 - y0) * ph;
   ctx.font = `11px ${cssv("--sans")}`; ctx.fillStyle = cssv("--muted"); ctx.lineWidth = 1;
-  const { ticks, step } = niceTicks(y0, y1, diffAxis ? 4 : 4);
+  const ticks = stepTicks(y0, y1, step);
+  ctx.textAlign = "right"; ctx.textBaseline = "middle";
   for (const t of ticks) {
     if (t < y0 - 1e-12 || t > y1 + 1e-12) continue;
     const y = Math.round(Y(t)) + 0.5;
-    ctx.strokeStyle = cssv(t === 0 && diffAxis ? "--axis" : "--grid"); ctx.beginPath(); ctx.moveTo(PAD.l, y); ctx.lineTo(PAD.l + pw, y); ctx.stroke();
-    ctx.textAlign = "right"; ctx.textBaseline = "middle"; ctx.fillText(tickFmt(t, step), PAD.l - 6, y);
+    ctx.strokeStyle = cssv("--grid"); ctx.beginPath(); ctx.moveTo(p.l, y); ctx.lineTo(p.l + pw, y); ctx.stroke();
+    ctx.fillText(tickFmt(t, step), p.l - 6, y);
   }
+  ctx.textBaseline = "alphabetic"; ctx.fillText(unit, p.l - 6, p.t - 10);
   ctx.textAlign = "center"; ctx.textBaseline = "top";
   for (const t of xTicks(i0, i1, pw)) {
     const x = Math.round(X(t.i)) + 0.5;
-    ctx.strokeStyle = cssv("--grid"); ctx.beginPath(); ctx.moveTo(x, PAD.t); ctx.lineTo(x, PAD.t + ph); ctx.stroke();
-    ctx.fillText(t.label, x, PAD.t + ph + 6);
+    ctx.strokeStyle = cssv("--grid"); ctx.beginPath(); ctx.moveTo(x, p.t); ctx.lineTo(x, p.t + ph); ctx.stroke();
+    ctx.fillText(t.label, x, p.t + ph + 6);
   }
-  ctx.strokeStyle = cssv("--axis"); ctx.beginPath(); ctx.moveTo(PAD.l, PAD.t + ph + 0.5); ctx.lineTo(PAD.l + pw, PAD.t + ph + 0.5); ctx.stroke();
+  ctx.strokeStyle = cssv("--axis"); ctx.beginPath(); ctx.moveTo(p.l, p.t + ph + 0.5); ctx.lineTo(p.l + pw, p.t + ph + 0.5); ctx.stroke();
   return { X, Y };
 }
-function drawLine(c, a, i0, i1, X, Y, color) {
+// Right axis for the anomaly (new - original): its own symmetric scale, ticks, title and zero line.
+function drawRightAxis(c, p, d0, d1, step, unit) {
+  const { ctx, pw, ph } = c, xr = p.l + pw;
+  const Y = y => p.t + ph - (y - d0) / (d1 - d0) * ph;
+  const ticks = stepTicks(d0, d1, step);
+  const ink = cssv("--ink-2");
+  ctx.font = `11px ${cssv("--sans")}`; ctx.fillStyle = cssv("--muted"); ctx.lineWidth = 1;
+  ctx.strokeStyle = cssv("--axis"); ctx.beginPath(); ctx.moveTo(xr + 0.5, p.t); ctx.lineTo(xr + 0.5, p.t + ph); ctx.stroke();
+  ctx.textAlign = "left"; ctx.textBaseline = "middle";
+  for (const t of ticks) {
+    if (t < d0 - 1e-15 || t > d1 + 1e-15) continue;
+    const y = Math.round(Y(t)) + 0.5;
+    ctx.beginPath(); ctx.moveTo(xr, y); ctx.lineTo(xr + 4, y); ctx.stroke();
+    ctx.fillText(tickFmt(t, step), xr + 7, y);
+  }
+  const yz = Math.round(Y(0)) + 0.5;
+  ctx.save(); ctx.globalAlpha = 0.55; ctx.strokeStyle = ink; ctx.beginPath(); ctx.moveTo(p.l, yz); ctx.lineTo(xr, yz); ctx.stroke(); ctx.restore();
+  ctx.strokeStyle = ink; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(xr + 7, p.t - 14); ctx.lineTo(xr + 17, p.t - 14); ctx.stroke();
+  ctx.textBaseline = "alphabetic"; ctx.fillText(`Δ ${unit}`, xr + 21, p.t - 10);
+  return Y;
+}
+// One trace. "halo": the original, drawn wide underneath; "core": the new, thin on top; "anom": the anomaly.
+// Zoomed out (more days than pixels) each pixel column draws the min-max band of its days.
+function drawTrace(c, p, a, i0, i1, X, Y, color, style) {
   if (!a) return;
   const { ctx, pw } = c, e = Math.min(i1, a.length);
   if (e <= i0) return;
   const n = i1 - i0;
-  ctx.fillStyle = color; ctx.strokeStyle = color;
+  ctx.save();
+  ctx.fillStyle = color; ctx.strokeStyle = color; ctx.lineJoin = "round"; ctx.lineCap = "round";
+  if (style === "anom") ctx.globalAlpha = 0.7;
   if (n > pw * 1.5) {
     const cols = Math.ceil((e - i0) / n * pw), top = [], bot = [];
     for (let k = 0; k < cols; k++) {
-      const s = i0 + Math.floor(k * n / pw), t = Math.min(e, Math.max(s + 1, i0 + Math.floor((k + 1) * n / pw)));
+      const s0 = i0 + Math.floor(k * n / pw), s1 = Math.min(e, Math.max(s0 + 1, i0 + Math.floor((k + 1) * n / pw)));
       let lo = Infinity, hi = -Infinity;
-      for (let j = s; j < t; j++) { const x = a[j]; if (x < lo) lo = x; if (x > hi) hi = x; }
+      for (let j = s0; j < s1; j++) { const x = a[j]; if (x < lo) lo = x; if (x > hi) hi = x; }
       top.push(Y(hi)); bot.push(Y(lo));
     }
     ctx.beginPath();
-    for (let k = 0; k < cols; k++) ctx.lineTo(PAD.l + k + 0.5, top[k] - 0.5);
-    for (let k = cols - 1; k >= 0; k--) ctx.lineTo(PAD.l + k + 0.5, bot[k] + 0.5);
+    for (let k = 0; k < cols; k++) ctx.lineTo(p.l + k + 0.5, top[k] - 0.5);
+    for (let k = cols - 1; k >= 0; k--) ctx.lineTo(p.l + k + 0.5, bot[k] + 0.5);
     ctx.closePath(); ctx.fill();
+    if (style !== "anom") { ctx.lineWidth = style === "halo" ? 3.5 : 1.5; ctx.stroke(); }
   } else {
-    ctx.lineWidth = n < pw / 4 ? 2 : 1.5; ctx.lineJoin = "round"; ctx.lineCap = "round";
+    ctx.lineWidth = style === "halo" ? 5 : style === "anom" ? 1.25 : (n < pw / 4 ? 2 : 1.5);
     ctx.beginPath();
     for (let j = i0; j < e; j++) { const x = X(j), y = Y(a[j]); if (j === i0) ctx.moveTo(x, y); else ctx.lineTo(x, y); }
     ctx.stroke();
   }
+  ctx.restore();
 }
-function drawCrosshair(c, X, Y, a, color, i0, i1) {
+function drawCursor(c, p, X, Y, Ya, i0, i1, og, nw, df) {
   const { ctx, ph } = c;
-  if (brush && brush.a != null) {
+  if (brush && brush.b != null) {
     const xa = X(Math.min(brush.a, brush.b)), xb = X(Math.max(brush.a, brush.b));
-    ctx.fillStyle = cssv("--wash"); ctx.fillRect(xa, PAD.t, Math.max(1, xb - xa), ph);
+    ctx.fillStyle = cssv("--wash"); ctx.fillRect(xa, p.t, Math.max(1, xb - xa), ph);
   }
   if (hover == null || hover < i0 || hover >= i1) return;
-  const x = Math.round(X(hover)) + 0.5;
-  ctx.strokeStyle = cssv("--ink-2"); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, PAD.t); ctx.lineTo(x, PAD.t + ph); ctx.stroke();
-  if (a && hover < a.length && color) {
-    const y = Y(a[hover]);
-    ctx.beginPath(); ctx.arc(x, y, 4, 0, 2 * Math.PI); ctx.lineWidth = 2; ctx.strokeStyle = cssv("--surface"); ctx.stroke(); ctx.fillStyle = color; ctx.fill();
-  }
+  const x = Math.round(X(hover)) + 0.5, surf = cssv("--surface");
+  ctx.strokeStyle = cssv("--ink-2"); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, p.t); ctx.lineTo(x, p.t + ph); ctx.stroke();
+  const dot = (y, r, col) => { ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI); ctx.lineWidth = 2; ctx.strokeStyle = surf; ctx.stroke(); ctx.fillStyle = col; ctx.fill(); };
+  if (og && hover < og.length) dot(Y(og[hover]), 6, cssv("--s1"));
+  dot(Y(nw[hover]), 3.5, cssv("--s2"));
+  if (Ya && df && hover < df.length) dot(Ya(df[hover]), 3.5, cssv("--ink-2"));
 }
 function message(c, text) {
   const { ctx, w, h } = c;
@@ -895,55 +940,46 @@ function message(c, text) {
   lines.push(cur);
   lines.forEach((l, k) => ctx.fillText(l, w / 2, h / 2 + (k - (lines.length - 1) / 2) * 18));
 }
+function note(c, p, text) {
+  const { ctx } = c;
+  ctx.font = `12px ${cssv("--sans")}`; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+  const w = ctx.measureText(text).width;
+  ctx.fillStyle = cssv("--surface"); ctx.fillRect(p.l + 6, p.t + 4, w + 12, 20);
+  ctx.fillStyle = cssv("--ink-2"); ctx.fillText(text, p.l + 12, p.t + 14);
+}
 let current = null;
 function drawSeries() {
   const [i0, i1] = view, e = selK != null ? EMB[selK] : null, v = sVar;
-  const cO = prepCanvas(cvO), cN = prepCanvas(cvN), cD = prepCanvas(cvD);
-  if (!current || !e) { for (const c of [cO, cN, cD]) message(c, "Loading…"); return; }
+  const anomOn = showAnom && !!e && e.hasOld;
+  pad = { ...PAD0, r: anomOn ? 80 : PAD0.r };
+  const c = prepCanvas(cvS, pad);
+  if (!current || !e) { message(c, "Loading…"); return; }
   const nw = current.nw[v], og = e.hasOld ? current.og[v] : null, df = e.hasOld ? current.df[v] : null;
   const zero = v === "prcp" || v === "swe" || v === "srad" || v === "vp";
   const [lo, hi] = viewExtent([nw, og], i0, i1);
   const [y0, y1, ystep] = niceRange(lo, hi, zero);
-  const c1 = cssv("--s1"), c2 = cssv("--s2"), cd = cssv("--ink-2");
-  // original
-  const ax = drawAxes(cO, i0, i1, y0, y1, ystep, false);
-  if (og) {
-    if (i1 > M.nOld) {
-      const xa = ax.X(Math.max(i0, M.nOld)), xb = PAD.l + cO.pw;
-      cO.ctx.fillStyle = cssv("--wash"); cO.ctx.fillRect(xa, PAD.t, xb - xa, cO.ph);
-      if (xb - xa > 70) { cO.ctx.fillStyle = cssv("--muted"); cO.ctx.textAlign = "center"; cO.ctx.textBaseline = "middle"; cO.ctx.fillText("not in the original", (xa + xb) / 2, PAD.t + cO.ph / 2); }
-    }
-    drawLine(cO, og, i0, i1, ax.X, ax.Y, c1);
-    drawCrosshair(cO, ax.X, ax.Y, og, c1, i0, i1);
-  } else {
-    cO.ctx.fillStyle = cssv("--surface"); cO.ctx.fillRect(0, 0, cO.w, cO.h);
-    message(cO, e.origNaN ? "The original series is NaN on every day for this basin (its aggregation propagated a Daymet fill cell)." : "This basin has no original series: it is not in the co-author product.");
+  const { X, Y } = drawFrame(c, pad, i0, i1, y0, y1, ystep, D.units[v]);
+  if (og && i1 > M.nOld) {
+    const xa = X(Math.max(i0, M.nOld)), xb = pad.l + c.pw;
+    c.ctx.fillStyle = cssv("--wash"); c.ctx.fillRect(xa, pad.t, xb - xa, c.ph);
+    if (xb - xa > 96) { c.ctx.fillStyle = cssv("--muted"); c.ctx.font = `11px ${cssv("--sans")}`; c.ctx.textAlign = "center"; c.ctx.textBaseline = "top"; c.ctx.fillText("no original after 2023", (xa + xb) / 2, pad.t + 6); }
   }
-  // new
-  const an = drawAxes(cN, i0, i1, y0, y1, ystep, false);
-  drawLine(cN, nw, i0, i1, an.X, an.Y, c2);
-  drawCrosshair(cN, an.X, an.Y, nw, c2, i0, i1);
-  // difference
-  const st = $("d-stats");
-  if (df) {
-    const e1 = Math.min(i1, M.nOld);
-    let mx = 0, ss = 0, sm = 0, n = 0;
-    for (let j = i0; j < e1; j++) { const d = df[j], a = Math.abs(d); if (a > mx) mx = a; ss += d * d; sm += d; n++; }
-    const lim = mx > 0 ? mx : 1e-6, [d0, d1, dstep] = niceRange(-lim, lim, false);
-    const ad = drawAxes(cD, i0, i1, d0, d1, dstep, true);
-    if (i1 > M.nOld) { const xa = ad.X(Math.max(i0, M.nOld)); cD.ctx.fillStyle = cssv("--wash"); cD.ctx.fillRect(xa, PAD.t, PAD.l + cD.pw - xa, cD.ph); }
-    drawLine(cD, df, i0, i1, ad.X, ad.Y, cd);
-    drawCrosshair(cD, ad.X, ad.Y, df, cd, i0, i1);
-    st.textContent = n ? `In view: largest |Δ| ${sci(mx, 3)} · RMSE ${sci(Math.sqrt(ss / n), 3)} · mean ${sciSigned(sm / n, 2)} ${D.units[v]}` : "No overlap with the original in this window";
-  } else {
-    message(cD, "No difference to show without an original series.");
-    st.textContent = "";
-  }
+  let mx = 0, ss = 0, sm = 0, n = 0;
+  if (df) for (let j = i0, e1 = Math.min(i1, M.nOld); j < e1; j++) { const d = df[j], a = Math.abs(d); if (a > mx) mx = a; ss += d * d; sm += d; n++; }
+  let Ya = null;
+  if (anomOn) { const lim = mx > 0 ? mx : 1e-6, [d0, d1, dstep] = niceRange(-lim, lim, false); Ya = drawRightAxis(c, pad, d0, d1, dstep, D.units[v]); }
+  drawTrace(c, pad, og, i0, i1, X, Y, cssv("--s1"), "halo");
+  drawTrace(c, pad, nw, i0, i1, X, Y, cssv("--s2"), "core");
+  if (Ya && n) drawTrace(c, pad, df, i0, i1, X, Ya, cssv("--ink-2"), "anom");
+  if (!og) note(c, pad, e.origNaN ? "Original: NaN on every day for this basin" : "Original: none (basin not in the co-author product)");
+  drawCursor(c, pad, X, Y, Ya, i0, i1, og, nw, df);
+  $("d-stats").textContent = !df ? "" : n
+    ? `In view, new − original: largest |Δ| ${sci(mx, 3)} · RMSE ${sci(Math.sqrt(ss / n), 3)} · mean ${sciSigned(sm / n, 2)} ${D.units[v]}`
+    : "No overlap with the original in this window";
 }
-const ALL_CV = [cvO, cvN, cvD];
-function idxAt(cv, clientX) {
-  const r = cv.getBoundingClientRect(), pw = r.width - PAD.l - PAD.r;
-  const f = Math.min(1, Math.max(0, (clientX - r.left - PAD.l) / pw));
+function idxAt(clientX) {
+  const r = cvS.getBoundingClientRect(), pw = r.width - pad.l - pad.r;
+  const f = Math.min(1, Math.max(0, (clientX - r.left - pad.l) / pw));
   return Math.min(view[1] - 1, Math.max(view[0], Math.round(view[0] + f * (view[1] - view[0]))));
 }
 function seriesTip(x, y) {
@@ -954,42 +990,46 @@ function seriesTip(x, y) {
     const hasO = e.hasOld && j < M.nOld;
     tipRow(t, cssv("--s1"), hasO ? val(current.og[v][j], v) : "—", hasO ? "original" : (e.hasOld ? "original (ends 2023)" : "no original"));
     tipRow(t, cssv("--s2"), val(current.nw[v][j], v), "new");
-    if (hasO) tipRow(t, cssv("--ink-2"), sciSigned(current.df[v][j], 3), "new − original");
+    if (hasO) tipRow(t, cssv("--ink-2"), sciSigned(current.df[v][j], 3), "anomaly, new − original");
   });
 }
-for (const cv of ALL_CV) {
-  cv.addEventListener("pointerdown", e => {
-    if (e.button !== 0) return;
-    brush = { a: idxAt(cv, e.clientX), b: null, x: e.clientX }; cv.setPointerCapture(e.pointerId);
-  });
-  cv.addEventListener("pointermove", e => {
-    hover = idxAt(cv, e.clientX);
-    if (brush) { if (Math.abs(e.clientX - brush.x) > 5) brush.b = hover; }
-    requestDraw(drawSeries);
-    if (brush && brush.b != null) hideTip(); else seriesTip(e.clientX, e.clientY);
-  });
-  cv.addEventListener("pointerup", () => {
-    if (brush && brush.b != null) {
-      let a = Math.min(brush.a, brush.b), b = Math.max(brush.a, brush.b) + 1;
-      if (b - a < 14) { const m = (a + b) / 2; a = Math.max(0, Math.round(m - 7)); b = Math.min(M.nNew, a + 14); }
-      setView(a, b);
-    }
-    brush = null; requestDraw(drawSeries);
-  });
-  cv.addEventListener("pointercancel", () => { brush = null; requestDraw(drawSeries); });
-  cv.addEventListener("pointerleave", () => { if (!brush) { hover = null; hideTip(); requestDraw(drawSeries); } });
-  cv.addEventListener("dblclick", () => setView(0, M.nNew));
-  cv.addEventListener("keydown", e => {
-    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-    e.preventDefault();
-    const step = (e.shiftKey ? 30 : 1) * (e.key === "ArrowLeft" ? -1 : 1);
-    hover = Math.min(view[1] - 1, Math.max(view[0], (hover == null ? view[0] : hover) + step));
-    requestDraw(drawSeries);
-    const r = cv.getBoundingClientRect(), pw = r.width - PAD.l - PAD.r;
-    seriesTip(r.left + PAD.l + (hover - view[0]) / (view[1] - view[0]) * pw, r.top + 20);
-  });
-  cv.addEventListener("blur", () => { hover = null; hideTip(); requestDraw(drawSeries); });
-}
+cvS.addEventListener("pointerdown", e => {
+  if (e.button !== 0) return;
+  brush = { a: idxAt(e.clientX), b: null, x: e.clientX }; cvS.setPointerCapture(e.pointerId);
+});
+cvS.addEventListener("pointermove", e => {
+  hover = idxAt(e.clientX);
+  if (brush && Math.abs(e.clientX - brush.x) > 5) brush.b = hover;
+  requestDraw(drawSeries);
+  if (brush && brush.b != null) hideTip(); else seriesTip(e.clientX, e.clientY);
+});
+cvS.addEventListener("pointerup", () => {
+  if (brush && brush.b != null) {
+    let a = Math.min(brush.a, brush.b), b = Math.max(brush.a, brush.b) + 1;
+    if (b - a < 14) { const m = (a + b) / 2; a = Math.max(0, Math.round(m - 7)); b = Math.min(M.nNew, a + 14); }
+    setView(a, b);
+  }
+  brush = null; requestDraw(drawSeries);
+});
+cvS.addEventListener("pointercancel", () => { brush = null; requestDraw(drawSeries); });
+cvS.addEventListener("pointerleave", () => { if (!brush) { hover = null; hideTip(); requestDraw(drawSeries); } });
+cvS.addEventListener("dblclick", () => setView(0, M.nNew));
+cvS.addEventListener("keydown", e => {
+  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+  e.preventDefault();
+  const step = (e.shiftKey ? 30 : 1) * (e.key === "ArrowLeft" ? -1 : 1);
+  hover = Math.min(view[1] - 1, Math.max(view[0], (hover == null ? view[0] : hover) + step));
+  requestDraw(drawSeries);
+  const r = cvS.getBoundingClientRect(), pw = r.width - pad.l - pad.r;
+  seriesTip(r.left + pad.l + (hover - view[0]) / (view[1] - view[0]) * pw, r.top + 24);
+});
+cvS.addEventListener("blur", () => { hover = null; hideTip(); requestDraw(drawSeries); });
+anomBtn.addEventListener("click", () => {
+  showAnom = !showAnom;
+  anomBtn.setAttribute("aria-checked", String(showAnom));
+  $("a-leg").hidden = !(showAnom && selK != null && EMB[selK].hasOld);
+  requestDraw(drawSeries);
+});
 function setView(a, b) {
   view = [Math.max(0, a), Math.min(M.nNew, b)];
   const ys = $("w-year"), y = M.year0 + Math.floor(view[0] / 365);
@@ -1017,9 +1057,12 @@ function renderAnnual() {
 }
 function updateSubs() {
   if (selK == null) return;
-  const e = EMB[selK], u = D.units[sVar];
-  $("o-sub").textContent = e.hasOld ? `co-authors' series, 1980–2023 · ${u}` : "none for this basin";
-  $("n-sub").textContent = `reprocessed, 1980–2025 · ${u}`;
+  const e = EMB[selK];
+  $("o-sub").textContent = e.hasOld ? "co-authors' series, 1980–2023" : e.origNaN ? "NaN on every day for this basin" : "none for this basin";
+  $("n-sub").textContent = "reprocessed, 1980–2025";
+  anomBtn.disabled = !e.hasOld;
+  anomBtn.title = e.hasOld ? "" : "No original series for this basin, so no anomaly";
+  $("a-leg").hidden = !(showAnom && e.hasOld);
 }
 async function select(k, fromMap, userPick = true) {
   selK = k; current = null;
@@ -1064,7 +1107,7 @@ function renderFoot() {
   li(`New: ${M.new_file}${M.new_md5 ? ` (md5 ${M.new_md5})` : ""}; ${int(H.n_new)} basins, 1980–2025. Exactextract coverage × true cell area on the full-resolution polygons; daily mean over the valid cells.`);
   li(`Both read the same Daymet V4 R1 cells, so agreement shows that the reprocessing reproduces the co-authors' aggregation; it does not test Daymet itself.`);
   li(`Metrics come from daymet_validate.py over 1980–2023, one row per basin, variable and year (${M.validation_file}). Map values are per basin over the whole record: RMSE pooled over its days, largest |Δ| over its years.`);
-  li(`Embedded series are quantized for display: the new values to 0.01 mm, 0.01 °C, 0.1 Pa or 0.01 W/m² (coarser only for series with a very wide range); the difference to 1/32,767 of its largest value in the record. The original is drawn as new − difference.`);
+  li(`Embedded series are quantized for display: the new values to 0.01 mm, 0.01 °C, 0.1 Pa or 0.01 W/m² (coarser only for series with a very wide range); the difference to 1/32,767 of its largest value in the record. The original is drawn as new − difference, floored at zero for precipitation, SWE, vapour pressure and radiation (the rounding of the new values can otherwise dip a few thousandths below zero).`);
   li(`Daymet uses a 365-day calendar: December 31 is dropped in leap years, and both series follow it.`);
   li(`Selection: ${M.n} basins per group, seed ${M.seed}. Built ${M.generated} by EO_data_processing/viz/build_daymet_record_explorer.py (commit ${M.commit}).`);
   f.append(ul);
