@@ -13,3 +13,11 @@ exactextract==0.3.0
 requests==2.34.2
 psutil==7.2.2
 tabulate==0.10.0
+# transitive (pinned 2026-10-01 from the run's venv)
+certifi==2026.7.22
+charset-normalizer==3.5.1
+idna==3.20
+packaging==26.3
+python-dateutil==2.9.0.post0
+six==1.17.0
+urllib3==2.8.0

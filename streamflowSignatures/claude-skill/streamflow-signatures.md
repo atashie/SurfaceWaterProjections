@@ -212,7 +212,9 @@ retrieved) → 7,964 watershed boundaries (54 basins > 100,000 km² dropped) →
 screening rejects 10.6 % of gage-years over WY 1980–2025 (>30 NA days 92 %, gap > 3 d
 5 %, boundary NA 3 %) → 6,678 gages (WY 1993–2025) / 6,250 (WY 1980–2025); the longer
 window loses 1,063 gages with ≥ 20 valid years to the window-anchored 60 % rule alone.
-Daymet reaches 5,517 / 5,638 of the product gages; trend statistics survive the
+Daymet reaches 5,517 / 5,638 of the product gages (4 / 3 of them have all-NaN climate,
+so 5,513 / 5,635 carry climate signatures; a reprocessed input covering every product gage
+was built 2026-09-30 but no product uses it yet); trend statistics survive the
 completeness gate for ~93 % of gages on dense signatures. Rerun with
 `docs/benchmarks/qualification_census.jl`.
 

@@ -33,11 +33,22 @@ zero-padded id spelling.
 
 Validation targets for the defaults (June 27 delivery): 7,964 features; gagesii 6,164 /
 wsc_eccc 1,771 / hydrobasins 29; 0 dups/invalid/empty; 141 basins kept full-res by the 2 %
-guard; low_confidence = 29 HB + area outliers.
+guard; low_confidence = 29 HB + area outliers. (--no-simplify --include-large: 8,017; 30 HB;
+57 low_confidence, i.e. 30 HB + 28 area outliers - 1 counted twice.)
+
+A <stem>.provenance.json sidecar (added 2026-10-01) records the arguments, the md5 and
+size of every input file, the outputs' md5, the git state of this folder and the library
+versions.
 """
 import argparse
 import glob
+import hashlib
+import json
 import os
+import platform
+import subprocess
+import sys
+import time
 from collections import defaultdict
 
 import geopandas as gpd
@@ -274,6 +285,42 @@ def main():
     if "csv" in formats:
         final[cols].drop(columns=["geometry"]).to_csv(stem + "_qa.csv", index=False)
     print(f"wrote {stem}.{{{','.join(sorted(formats))}}}")
+    write_provenance(a, stem, final, [basin_gpkg, a.metadata, a.golden, a.signatures]
+                     + sorted(glob.glob(os.path.join(gages2, "*")))
+                     + sorted(glob.glob(os.path.join(cadir, "MDA_ADP_*.gpkg"))))
+
+
+def write_provenance(a, stem, final, inputs):
+    def md5(path):
+        h = hashlib.md5()
+        with open(path, "rb") as fh:
+            for b in iter(lambda: fh.read(1 << 24), b""):
+                h.update(b)
+        return h.hexdigest()
+
+    def git(*args):
+        r = subprocess.run(["git", "-C", os.path.dirname(os.path.abspath(__file__))] + list(args),
+                           capture_output=True, text=True)
+        return r.stdout.strip() if r.returncode == 0 else None
+    import pyogrio
+    import pyproj
+    import shapely
+    outs = [p for p in (stem + ".parquet", stem + ".gpkg", stem + "_qa.csv") if os.path.exists(p)]
+    prov = {"created_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "argv": sys.argv, "args": vars(a),
+            "inputs": {p: {"bytes": os.path.getsize(p), "md5": md5(p)} for p in inputs if os.path.isfile(p)},
+            "outputs": {os.path.basename(p): {"bytes": os.path.getsize(p), "md5": md5(p)} for p in outs},
+            "rows": int(len(final)), "by_source": final["watershed_geom_source"].value_counts().to_dict(),
+            "low_confidence": int(final["low_confidence"].sum()), "area_flag": int(final["area_flag"].fillna(False).sum()),
+            "git": {"commit": git("rev-parse", "HEAD"),
+                    "geometry_tools_dirty": bool(git("status", "--porcelain", "--", "."))},
+            "software": {"python": sys.version.split()[0], "platform": platform.platform(),
+                         "geopandas": gpd.__version__, "pandas": pd.__version__, "shapely": shapely.__version__,
+                         "geos": shapely.geos_version_string, "pyogrio": pyogrio.__version__,
+                         "gdal": getattr(pyogrio, "__gdal_version_string__", "unknown"),
+                         "pyproj": pyproj.__version__, "proj": pyproj.proj_version_str}}
+    with open(stem + ".provenance.json", "w") as fh:
+        json.dump(prov, fh, indent=2, default=str)
+    print(f"wrote {stem}.provenance.json ({len(prov['inputs'])} inputs hashed)")
 
 
 if __name__ == "__main__":

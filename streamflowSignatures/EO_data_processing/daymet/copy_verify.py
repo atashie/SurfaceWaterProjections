@@ -2,7 +2,9 @@
 
 The drive has silently truncated files before (mtime preserved), so each file is
 md5-hashed locally, copied, flushed, re-read FROM THE DRIVE and hashed again; any
-mismatch or size difference is fatal. A MANIFEST_md5.txt is written on the drive.
+mismatch or size difference is fatal. MANIFEST_md5.txt on the drive holds one line per
+file ("md5  size  relpath"); re-copying a file REPLACES its line (it used to append a
+second one). The manifest is rewritten through a temporary file and an fsync.
 Usage: python copy_verify.py <src_root> <dst_root> <relpath> [<relpath> ...]
 """
 import fcntl
@@ -49,8 +51,19 @@ def main():
         if not ok:
             print(f"MISMATCH {rel}: src {hs} {ss} B, drive {hd} {sd} B")
     man = os.path.join(dst, "MANIFEST_md5.txt")
-    with open(man, "a") as fh:
-        fh.write("\n".join(lines) + "\n")
+    entries = {}                         # relpath -> line; insertion order kept, re-copies replace
+    if os.path.exists(man):
+        for ln in open(man):
+            f = ln.rstrip("\n").split(None, 2)
+            if len(f) == 3:
+                entries[f[2]] = ln.rstrip("\n")
+    for ln in lines:
+        entries[ln.split(None, 2)[2]] = ln
+    with open(man + ".tmp", "w") as fh:
+        fh.write("\n".join(entries.values()) + "\n")
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(man + ".tmp", man)
     print(f"copied {len(files)} files, {total / 1e9:.2f} GB; md5 + size verified on the drive: "
           f"{len(files) - bad} OK, {bad} mismatches; manifest {man}")
     sys.exit(1 if bad else 0)

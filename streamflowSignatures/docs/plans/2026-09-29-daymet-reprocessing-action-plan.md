@@ -1,8 +1,9 @@
 # Daymet reprocessing — action plan for the dedicated machine
 
 **Date**: 2026-09-29 · **Status**: single-year gate (calendar 2023) PASSED on the M5 MacBook
-the same day; the full 1980–2025 run COMPLETED 2026-09-30 (§0, last part); next: the Phase 1
-replay against product #1 — read §0 first; it supersedes §§1–3 and parts of §§5 and 9 where they differ.
+the same day; the full 1980–2025 run COMPLETED 2026-09-30 and was adversarially reviewed
+2026-10-01 (§0, last two blocks); next: the Phase 1 replay against product #1 in two steps
+(prerequisites in the review block) — read §0 first; it supersedes §§1–3 and parts of §§5 and 9 where they differ.
 §§1–10 below are the original plan (numbers marked **M** measured, **E** estimated).
 
 **Background and option comparison**: `2026-09-29-daymet-reprocessing-options.md`
@@ -50,9 +51,11 @@ on five days per variable, all 7,964 basins, matches the chunk-aligned aggregati
 at six points (TN, WA, CO, QC, FL, YT), all six 2023 variables and prcp 1980: our LCC x/y equal ORNL's to 0.00 m and the
 pixel series match to float32 rounding while the neighbouring pixel differs by up to 18 mm
 (`daymet_pixelcheck.py`). (3) Output is bit-identical across reruns and worker counts
-(partial sums accumulated in a fixed order).
+for a fixed weights file (partial sums accumulated in a fixed order; a different weights
+file changes the order and the last bits, ≤ 2e-13 relative).
 
-**Agreement with the stale product** (5,969 shared basins; table in `RUN_NOTES.md`) forced
+**Agreement with the stale product** (5,969 shared basins, 5,965 with stale data; table in
+`RUN_NOTES.md`) forced
 three method findings:
 1. **Weights must be TRUE AREAS, not coverage fractions.** The co-authors' gdptools values
    are an area-weighted mean. Coverage fractions of the conformal LCC grid (areal scale
@@ -85,8 +88,9 @@ full-run results at the end of this section.)
 15–21 MB/s here. U3 absent in prcp 1980 (all 26,280 chunks stored); `daymet_stream.py`
 probes every file and stops if an unstored chunk lies under a basin. U4 29 % (2020+ layout),
 40 % (1980–2019). U5 validity constant in time for every basin in 2023. U6 answered
-(finding 3). U7 answered (finding 2). U8 measured. U9 no date shift (lag-0 r = 0.99999997 vs
-0.15 at ±1 day); leap years verified — 1980 has Feb 29 and no Dec 31, and prcp 1980
+(finding 3). U7 answered (finding 2). U8 measured. U9 no date shift (prcp 2023: median lag-0 r 0.9999999999963 vs
+0.24 at ±1 day — figures corrected 2026-10-01; the identity agreement on the date-aligned join
+is the stronger evidence, a lag test alone misses a shift inside part of a year); leap years verified — 1980 has Feb 29 and no Dec 31, and prcp 1980
 reproduces the stale values (annual totals within ±0.001 %, p01–p99). **U10 open: no
 Earthdata Login on this Mac; the six 2025 files need one.** U12 measured.
 
@@ -135,15 +139,52 @@ laptop awake for the ~2-day run) → `daymet_assemble.py` → `daymet_validate.p
   on the drive.
 - Acceptance (§7): (1) structure ✓ — 8,017 sites (D4), identical site set every year,
   Dec 31 absent in leap years; (2) coverage ✓ — every basin has a valid cell every day;
-  (3) agreement ✓ — 1980–2023 on the 5,969 shared basins, R² ≥ 0.9999999 in every
+  (3) agreement ✓ — 1980–2023 on the 5,965 basins with stale data (5,969 shared, 4
+  all-NaN there), R² ≥ 0.9999999 in every
   basin-year for prcp, tmin, tmax, vp, srad (100 % ≥ 0.999 against the ≥ 95 % bar); swe
   ≥ 0.999 in all but 2 of 262,460 basin-years, both trace-snow basins (mean < 1e-6 mm);
   prcp annual totals within ±0.0011 % (p01–p99); no date offset in any year; (4) replay —
   NOT yet run; (5) provenance ✓ (CMR manifest, SHA-256 per file, run meta with commit,
-  per-file timing JSON, assembled-file md5).
+  per-file timing JSON, assembled-file md5 — spread over five files until the 2026-10-01
+  sidecar upgrade gathered them).
 - Coverage: every gage of both delivered products is in the new file — #1 6,678 (was
   5,513 with a non-NaN series), #2 6,250 (was 5,635). The stale file's 118 other sites are
-  gages of neither product; 01372058 (all-NaN there) has no polygon.
+  gages of neither product; 01372058 (all-NaN there) has no polygon. A rerun would give
+  usable climate to 1,165 (#1) / 615 (#2) more gages (1,161 / 612 absent + 4 / 3 all-NaN).
+
+**Adversarial review, 2026-10-01 — no wrong value found.** Three read-only reviews
+(ingest; processing and storage; honesty of the comparison).
+- **Independent evidence:**
+  - Single Pixel API basin means for small basins match to float32 rounding in every year
+    tested, 2024–2025 included (archived: `validation/outputcheck_single_pixel_2026-10-01.json`).
+  - The assembled parquet equals the per-year files in all 807,632,580 values.
+  - All 276 granules still match CMR.
+  - The polygon layer rebuilds byte-identically.
+- **Corrected:** doc claims (CHANGELOG `[October 2026]` lists them).
+- **Hardened for future runs:** token on stdin with a clean shutdown; CRS, last-cell and
+  calendar asserts; CMR drift check; 20 MB/s reconnect floor; fatal out-of-range values;
+  value-verified assembly with a self-contained sidecar; `daymet_outputcheck.py`;
+  `selftest_daymet_tools.py`.
+- **Not compared with any earlier product:** 2,048 basins (all 53 large, all 30 HydroBASINS,
+  47 of the 57 low-confidence polygons), 2024–2025, the 7 fill-touching basins.
+
+Before the replay / a rerun:
+- (a) **Memory**: the Julia runner reads all eight columns (~8.6 GB for this file,
+  extrapolated) before keeping four. Give it a (site_id, Date, prcp, swe) copy on the 16 GB
+  laptop, or measure on a one-year subset first.
+- (b) **Low-confidence polygons**: 57 basins, 12 in #1 and 13 in #2, e.g. 06FD001 at 28,997
+  km² against a reported 289,000.
+  - 27 HydroBASINS polygons have no metadata area, so the > 50 % area screen that caught
+    05KH009 cannot run on them.
+  - Compare with an independent area (HydroBASINS UP_AREA, HYDAT gross drainage area), then
+    decide include / exclude / flag per gage. Carrying a flag into the products is a CSV
+    contract decision.
+- (c) **Two-step replay**: first product #1's config restricted to calendar 1980–2023 and
+  the 5,965 shared basins (isolates the weighting effect); then the full file (adds two
+  years and 1,165 gages, which move climate-signature means, trends and qualification by
+  themselves).
+- (d) Ask the co-authors to confirm their polygon version, weighting and fill handling
+  (options doc T4); until then the README states them as inferences.
 
 ---
 

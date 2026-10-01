@@ -688,6 +688,177 @@ doc is the review copy.
 
 ---
 
+## [September 2026]
+
+### Added: reprocessed Daymet climate input, 8,017 basins, 1980–2025 (run 2026-09-29/30)
+`daymet_1980_2025_29sep2026.parquet` (run folder `~/HISSS_data/daymet-processed-29sep2026/`,
+md5-verified copy `/Volumes/Untitled/daymet-processed-29sep2026/`): 134,605,430 rows
+(8,017 × 46 × 365), no NaN in any variable, md5 `c059076088cd8abd963c64094468e90f`.
+NOT yet the input of any delivered product.
+- Against the stale product 1980–2023 (5,965 basins with stale data — 5,969 shared, 4
+  all-NaN; 262,460 basin-years per variable; count corrected 2026-10-01): R² ≥ 0.9999999
+  in every basin-year for prcp, tmin, tmax, vp and srad; swe
+  ≥ 0.999 in all but 2 trace-snow basin-years; prcp annual totals within ±0.0011 %
+  (p01–p99); no date offset. Every gage of both products is covered (#1 6,678, #2 6,250;
+  the stale file had 5,513 / 5,635 non-NaN).
+- Run: 25.9 h of downloads (3.379 TB from ORNL) — 6.8 h over the estimate, lost to slow
+  single connections that curl's stall floor does not catch — then 35 min to assemble,
+  validate and copy. Tables: the run folder's `RUN_NOTES.md`; `EO_data_processing/README_DAYMET.md`;
+  action plan §0.
+
+### Added: Daymet reprocessing toolchain; single-year gate on calendar 2023 PASSED (2026-09-29)
+**DECISION (user, 2026-09-29)**: reprocess Daymet for every watershed that has a polygon
+(the 7,964-basin layer), entirely from scratch — no append to the stale series; check the
+result against the stale co-author product; process, time and compare ONE year before any
+multi-year run.
+- New tools in `EO_data_processing/daymet/` (moved there from `docs/benchmarks/daymet/` the
+  same day; user decision): `daymet_probe`, `_weights`, `_aggregate`, `_crosscheck`,
+  `_pixelcheck`, `_validate`, `_assemble`, `_stream`, `copy_verify`; product README
+  `EO_data_processing/README_DAYMET.md`. Method: exactextract
+  coverage × true cell area on the unresampled Daymet LCC grid, chunk-aligned accumulation,
+  mean over the cells valid that day; every raw file's SHA-256 checked against NASA CMR.
+- 2023, six variables (72.2 GB from the NCAR mirror, byte-identical to ORNL): download
+  66 min at 15–21 MB/s; aggregation 13–21 s per variable-year on the 16 GB M5 laptop (32 s
+  for the 1980–2019 chunk layout) → 1980–2025 is download-bound, ≈ 50 h (prcp + swe
+  ≈ 8.5 h). Exactness: exactextract's own weighted mean agrees to ≤ 5e-11 in all 7,964 gate
+  basins; ORNL's Single Pixel API agrees at six points; output is bit-identical across
+  reruns for a fixed weights file.
+  Probe on prcp 1980 (old layout, leap year): all chunks stored, Feb 29 kept / Dec 31
+  dropped as in the stale data, stale values reproduced.
+- Against the stale product (5,969 shared basins): with true-area weights and
+  full-resolution polygons, prcp reproduces it (annual totals within ±0.0011 %, p01–p99).
+  Coverage-only weights shift large northern basins by up to 0.3 %; the published
+  200 m-simplified Resource 4 polygons leave ≈ ±0.1 % (prcp) and ±2.5 % (swe) at p01–p99.
+  Found the five all-NaN stale sites (Known Issues).
+- Results: `docs/plans/2026-09-29-daymet-reprocessing-action-plan.md` §0. Run folder:
+  `/Volumes/Untitled/daymet_processed_sep2026/` (`RUN_NOTES.md`).
+- Comparison dashboard: `EO_data_processing/viz/build_daymet_comparison_dashboard.py` (+ its
+  HTML template) — one year, one or more polygon versions: summary tiles, original-vs-fresh
+  scatter, difference map, daily series for curated basins, least-agreeing table. The 2023
+  page is `daymet_2023_comparison_dashboard.html` in the gate run folder.
+
+**DECISIONS (user, 2026-09-29, after the gate)** for the 1980–2025 run: (D1) full-resolution
+polygons; (D2) all six variables in one pass; (D3) the user's Earthdata Login bearer token
+for the ORNL-only 2025 files (expires ≈ 2026-10-25; kept outside the repo, docs and memory);
+(D4) add the 53 correctly delineated basins > 100,000 km² if RAM allows (05KH009 stays out,
+wrong polygon). **LOCATIONS (user, 2026-09-29):** code in `EO_data_processing/`; run folder
+on the internal SSD `~/HISSS_data/daymet-processed-29sep2026/` with md5-verified copies to
+the exFAT drive; commit and merge when ready. Implemented the same day: the polygon rebuild
+script is now committed (`EO_data_processing/geometry/rebuild_watershed_polygons.py`; defaults
+reproduce Resource 4, `--no-simplify --include-large` gives the 8,017-basin layer); bearer-token
+downloads with the ORNL-only 2025 files first; an aggregator planning fix (int32 keys, slices;
+byte-identical output) that keeps the 8,017-basin runs at 4.3 GB parent + < 1 GB per worker
+with `--workers 6`; downloads prefer ORNL (48–54 MB/s here vs ~18 MB/s from the mirror), so
+the 1980–2025 run takes ≈ 19 h instead of ≈ 50 h. The run started 2026-09-29 20:23 UTC.
+
+### Changed: Claude Code instruction files restructured for the context budget (2026-09-29)
+The eight files auto-loaded at every session start (CLAUDE.md plus seven `@`-imports:
+DEVELOPMENT.md, SIGNATURES.md, CHANGELOG.md, both Google-Doc snapshots, both EO READMEs)
+totalled ~354 KB ≈ 88k tokens. Official guidance: keep CLAUDE.md under 200 lines, `@`-imports
+load eagerly, procedures belong in skills, directory-scoped constraints in path-scoped rules.
+Restructured per the user-approved plan the same day:
+- `CLAUDE.md` rewritten to ~100 lines of always-true rules; its only import is the new
+  `docs/STATUS.md` (one-liners: products, pending decisions, live issues, deferred fixes,
+  sync dates; ≤ 60 lines). Startup context is now ≈ 5k tokens.
+- `.claude/` is TRACKED (only `settings.local.json` ignored) and excluded from the HISSS
+  mirror. Path-scoped rules: `signatures-code.md`, `benchmarks.md`, `changelog.md`. Skills
+  (description at startup, body on demand): `/sync-docs` with `sync_google_docs.py` — a
+  stdlib fetch + paragraph diff of both Google Docs, verified to reproduce today's snapshots
+  exactly, so an unchanged sync costs no context — `/add-signature`, `/run-benchmark`, and
+  `/cross-language-alignment` (moved from `claude-skill/`). `claude-skill/streamflow-signatures.md`
+  stays as the user-facing interpretation skill.
+- `[Unreleased] → Guidelines Document TODOs` and `→ Manuscript Reconciliation Log` (461 lines)
+  moved verbatim to `docs/reconciliation/`; CHANGELOG.md itself is no longer auto-loaded.
+- `EO_data_processing/CLAUDE.md` (nested, loads only when working there) carries the id-join
+  and S3-loss rules; the stacked dated status banners of both EO READMEs moved verbatim to a
+  "Build history" section at the end of each file.
+- Nothing was deleted; `docs/DEVELOPMENT.md` and `docs/SIGNATURES.md` are unchanged and are
+  read on demand via the pointers in CLAUDE.md and the rules.
+
+### Changed: signature categories are the co-authors' EIGHT; repo docs aligned (2026-09-10)
+**DECISION (user, 2026-09-10)**: the colleague's 8-category sheet is the reference
+grouping — Flow Volume, Flow Duration, Storage, Flashiness, Drought, Flow Timing,
+Precipitation Streamflow, Snow. Vocabulary from here on: *category* = one of the eight
+(manuscript, guidelines doc, HydroShare dictionary); *function family* = the computing
+function (15 functions of `calculate_all_signatures()`), a sub-level. The 21 scalars
+inherit their function's category (`season_excluded_years_*` → Flow Volume;
+`ice_affected_days_total` stays outside as a preprocessing diagnostic). TQmean → Flow
+Volume and avg_storage → Storage follow the sheet.
+- **New canonical mapping** `docs/signature_categories.csv` (121 rows: signature, kind,
+  category, function, module, function_family, category_source) — the source for
+  regenerating the HydroShare dictionary/categories CSV later.
+- **Repo docs aligned (applied)**: README.md "Signature Categories" table rebuilt as
+  8 categories × function families (+ line 237 pointer); docs/SIGNATURES.md gained a
+  "Signature categories" map in the Overview, its Summary Table carries a Category column,
+  and the Pettitt signal table is labeled by function family; CLAUDE.md pointer;
+  claude-skill overview lists the eight; `docs/plans/dataset_workflow_schematic.md` +
+  PNG re-rendered ("in 8 categories"; playwright + chromium installed into `.venv`,
+  mermaid byproducts git-ignored); CROSS_LANGUAGE_STATUS "Per-Category Results" note
+  (those tables are by function family). `build_signature_explorer.py` `category_of`
+  now reads the canonical CSV (rule-based fallback kept), so the next explorer build
+  shows the eight; the comparison scripts' function-family groupings are unchanged
+  (diagnostics).
+- **Not editable from here — catalogued** in
+  `docs/plans/2026-09-10-manuscript-category-edits.md`: 8 manuscript locations (§2
+  preamble, §2.2.1, §3, §4 figure, §5.1.1, §5.1.3, §1) and 8 residual guidelines-doc
+  edits (TQmean to 3.1, add the avg_storage block to 3.3, "(see 3.12)" → 3.1,
+  ice_affected_days_total, two column names, module/family wording, Part 5 high_na).
+- **HydroShare documents NOT changed this session (user decision)** — pending list in
+  the same file (§C) and under Planned.
+
+### Fixed (HIGH): `flagged_for_high_na` now has ONE definition in all three languages (2026-09-04)
+Found during the guidelines Parts 4–5 accuracy review and independently confirmed by a
+Codex adversarial review (8/8 findings CONFIRMED, GO-WITH-FIXES) before the user
+approved the fix. The flag meant three different things — Julia (the delivered
+products) counted NA over the **16 numeric metadata columns only** (every signature
+column arrived as `Vector{Any}` from the runner and failed the numeric-eltype filter,
+so 1,224 = every Canadian gage + 41 USGS gages missing GAGES-II attributes), Python
+counted every non-flag column incl. string metadata, and rpkg counted only the
+`_mean`/`_median` keys each gage happened to emit. The other 11 flags agreed
+cell-for-cell across the three languages.
+
+- **Definition (config `qa_qc.high_na_denominator`, one manifest shared by
+  Julia/Python/rpkg):** the fraction of the SIGNATURE columns present in the assembled
+  output table — every column ending in one of the 16 statistic suffixes plus the 21
+  registered per-gage scalars (1,621 of the 1,653 product columns) — whose value is
+  NA or NaN, flagged when strictly greater than `max_na_fraction` (0.30). Metadata,
+  unregistered diagnostics and flag columns never enter the denominator; families
+  NA-filled by the table union DO count (that structural NA — no Daymet, no SWE — is
+  exactly what the guidelines say the flag surfaces). Column selection is by NAME and
+  the NA test is value-level, so untyped columns can no longer drop out.
+- **Code**: `julia/src/qa_qc.jl` (+ `high_na_denominator_columns`, exported),
+  `python/streamflow_signatures/qa_qc.py`, `rpkg/R/qa_qc.R` (now also accepts the
+  assembled data.frame; the per-gage list path keeps emitted-key semantics, matching
+  Julia's `include_qa_flags` path), config constants in all three languages with
+  identical fallbacks, the manifest synced into the two bundled config copies, and
+  `run_rpkg_benchmark.R` now computes the flags on the assembled table like the Julia
+  and Python runners. **Tests** (`julia/test/test_qa_high_na.jl`,
+  `python/tests/test_qa_flags.py`, `rpkg/tests/testthat/test-qa_flags.R`) go through
+  the runner's untyped-column shape, pin metadata exclusion, NaN-counts-as-NA, the
+  1,621-of-1,653 selection, and (Python) that the manifest equals the schema
+  registries. Suites: Julia green (new file 14/14), Python 160 passed, rpkg 1,078
+  passed against the installed package.
+- **Measured on the WY 1993–2025 reference set** (new rule applied to each
+  language's own CSV): Julia 1,224 → **791**, Python 787 → 791, rpkg 90 → 771 — Julia
+  and Python now agree on all 6,678 gages. The 20 rpkg differences are a SEPARATE
+  pre-existing divergence surfaced by the new rule — rpkg emitted tau = 1, p = 1 for
+  constant annual series where canonical emits NaN — **also fixed the same day**
+  (`mann_kendall_test()` wrapper in rpkg with the canonical NA contract, used by
+  `generate_stats()` and the Pettitt segment p-values; parity test added; rpkg suite
+  1,098 passed). The rpkg reference CSV still needs a benchmark re-run to reflect it.
+- **Delivered products (dry run of `docs/benchmarks/recompute_high_na_flag.py`, a
+  byte-preserving text-level rewrite of that one column):** WY 1993–2025 product #1
+  1,224 → 791 (1,011 Canadian gages un-flagged, 611 USGS gages newly flagged, 33 USGS
+  un-flagged); WY 1980–2025 product #2 1,243 → 598. **Deliberately NOT applied
+  (user decision, 2026-09-04)**: the delivered CSVs and their staged HydroShare copies
+  keep the column as shipped; it is cataloged as a known issue in the product docs
+  and the dictionary row, and will be regenerated at the next rerun of any portion of
+  the data. `recompute_high_na_flag.py` stays ready for that moment.
+- Tooling: `refresh_qa_flags.jl` gained `--dry-run` (it re-serializes every value, so
+  it is the canonical cross-check, not the rewrite tool).
+
+---
+
 ## [August 2026]
 
 ### Milestone: pre-publication audit + PUBLIC CODE RELEASE at github.com/CZ-Sync/HISSS (2026-08-28)

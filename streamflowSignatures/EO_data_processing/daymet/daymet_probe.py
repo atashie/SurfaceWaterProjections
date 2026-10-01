@@ -1,6 +1,8 @@
 """Probe one Daymet NA file: layout facts, and the unstored-chunk hazard (plan unknown U3).
 
-Prints shape, chunking, compression, fill values, CRS, time axis and calendar, then
+Prints shape, chunking, compression, fill values, CRS, time axis and calendar (the grid,
+CRS and calendar are asserted by daymet_common.read_grid, so a change is fatal here), the
+variable's attributes (units included; recorded, not asserted), then
 counts the HDF5 chunks actually stored against the chunks the shape implies. A chunk
 that was never written reads back as the HDF5 dataset fill value -- 0.0 in the
 1980-2019 files, NOT the -9999 `_FillValue` -- so a basin whose cells fall in such a
@@ -47,6 +49,8 @@ def main():
     with h5py.File(a.file, "r") as f:
         d = f[g.var]
         res["global_attrs"] = {k: (v.decode() if isinstance(v, bytes) else str(v)) for k, v in f.attrs.items()}
+        res["var_attrs"] = {k: (v.decode() if isinstance(v, bytes) else str(v)) for k, v in d.attrs.items()
+                            if k not in ("DIMENSION_LIST", "_Netcdf4Dimid")}
         n = d.id.get_num_chunks()
         res["chunks_stored"] = int(n)
         stored = set()

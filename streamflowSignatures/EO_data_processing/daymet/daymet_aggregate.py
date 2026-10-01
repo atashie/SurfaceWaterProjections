@@ -2,7 +2,8 @@
 
 Usage:
     python daymet_aggregate.py --file <daymet_v4_daily_na_<var>_<yyyy>.nc> --weights-dir <dir>
-        --out-dir <dir> [--workers 8] [--weight area|coverage]
+        --out-dir <dir> [--workers 8] [--weight area|coverage] [--source-sha256 <hex>]
+        [--allow-out-of-range]
 
 Method (chunk-aligned; each HDF5 chunk is decompressed exactly once):
     for every spatial tile of the file's own chunk grid that holds a weighted cell,
@@ -20,10 +21,17 @@ Outputs in --out-dir:
     <var>_<year>_qa.csv       per basin: valid_frac_min / _max (valid weight / total weight
                               over the year), n_nan_days, min, max, mean of the daily means
     <var>_<year>_timing.json  wall and CPU seconds, peak RSS, tiles read, bytes decompressed,
-                              out-of-range counts, input file size and mtime
+                              out-of-range counts, input file size and mtime, the input's
+                              SHA-256 as verified by the caller (--source-sha256), the
+                              weights md5 and the git state of these tools
+    <var>_<year>.done         written last; carries the same SHA-256, weights md5 and commit,
+                              so daymet_stream.py can refuse a .done built on other weights
 The run is resumable at the file level: an existing <var>_<year>.done skips the file.
-Deterministic: partial sums are accumulated in a fixed task order, so reruns and different
---workers values give bit-identical output.
+A cell value outside RANGES (daymet_common.py) is fatal unless --allow-out-of-range: the
+outputs are written for inspection, but no .done.
+Deterministic: partial sums are accumulated in a fixed task order, so for a FIXED weights
+file, reruns and different --workers values give bit-identical output. A different weights
+file (e.g. more basins) changes the tile order and so the last bits (<= 2e-13 relative).
 """
 import argparse
 import json
@@ -41,7 +49,7 @@ import pyarrow.parquet as pq
 from scipy.sparse import csr_matrix
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from daymet_common import FILL, NX, NY, RANGES, read_grid, write_json  # noqa: E402
+from daymet_common import FILL, NX, NY, RANGES, git_state, read_grid, utc_now, write_json  # noqa: E402
 
 READ_TARGET_BYTES = 160 * 2**20   # uncompressed bytes per read, rounded to whole time chunks
 COMPUTE_DAYS = 64                 # days per sparse product (bounds float64 temporaries)
@@ -132,6 +140,10 @@ def main():
     ap.add_argument("--out-dir", required=True)
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--weight", choices=["area", "coverage"], default="area")
+    ap.add_argument("--source-sha256", default=None,
+                    help="the input file's SHA-256 as verified by the caller; recorded in the outputs")
+    ap.add_argument("--allow-out-of-range", action="store_true",
+                    help="write the .done even when a cell value falls outside RANGES")
     a = ap.parse_args()
     os.makedirs(a.out_dir, exist_ok=True)
 
@@ -152,6 +164,8 @@ def main():
     del t
     basins = pd.read_csv(os.path.join(a.weights_dir, "daymet_basins.csv"), dtype={"site_id": str})
     nb = len(basins)
+    wmeta = os.path.join(a.weights_dir, "daymet_weights_meta.json")
+    weights_md5 = json.load(open(wmeta)).get("weights_md5") if os.path.exists(wmeta) else None
     tasks, n_tiles, n_tiles_total, tb = plan_tasks(
         w["basin_idx"], w["cell_id"], w[wcol], grid.chunks, lo, hi)
     del w
@@ -220,9 +234,16 @@ def main():
         "valid_value_min": vmin, "valid_value_max": vmax, "range_checked": [lo, hi],
         "basins": nb, "basins_with_nan_days": int((qa["n_nan_days"] > 0).sum()),
         "output_bytes": os.path.getsize(stem + ".parquet"),
+        "source_sha256": a.source_sha256, "weights_md5": weights_md5, "git": git_state(),
+        "finished_utc": utc_now(),
     }
     write_json(stem + "_timing.json", timing)
-    open(stem + ".done", "w").write(json.dumps({"finished": time.strftime("%Y-%m-%dT%H:%M:%S")}))
+    if n_oor and not a.allow_out_of_range:
+        sys.exit(f"{var} {year}: {n_oor} cell-days outside {RANGES[var]} (values {vmin:.6g} .. {vmax:.6g}); "
+                 f"outputs written for inspection, no .done (rerun with --allow-out-of-range to accept)")
+    open(stem + ".done", "w").write(json.dumps({
+        "finished": time.strftime("%Y-%m-%dT%H:%M:%S"), "finished_utc": timing["finished_utc"],
+        "source_sha256": a.source_sha256, "weights_md5": weights_md5, "commit": timing["git"]["commit"]}))
     print(f"{var} {year}: {timing['wall_seconds_total']} s wall ({t_read:.0f} s read+aggregate, "
           f"{nbytes / 1e9:.1f} GB decompressed, worker CPU {worker_cpu:.0f} s), peak RSS parent "
           f"{timing['peak_rss_parent_mb']} MB / worker {timing['peak_rss_largest_worker_mb']} MB; "
