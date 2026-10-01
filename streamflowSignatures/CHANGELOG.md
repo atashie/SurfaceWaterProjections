@@ -25,10 +25,10 @@ loads every session is `docs/STATUS.md`.
 ### Planned
 - **Daymet climate input reprocess (options review 2026-09-29; single-year gate PASSED the
   same day; D1–D4 and the locations DECIDED 2026-09-29; the 1980–2025 file BUILT and
-  validated 2026-09-30; adversarially reviewed 2026-10-01 — see `[October 2026]`; NEXT:
-  the Phase 1 replay against product #1 in two steps (prerequisites: a 4-column input for
-  the 16 GB laptop, a decision on the 57 low-confidence polygons), then the user's decision
-  on rerunning the products; action plan §0).**
+  validated 2026-09-30; adversarially reviewed 2026-10-01 — see `[October 2026]`;
+  questionable polygons kept and FLAGGED and the signature replay DROPPED, user decisions
+  2026-10-01 (raw-data equivalence suffices; record explorer built); NEXT: the user's
+  decision on rerunning the products; action plan §0).**
   Daymet V4 R1 now ends at calendar 2025 (released 2026-05-22; no 2026 before ~spring
   2027), so WY 1980–2025 climate is achievable — matching the products. The 6,087-basin
   input predates the 7,964-polygon layer (basin size explains ≤ 58 of the 2,049 gages
@@ -296,6 +296,47 @@ Moved 2026-09-29 to `docs/reconciliation/guidelines_todos.md` and
 
 ## [October 2026]
 
+### Added: Daymet record explorer, basin flags, batched Julia runner; signature replay dropped (2026-10-01)
+**Decisions (user, 2026-10-01):**
+- Keep the questionable polygons and FLAG them. The flags travel as a companion table; the
+  signature CSV's column contract is unchanged.
+- Protect memory on the 16 GB laptop, which another session shares.
+- Keep `main` current; the HISSS mirror will be force-pushed later.
+- Later the same day: STOP the signature replay against product #1. In the user's words: "if
+  the raw data are sufficiently equivalent then that is all we need to know".
+
+What was built:
+- **Basin flags.** `EO_data_processing/daymet/daymet_basin_flags.py` writes
+  `daymet_basin_flags.csv` next to the climate file: 101 flagged basins.
+  - 30 HydroBASINS fallbacks, 28 area mismatches (> 50 %), 27 with no metadata area,
+    45 under 4 Daymet cells.
+  - 57 of them are low-confidence: 12 in product #1, 13 in #2.
+- **Batched runner.** `docs/benchmarks/run_batched_julia.py` splits, runs and merges a
+  Julia run in gage batches.
+  - A memory guard stops Julia when available memory falls below `--min-avail-gb`.
+  - `merge` refuses batches whose headers differ (the `flagged_for_high_na` denominator
+    would differ) and orders the gages like a reference CSV.
+  - The replay's control arm ran as 6 batches of ~1,336 gages: code b5f4c13 (clean
+    tree), the stale climate input, product #1's config. Each batch took 121–177 s and
+    peaked at 4.8–5.5 GB RSS.
+  - Merged, the batches give 6,678 gages × 1,653 columns and 18,898,406 annual rows,
+    product #1's shape. No batch log has a family failure.
+  - The control arm was never compared with product #1, because the replay stopped
+    first. Step (a) finished 1 of its 6 batches and step (b) never started (folder
+    `~/HISSS_data/daymet-replay-01oct2026/`).
+- **Record explorer.** `EO_data_processing/viz/build_daymet_record_explorer.py` writes
+  `validation/daymet_record_explorer_2026-10-01.html` in the run folder. The page is
+  10.9 MB, has a verified drive copy, and makes no network request. It shows:
+  - the 1980–2023 agreement metrics as per-variable distributions over 262,460
+    basin-years: largest daily |Δ|, RMSE, mean |Δ|, mean Δ, 1 − R² and annual totals, with
+    quantile and lag tables;
+  - a map of all 8,017 basins, coloured by coverage or by per-basin record RMSE / largest
+    daily |Δ|;
+  - original | new daily series side by side, plus the difference, for 30 embedded basins:
+    10 least matching, 10 random and 10 without an original series (seed 20261001).
+  The builder re-derives every embedded basin-year's largest |Δ|, which equals the
+  validation table. It also decodes every embedded block back against the source series.
+
 ### Fixed (MEDIUM): Daymet input — adversarial review, doc corrections, toolchain hardened (2026-10-01)
 Three independent reviews of the 2026-09-30 file (ingest; processing and storage; honesty of
 the comparison with the stale product) re-ran checks read-only and found **no wrong value**
@@ -356,7 +397,8 @@ What they found, and what changed:
     `validation/cmr_requery_2026-10-01.json` and
     `polygons/…provenance_rebuild_2026-10-01.json`.
   - RUN_NOTES corrected; drive copy re-verified.
-- **Open before a rerun** (action plan, review block):
+- **Open before a rerun** (action plan, review block; the first three items were settled
+  later the same day, see the entry above):
   - The Julia runner loads all eight columns (~8.6 GB for this file, extrapolated); give it
     a 4-column copy on the 16 GB laptop.
   - Decide on the 57 low-confidence polygons (12 in #1, 13 in #2; 27 HydroBASINS polygons

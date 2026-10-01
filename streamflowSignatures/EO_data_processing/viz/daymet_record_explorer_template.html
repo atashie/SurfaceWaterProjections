@@ -1,0 +1,1109 @@
+<title>Daymet Reprocess Explorer</title>
+<style>
+/* Layout: one working column — headline strip, agreement histograms, map + basin list, then the
+   original | new series side by side over a full-width difference strip. */
+:root {
+  --page: #f4f4f1;
+  --surface: #fcfcfb;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #6f6d68;
+  --grid: #e4e3dd;
+  --axis: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.11);
+  --hover: rgba(11, 11, 11, 0.045);
+  --wash: rgba(82, 81, 78, 0.10);
+  --s1: #2a78d6;
+  --s2: #eb6834;
+  --s3: #1baf7a;
+  --dot: rgba(82, 81, 78, 0.42);
+  --dot-new: rgba(27, 175, 122, 0.62);
+  --seq-lo: #dcdad2;
+  --seq-hi: #1b1a18;
+  --tip-bg: #1b1a18;
+  --tip-fg: #f4f4f1;
+  --status-warning: #fab219;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink-2: #c3c2b7; --muted: #9b998f;
+    --grid: #2c2c2a; --axis: #45453f; --border: rgba(255, 255, 255, 0.11); --hover: rgba(255, 255, 255, 0.06);
+    --wash: rgba(195, 194, 183, 0.11); --s1: #3987e5; --s2: #d95926; --s3: #199e70;
+    --dot: rgba(195, 194, 183, 0.36); --dot-new: rgba(25, 158, 112, 0.72); --seq-lo: #34342f; --seq-hi: #f2f1ec;
+    --tip-bg: #f2f1ec; --tip-fg: #121211; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink-2: #c3c2b7; --muted: #9b998f;
+  --grid: #2c2c2a; --axis: #45453f; --border: rgba(255, 255, 255, 0.11); --hover: rgba(255, 255, 255, 0.06);
+  --wash: rgba(195, 194, 183, 0.11); --s1: #3987e5; --s2: #d95926; --s3: #199e70;
+  --dot: rgba(195, 194, 183, 0.36); --dot-new: rgba(25, 158, 112, 0.72); --seq-lo: #34342f; --seq-hi: #f2f1ec;
+  --tip-bg: #f2f1ec; --tip-fg: #121211; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--page); color: var(--ink); font: 14px/1.5 var(--sans); }
+[hidden] { display: none !important; }
+.wrap { max-width: 1280px; margin: 0 auto; padding-inline: 16px; padding-block: 28px 56px; display: grid; gap: 36px; }
+@media (min-width: 760px) { .wrap { padding-inline: 32px; } }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+h1 { font-size: 28px; line-height: 1.2; font-weight: 650; letter-spacing: -0.01em; }
+h2 { font-size: 19px; line-height: 1.3; font-weight: 650; }
+h3 { font-size: 13px; font-weight: 600; }
+p { margin: 0; }
+.eyebrow { font-size: 12px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); }
+.lede { max-width: 72ch; color: var(--ink-2); font-size: 15px; }
+.mono { font-family: var(--mono); font-size: 0.93em; }
+.muted { color: var(--muted); }
+.note { color: var(--ink-2); max-width: 80ch; font-size: 13px; }
+header.top { display: grid; gap: 10px; }
+section { display: grid; gap: 14px; min-width: 0; }
+.section-head { display: grid; gap: 4px; }
+
+/* headline tiles */
+.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 900px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .tiles { grid-template-columns: 1fr; } }
+.tile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; display: grid; gap: 2px; align-content: start; min-width: 0; }
+.tile .label { font-size: 13px; color: var(--ink-2); }
+.tile .value { font-size: 26px; font-weight: 650; line-height: 1.25; }
+.tile .value small { font-size: 15px; font-weight: 500; color: var(--ink-2); }
+.tile .sub { font-size: 12.5px; color: var(--muted); }
+
+/* controls */
+.controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+.ctl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ctl > .lab { font-size: 12px; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
+.seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); padding: 2px; gap: 2px; }
+.seg button { font: inherit; font-size: 13px; color: var(--ink-2); background: transparent; border: 0; border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+.seg button:hover { background: var(--hover); color: var(--ink); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+.btn { font: inherit; font-size: 13px; color: var(--ink); background: var(--surface); border: 1px solid var(--border); border-radius: 7px; padding: 5px 10px; cursor: pointer; }
+.btn:hover { background: var(--hover); }
+select.btn { padding-right: 6px; }
+button:focus-visible, select:focus-visible, canvas:focus-visible, .row:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
+
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; min-width: 0; }
+
+/* histograms */
+.hist-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.hist-grid.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 1100px) { .hist-grid.four { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 900px) { .hist-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .hist-grid, .hist-grid.four { grid-template-columns: 1fr; } }
+.hist-card { display: grid; gap: 4px; }
+.hist-card .h { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.hist-card .unit { font-size: 12px; color: var(--muted); }
+.hist-card svg { display: block; width: 100%; height: auto; overflow: visible; }
+.cap { font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.cap .k { color: var(--muted); }
+details { font-size: 13px; }
+details > summary { cursor: pointer; color: var(--ink-2); padding-block: 4px; }
+.tablewrap { overflow-x: auto; margin-top: 8px; }
+table { border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; min-width: 100%; }
+th, td { text-align: right; padding: 5px 10px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+th { font-weight: 600; color: var(--ink-2); }
+
+/* map + list */
+.explore { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 14px; align-items: stretch; }
+@media (max-width: 960px) { .explore { grid-template-columns: 1fr; } }
+.mapcard { display: grid; gap: 8px; position: relative; }
+.mapbox { position: relative; height: clamp(300px, 46vw, 520px); }
+.mapbox canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: pan-y; cursor: grab; border-radius: 6px; }
+.mapbox canvas.dragging { cursor: grabbing; }
+.zoom { position: absolute; right: 8px; top: 8px; display: grid; gap: 4px; }
+.zoom .btn { width: 32px; height: 32px; padding: 0; font-size: 16px; line-height: 1; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: var(--ink-2); align-items: center; }
+.legend .item { display: inline-flex; align-items: center; gap: 6px; }
+.legend svg { flex: none; }
+.ramp { display: inline-flex; align-items: center; gap: 8px; }
+.ramp .bar { width: 140px; height: 10px; border-radius: 3px; border: 1px solid var(--border); }
+.listcard { display: grid; grid-template-rows: auto 1fr; gap: 6px; padding: 10px 6px 6px 10px; }
+.list { overflow-y: auto; max-height: clamp(360px, 52vw, 600px); padding-right: 6px; display: grid; gap: 14px; align-content: start; }
+@media (max-width: 960px) { .list { max-height: 520px; } }
+.group { display: grid; gap: 2px; }
+.ghead { display: grid; gap: 2px; padding: 4px 6px 6px; }
+.ghead .t { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13.5px; }
+.ghead .d { font-size: 12px; color: var(--muted); }
+.row { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 2px 10px; align-items: start; text-align: left; font: inherit; color: inherit; background: transparent; border: 0; border-radius: 7px; padding: 6px 6px; cursor: pointer; width: 100%; }
+.row:hover { background: var(--hover); }
+.row[aria-current="true"] { background: var(--wash); box-shadow: inset 0 0 0 1px var(--border); }
+.row .sym { padding-top: 3px; }
+.row .main { min-width: 0; }
+.row .id { font-family: var(--mono); font-size: 12.5px; }
+.row .nm { color: var(--ink-2); font-size: 12.5px; overflow-wrap: anywhere; }
+.row .why { grid-column: 2 / 4; font-size: 12px; color: var(--muted); }
+.row .area { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; padding-top: 1px; }
+
+/* series */
+.sel-head { display: grid; gap: 8px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; }
+.chip.flag { border-color: var(--status-warning); color: var(--ink); }
+.pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 780px) { .pair { grid-template-columns: 1fr; } }
+.panel { display: grid; gap: 6px; }
+.panel .ph { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.panel .ph .k { display: inline-flex; align-items: center; gap: 7px; }
+.panel .ph .s { font-size: 12px; color: var(--muted); }
+.key { display: inline-block; width: 16px; height: 2px; border-radius: 1px; }
+.cv { position: relative; height: 230px; }
+.cv.short { height: 170px; }
+.cv canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: pan-y; cursor: crosshair; }
+.stats { font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.hint { font-size: 12px; color: var(--muted); }
+
+.tip { position: fixed; z-index: 10; pointer-events: none; background: var(--tip-bg); color: var(--tip-fg); border-radius: 7px; padding: 7px 10px; font-size: 12.5px; line-height: 1.45; max-width: 320px; box-shadow: 0 4px 18px rgba(0, 0, 0, 0.18); font-variant-numeric: tabular-nums; }
+.tip .r { display: flex; align-items: center; gap: 8px; }
+.tip b { font-weight: 650; }
+.tip .t { opacity: 0.75; font-size: 12px; }
+footer { display: grid; gap: 8px; font-size: 12.5px; color: var(--ink-2); border-top: 1px solid var(--border); padding-top: 18px; }
+footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; max-width: 110ch; }
+.warn { color: var(--ink); background: var(--wash); border-radius: 8px; padding: 10px 12px; font-size: 13px; }
+@media (prefers-reduced-motion: no-preference) { .seg button, .row, .btn { transition: background-color 0.12s; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <p class="eyebrow">HISSS climate input · Daymet V4 R1 · daily basin means</p>
+    <h1>Reprocessed Daymet against the original basin series</h1>
+    <p class="lede" id="lede"></p>
+  </header>
+
+  <section aria-labelledby="h-tiles">
+    <h2 id="h-tiles" hidden>Headline numbers</h2>
+    <div class="tiles" id="tiles"></div>
+  </section>
+
+  <section aria-labelledby="h-agree">
+    <div class="section-head">
+      <h2 id="h-agree">Agreement on every shared basin-year, 1980–2023</h2>
+      <p class="note" id="agree-note"></p>
+    </div>
+    <div class="controls">
+      <div class="ctl"><span class="lab" id="lab-metric">Metric</span><div class="seg" id="metric-seg" role="group" aria-labelledby="lab-metric"></div></div>
+    </div>
+    <p class="note" id="metric-desc"></p>
+    <div class="hist-grid" id="hist-grid"></div>
+    <details id="q-details">
+      <summary>Quantile table for this metric</summary>
+      <div class="tablewrap"><table id="q-table"></table></div>
+    </details>
+    <div class="card">
+      <h3>Date alignment</h3>
+      <p class="note" style="margin-top:2px">Pearson r between the new and original daily series of each basin-year, with the new series shifted one day either way. A date offset would make a shifted r beat r at lag 0.</p>
+      <div class="tablewrap"><table id="lag-table"></table></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-map">
+    <div class="section-head">
+      <h2 id="h-map">Basins</h2>
+      <p class="note">Every basin of the new file at its gage. Daily series are embedded for the highlighted basins: pick one on the map or in the list.</p>
+    </div>
+    <div class="controls">
+      <div class="ctl"><span class="lab" id="lab-color">Colour by</span><div class="seg" id="mapmode-seg" role="group" aria-labelledby="lab-color"></div></div>
+      <div class="ctl" id="mapvar-ctl"><span class="lab" id="lab-mapvar">Variable</span><div class="seg" id="mapvar-seg" role="group" aria-labelledby="lab-mapvar"></div></div>
+    </div>
+    <div class="explore">
+      <div class="card mapcard">
+        <div class="mapbox" id="mapbox">
+          <canvas id="map" tabindex="0" aria-label="Map of basins. Use the list beside it to pick an embedded basin."></canvas>
+          <div class="zoom">
+            <button class="btn" id="zin" type="button" aria-label="Zoom in">+</button>
+            <button class="btn" id="zout" type="button" aria-label="Zoom out">−</button>
+            <button class="btn" id="zreset" type="button" aria-label="Reset map view">⟲</button>
+          </div>
+        </div>
+        <div class="legend" id="map-legend"></div>
+        <p class="hint">Drag to pan · pinch or ⌘/Ctrl + scroll to zoom · double-click to zoom in · click a highlighted basin to load its series.</p>
+      </div>
+      <div class="card listcard">
+        <h3 style="padding: 2px 6px">Embedded basins</h3>
+        <div class="list" id="list"></div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="sel-title" id="series-section">
+    <div class="sel-head">
+      <p class="eyebrow">Daily series</p>
+      <h2 id="sel-title"></h2>
+      <div class="chips" id="sel-chips"></div>
+      <p class="note" id="sel-why"></p>
+    </div>
+    <div class="controls">
+      <div class="ctl"><span class="lab" id="lab-svar">Variable</span><div class="seg" id="svar-seg" role="group" aria-labelledby="lab-svar"></div></div>
+      <div class="ctl"><span class="lab" id="lab-win">Window</span>
+        <button class="btn" id="w-full" type="button">Full record</button>
+        <button class="btn" id="w-prev" type="button" aria-label="Previous window">◀</button>
+        <select class="btn" id="w-year" aria-labelledby="lab-win"></select>
+        <button class="btn" id="w-next" type="button" aria-label="Next window">▶</button>
+      </div>
+    </div>
+    <p class="hint">Drag across a chart to zoom to those dates; double-click to return to the full record. With a chart focused, ← → step a day (Shift: a month).</p>
+    <div id="series-msg" class="warn" hidden></div>
+    <div class="pair">
+      <div class="card panel">
+        <div class="ph"><span class="k"><span class="key" style="background: var(--s1)"></span><h3>Original</h3></span><span class="s" id="o-sub">co-authors' series, 1980–2023</span></div>
+        <div class="cv"><canvas id="cv-o" tabindex="0" aria-label="Original daily series"></canvas></div>
+      </div>
+      <div class="card panel">
+        <div class="ph"><span class="k"><span class="key" style="background: var(--s2)"></span><h3>New</h3></span><span class="s" id="n-sub">reprocessed, 1980–2025</span></div>
+        <div class="cv"><canvas id="cv-n" tabindex="0" aria-label="New daily series"></canvas></div>
+      </div>
+    </div>
+    <div class="card panel">
+      <div class="ph"><span class="k"><span class="key" style="background: var(--ink-2)"></span><h3>Difference, new − original</h3></span><span class="stats" id="d-stats"></span></div>
+      <div class="cv short"><canvas id="cv-d" tabindex="0" aria-label="Daily difference, new minus original"></canvas></div>
+    </div>
+    <details id="ann-details">
+      <summary id="ann-summary">Annual values for this basin and variable</summary>
+      <div class="tablewrap"><table id="ann-table"></table></div>
+    </details>
+  </section>
+
+  <footer id="foot"></footer>
+</div>
+<div class="tip" id="tip" hidden></div>
+
+<script id="explorer-data" type="application/json">__DATA__</script>
+<script id="explorer-blocks" type="application/json">__BLOCKS__</script>
+<script>
+(() => {
+"use strict";
+const D = JSON.parse(document.getElementById("explorer-data").textContent);
+const BLOCKS = JSON.parse(document.getElementById("explorer-blocks").textContent);
+const M = D.meta, B = D.basins, VARS = D.vars;
+const NB = B.id.length;
+const GROUPS = [
+  { key: "worst", label: "Least matching", color: "--s1", shape: "diamond" },
+  { key: "random", label: "Random", color: "--s2", shape: "circle" },
+  { key: "new", label: "New coverage", color: "--s3", shape: "triangle" },
+];
+const GROUP = Object.fromEntries(GROUPS.map(g => [g.key, g]));
+const DEC = { prcp: 2, tmin: 2, tmax: 2, swe: 2, vp: 1, srad: 1 };
+const $ = id => document.getElementById(id);
+const cssv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const SVGNS = "http://www.w3.org/2000/svg";
+const sv = (tag, attrs) => { const e = document.createElementNS(SVGNS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+
+// ---------- number formatting -------------------------------------------------------------
+const SUP = { "-": "⁻", "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹" };
+const sup = n => String(n).split("").map(c => SUP[c] || c).join("");
+const int = n => Math.round(n).toLocaleString("en-US");
+function sci(x, d = 2) {
+  if (x == null || !isFinite(x)) return "—";
+  if (x === 0) return "0";
+  const a = Math.abs(x);
+  if (a >= 0.01 && a < 1e5) return trimNum(x, d);
+  let e = Math.floor(Math.log10(a)), m = (x / Math.pow(10, e)).toPrecision(d);
+  if (Math.abs(Number(m)) >= 10) { e += 1; m = (x / Math.pow(10, e)).toPrecision(d); }
+  return `${m.replace("-", "−")} × 10${sup(e)}`;
+}
+const pct = x => signed(trimNum(x, 2).replace("−", "-"));
+function trimNum(x, sigd) {
+  const a = Math.abs(x);
+  if (a === 0) return "0";
+  const dec = Math.max(0, sigd - 1 - Math.floor(Math.log10(a)));
+  return Number(x.toFixed(Math.min(dec, 10))).toLocaleString("en-US", { maximumFractionDigits: Math.min(dec, 10) });
+}
+const signed = s => (s.startsWith("-") ? "−" + s.slice(1) : (s === "0" ? s : "+" + s));
+const sciSigned = (x, d = 3) => (x == null || !isFinite(x)) ? "—" : signed(sci(x, d).replace("−", "-"));
+const val = (x, v) => (x == null || !isFinite(x)) ? "—" : x.toLocaleString("en-US", { minimumFractionDigits: DEC[v], maximumFractionDigits: DEC[v] }).replace("-", "−");
+function tickFmt(t, step) {
+  if (t === 0) return "0";
+  const a = Math.abs(step);
+  if (a >= 1e-2 && Math.abs(t) < 1e5) {
+    const dec = Math.max(0, -Math.floor(Math.log10(a) + 1e-9));
+    return t.toLocaleString("en-US", { minimumFractionDigits: dec, maximumFractionDigits: dec }).replace("-", "−");
+  }
+  const e = Math.floor(Math.log10(Math.abs(t)) + 1e-9);
+  const m = Number((t / Math.pow(10, e)).toPrecision(2));
+  return `${String(m).replace("-", "−")}e${e}`;
+}
+function niceTicks(lo, hi, n = 4) {
+  if (!(hi > lo)) { const d = Math.abs(lo) || 1; lo -= d; hi += d; }
+  const raw = (hi - lo) / n, p = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * p).find(s => s >= raw) || 10 * p;
+  const t0 = Math.ceil(lo / step - 1e-9) * step, out = [];
+  for (let t = t0; t <= hi + step * 1e-9; t += step) out.push(Math.abs(t) < step * 1e-9 ? 0 : t);
+  return { ticks: out, step };
+}
+function niceRange(lo, hi, zeroBase) {
+  if (!(isFinite(lo) && isFinite(hi))) return [0, 1];
+  if (hi === lo) { const d = Math.abs(hi) * 0.1 || 1; lo -= d; hi += d; }
+  const pad = (hi - lo) * 0.06;
+  let a = lo - pad, b = hi + pad;
+  if (zeroBase && lo >= 0) a = 0;
+  const { step } = niceTicks(a, b, 4);
+  return [Math.floor(a / step + 1e-9) * step, Math.ceil(b / step - 1e-9) * step, step];
+}
+
+// ---------- Daymet calendar ------------------------------------------------------------------
+const dayDate = i => { const y = M.year0 + Math.floor(i / 365), d = i % 365; return new Date(Date.UTC(y, 0, 1 + d)); };
+const iso = i => dayDate(i).toISOString().slice(0, 10);
+const yearStart = y => (y - M.year0) * 365;
+const monthStart = (y, m) => yearStart(y) + Math.round((Date.UTC(y, m, 1) - Date.UTC(y, 0, 1)) / 864e5);
+const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function xTicks(i0, i1, pw) {
+  const years = (i1 - i0) / 365, out = [];
+  const y0 = M.year0 + Math.floor(i0 / 365), y1 = M.year0 + Math.floor((i1 - 1) / 365);
+  if (years > 2.5) {
+    const per = pw / years, every = [1, 2, 5, 10, 20].find(e => per * e >= 46) || 20;
+    for (let y = Math.ceil(y0 / every) * every; y <= y1 + 1; y += every) {
+      const i = yearStart(y); if (i >= i0 && i < i1) out.push({ i, label: String(y) });
+    }
+  } else {
+    const months = (i1 - i0) / 30.4, every = [1, 2, 3, 6].find(e => (pw / months) * e >= 40) || 6;
+    for (let y = y0; y <= y1 + 1; y++) for (let m = 0; m < 12; m += every) {
+      const i = monthStart(y, m); if (i >= i0 && i < i1) out.push({ i, label: m === 0 ? String(y) : MON[m] });
+    }
+  }
+  return out;
+}
+
+// ---------- tooltip ------------------------------------------------------------------------
+const tip = $("tip");
+function showTip(x, y, build) {
+  tip.replaceChildren(); build(tip); tip.hidden = false;
+  const r = tip.getBoundingClientRect(), W = window.innerWidth, H = window.innerHeight;
+  let lx = x + 14, ly = y + 14;
+  if (lx + r.width > W - 8) lx = x - r.width - 14;
+  if (ly + r.height > H - 8) ly = y - r.height - 14;
+  tip.style.left = Math.max(8, lx) + "px"; tip.style.top = Math.max(8, ly) + "px";
+}
+const hideTip = () => { tip.hidden = true; };
+function tipRow(parent, color, value, label) {
+  const r = el("div", "r");
+  if (color) { const k = el("span", "key"); k.style.background = color; r.append(k); }
+  r.append(el("b", null, value), el("span", "t", label)); parent.append(r);
+}
+
+// ---------- symbols ------------------------------------------------------------------------
+function symbolSVG(shape, color, size = 12) {
+  const s = sv("svg", { width: size, height: size, viewBox: "-7 -7 14 14", "aria-hidden": "true" });
+  const fill = `var(${color})`;
+  if (shape === "circle") s.append(sv("circle", { r: 5, fill }));
+  else if (shape === "diamond") s.append(sv("path", { d: "M0 -6 L6 0 L0 6 L-6 0 Z", fill }));
+  else if (shape === "triangle") s.append(sv("path", { d: "M0 -6 L6 5 L-6 5 Z", fill }));
+  else s.append(sv("circle", { r: 3, fill }));
+  return s;
+}
+function drawShape(ctx, shape, x, y, r) {
+  ctx.beginPath();
+  if (shape === "circle") ctx.arc(x, y, r, 0, 2 * Math.PI);
+  else if (shape === "diamond") { ctx.moveTo(x, y - r * 1.2); ctx.lineTo(x + r * 1.2, y); ctx.lineTo(x, y + r * 1.2); ctx.lineTo(x - r * 1.2, y); ctx.closePath(); }
+  else { ctx.moveTo(x, y - r * 1.2); ctx.lineTo(x + r * 1.15, y + r * 0.95); ctx.lineTo(x - r * 1.15, y + r * 0.95); ctx.closePath(); }
+}
+
+// ---------- segmented controls ---------------------------------------------------------------
+function seg(host, items, current, onPick) {
+  host.replaceChildren();
+  for (const [key, label] of items) {
+    const b = el("button", null, label); b.type = "button";
+    b.setAttribute("aria-pressed", String(key === current));
+    b.addEventListener("click", () => { for (const x of host.children) x.setAttribute("aria-pressed", String(x === b)); onPick(key); });
+    host.append(b);
+  }
+}
+
+// ---------- headline -------------------------------------------------------------------------
+const H = D.headline, HV = H.vars;
+function renderHeadline() {
+  const u = D.units;
+  $("lede").textContent =
+    `On all ${int(H.compared)} basins that both files cover, every day of 1980–2023, the reprocessed series reproduce the co-authors' ` +
+    `to within ${sci(HV.prcp.max_abs)} ${u.prcp} of daily precipitation, ${sci(Math.max(HV.tmin.max_abs, HV.tmax.max_abs))} ${u.tmin}, ` +
+    `${sci(HV.vp.max_abs)} ${u.vp}, ${sci(HV.srad.max_abs)} ${u.srad} and ${sci(HV.swe.max_abs)} ${u.swe} of snow water equivalent. ` +
+    `The new file adds ${int(H.new_only + H.orig_nan)} basins and the years 2024–2025.`;
+  const days = VARS.reduce((s, v) => s + HV[v].days, 0);
+  const tiles = [
+    ["Basins compared", int(H.compared), `of ${int(H.shared)} in both files; ${H.orig_nan} are NaN on every day in the original`],
+    ["Daily values compared", `${(days / 1e6).toFixed(0)} M`, `${(HV.prcp.days / 1e6).toFixed(1)} M per variable × 6 variables, 1980–2023`],
+    ["Largest daily |Δ|, precipitation", [sci(HV.prcp.max_abs), D.units.prcp], `basin ${HV.prcp.max_site} in ${HV.prcp.max_year}; the median basin-year's largest is ${sci(D.metrics[0].vars.prcp.q.p50)} mm`],
+    ["Annual precipitation totals", [`${pct(H.prcp_annual_p01)} to ${pct(H.prcp_annual_p99)}`, "%"], `1st–99th percentile of ${int(HV.prcp.basin_years)} basin-years; extremes ${pct(H.prcp_annual_min)} and ${pct(H.prcp_annual_max)} %`],
+    ["Date alignment", `${int(VARS.reduce((s, v) => s + D.lag[v].beats, 0))} shifts`, `no basin-year of any variable correlates better one day earlier or later`],
+    ["New coverage", `${int(H.new_only + H.orig_nan)} basins`, `no original series (${int(H.new_only)} absent, ${H.orig_nan} NaN); 2024–2025 are new for all ${int(H.n_new)}`],
+  ];
+  const host = $("tiles"); host.replaceChildren();
+  for (const [label, value, sub] of tiles) {
+    const t = el("div", "tile"), vv = el("div", "value");
+    if (Array.isArray(value)) vv.append(document.createTextNode(value[0] + " "), el("small", null, value[1])); else vv.textContent = value;
+    t.append(el("div", "label", label), vv, el("div", "sub", sub));
+    host.append(t);
+  }
+  $("agree-note").textContent =
+    `${int(HV.prcp.basin_years)} basin-years per variable (${int(H.compared)} basins × 44 years); one value per basin-year, from the validation table ${M.validation_file}. ` +
+    `Logarithmic axes show the magnitude of differences that are mostly far below the variables' own precision.`;
+}
+
+// ---------- agreement histograms ------------------------------------------------------------
+let metricKey = "max_abs";
+const METRIC = Object.fromEntries(D.metrics.map(m => [m.key, m]));
+function unitOf(m, v) { return m.key === "annual" ? "%" : m.key === "omr2" ? "unitless" : D.units[v]; }
+function renderMetric() {
+  const m = METRIC[metricKey];
+  $("metric-desc").textContent = m.desc;
+  const grid = $("hist-grid"); grid.replaceChildren();
+  const vs = Object.keys(m.vars);
+  grid.classList.toggle("four", vs.length === 4);
+  for (const v of vs) {
+    const card = el("div", "card hist-card");
+    const h = el("div", "h"); h.append(el("h3", null, D.short[v]), el("span", "unit", unitOf(m, v)));
+    const host = el("div"); host.dataset.v = v;
+    card.append(h, host, el("div", "cap"));
+    grid.append(card);
+  }
+  drawHists();
+  renderQTable();
+}
+function drawHists() {
+  const m = METRIC[metricKey];
+  for (const card of $("hist-grid").children) {
+    const host = card.children[1], v = host.dataset.v, h = m.vars[v];
+    const w = Math.max(220, host.clientWidth || 300), Hh = 150, L = 44, R = 10, T = 14, Bm = 30;
+    const pw = w - L - R, ph = Hh - T - Bm;
+    const s = sv("svg", { width: w, height: Hh, viewBox: `0 0 ${w} ${Hh}`, role: "img",
+      "aria-label": `${m.label} of ${D.names[v]}: histogram of ${int(h.n)} basin-years` });
+    const nb = h.counts.length, maxc = Math.max(...h.counts, 1);
+    const yt = niceTicks(0, maxc, 3);
+    const ymax = yt.ticks[yt.ticks.length - 1] >= maxc ? yt.ticks[yt.ticks.length - 1] : maxc;
+    const X = t => L + (t - h.lo) / (h.hi - h.lo) * pw, Y = c => T + ph - c / ymax * ph;
+    for (const t of yt.ticks) {
+      s.append(sv("line", { x1: L, x2: L + pw, y1: Y(t), y2: Y(t), stroke: "var(--grid)", "stroke-width": 1 }));
+      const lab = sv("text", { x: L - 6, y: Y(t) + 4, "text-anchor": "end", "font-size": 11, fill: "var(--muted)" });
+      lab.textContent = t >= 1000 ? `${(t / 1000).toLocaleString("en-US")}k` : String(t); s.append(lab);
+    }
+    const bw = pw / nb, gap = Math.min(2, bw * 0.3);
+    for (let i = 0; i < nb; i++) {
+      const c = h.counts[i];
+      if (c > 0) {
+        const hh = Math.max(1, c / ymax * ph), x = L + i * bw + gap / 2, ww = Math.max(0.8, bw - gap);
+        const r = Math.min(2, ww / 2);
+        s.append(sv("path", { d: `M${x},${T + ph} v${-(hh - r)} q0,${-r} ${r},${-r} h${ww - 2 * r} q${r},0 ${r},${r} v${hh - r} z`, fill: "var(--s1)" }));
+      }
+      const hit = sv("rect", { x: L + i * bw, y: T, width: bw, height: ph, fill: "transparent" });
+      const a = h.lo + i * (h.hi - h.lo) / nb, b2 = a + (h.hi - h.lo) / nb;
+      const range = m.kind === "log" ? `${sci(Math.pow(10, a))} – ${sci(Math.pow(10, b2))}` : `${sciSigned(a, 2)} – ${sciSigned(b2, 2)}`;
+      hit.addEventListener("pointermove", e => showTip(e.clientX, e.clientY, t => { tipRow(t, null, int(c), "basin-years"); t.append(el("div", "t", `${range} ${unitOf(m, v)}`)); }));
+      hit.addEventListener("pointerleave", hideTip);
+      s.append(hit);
+    }
+    s.append(sv("line", { x1: L, x2: L + pw, y1: T + ph, y2: T + ph, stroke: "var(--axis)", "stroke-width": 1 }));
+    if (m.kind === "log") {
+      const dec = h.hi - h.lo, every = dec > 8 ? 2 : 1;
+      for (let e = Math.ceil(h.lo); e <= h.hi; e += every) {
+        s.append(sv("line", { x1: X(e), x2: X(e), y1: T + ph, y2: T + ph + 4, stroke: "var(--axis)" }));
+        const lab = sv("text", { x: X(e), y: T + ph + 17, "text-anchor": "middle", "font-size": 11, fill: "var(--muted)" });
+        lab.textContent = `10${sup(e)}`; s.append(lab);
+      }
+    } else {
+      const xt = niceTicks(h.lo, h.hi, 4);
+      for (const t of xt.ticks) {
+        if (t < h.lo || t > h.hi) continue;
+        s.append(sv("line", { x1: X(t), x2: X(t), y1: T + ph, y2: T + ph + 4, stroke: "var(--axis)" }));
+        const lab = sv("text", { x: X(t), y: T + ph + 17, "text-anchor": "middle", "font-size": 11, fill: "var(--muted)" });
+        lab.textContent = tickFmt(t, xt.step); s.append(lab);
+      }
+      s.append(sv("line", { x1: X(0), x2: X(0), y1: T, y2: T + ph, stroke: "var(--axis)", "stroke-width": 1 }));
+    }
+    const pos = q => m.kind === "log" ? (q > 0 ? X(Math.log10(q)) : null) : X(q);
+    const marks = [["median", h.q.p50], ["p99", h.q.p99]];
+    let lastX = -1e9;
+    for (const [name, q] of marks) {
+      const x = pos(q); if (x == null || x < L || x > L + pw) continue;
+      s.append(sv("line", { x1: x, x2: x, y1: T - 2, y2: T + ph, stroke: "var(--ink-2)", "stroke-width": 1 }));
+      if (x - lastX > 40) {
+        const lab = sv("text", { x, y: T - 4, "text-anchor": "middle", "font-size": 10.5, fill: "var(--ink-2)" });
+        lab.textContent = name; s.append(lab); lastX = x;
+      }
+    }
+    host.replaceChildren(s);
+    const cap = card.children[2]; cap.replaceChildren();
+    const u = unitOf(m, v) === "unitless" ? "" : ` ${unitOf(m, v)}`;
+    const part = (k, t) => { cap.append(el("span", "k", k + " "), document.createTextNode(t)); };
+    const fmtq = q => m.kind === "lin" ? sciSigned(q, 2) : sci(q, 2);
+    part("median", fmtq(h.q.p50) + u); cap.append(document.createTextNode(" · "));
+    part("p99", fmtq(h.q.p99) + u); cap.append(document.createTextNode(" · "));
+    part(m.kind === "lin" ? "range" : "max", m.kind === "lin" ? `${fmtq(h.min)} to ${fmtq(h.max)}${u}` : fmtq(h.max) + u);
+    const extra = [];
+    if (h.zeros) extra.push(`${int(h.zeros)} exactly 0 (not drawn)`);
+    if (h.below || h.above) extra.push(`${int((h.below || 0) + (h.above || 0))} beyond the axis`);
+    extra.push(`n = ${int(h.n)}`);
+    cap.append(el("div", "k", extra.join(" · ")));
+  }
+}
+function renderQTable() {
+  const m = METRIC[metricKey], t = $("q-table"); t.replaceChildren();
+  const hr = el("tr"); for (const c of ["Variable", "Unit", "Basin-years", "Min", "1st pct", "Median", "99th pct", "99.9th pct", "Max"]) hr.append(el("th", null, c));
+  t.append(hr);
+  const f = q => m.kind === "lin" ? sciSigned(q, 3) : sci(q, 3);
+  for (const v of Object.keys(m.vars)) {
+    const h = m.vars[v], r = el("tr");
+    for (const c of [D.names[v], unitOf(m, v), int(h.n), f(h.min), f(h.q.p01), f(h.q.p50), f(h.q.p99), f(h.q.p999), f(h.max)]) r.append(el("td", null, c));
+    t.append(r);
+  }
+}
+function renderLag() {
+  const t = $("lag-table"); t.replaceChildren();
+  const hr = el("tr"); for (const c of ["Variable", "Basin-years", "Median r, new 1 day earlier", "Median r, lag 0", "Median r, new 1 day later", "Basin-years a shift beats lag 0"]) hr.append(el("th", null, c));
+  t.append(hr);
+  for (const v of VARS) {
+    const g = D.lag[v], r = el("tr");
+    const r0 = g.r0 >= 0.9999995 ? "> 0.999999" : g.r0.toFixed(6);
+    for (const c of [D.names[v], int(g.n), g.m1.toFixed(3), r0, g.p1.toFixed(3), int(g.beats)]) r.append(el("td", null, c));
+    t.append(r);
+  }
+}
+
+// ---------- map ------------------------------------------------------------------------------
+const EMB = D.embedded;
+const embAt = new Map(EMB.map((e, k) => [e.i, k]));
+const REC = new Map(D.rec.idx.map((i, k) => [i, k]));
+let mapMode = "coverage", mapVar = "prcp";
+const mapCv = $("map"), mapBox = $("mapbox");
+const MV = { s: 1, tx: 0, ty: 0, fit: null };
+let bx0 = Infinity, bx1 = -Infinity, by0 = Infinity, by1 = -Infinity;
+for (let i = 0; i < NB; i++) { bx0 = Math.min(bx0, B.x[i]); bx1 = Math.max(bx1, B.x[i]); by0 = Math.min(by0, B.y[i]); by1 = Math.max(by1, B.y[i]); }
+function mapFit() {
+  const w = mapBox.clientWidth, h = mapBox.clientHeight, m = 24;
+  const s = Math.min((w - 2 * m) / (bx1 - bx0), (h - 2 * m) / (by1 - by0));
+  MV.s = s; MV.tx = w / 2 - s * (bx0 + bx1) / 2; MV.ty = h / 2 + s * (by0 + by1) / 2; MV.fit = s;
+}
+const sx = x => x * MV.s + MV.tx, sy = y => -y * MV.s + MV.ty;
+function hexToRgb(c) {
+  c = c.trim();
+  if (c.startsWith("#")) { const n = parseInt(c.length === 4 ? c.slice(1).split("").map(x => x + x).join("") : c.slice(1, 7), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+  const m = c.match(/[\d.]+/g); return m ? m.slice(0, 3).map(Number) : [128, 128, 128];
+}
+function rampColor(t, lo, hi) { const a = hexToRgb(lo), b = hexToRgb(hi); return `rgb(${a.map((x, k) => Math.round(x + (b[k] - x) * t)).join(",")})`; }
+function mapScale() {
+  const arr = D.rec[mapMode][mapVar].filter(x => x > 0).map(Math.log10).sort((a, b) => a - b);
+  const q = p => arr[Math.min(arr.length - 1, Math.max(0, Math.round(p * (arr.length - 1))))];
+  return { lo: q(0.02), hi: q(0.98) };
+}
+let mapHover = null;
+function drawMap() {
+  const w = mapBox.clientWidth, h = mapBox.clientHeight, dpr = window.devicePixelRatio || 1;
+  if (!MV.fit) mapFit();
+  mapCv.width = Math.round(w * dpr); mapCv.height = Math.round(h * dpr);
+  const ctx = mapCv.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = cssv("--surface"); ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = cssv("--axis"); ctx.lineWidth = 0.8; ctx.beginPath();
+  const ox = D.outlines.x, oy = D.outlines.y; let pen = false;
+  for (let k = 0; k < ox.length; k++) {
+    if (ox[k] == null) { pen = false; continue; }
+    const X = sx(ox[k]), Y = sy(oy[k]);
+    if (pen) ctx.lineTo(X, Y); else { ctx.moveTo(X, Y); pen = true; }
+  }
+  ctx.stroke();
+  const zoom = MV.s / MV.fit, r = Math.min(3.2, 1.5 * Math.sqrt(zoom));
+  if (mapMode === "coverage") {
+    const cBoth = cssv("--dot"), cNew = cssv("--dot-new");
+    for (const pass of [0, 1]) {
+      ctx.fillStyle = pass === 0 ? cBoth : cNew;
+      for (let i = 0; i < NB; i++) {
+        if ((B.status[i] === 0) !== (pass === 0) || embAt.has(i)) continue;
+        ctx.fillRect(sx(B.x[i]) - r, sy(B.y[i]) - r, 2 * r, 2 * r);
+      }
+    }
+  } else {
+    const sc = mapScale(), lo = cssv("--seq-lo"), hi = cssv("--seq-hi"), vals = D.rec[mapMode][mapVar];
+    ctx.strokeStyle = cssv("--dot"); ctx.lineWidth = 0.8;
+    for (let i = 0; i < NB; i++) {
+      if (B.status[i] === 0 || embAt.has(i)) continue;
+      ctx.strokeRect(sx(B.x[i]) - r, sy(B.y[i]) - r, 2 * r, 2 * r);
+    }
+    const order = D.rec.idx.map((i, k) => k).sort((a, b) => vals[a] - vals[b]);
+    for (const k of order) {
+      const i = D.rec.idx[k]; if (embAt.has(i)) continue;
+      const t = vals[k] > 0 ? Math.min(1, Math.max(0, (Math.log10(vals[k]) - sc.lo) / (sc.hi - sc.lo))) : 0;
+      ctx.fillStyle = rampColor(t, lo, hi);
+      ctx.fillRect(sx(B.x[i]) - r - 0.3, sy(B.y[i]) - r - 0.3, 2 * r + 0.6, 2 * r + 0.6);
+    }
+  }
+  const surf = cssv("--surface");
+  for (const g of GROUPS) {
+    const col = cssv(g.color);
+    EMB.forEach((e, k) => {
+      if (e.group !== g.key) return;
+      const X = sx(B.x[e.i]), Y = sy(B.y[e.i]), rr = 6;
+      if (k === selK) { ctx.beginPath(); ctx.arc(X, Y, rr + 6, 0, 2 * Math.PI); ctx.strokeStyle = cssv("--ink"); ctx.lineWidth = 2; ctx.stroke(); }
+      drawShape(ctx, g.shape, X, Y, rr); ctx.lineWidth = 4; ctx.strokeStyle = surf; ctx.stroke();
+      drawShape(ctx, g.shape, X, Y, rr); ctx.fillStyle = col; ctx.fill();
+    });
+  }
+  if (mapHover != null && !embAt.has(mapHover)) {
+    ctx.beginPath(); ctx.arc(sx(B.x[mapHover]), sy(B.y[mapHover]), r + 4, 0, 2 * Math.PI);
+    ctx.strokeStyle = cssv("--ink"); ctx.lineWidth = 1.5; ctx.stroke();
+  }
+  renderMapLegend();
+}
+function renderMapLegend() {
+  const host = $("map-legend"); host.replaceChildren();
+  const item = (sym, label) => { const s = el("span", "item"); s.append(sym, document.createTextNode(label)); host.append(s); };
+  for (const g of GROUPS) item(symbolSVG(g.shape, g.color), `${g.label} (${EMB.filter(e => e.group === g.key).length})`);
+  if (mapMode === "coverage") {
+    const dot = c => { const s = sv("svg", { width: 10, height: 10, viewBox: "0 0 10 10", "aria-hidden": "true" }); s.append(sv("rect", { x: 2, y: 2, width: 6, height: 6, fill: `var(${c})` })); return s; };
+    item(dot("--dot"), `In both files (${int(H.compared)})`);
+    item(dot("--dot-new"), `New file only (${int(H.new_only + H.orig_nan)})`);
+  } else {
+    const sc = mapScale(), r = el("span", "ramp");
+    const bar = el("span", "bar"); bar.style.background = `linear-gradient(90deg, ${cssv("--seq-lo")}, ${cssv("--seq-hi")})`;
+    const lbl = mapMode === "rmse" ? "Record RMSE" : "Largest daily |Δ|";
+    r.append(el("span", null, `${lbl}, ${D.short[mapVar]}: ${sci(Math.pow(10, sc.lo))}`), bar, el("span", null, `${sci(Math.pow(10, sc.hi))} ${D.units[mapVar]}`));
+    host.append(r);
+    const s = sv("svg", { width: 10, height: 10, viewBox: "0 0 10 10", "aria-hidden": "true" });
+    s.append(sv("rect", { x: 2, y: 2, width: 6, height: 6, fill: "none", stroke: "var(--muted)" }));
+    item(s, "No original series");
+  }
+}
+function mapHit(px, py) {
+  let best = null, bd = 18 * 18;
+  EMB.forEach((e, k) => { const dx = sx(B.x[e.i]) - px, dy = sy(B.y[e.i]) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = { emb: k, i: e.i }; } });
+  if (best) return best;
+  bd = 9 * 9;
+  for (let i = 0; i < NB; i++) { const dx = sx(B.x[i]) - px, dy = sy(B.y[i]) - py, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = { emb: null, i }; } }
+  return best;
+}
+function basinTip(t, i) {
+  const e = embAt.has(i) ? EMB[embAt.get(i)] : null;
+  t.append(el("div", null, ""));
+  const head = el("div", "r"); head.append(el("b", null, B.id[i]), el("span", "t", B.region[i] || (B.country[i] === "US" ? "USA" : "Canada")));
+  t.append(head);
+  if (B.name[i]) t.append(el("div", null, placeName(i)));
+  t.append(el("div", "t", `${sci(B.area[i], 3)} km² · ${int(B.cells[i])} Daymet cells`));
+  const st = B.status[i] === 0 ? "In both files" : B.status[i] === 1 ? "Original is NaN on every day" : "New file only";
+  t.append(el("div", "t", st));
+  if (REC.has(i)) {
+    const k = REC.get(i), v = mapVar;
+    t.append(el("div", "t", `${D.short[v]}: record RMSE ${sci(D.rec.rmse[v][k])}, largest |Δ| ${sci(D.rec.max_abs[v][k])} ${D.units[v]}`));
+  }
+  t.append(el("div", "t", e ? `${GROUP[e.group].label}: click to load its series` : "Daily series not embedded"));
+}
+(() => {
+  let down = null;
+  mapCv.addEventListener("pointerdown", e => { down = { x: e.clientX, y: e.clientY, tx: MV.tx, ty: MV.ty, moved: false }; mapCv.setPointerCapture(e.pointerId); });
+  mapCv.addEventListener("pointermove", e => {
+    const rect = mapCv.getBoundingClientRect(), px = e.clientX - rect.left, py = e.clientY - rect.top;
+    if (down) {
+      const dx = e.clientX - down.x, dy = e.clientY - down.y;
+      if (!down.moved && dx * dx + dy * dy > 16) { down.moved = true; mapCv.classList.add("dragging"); hideTip(); }
+      if (down.moved) { MV.tx = down.tx + dx; MV.ty = down.ty + dy; requestDraw(drawMap); return; }
+    }
+    const hit = mapHit(px, py);
+    const hv = hit ? hit.i : null;
+    if (hv !== mapHover) { mapHover = hv; requestDraw(drawMap); }
+    if (hit) showTip(e.clientX, e.clientY, t => basinTip(t, hit.i)); else hideTip();
+  });
+  const end = e => {
+    if (down && !down.moved && e.type === "pointerup") {
+      const rect = mapCv.getBoundingClientRect(), hit = mapHit(e.clientX - rect.left, e.clientY - rect.top);
+      if (hit && hit.emb != null) select(hit.emb, true);
+    }
+    down = null; mapCv.classList.remove("dragging");
+  };
+  mapCv.addEventListener("pointerup", end);
+  mapCv.addEventListener("pointercancel", end);
+  mapCv.addEventListener("pointerleave", () => { hideTip(); if (mapHover != null) { mapHover = null; requestDraw(drawMap); } });
+  const zoomAt = (f, px, py) => {
+    const ns = Math.min(MV.fit * 60, Math.max(MV.fit * 0.8, MV.s * f)), k = ns / MV.s;
+    MV.tx = px - (px - MV.tx) * k; MV.ty = py - (py - MV.ty) * k; MV.s = ns; requestDraw(drawMap);
+  };
+  mapCv.addEventListener("wheel", e => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault();
+    const rect = mapCv.getBoundingClientRect();
+    zoomAt(Math.exp(-e.deltaY * 0.01), e.clientX - rect.left, e.clientY - rect.top);
+  }, { passive: false });
+  mapCv.addEventListener("dblclick", e => { const rect = mapCv.getBoundingClientRect(); zoomAt(e.shiftKey ? 0.5 : 2, e.clientX - rect.left, e.clientY - rect.top); });
+  $("zin").addEventListener("click", () => zoomAt(1.6, mapBox.clientWidth / 2, mapBox.clientHeight / 2));
+  $("zout").addEventListener("click", () => zoomAt(1 / 1.6, mapBox.clientWidth / 2, mapBox.clientHeight / 2));
+  $("zreset").addEventListener("click", () => { mapFit(); requestDraw(drawMap); });
+})();
+
+// ---------- basin list -----------------------------------------------------------------------
+function placeName(i) {
+  const n = B.name[i], r = B.region[i];
+  if (!n) return r || "";
+  return !r || n.endsWith(", " + r) ? n : `${n}, ${r}`;
+}
+function whyText(e) {
+  const out = [], maxv = [], rm = {};
+  for (const w of e.why) {
+    if (w.kind === "max") maxv.push(`${D.short[w.var]} ${sci(w.value)} ${D.units[w.var]} (${w.year})`);
+    else if (w.kind === "rmse") (rm[w.rank] = rm[w.rank] || []).push(D.short[w.var]);
+    else if (w.kind === "random") out.push(e.group === "new" ? "Random draw among basins without an original series" : "Random draw among the compared basins");
+    else if (w.kind === "orig_nan") out.push("The original is NaN on every day (a Daymet fill cell under the basin)");
+    else if (w.kind === "large") out.push(`Basin larger than ${int(M.largeKm2)} km², absent from the original`);
+    else if (w.kind === "low_confidence") out.push("Low-confidence polygon");
+  }
+  if (maxv.length) out.push(`Largest daily |Δ| of the record: ${maxv.join("; ")}`);
+  for (const k of Object.keys(rm).sort((a, b) => a - b)) out.push(`Record RMSE rank ${k}: ${rm[k].join(", ")}`);
+  if (e.flag) out.push(`Flag: ${e.flag}`);
+  return out;
+}
+const rows = [];
+function renderList() {
+  const host = $("list"); host.replaceChildren();
+  const desc = {
+    worst: "The basin holding each variable's largest daily |Δ| over 1980–2023, then the next basins by record RMSE, one variable at a time.",
+    random: `A seeded random draw (seed ${M.seed}) among the ${int(H.compared)} compared basins.`,
+    new: "Basins with no original series: one NaN in the original, one larger than 100,000 km², one low-confidence polygon, the rest drawn at random." +
+      (D.check ? ` No original exists for these; ORNL's Single Pixel API checks ${D.check.n_sites} small basins in ${D.check.years.length} years (${D.check.years[0]}–${D.check.years[D.check.years.length - 1]}): largest |Δ| ${sci(D.check.max.vp)} Pa (vp), ≤ ${sci(Math.max(...VARS.filter(v => v !== "vp").map(v => D.check.max[v])))} for the others.` : ""),
+  };
+  for (const g of GROUPS) {
+    const box = el("div", "group");
+    const head = el("div", "ghead"), t = el("div", "t");
+    t.append(symbolSVG(g.shape, g.color), document.createTextNode(`${g.label}`));
+    head.append(t, el("div", "d", desc[g.key]));
+    box.append(head);
+    EMB.forEach((e, k) => {
+      if (e.group !== g.key) return;
+      const i = e.i, b = el("button", "row"); b.type = "button";
+      const sym = el("span", "sym"); sym.append(symbolSVG(g.shape, g.color));
+      const main = el("span", "main");
+      main.append(el("span", "id", B.id[i]));
+      const nm = placeName(i);
+      if (nm) { main.append(document.createTextNode(" ")); main.append(el("span", "nm", nm)); }
+      b.append(sym, main, el("span", "area", `${sci(B.area[i], 3)} km²`), el("span", "why", whyText(e)[0] || ""));
+      b.addEventListener("click", () => select(k, false));
+      b.addEventListener("pointerenter", () => { mapHover = i; requestDraw(drawMap); });
+      b.addEventListener("pointerleave", () => { mapHover = null; requestDraw(drawMap); });
+      rows[k] = b; box.append(b);
+    });
+    host.append(box);
+  }
+}
+
+// ---------- series ---------------------------------------------------------------------------
+let selK = null, sVar = "prcp", view = [0, M.nNew], hover = null, brush = null;
+const cache = new Map();
+function unshuffle16(u8, off, n) {
+  const out = new Int16Array(n);
+  for (let j = 0; j < n; j++) out[j] = ((u8[off + n + j] << 8) | u8[off + j]) << 16 >> 16;
+  return out;
+}
+async function decode(k) {
+  if (cache.has(k)) return cache.get(k);
+  const e = EMB[k];
+  if (typeof DecompressionStream === "undefined") throw new Error("This browser cannot decompress the embedded series: it needs DecompressionStream (Chrome or Edge 80+, Safari 16.4+, Firefox 113+).");
+  const bin = Uint8Array.from(atob(BLOCKS[e.block]), c => c.charCodeAt(0));
+  const buf = await new Response(new Blob([bin]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer();
+  const u8 = new Uint8Array(buf);
+  let off = 0;
+  const res = { nw: {}, og: {}, df: {} };
+  for (const v of VARS) {
+    const d = e.vars[v], steps = unshuffle16(u8, off, M.nNew); off += 2 * M.nNew;
+    const a = new Float64Array(M.nNew); let acc = 0;
+    for (let j = 0; j < M.nNew; j++) { acc += steps[j]; a[j] = d.lo + acc * d.q; }
+    res.nw[v] = a;
+    if (e.hasOld) {
+      const q = unshuffle16(u8, off, M.nOld); off += 2 * M.nOld;
+      const df = new Float64Array(M.nOld), og = new Float64Array(M.nOld);
+      for (let j = 0; j < M.nOld; j++) { df[j] = q[j] * d.ds; og[j] = a[j] - df[j]; }
+      res.df[v] = df; res.og[v] = og;
+    }
+  }
+  if (off !== u8.length) throw new Error(`series block ${e.block} has ${u8.length - off} unread bytes`);
+  cache.set(k, res);
+  return res;
+}
+const cvO = $("cv-o"), cvN = $("cv-n"), cvD = $("cv-d");
+const PAD = { l: 58, r: 12, t: 10, b: 24 };
+function prepCanvas(cv) {
+  const box = cv.parentElement, w = box.clientWidth, h = box.clientHeight, dpr = window.devicePixelRatio || 1;
+  cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+  const ctx = cv.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = cssv("--surface"); ctx.fillRect(0, 0, w, h);
+  return { ctx, w, h, pw: w - PAD.l - PAD.r, ph: h - PAD.t - PAD.b };
+}
+function viewExtent(arrs, i0, i1) {
+  let lo = Infinity, hi = -Infinity;
+  for (const a of arrs) { if (!a) continue; const e = Math.min(i1, a.length); for (let j = i0; j < e; j++) { const x = a[j]; if (x < lo) lo = x; if (x > hi) hi = x; } }
+  return [lo, hi];
+}
+function drawAxes(c, i0, i1, y0, y1, ystep, diffAxis) {
+  const { ctx, pw, ph } = c, X = i => PAD.l + (i - i0) / (i1 - i0) * pw, Y = y => PAD.t + ph - (y - y0) / (y1 - y0) * ph;
+  ctx.font = `11px ${cssv("--sans")}`; ctx.fillStyle = cssv("--muted"); ctx.lineWidth = 1;
+  const { ticks, step } = niceTicks(y0, y1, diffAxis ? 4 : 4);
+  for (const t of ticks) {
+    if (t < y0 - 1e-12 || t > y1 + 1e-12) continue;
+    const y = Math.round(Y(t)) + 0.5;
+    ctx.strokeStyle = cssv(t === 0 && diffAxis ? "--axis" : "--grid"); ctx.beginPath(); ctx.moveTo(PAD.l, y); ctx.lineTo(PAD.l + pw, y); ctx.stroke();
+    ctx.textAlign = "right"; ctx.textBaseline = "middle"; ctx.fillText(tickFmt(t, step), PAD.l - 6, y);
+  }
+  ctx.textAlign = "center"; ctx.textBaseline = "top";
+  for (const t of xTicks(i0, i1, pw)) {
+    const x = Math.round(X(t.i)) + 0.5;
+    ctx.strokeStyle = cssv("--grid"); ctx.beginPath(); ctx.moveTo(x, PAD.t); ctx.lineTo(x, PAD.t + ph); ctx.stroke();
+    ctx.fillText(t.label, x, PAD.t + ph + 6);
+  }
+  ctx.strokeStyle = cssv("--axis"); ctx.beginPath(); ctx.moveTo(PAD.l, PAD.t + ph + 0.5); ctx.lineTo(PAD.l + pw, PAD.t + ph + 0.5); ctx.stroke();
+  return { X, Y };
+}
+function drawLine(c, a, i0, i1, X, Y, color) {
+  if (!a) return;
+  const { ctx, pw } = c, e = Math.min(i1, a.length);
+  if (e <= i0) return;
+  const n = i1 - i0;
+  ctx.fillStyle = color; ctx.strokeStyle = color;
+  if (n > pw * 1.5) {
+    const cols = Math.ceil((e - i0) / n * pw), top = [], bot = [];
+    for (let k = 0; k < cols; k++) {
+      const s = i0 + Math.floor(k * n / pw), t = Math.min(e, Math.max(s + 1, i0 + Math.floor((k + 1) * n / pw)));
+      let lo = Infinity, hi = -Infinity;
+      for (let j = s; j < t; j++) { const x = a[j]; if (x < lo) lo = x; if (x > hi) hi = x; }
+      top.push(Y(hi)); bot.push(Y(lo));
+    }
+    ctx.beginPath();
+    for (let k = 0; k < cols; k++) ctx.lineTo(PAD.l + k + 0.5, top[k] - 0.5);
+    for (let k = cols - 1; k >= 0; k--) ctx.lineTo(PAD.l + k + 0.5, bot[k] + 0.5);
+    ctx.closePath(); ctx.fill();
+  } else {
+    ctx.lineWidth = n < pw / 4 ? 2 : 1.5; ctx.lineJoin = "round"; ctx.lineCap = "round";
+    ctx.beginPath();
+    for (let j = i0; j < e; j++) { const x = X(j), y = Y(a[j]); if (j === i0) ctx.moveTo(x, y); else ctx.lineTo(x, y); }
+    ctx.stroke();
+  }
+}
+function drawCrosshair(c, X, Y, a, color, i0, i1) {
+  const { ctx, ph } = c;
+  if (brush && brush.a != null) {
+    const xa = X(Math.min(brush.a, brush.b)), xb = X(Math.max(brush.a, brush.b));
+    ctx.fillStyle = cssv("--wash"); ctx.fillRect(xa, PAD.t, Math.max(1, xb - xa), ph);
+  }
+  if (hover == null || hover < i0 || hover >= i1) return;
+  const x = Math.round(X(hover)) + 0.5;
+  ctx.strokeStyle = cssv("--ink-2"); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, PAD.t); ctx.lineTo(x, PAD.t + ph); ctx.stroke();
+  if (a && hover < a.length && color) {
+    const y = Y(a[hover]);
+    ctx.beginPath(); ctx.arc(x, y, 4, 0, 2 * Math.PI); ctx.lineWidth = 2; ctx.strokeStyle = cssv("--surface"); ctx.stroke(); ctx.fillStyle = color; ctx.fill();
+  }
+}
+function message(c, text) {
+  const { ctx, w, h } = c;
+  ctx.fillStyle = cssv("--muted"); ctx.font = `13px ${cssv("--sans")}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  const words = text.split(" "), lines = []; let cur = "";
+  for (const wd of words) { const t = cur ? cur + " " + wd : wd; if (ctx.measureText(t).width > w - 48 && cur) { lines.push(cur); cur = wd; } else cur = t; }
+  lines.push(cur);
+  lines.forEach((l, k) => ctx.fillText(l, w / 2, h / 2 + (k - (lines.length - 1) / 2) * 18));
+}
+let current = null;
+function drawSeries() {
+  const [i0, i1] = view, e = selK != null ? EMB[selK] : null, v = sVar;
+  const cO = prepCanvas(cvO), cN = prepCanvas(cvN), cD = prepCanvas(cvD);
+  if (!current || !e) { for (const c of [cO, cN, cD]) message(c, "Loading…"); return; }
+  const nw = current.nw[v], og = e.hasOld ? current.og[v] : null, df = e.hasOld ? current.df[v] : null;
+  const zero = v === "prcp" || v === "swe" || v === "srad" || v === "vp";
+  const [lo, hi] = viewExtent([nw, og], i0, i1);
+  const [y0, y1, ystep] = niceRange(lo, hi, zero);
+  const c1 = cssv("--s1"), c2 = cssv("--s2"), cd = cssv("--ink-2");
+  // original
+  const ax = drawAxes(cO, i0, i1, y0, y1, ystep, false);
+  if (og) {
+    if (i1 > M.nOld) {
+      const xa = ax.X(Math.max(i0, M.nOld)), xb = PAD.l + cO.pw;
+      cO.ctx.fillStyle = cssv("--wash"); cO.ctx.fillRect(xa, PAD.t, xb - xa, cO.ph);
+      if (xb - xa > 70) { cO.ctx.fillStyle = cssv("--muted"); cO.ctx.textAlign = "center"; cO.ctx.textBaseline = "middle"; cO.ctx.fillText("not in the original", (xa + xb) / 2, PAD.t + cO.ph / 2); }
+    }
+    drawLine(cO, og, i0, i1, ax.X, ax.Y, c1);
+    drawCrosshair(cO, ax.X, ax.Y, og, c1, i0, i1);
+  } else {
+    cO.ctx.fillStyle = cssv("--surface"); cO.ctx.fillRect(0, 0, cO.w, cO.h);
+    message(cO, e.origNaN ? "The original series is NaN on every day for this basin (its aggregation propagated a Daymet fill cell)." : "This basin has no original series: it is not in the co-author product.");
+  }
+  // new
+  const an = drawAxes(cN, i0, i1, y0, y1, ystep, false);
+  drawLine(cN, nw, i0, i1, an.X, an.Y, c2);
+  drawCrosshair(cN, an.X, an.Y, nw, c2, i0, i1);
+  // difference
+  const st = $("d-stats");
+  if (df) {
+    const e1 = Math.min(i1, M.nOld);
+    let mx = 0, ss = 0, sm = 0, n = 0;
+    for (let j = i0; j < e1; j++) { const d = df[j], a = Math.abs(d); if (a > mx) mx = a; ss += d * d; sm += d; n++; }
+    const lim = mx > 0 ? mx : 1e-6, [d0, d1, dstep] = niceRange(-lim, lim, false);
+    const ad = drawAxes(cD, i0, i1, d0, d1, dstep, true);
+    if (i1 > M.nOld) { const xa = ad.X(Math.max(i0, M.nOld)); cD.ctx.fillStyle = cssv("--wash"); cD.ctx.fillRect(xa, PAD.t, PAD.l + cD.pw - xa, cD.ph); }
+    drawLine(cD, df, i0, i1, ad.X, ad.Y, cd);
+    drawCrosshair(cD, ad.X, ad.Y, df, cd, i0, i1);
+    st.textContent = n ? `In view: largest |Δ| ${sci(mx, 3)} · RMSE ${sci(Math.sqrt(ss / n), 3)} · mean ${sciSigned(sm / n, 2)} ${D.units[v]}` : "No overlap with the original in this window";
+  } else {
+    message(cD, "No difference to show without an original series.");
+    st.textContent = "";
+  }
+}
+const ALL_CV = [cvO, cvN, cvD];
+function idxAt(cv, clientX) {
+  const r = cv.getBoundingClientRect(), pw = r.width - PAD.l - PAD.r;
+  const f = Math.min(1, Math.max(0, (clientX - r.left - PAD.l) / pw));
+  return Math.min(view[1] - 1, Math.max(view[0], Math.round(view[0] + f * (view[1] - view[0]))));
+}
+function seriesTip(x, y) {
+  if (hover == null || !current) return hideTip();
+  const e = EMB[selK], v = sVar, j = hover;
+  showTip(x, y, t => {
+    t.append(el("div", "t", `${iso(j)} · ${D.names[v]} (${D.units[v]})`));
+    const hasO = e.hasOld && j < M.nOld;
+    tipRow(t, cssv("--s1"), hasO ? val(current.og[v][j], v) : "—", hasO ? "original" : (e.hasOld ? "original (ends 2023)" : "no original"));
+    tipRow(t, cssv("--s2"), val(current.nw[v][j], v), "new");
+    if (hasO) tipRow(t, cssv("--ink-2"), sciSigned(current.df[v][j], 3), "new − original");
+  });
+}
+for (const cv of ALL_CV) {
+  cv.addEventListener("pointerdown", e => {
+    if (e.button !== 0) return;
+    brush = { a: idxAt(cv, e.clientX), b: null, x: e.clientX }; cv.setPointerCapture(e.pointerId);
+  });
+  cv.addEventListener("pointermove", e => {
+    hover = idxAt(cv, e.clientX);
+    if (brush) { if (Math.abs(e.clientX - brush.x) > 5) brush.b = hover; }
+    requestDraw(drawSeries);
+    if (brush && brush.b != null) hideTip(); else seriesTip(e.clientX, e.clientY);
+  });
+  cv.addEventListener("pointerup", () => {
+    if (brush && brush.b != null) {
+      let a = Math.min(brush.a, brush.b), b = Math.max(brush.a, brush.b) + 1;
+      if (b - a < 14) { const m = (a + b) / 2; a = Math.max(0, Math.round(m - 7)); b = Math.min(M.nNew, a + 14); }
+      setView(a, b);
+    }
+    brush = null; requestDraw(drawSeries);
+  });
+  cv.addEventListener("pointercancel", () => { brush = null; requestDraw(drawSeries); });
+  cv.addEventListener("pointerleave", () => { if (!brush) { hover = null; hideTip(); requestDraw(drawSeries); } });
+  cv.addEventListener("dblclick", () => setView(0, M.nNew));
+  cv.addEventListener("keydown", e => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault();
+    const step = (e.shiftKey ? 30 : 1) * (e.key === "ArrowLeft" ? -1 : 1);
+    hover = Math.min(view[1] - 1, Math.max(view[0], (hover == null ? view[0] : hover) + step));
+    requestDraw(drawSeries);
+    const r = cv.getBoundingClientRect(), pw = r.width - PAD.l - PAD.r;
+    seriesTip(r.left + PAD.l + (hover - view[0]) / (view[1] - view[0]) * pw, r.top + 20);
+  });
+  cv.addEventListener("blur", () => { hover = null; hideTip(); requestDraw(drawSeries); });
+}
+function setView(a, b) {
+  view = [Math.max(0, a), Math.min(M.nNew, b)];
+  const ys = $("w-year"), y = M.year0 + Math.floor(view[0] / 365);
+  ys.value = (view[1] - view[0] === 365 && view[0] % 365 === 0) ? String(y) : "";
+  requestDraw(drawSeries);
+}
+function renderAnnual() {
+  const e = EMB[selK], v = sVar, t = $("ann-table"); t.replaceChildren();
+  if (!current) return;
+  const tot = v === "prcp";
+  $("ann-summary").textContent = `Annual ${tot ? "totals" : "means"} for ${B.id[e.i]}, ${D.names[v].toLowerCase()} (${tot ? "mm/year" : D.units[v]})`;
+  const hr = el("tr");
+  for (const c of ["Year", "Original", "New", "New − original", "Relative"]) hr.append(el("th", null, c));
+  t.append(hr);
+  for (let y = M.year0; y <= M.yearNewEnd; y++) {
+    const s = yearStart(y), agg = a => { let x = 0; for (let j = s; j < s + 365; j++) x += a[j]; return tot ? x : x / 365; };
+    const n = agg(current.nw[v]), hasO = e.hasOld && y <= M.yearOldEnd;
+    let d = null; if (hasO) { let x = 0; for (let j = s; j < s + 365; j++) x += current.df[v][j]; d = tot ? x : x / 365; }
+    const o = hasO ? n - d : null;
+    const rel = hasO && Math.abs(o) > 1e-9 && v !== "tmin" && v !== "tmax" ? `${sciSigned(100 * d / o, 2)} %` : "—";
+    const r = el("tr");
+    for (const c of [String(y), hasO ? o.toFixed(DEC[v] + 1) : "—", n.toFixed(DEC[v] + 1), hasO ? sciSigned(d, 3) : "—", rel]) r.append(el("td", null, c));
+    t.append(r);
+  }
+}
+function updateSubs() {
+  if (selK == null) return;
+  const e = EMB[selK], u = D.units[sVar];
+  $("o-sub").textContent = e.hasOld ? `co-authors' series, 1980–2023 · ${u}` : "none for this basin";
+  $("n-sub").textContent = `reprocessed, 1980–2025 · ${u}`;
+}
+async function select(k, fromMap, userPick = true) {
+  selK = k; current = null;
+  const e = EMB[k], i = e.i, g = GROUP[e.group];
+  rows.forEach((r, kk) => r && r.setAttribute("aria-current", String(kk === k)));
+  $("sel-title").textContent = `${B.id[i]}${B.name[i] ? " · " + B.name[i] : ""}`;
+  const chips = $("sel-chips"); chips.replaceChildren();
+  const chip = (text, sym, cls) => { const c = el("span", "chip" + (cls ? " " + cls : "")); if (sym) c.append(sym); c.append(document.createTextNode(text)); chips.append(c); };
+  chip(g.label, symbolSVG(g.shape, g.color, 11));
+  chip([B.region[i], B.country[i] === "US" ? "USA" : "Canada"].filter(Boolean).join(", "));
+  chip(`${sci(B.area[i], 3)} km²`);
+  chip(`${int(B.cells[i])} Daymet cells`);
+  chip(e.hasOld ? "In both files" : e.origNaN ? "Original NaN on every day" : "New file only");
+  if (B.lowconf[i]) chip("⚠ Low-confidence polygon", null, "flag");
+  if (B.lowpix[i]) chip("⚠ Fewer than 4 Daymet cells", null, "flag");
+  $("sel-why").textContent = whyText(e).join(". ") + ".";
+  updateSubs();
+  requestDraw(drawMap);
+  drawSeries();
+  if (fromMap) rows[k] && rows[k].scrollIntoView({ block: "nearest" });
+  if (userPick) {
+    const top = $("series-section").getBoundingClientRect().top;
+    if (top > window.innerHeight - 160) $("series-section").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+  }
+  try {
+    const res = await decode(k);
+    if (selK !== k) return;
+    current = res; $("series-msg").hidden = true;
+  } catch (err) {
+    $("series-msg").textContent = String(err.message || err); $("series-msg").hidden = false;
+  }
+  drawSeries(); renderAnnual();
+}
+
+// ---------- footer ---------------------------------------------------------------------------
+function renderFoot() {
+  const f = $("foot"); f.replaceChildren();
+  f.append(el("h3", null, "About these data"));
+  const ul = el("ul");
+  const li = t => ul.append(el("li", null, t));
+  li(`Original: the co-authors' basin series (${M.old_file}, ${(M.old_bytes / 1e9).toFixed(2)} GB; ${int(H.n_old)} sites, 1980–2023), aggregated with gdptools. ${H.old_only} of its sites have no polygon in the new file.`);
+  li(`New: ${M.new_file}${M.new_md5 ? ` (md5 ${M.new_md5})` : ""}; ${int(H.n_new)} basins, 1980–2025. Exactextract coverage × true cell area on the full-resolution polygons; daily mean over the valid cells.`);
+  li(`Both read the same Daymet V4 R1 cells, so agreement shows that the reprocessing reproduces the co-authors' aggregation; it does not test Daymet itself.`);
+  li(`Metrics come from daymet_validate.py over 1980–2023, one row per basin, variable and year (${M.validation_file}). Map values are per basin over the whole record: RMSE pooled over its days, largest |Δ| over its years.`);
+  li(`Embedded series are quantized for display: the new values to 0.01 mm, 0.01 °C, 0.1 Pa or 0.01 W/m² (coarser only for series with a very wide range); the difference to 1/32,767 of its largest value in the record. The original is drawn as new − difference.`);
+  li(`Daymet uses a 365-day calendar: December 31 is dropped in leap years, and both series follow it.`);
+  li(`Selection: ${M.n} basins per group, seed ${M.seed}. Built ${M.generated} by EO_data_processing/viz/build_daymet_record_explorer.py (commit ${M.commit}).`);
+  f.append(ul);
+}
+
+// ---------- scheduling, theme, resize --------------------------------------------------------
+const pending = new Set();
+function requestDraw(fn) {
+  if (pending.has(fn)) return;
+  pending.add(fn);
+  requestAnimationFrame(() => { pending.delete(fn); fn(); });
+}
+function redrawAll() { requestDraw(drawMap); requestDraw(drawSeries); drawHists(); }
+new ResizeObserver(() => { MV.fit = null; redrawAll(); }).observe(document.querySelector(".wrap"));
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", redrawAll);
+new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+// ---------- boot -----------------------------------------------------------------------------
+renderHeadline();
+seg($("metric-seg"), D.metrics.map(m => [m.key, m.label]), metricKey, k => { metricKey = k; renderMetric(); });
+renderMetric();
+renderLag();
+seg($("mapmode-seg"), [["coverage", "Coverage"], ["rmse", "Record RMSE"], ["max_abs", "Largest daily |Δ|"]], mapMode, k => {
+  mapMode = k; $("mapvar-ctl").hidden = k === "coverage"; requestDraw(drawMap);
+});
+$("mapvar-ctl").hidden = true;
+seg($("mapvar-seg"), VARS.map(v => [v, D.short[v]]), mapVar, k => { mapVar = k; requestDraw(drawMap); });
+seg($("svar-seg"), VARS.map(v => [v, D.short[v]]), sVar, k => { sVar = k; updateSubs(); requestDraw(drawSeries); renderAnnual(); });
+const ys = $("w-year");
+ys.append(new Option("Year…", ""));
+for (let y = M.year0; y <= M.yearNewEnd; y++) ys.append(new Option(String(y), String(y)));
+ys.addEventListener("change", () => { if (ys.value) { const s = yearStart(Number(ys.value)); setView(s, s + 365); } });
+$("w-full").addEventListener("click", () => setView(0, M.nNew));
+$("w-prev").addEventListener("click", () => { const n = view[1] - view[0], a = Math.max(0, view[0] - n); setView(a, a + n); });
+$("w-next").addEventListener("click", () => { const n = view[1] - view[0], b = Math.min(M.nNew, view[1] + n); setView(b - n, b); });
+renderList();
+renderFoot();
+drawMap();
+const firstK = EMB.reduce((best, e, k) => (e.group === "worst" && (best == null || e.why.length > EMB[best].why.length) ? k : best), null);
+select(firstK == null ? 0 : firstK, false, false);
+})();
+</script>

@@ -35,6 +35,8 @@ Calendar 2025 exists only at ORNL. Every file is checked against NASA CMR's SHA-
 | `daymet_assemble.py` | per-variable-years → the pipeline's climate parquet (`site_id, Date, prcp, tmin, tmax, swe, vp, srad`, ordered year, site_id, Date); re-reads it and verifies every value against the inputs; `--provenance-only` upgrades an existing run's sidecar |
 | `daymet_validate.py` | per-basin comparison with the stale co-author product (1980–2023) |
 | `daymet_outputcheck.py` | the assembled file against ORNL's Single Pixel API for a few small basins (any year; no raw files) |
+| `daymet_basin_flags.py` | `daymet_basin_flags.csv`, the companion table of questionable basins (HydroBASINS fallback, area mismatch, no area reference, < 4 cells) with product membership |
+| `../viz/build_daymet_record_explorer.py` | self-contained HTML explorer of the whole record: the agreement metrics as distributions, a basin map, and original \| new daily series for 3 × N embedded basins (least matching, random, no original). It checks the embedded series against the validation table |
 | `daymet_crosscheck.py` | independent check: exactextract's own weighted mean on a few days (needs a raw file) |
 | `daymet_pixelcheck.py` | georeferencing check of a raw file against ORNL's Single Pixel API |
 | `copy_verify.py` | copy run outputs to the exFAT drive and re-read every file from the device (md5 + size); re-copying replaces the manifest line |
@@ -42,8 +44,8 @@ Calendar 2025 exists only at ORNL. Every file is checked against NASA CMR's SHA-
 | `selftest_daymet_tools.py` | synthetic-file and local-server tests of the above (grid asserts, aggregation, assembly verification, manifest, download path) |
 
 After a run: `daymet_assemble.py` (it verifies), `daymet_validate.py` for the years the stale
-product covers, then `daymet_outputcheck.py --years <a spread incl. the newest>` and
-`copy_verify.py`.
+product covers, then `daymet_outputcheck.py --years <a spread incl. the newest>`,
+`../viz/build_daymet_record_explorer.py` and `copy_verify.py`.
 
 ## Resources (16 GB M5 laptop, measured 2026-09-29)
 **Downloads.** A full 1980–2025 run downloads 3.455 TB (~50 h at the mirror's ~19 MB/s).

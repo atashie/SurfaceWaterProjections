@@ -4,7 +4,8 @@ Daily basin means of six Daymet V4 R1 variables for **8,017 watersheds**, calend
 **1980–2025**, computed in this repo from the gridded Daymet mosaics. It is meant to replace
 the earlier co-author product (gdptools, 6,087 basins, 1980–2023) as the climate input of
 the signature pipeline. **As of 2026-10-01 neither delivered product uses it.** Whether to
-rerun them on it is an open user decision (`docs/STATUS.md`). Tools: `daymet/` (see
+rerun them on it is an open user decision (`docs/STATUS.md`). The user judged the raw-data
+agreement below sufficient and dropped a signature-level replay (2026-10-01). Tools: `daymet/` (see
 `daymet/README.md`); polygons: `geometry/`.
 
 ## Source
@@ -141,6 +142,12 @@ The check is `daymet/daymet_outputcheck.py`; its result is in the run's
 checks of further small basins agree. The large basins rest on the weight checks: Σ coverage
 × true area equals the polygon area to 1e-7 for all 53.
 
+**Explorer.** `validation/daymet_record_explorer_2026-10-01.html` in the run folder is
+self-contained (10.9 MB). It shows these metrics as distributions and maps every basin. For
+30 basins it plots the original and new daily series side by side: the 10 least matching,
+10 random and 10 without an original series. `viz/build_daymet_record_explorer.py` builds
+it.
+
 **Coverage.**
 - Every gage of both delivered products is in this file (#1 6,678, #2 6,250).
 - The stale file has 5,517 / 5,638 of them; 4 / 3 of those are all-NaN (St. Johns River, FL).
@@ -149,18 +156,23 @@ checks of further small basins agree. The large basins rest on the weight checks
 - The stale file's other 118 sites belong to neither product.
 
 ## Caveats
-- **Low-confidence polygons.** 57 polygons are `low_confidence`: 30 HydroBASINS fallbacks
-  and 28 whose area is > 50 % off the metadata area (one is both). 12 of them are in product
-  #1 and 13 in #2.
+- **Low-confidence polygons, kept and flagged** (user decision 2026-10-01). 57 polygons are
+  `low_confidence`: 30 HydroBASINS fallbacks and 28 whose area is > 50 % off the metadata area
+  (one is both). 12 of them are in product #1 and 13 in #2.
   - Example: 06FD001, 28,997 km² against a reported 289,000.
   - 27 of the HydroBASINS polygons have no metadata area to check against.
-  - The flag lives only in the run's `weights/daymet_basins.csv`, not in the climate file or
-    the products.
-  - Decide how to treat them before a rerun (action plan, review block).
+  - The flags are in `daymet_basin_flags.csv`, next to the climate file. It has one row per
+    flagged basin (101, the 45 small basins included): the reason, both areas, and product
+    membership. `daymet/daymet_basin_flags.py` builds it.
+  - At a rerun the table goes with the products as a companion file; the signature CSV's
+    column contract is unchanged.
 - **Small basins.** 45 basins cover fewer than 4 grid cells (`low_pixel_support`; 35 in
   #1, 21 in #2).
 - **No streamflow.** 4 basins have no streamflow record (01591000, 01591400, 01591610,
   01591700); they keep their boundary id.
 - **Memory.** The file is 37 % larger than the stale input. The Julia runner reads all eight
   columns before keeping four, so expect about 8.6 GB resident (extrapolated from one row
-  group). On the 16 GB laptop, give it a (site_id, Date, prcp, swe) copy or measure first.
+  group). On the 16 GB laptop, run it in gage batches with
+  `docs/benchmarks/run_batched_julia.py`, which writes 4-column batch inputs. In the
+  2026-10-01 control run (stale input), each of 6 batches (~1,336 gages) peaked at
+  4.8–5.5 GB RSS.

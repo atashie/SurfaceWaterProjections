@@ -2,8 +2,8 @@
 
 **Date**: 2026-09-29 · **Status**: single-year gate (calendar 2023) PASSED on the M5 MacBook
 the same day; the full 1980–2025 run COMPLETED 2026-09-30 and was adversarially reviewed
-2026-10-01 (§0, last two blocks); next: the Phase 1 replay against product #1 in two steps
-(prerequisites in the review block) — read §0 first; it supersedes §§1–3 and parts of §§5 and 9 where they differ.
+2026-10-01 (§0, last two blocks); the signature replay was then DROPPED by user decision
+(2026-10-01: raw-data equivalence suffices); next: the user's rerun decision — read §0 first; it supersedes §§1–3 and parts of §§5 and 9 where they differ.
 §§1–10 below are the original plan (numbers marked **M** measured, **E** estimated).
 
 **Background and option comparison**: `2026-09-29-daymet-reprocessing-options.md`
@@ -168,21 +168,26 @@ laptop awake for the ~2-day run) → `daymet_assemble.py` → `daymet_validate.p
 - **Not compared with any earlier product:** 2,048 basins (all 53 large, all 30 HydroBASINS,
   47 of the 57 low-confidence polygons), 2024–2025, the 7 fill-touching basins.
 
-Before the replay / a rerun:
-- (a) **Memory**: the Julia runner reads all eight columns (~8.6 GB for this file,
-  extrapolated) before keeping four. Give it a (site_id, Date, prcp, swe) copy on the 16 GB
-  laptop, or measure on a one-year subset first.
-- (b) **Low-confidence polygons**: 57 basins, 12 in #1 and 13 in #2, e.g. 06FD001 at 28,997
-  km² against a reported 289,000.
+Before a rerun (state 2026-10-01, end of day):
+- (a) **Memory** — SOLVED. The Julia runner reads all eight columns (~8.6 GB for this file,
+  extrapolated) before keeping four. `docs/benchmarks/run_batched_julia.py` runs it in gage
+  batches on 4-column inputs. The replay's control arm took 6 batches of ~1,336 gages,
+  121–177 s and 4.8–5.5 GB peak RSS each.
+- (b) **Low-confidence polygons** — DECIDED (user, 2026-10-01): keep and FLAG them in the
+  companion table `daymet_basin_flags.csv`; the CSV contract is unchanged. Background:
+  57 basins, 12 in #1 and 13 in #2, e.g. 06FD001 at 28,997 km² against a reported 289,000.
   - 27 HydroBASINS polygons have no metadata area, so the > 50 % area screen that caught
     05KH009 cannot run on them.
-  - Compare with an independent area (HydroBASINS UP_AREA, HYDAT gross drainage area), then
-    decide include / exclude / flag per gage. Carrying a flag into the products is a CSV
-    contract decision.
-- (c) **Two-step replay**: first product #1's config restricted to calendar 1980–2023 and
-  the 5,965 shared basins (isolates the weighting effect); then the full file (adds two
-  years and 1,165 gages, which move climate-signature means, trends and qualification by
-  themselves).
+  - An independent area (HydroBASINS UP_AREA, HYDAT gross drainage area) could still settle
+    which area is wrong per gage. The companion table keeps the flags out of the signature
+    CSV, so the column contract does not change.
+- (c) **Two-step replay** — DROPPED (user, 2026-10-01): "if the raw data are sufficiently
+  equivalent then that is all we need to know". The evidence is the raw-data comparison and
+  `validation/daymet_record_explorer_2026-10-01.html`. Only the control arm ran (current
+  code, stale input; product #1's shape, never compared). The design was: first product
+  #1's config restricted to calendar 1980–2023 and the 5,965 shared basins (isolates the
+  weighting effect); then the full file (adds two years and 1,165 gages, which move
+  climate-signature means, trends and qualification by themselves).
 - (d) Ask the co-authors to confirm their polygon version, weighting and fill handling
   (options doc T4); until then the README states them as inferences.
 
@@ -516,4 +521,5 @@ Active Parquet Files, and the claude-skill. Log everything in CHANGELOG.
 - Do not re-pad ids; join on the zero-stripped form (9 boundary ids are mis-padded).
 - Do not put any of this on the exFAT thumb drive.
 - Do not delete a raw file before its output passed the checks and `.done` exists.
-- Do not run the streamflow products against the new input without the §6 replay.
+- Do not run the streamflow products against the new input without the user's rerun
+  decision. The §6 replay was dropped by user decision 2026-10-01.
