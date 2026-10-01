@@ -23,33 +23,18 @@ loads every session is `docs/STATUS.md`.
 ## [Unreleased]
 
 ### Planned
-- **Daymet climate input reprocess (options review 2026-09-29; single-year gate PASSED the
-  same day; D1–D4 and the locations DECIDED 2026-09-29; the 1980–2025 file BUILT and
-  validated 2026-09-30; adversarially reviewed 2026-10-01 — see `[October 2026]`;
-  questionable polygons kept and FLAGGED and the signature replay DROPPED, user decisions
-  2026-10-01 (raw-data equivalence suffices; record explorer built); NEXT: the user's
-  decision on rerunning the products; action plan §0).**
-  Daymet V4 R1 now ends at calendar 2025 (released 2026-05-22; no 2026 before ~spring
-  2027), so WY 1980–2025 climate is achievable — matching the products. The 6,087-basin
-  input predates the 7,964-polygon layer (basin size explains ≤ 58 of the 2,049 gages
-  without Daymet); a recompute over all 7,964 polygons is the only way to close the hole
-  (no published product substitutes). ORNL THREDDS/NCSS/tiles are gone and pydaymet /
-  daymetr / climateR are broken for gridded pulls; viable routes are the annual NA
-  mosaics (ORNL HTTPS/S3; NCAR GDEX mirror through 2024 via Globus) with our own
-  exactextract zonal statistics, gdptools by the USGS co-author, or Google Earth Engine
-  (through 2025; licensing question for a private-company author). Recommended: prcp +
-  swe first (≈ 0.57 TB), validated by reproducing the co-authors' 2023 values on the
-  6,087 shared basins; four ≤ 1-day feasibility tests (T0–T4) and a go/no-go by
-  ~2026-10-10 are laid out in `docs/plans/2026-09-29-daymet-reprocessing-options.md`.
-  This rerun would also regenerate `flagged_for_high_na` (below).
-  Measured the same day (plan §3 A-addendum): files are gzip-4 NetCDF-4 chunked
-  (1,1000,1000) for 1980–2019 and (10,300,300) for 2020+; six variables total 3.38 TB
-  for 1980–2024 (72–77 GB/yr), prcp+swe 0.564 TB; the NCAR mirror delivers 18–25 MB/s to
-  the Windows laptop, decompression runs 150–170 MB/s per core → a download-bound
-  year-by-year stream needs ≈ 2–3 GB RAM, ≈ 155 GB (six) / 25 GB (prcp+swe) of SSD, and
-  ≈ 2–2.5 days (six) / ≈ 9 h (prcp+swe) of wall-clock.
-  **Action plan for the dedicated machine (tools to write, runbook, acceptance criteria,
-  twelve named unknowns): `docs/plans/2026-09-29-daymet-reprocessing-action-plan.md`.**
+- **Daymet climate input: the product-rerun decision is PENDING (NEXT).** The reprocessed
+  input `daymet_1980_2025_29sep2026.parquet` (8,017 basins, calendar 1980–2025, no NaN) was
+  built 2026-09-30 and adversarially reviewed 2026-10-01. On the 5,965 basins with stale
+  data it reproduces the co-authors' series. The user accepted it on raw-data equivalence
+  and dropped the signature replay (DECISION, 2026-10-01); the questionable polygons are
+  kept and flagged in `daymet_basin_flags.csv`. No product uses it yet. A rerun on it would
+  give 1,165 (#1) / 615 (#2) more gages usable climate, complete the four all-NaN Florida
+  gages (Known Issues) and regenerate `flagged_for_high_na` (below). On the 16 GB laptop,
+  run Julia in gage batches with `docs/benchmarks/run_batched_julia.py`. Record:
+  `[October 2026]`, `[September 2026]` and the action plan §0
+  (`docs/plans/2026-09-29-daymet-reprocessing-action-plan.md`); the superseded planning
+  text of this entry is in `changelog-old.md`.
 - **HydroShare documentation updates PENDING (not applied 2026-09-10 — user decision to
   leave the staged files untouched this session).** (H1) Category terminology: regenerate
   `hisss_data_dictionary.csv` `category` + `hisss_signature_categories.csv` (root/R1/R2)
@@ -515,59 +500,11 @@ climate input was found truncated.
   run folder). Dashboard tooling gap fixed: `SIGNATURE_GROUPS` had never included the snow
   family, so every pre-2026-08-10 dashboard silently omitted its 14 bases.
 
-## [July 2026]
+## [July 2026] – [March 2026]
 
-Condensed summary — **the full text of every entry is in [changelog-old.md](changelog-old.md) → [July 2026]**.
-Julia gained the annual-values export, the b=1 recession alpha, the snow and drought
-signature families, the 20-value stats floor and the record-anchored snow gate; both
-standard products were produced; the Annual NLCD product was built.
-
-- **Streamflow drought family (10 metrics + 5 threshold scalars, +165 → 1,653 columns;
-  Julia, 2026-07-27/28)** after Adelsperger et al. (in review): 7-day centered smoothing
-  within contiguous date runs, whole-record Weibull (type-6) thresholds at the five USDM
-  levels, strict `<`. Scope decisions (user): fixed thresholds only, water-year aggregation,
-  NaN below the plotting range, `_fixed_` infix. Measured: `drought_duration_fixed_p10` is
-  largely redundant with the low-pulse pair (within-gage median r = 0.994) — **kept by user
-  decision**. Same-machine additivity PASS (1,487 shared columns bitwise unchanged) via the
-  new `check_additivity.jl`; the benchmark timing JSON gained a **provenance block**; the
-  GAGES-II directory is now resolved at runtime (`gages_ii_dir()`) after the
-  precompile-constant trap bit three times in one day. Two Codex reviews, GO-WITH-FIXES each.
-- **Annual NLCD per-watershed product** (CONUS, 30 m, 1985–2025; 6,119 gages × 41 years =
-  250,879 rows; 16 classes + impervious) — `EO_data_processing/README_NLCD.md`.
-- **STANDARD OUTPUT #2 — WY 1980–2025 @ 60 % (2026-07-22)**: 6,250 gages × 1,488 columns,
-  Codex results review GO with zero findings; neither standard product is a subset of the
-  other (window-start-anchored 60 % denominator).
-- **STANDARD OUTPUT #1 — WY 1993–2025 @ 60 % (2026-07-22)**: 6,678 × 1,488; first production
-  use of the `STREAMFLOW_END_WATER_YEAR` cap; explorer extended to all 16 statistics.
-  **New convention (user)**: every artifact of a run lives in that run's own folder.
-- **Record-anchored decade gate for the 10 timing/melt/regime snow metrics (2026-07-22)** —
-  linked to the streamflow `decade_min_fraction` knob; NaNs the 6 trend stats only. Codex GO.
-- **Trend-completeness overall gate 80 % → 60 % (all languages, 2026-07-21)** — config-only,
-  per the guidelines doc and manuscript §2.2.3; the decade gate stays 80 %. Reinstall rpkg
-  before its benchmarks (it bundles the config).
-- **Stats floor — 20 annual values before ANY statistics (Julia)**; recession and elasticity
-  exempt; post-hoc `apply_stats_floor_mask.py` + `refresh_qa_flags.jl`.
-- **Production rerun harness**: ENV overrides for input paths / output dir / end year, memory
-  patches for the 16 GB machine, `validate_production_run.py`, `audit_qualification.jl`, the
-  signature explorer (`build_signature_explorer.py`). Finding: Daymet covers Canadian gages.
-- **Q-to-PPT unit gate for un-normalized gages (Julia + Python + rpkg)** —
-  `area_normalized = false` skips runoff ratios, elasticity, Q-P seasonality and storage; the
-  runners read the flag from metadata (leading-zero-safe). Codex: 2 MEDIUM fixed, plus a
-  latent InlineStrings typing bug caught during verification.
-- **Snow metrics family (14 metrics, Daymet SWE; Julia)** — SWE ≥ 10 mm threshold,
-  anchor-spell timing, SSM (Hatchett 2021); preprocessor `valid_swe_years`; runs only on an
-  explicit `snow_data` frame.
-- **Recession alpha assumes a linear reservoir (b = 1; Julia)** —
-  `log(a) = median(log(-dQ/dt) - log(Q))`; b and concavity keep their free fits; column
-  names unchanged.
-- **Annual values export (Julia)** — opt-in `AnnualCollector` →
-  `{prefix}_signatures_annual.parquet` (`gage_id, signature, water_year, value`); config
-  `annual_values.save`.
-- Docs: `docs/DATA_SOURCES.md` — inventory of the 11 external data sources.
-
-## [June 2026] – [March 2026]
-
-Condensed summaries of these months — the MODIS LAI/LULC EO products (June); the
+Condensed summaries of these months — the Julia annual-values export, b = 1 recession
+alpha, snow and drought families, 20-value stats floor and both standard products (July);
+the MODIS LAI/LULC EO products (June); the
 HydroATLAS watershed metadata + static HTML explorer (May); the April 2026 release (Pettitt
 changepoints, recession-parameterized BFI, Section 3 signatures, the Julia-canonical
 transition, centralized NA handling, cross-language alignment); the rpkg package + alignment

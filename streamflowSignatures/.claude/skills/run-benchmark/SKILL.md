@@ -52,6 +52,11 @@ python docs/benchmarks/run_python_benchmark.py                                  
 Rscript docs/benchmarks/run_rpkg_benchmark.R                                               # rpkg port
 ```
 
+On the 16 GB laptop a full Julia run needs more memory than is usually free. Run it in gage
+batches with `python docs/benchmarks/run_batched_julia.py` (`split` → `run`, which stops
+Julia if available memory drops below `--min-avail-gb` → `merge`, which checks that the
+headers match and restores the reference gage order). See the script's docstring.
+
 **Every artifact of a run goes in that run's OWN folder** (`processedOuts_<experiment>_<date>`):
 signatures CSV, annual parquet, timing JSON (with its provenance block), run log, signature
 explorer + `_annual/` sidecar, and every comparison dashboard/CSV/summary produced for it.

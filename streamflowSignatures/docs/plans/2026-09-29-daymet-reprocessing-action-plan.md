@@ -125,7 +125,8 @@ Earthdata Login on this Mac; the six 2025 files need one.** U12 measured.
 
 Then: `caffeinate -i python daymet_stream.py --years 1980-2025 --workers 6 …` (keeps the
 laptop awake for the ~2-day run) → `daymet_assemble.py` → `daymet_validate.py --years
-1980-2023` → verified copy to the drive → the Phase 1 replay (§6) against product #1.
+1980-2023` → verified copy to the drive → the Phase 1 replay (§6) against product #1
+(dropped by user decision 2026-10-01).
 
 **Full run, 2026-09-29 20:34 → 2026-09-30 23:05 UTC — COMPLETE** (driver
 `logs/run_full.sh`; full tables in the run folder's `RUN_NOTES.md`).

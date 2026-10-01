@@ -15,6 +15,38 @@ resolved known issues, applied guidelines-document items and earlier
 manuscript-reconciliation passes it no longer carries; the CHANGELOG.md entries that
 replaced them point here.
 
+### Planned — superseded (moved 2026-10-01)
+The Daymet planning entry as it stood before the 1980–2025 file was built and accepted;
+CHANGELOG.md now carries only the open product-rerun decision.
+
+- **Daymet climate input reprocess (options review 2026-09-29; single-year gate PASSED the
+  same day; D1–D4 and the locations DECIDED 2026-09-29; the 1980–2025 file BUILT and
+  validated 2026-09-30; adversarially reviewed 2026-10-01 — see `[October 2026]`;
+  questionable polygons kept and FLAGGED and the signature replay DROPPED, user decisions
+  2026-10-01 (raw-data equivalence suffices; record explorer built); NEXT: the user's
+  decision on rerunning the products; action plan §0).**
+  Daymet V4 R1 now ends at calendar 2025 (released 2026-05-22; no 2026 before ~spring
+  2027), so WY 1980–2025 climate is achievable — matching the products. The 6,087-basin
+  input predates the 7,964-polygon layer (basin size explains ≤ 58 of the 2,049 gages
+  without Daymet); a recompute over all 7,964 polygons is the only way to close the hole
+  (no published product substitutes). ORNL THREDDS/NCSS/tiles are gone and pydaymet /
+  daymetr / climateR are broken for gridded pulls; viable routes are the annual NA
+  mosaics (ORNL HTTPS/S3; NCAR GDEX mirror through 2024 via Globus) with our own
+  exactextract zonal statistics, gdptools by the USGS co-author, or Google Earth Engine
+  (through 2025; licensing question for a private-company author). Recommended: prcp +
+  swe first (≈ 0.57 TB), validated by reproducing the co-authors' 2023 values on the
+  6,087 shared basins; four ≤ 1-day feasibility tests (T0–T4) and a go/no-go by
+  ~2026-10-10 are laid out in `docs/plans/2026-09-29-daymet-reprocessing-options.md`.
+  This rerun would also regenerate `flagged_for_high_na` (below).
+  Measured the same day (plan §3 A-addendum): files are gzip-4 NetCDF-4 chunked
+  (1,1000,1000) for 1980–2019 and (10,300,300) for 2020+; six variables total 3.38 TB
+  for 1980–2024 (72–77 GB/yr), prcp+swe 0.564 TB; the NCAR mirror delivers 18–25 MB/s to
+  the Windows laptop, decompression runs 150–170 MB/s per core → a download-bound
+  year-by-year stream needs ≈ 2–3 GB RAM, ≈ 155 GB (six) / 25 GB (prcp+swe) of SSD, and
+  ≈ 2–2.5 days (six) / ≈ 9 h (prcp+swe) of wall-clock.
+  **Action plan for the dedicated machine (tools to write, runbook, acceptance criteria,
+  twelve named unknowns): `docs/plans/2026-09-29-daymet-reprocessing-action-plan.md`.**
+
 ### Planned — completed (port campaign record; the four deferred rpkg fixes stay in CHANGELOG.md)
 - **Port campaign COMPLETE (2026-08-27) — both ports validated at full scale.**
   Retained below for the follow-ups it still carries. All six formerly Julia-only features (Pettitt changepoint fields, the

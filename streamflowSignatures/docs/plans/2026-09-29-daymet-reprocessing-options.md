@@ -12,6 +12,10 @@ polygons, and T2 (AWS) / T3 (Earth Engine) are no longer needed for feasibility.
 decisions the same day: full-resolution polygons, all six variables, the user's EDL token
 for 2025, and the 53 basins > 100,000 km² if RAM allows. Details: action plan §0.
 
+**Update 2026-10-01**: the full 1980–2025 file was built on 2026-09-30 and adversarially
+reviewed on 2026-10-01. The user then dropped the signature replay because raw-data
+equivalence suffices. Current state: action plan §0.
+
 **Purpose.** Replace the stale climate input (`daymet_1980_2023` → 6,087 basins, calendar
 1980–2023) with a fresh Daymet extraction that (1) reaches the latest published year and
 (2) covers **all 7,964 watersheds** of the delivered boundary layer, closing the hole that

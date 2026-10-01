@@ -22,8 +22,9 @@ paths:
   overrides are read at runtime inside `main()`. A config-variant result obtained
   without a cache purge, a probe, or an observed expected delta is untrustworthy.
 - Climate input is `daymet_1980_2023_rebuilt_10aug2026.parquet`; the canonical-named
-  file is truncated. Verify parquet byte sizes and `PAR1` footers against the last timing
-  JSON's `provenance` block before any long run.
+  file is truncated. The reprocessed `daymet_1980_2025_29sep2026.parquet` (8,017 basins)
+  is not adopted until the user decides on a product rerun. Verify parquet byte sizes and
+  `PAR1` footers against the last timing JSON's `provenance` block before any long run.
 - Gates vs diagnostics: `check_schema_equality.py`, `check_annual_parquet_equality.py`,
   `check_signature_failures.py` and `check_additivity.jl` are GATES (non-zero exit,
   waivers named on the command line). The `compare_*` scripts intersect columns and

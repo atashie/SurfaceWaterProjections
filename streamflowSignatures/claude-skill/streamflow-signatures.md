@@ -88,10 +88,12 @@ Interpretation keys:
 - Trend/stat NaNs with values visible in the annual parquet usually mean the
   20-value stats floor (July 2026): metrics with <20 non-NA annual values report
   NaN for ALL 8 statistics (recession/elasticity exempt).
-- Daymet status (checked 2026-09-29): V4 R1 runs to calendar 2025; the shipped
-  products use calendar 1980–2023 for 6,087 basins (5,965 of the 8,014 gages). ORNL
-  THREDDS/NCSS are retired — bulk access is the annual NA mosaics or Earth Engine;
-  reprocessing plan in `docs/plans/2026-09-29-daymet-reprocessing-options.md`.
+- Daymet status (2026-10-01): V4 R1 runs to calendar 2025; the shipped products use
+  calendar 1980–2023 for 6,087 basins (5,965 of the 8,014 gages). A reprocessed input
+  for 8,017 basins and calendar 1980–2025 was built on 2026-09-30
+  (`EO_data_processing/README_DAYMET.md`). It reproduces the original series on the
+  5,965 shared basins, but no product uses it yet: every climate value in the delivered
+  products still comes from the original input.
 - Daymet SWE is modeled, not observed — prefer timing/trend signals over absolute
   magnitudes, especially in mountain terrain.
 
