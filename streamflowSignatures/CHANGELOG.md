@@ -335,6 +335,10 @@ What was built:
   - original and new daily series overlaid on one chart for 30 embedded basins: 10 least
     matching, 10 random and 10 without an original series (seed 20261001). A switch adds the
     anomaly, new − original, on its own right-hand axis.
+  - Later the same day, at the user's request: the new line thins as the view zooms out.
+    From 1.5 days per pixel, the new draws only the edges of its min-max band, so the
+    original's filled band shows through. The chart also zooms on values as well as dates:
+    drag a band or a box, drag along either axis, or press ↑ ↓.
   The builder re-derives every embedded basin-year's largest |Δ|, which equals the
   validation table. It also decodes every embedded block back against the source series.
 

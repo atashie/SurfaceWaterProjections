@@ -146,7 +146,8 @@ checks of further small basins agree. The large basins rest on the weight checks
 self-contained (10.9 MB). It shows these metrics as distributions and maps every basin. For
 30 basins it overlays the original and new daily series on one chart: the 10 least matching,
 10 random and 10 without an original series. A switch adds the anomaly, new − original, on
-its own right-hand axis. `viz/build_daymet_record_explorer.py` builds it.
+its own right-hand axis. The chart zooms on the dates and on either value axis.
+`viz/build_daymet_record_explorer.py` builds it.
 
 **Coverage.**
 - Every gage of both delivered products is in this file (#1 6,678, #2 6,250).

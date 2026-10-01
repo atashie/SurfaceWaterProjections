@@ -8,7 +8,7 @@ The page makes no network request (plain JS, canvas and SVG; data inline). It sh
   * a map of every basin, coloured by coverage or by its record RMSE / largest daily |difference|;
   * daily series of all six variables for 3 x N embedded basins (N least matching, N random, N
     without an original series): original and new overlaid on one chart, with a switch that adds
-    the anomaly new - original on its own right-hand axis.
+    the anomaly new - original on its own right-hand axis; the chart zooms on dates and values.
 
 Selection (seeded, so the same inputs give the same page):
   least matching  the basins holding each variable's largest daily |new - original|, then, one

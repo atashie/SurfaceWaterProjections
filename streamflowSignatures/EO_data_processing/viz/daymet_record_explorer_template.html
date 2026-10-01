@@ -82,7 +82,8 @@ section { display: grid; gap: 14px; min-width: 0; }
 .seg button:hover { background: var(--hover); color: var(--ink); }
 .seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
 .btn { font: inherit; font-size: 13px; color: var(--ink); background: var(--surface); border: 1px solid var(--border); border-radius: 7px; padding: 5px 10px; cursor: pointer; }
-.btn:hover { background: var(--hover); }
+.btn:hover:not([aria-disabled="true"]) { background: var(--hover); }
+.btn[aria-disabled="true"] { opacity: 0.45; cursor: default; }
 select.btn { padding-right: 6px; }
 button:focus-visible, select:focus-visible, canvas:focus-visible, .row:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; }
 
@@ -255,11 +256,15 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; max-width: 1
         <select class="btn" id="w-year" aria-labelledby="lab-win"></select>
         <button class="btn" id="w-next" type="button" aria-label="Next window">▶</button>
       </div>
+      <div class="ctl"><span class="lab" id="lab-yax">Value axis</span>
+        <button class="btn" id="y-fit" type="button" aria-disabled="true" aria-describedby="y-fit-d">Reset zoom</button>
+        <span id="y-fit-d" hidden>Fits the value axes to the data in view again</span>
+      </div>
       <div class="ctl"><span class="lab" id="lab-anom">Anomaly</span>
         <button class="switch" id="anom" type="button" role="switch" aria-checked="false" aria-labelledby="lab-anom anom-text"><span class="track"></span><span id="anom-text">new − original, right axis</span></button>
       </div>
     </div>
-    <p class="hint">Drag across the chart to zoom to those dates; double-click to return to the full record. With the chart focused, ← → step a day (Shift: a month).</p>
+    <p class="hint">Drag across the chart to zoom: sideways for dates, up or down for values, diagonally for both; drag along an axis to zoom only that axis. Double-click to reset (on an axis, only that axis). With the chart focused, ← → step a day (Shift: a month) and ↑ ↓ zoom the values.</p>
     <div id="series-msg" class="warn" hidden></div>
     <div class="card panel">
       <div class="ph">
@@ -795,6 +800,8 @@ function renderList() {
 
 // ---------- series ---------------------------------------------------------------------------
 let selK = null, sVar = "prcp", view = [0, M.nNew], hover = null, brush = null;
+// Value-axis zoom [lo, hi]: yZoom for the variable (left axis), aZoom for the anomaly (right axis); null fits the data in view.
+let yZoom = null, aZoom = null;
 const cache = new Map();
 function unshuffle16(u8, off, n) {
   const out = new Int16Array(n);
@@ -829,7 +836,7 @@ async function decode(k) {
 }
 const cvS = $("cv-s"), anomBtn = $("anom");
 const PAD0 = { l: 58, r: 14, t: 26, b: 24 };
-let pad = PAD0, showAnom = false;
+let pad = PAD0, showAnom = false, frame = null;   // frame: the scales last drawn, to turn a drag back into values
 function prepCanvas(cv, p) {
   const box = cv.parentElement, w = box.clientWidth, h = box.clientHeight, dpr = window.devicePixelRatio || 1;
   cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
@@ -843,7 +850,9 @@ function viewExtent(arrs, i0, i1) {
   return [lo, hi];
 }
 // Left axis (the variable), year/month grid and the x axis.
-const stepTicks = (y0, y1, step) => { const out = []; for (let k = 0; y0 + k * step <= y1 + step * 1e-6; k++) { const t = y0 + k * step; out.push(Math.abs(t) < step * 1e-6 ? 0 : t); } return out; };
+// Multiples of `step` within [y0, y1]; a zoomed axis need not start on one.
+const stepTicks = (y0, y1, step) => { const out = []; for (let k = Math.ceil(y0 / step - 1e-6); k * step <= y1 + step * 1e-6; k++) { const t = k * step; out.push(Math.abs(t) < step * 1e-6 ? 0 : t); } return out; };
+const zoomRange = ([a, b]) => [a, b, niceTicks(a, b, 4).step];
 function drawFrame(c, p, i0, i1, y0, y1, step, unit) {
   const { ctx, pw, ph } = c;
   const X = i => p.l + (i - i0) / (i1 - i0) * pw, Y = y => p.t + ph - (y - y0) / (y1 - y0) * ph;
@@ -851,7 +860,6 @@ function drawFrame(c, p, i0, i1, y0, y1, step, unit) {
   const ticks = stepTicks(y0, y1, step);
   ctx.textAlign = "right"; ctx.textBaseline = "middle";
   for (const t of ticks) {
-    if (t < y0 - 1e-12 || t > y1 + 1e-12) continue;
     const y = Math.round(Y(t)) + 0.5;
     ctx.strokeStyle = cssv("--grid"); ctx.beginPath(); ctx.moveTo(p.l, y); ctx.lineTo(p.l + pw, y); ctx.stroke();
     ctx.fillText(tickFmt(t, step), p.l - 6, y);
@@ -876,28 +884,35 @@ function drawRightAxis(c, p, d0, d1, step, unit) {
   ctx.strokeStyle = cssv("--axis"); ctx.beginPath(); ctx.moveTo(xr + 0.5, p.t); ctx.lineTo(xr + 0.5, p.t + ph); ctx.stroke();
   ctx.textAlign = "left"; ctx.textBaseline = "middle";
   for (const t of ticks) {
-    if (t < d0 - 1e-15 || t > d1 + 1e-15) continue;
     const y = Math.round(Y(t)) + 0.5;
     ctx.beginPath(); ctx.moveTo(xr, y); ctx.lineTo(xr + 4, y); ctx.stroke();
     ctx.fillText(tickFmt(t, step), xr + 7, y);
   }
-  const yz = Math.round(Y(0)) + 0.5;
-  ctx.save(); ctx.globalAlpha = 0.55; ctx.strokeStyle = ink; ctx.beginPath(); ctx.moveTo(p.l, yz); ctx.lineTo(xr, yz); ctx.stroke(); ctx.restore();
+  if (d0 <= 0 && d1 >= 0) {
+    const yz = Math.round(Y(0)) + 0.5;
+    ctx.save(); ctx.globalAlpha = 0.55; ctx.strokeStyle = ink; ctx.beginPath(); ctx.moveTo(p.l, yz); ctx.lineTo(xr, yz); ctx.stroke(); ctx.restore();
+  }
   ctx.strokeStyle = ink; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(xr + 7, p.t - 14); ctx.lineTo(xr + 17, p.t - 14); ctx.stroke();
   ctx.textBaseline = "alphabetic"; ctx.fillText(`Δ ${unit}`, xr + 21, p.t - 10);
   return Y;
 }
-// One trace. "halo": the original, drawn wide underneath; "core": the new, thin on top; "anom": the anomaly.
-// Zoomed out (more days than pixels) each pixel column draws the min-max band of its days.
-function drawTrace(c, p, a, i0, i1, X, Y, color, style) {
+// One trace, clipped to the plot; when the axis fits the data, `slack` px of overhang are kept so that the casing
+// of a value on the axis line is not cut. "halo": the original, drawn wide underneath; "core": the new on top,
+// thinning as more days share a pixel (2 px at 0.1 day per pixel down to 0.75 px at 1.5, log-linear);
+// "anom": the anomaly. From 1.5 days per pixel on, each pixel column draws the min-max band of its days; the new
+// draws only the edges of its band over the first `under` days (those with an original band beneath it), so the
+// original shows through, and fills its band where it stands alone.
+function drawTrace(c, p, a, i0, i1, X, Y, color, style, slack, under = 0) {
   if (!a) return;
-  const { ctx, pw } = c, e = Math.min(i1, a.length);
+  const { ctx, pw, ph } = c, e = Math.min(i1, a.length);
   if (e <= i0) return;
-  const n = i1 - i0;
+  const n = i1 - i0, dpp = n / pw;
+  const core = 2 - 1.25 * Math.min(1, Math.max(0, Math.log(dpp / 0.1) / Math.log(15)));
   ctx.save();
+  ctx.beginPath(); ctx.rect(p.l - 3, p.t - slack, pw + 6, ph + 2 * slack); ctx.clip();
   ctx.fillStyle = color; ctx.strokeStyle = color; ctx.lineJoin = "round"; ctx.lineCap = "round";
   if (style === "anom") ctx.globalAlpha = 0.7;
-  if (n > pw * 1.5) {
+  if (dpp > 1.5) {
     const cols = Math.ceil((e - i0) / n * pw), top = [], bot = [];
     for (let k = 0; k < cols; k++) {
       const s0 = i0 + Math.floor(k * n / pw), s1 = Math.min(e, Math.max(s0 + 1, i0 + Math.floor((k + 1) * n / pw)));
@@ -905,13 +920,25 @@ function drawTrace(c, p, a, i0, i1, X, Y, color, style) {
       for (let j = s0; j < s1; j++) { const x = a[j]; if (x < lo) lo = x; if (x > hi) hi = x; }
       top.push(Y(hi)); bot.push(Y(lo));
     }
-    ctx.beginPath();
-    for (let k = 0; k < cols; k++) ctx.lineTo(p.l + k + 0.5, top[k] - 0.5);
-    for (let k = cols - 1; k >= 0; k--) ctx.lineTo(p.l + k + 0.5, bot[k] + 0.5);
-    ctx.closePath(); ctx.fill();
-    if (style !== "anom") { ctx.lineWidth = style === "halo" ? 3.5 : 1.5; ctx.stroke(); }
+    const band = (k0, k1) => {
+      ctx.beginPath();
+      for (let k = k0; k < k1; k++) ctx.lineTo(p.l + k + 0.5, top[k] - 0.5);
+      for (let k = k1 - 1; k >= k0; k--) ctx.lineTo(p.l + k + 0.5, bot[k] + 0.5);
+      ctx.closePath();
+    };
+    if (style !== "core") {
+      band(0, cols); ctx.fill();
+      if (style === "halo") { ctx.lineWidth = 3.5; ctx.stroke(); }
+    } else {
+      const kU = Math.min(cols, Math.max(0, Math.floor((under - i0) / n * pw)));
+      if (kU < cols) { band(kU, cols); ctx.fill(); }
+      ctx.lineWidth = core;
+      for (const [edge, off] of [[top, -0.5], [bot, 0.5]]) {
+        ctx.beginPath(); edge.forEach((y, k) => ctx.lineTo(p.l + k + 0.5, y + off)); ctx.stroke();
+      }
+    }
   } else {
-    ctx.lineWidth = style === "halo" ? 5 : style === "anom" ? 1.25 : (n < pw / 4 ? 2 : 1.5);
+    ctx.lineWidth = style === "halo" ? 5 : style === "anom" ? 1.25 : core;
     ctx.beginPath();
     for (let j = i0; j < e; j++) { const x = X(j), y = Y(a[j]); if (j === i0) ctx.moveTo(x, y); else ctx.lineTo(x, y); }
     ctx.stroke();
@@ -919,15 +946,21 @@ function drawTrace(c, p, a, i0, i1, X, Y, color, style) {
   ctx.restore();
 }
 function drawCursor(c, p, X, Y, Ya, i0, i1, og, nw, df) {
-  const { ctx, ph } = c;
-  if (brush && brush.b != null) {
-    const xa = X(Math.min(brush.a, brush.b)), xb = X(Math.max(brush.a, brush.b));
-    ctx.fillStyle = cssv("--wash"); ctx.fillRect(xa, p.t, Math.max(1, xb - xa), ph);
+  const { ctx, pw, ph } = c;
+  if (brush && brush.mode) {   // the zoom being dragged: a band of dates, a band of values, or a box
+    const b = brush, cx = x => Math.min(p.l + pw, Math.max(p.l, x)), cy = y => Math.min(p.t + ph, Math.max(p.t, y));
+    const xa = b.mode === "y" ? p.l : cx(Math.min(b.x0, b.x1)), xb = b.mode === "y" ? p.l + pw : cx(Math.max(b.x0, b.x1));
+    const ya = b.mode === "x" ? p.t : cy(Math.min(b.y0, b.y1)), yb = b.mode === "x" ? p.t + ph : cy(Math.max(b.y0, b.y1));
+    ctx.fillStyle = cssv("--wash"); ctx.fillRect(xa, ya, Math.max(1, xb - xa), Math.max(1, yb - ya));
+    ctx.strokeStyle = cssv("--axis"); ctx.lineWidth = 1; ctx.strokeRect(xa + 0.5, ya + 0.5, Math.max(0, xb - xa - 1), Math.max(0, yb - ya - 1));
   }
   if (hover == null || hover < i0 || hover >= i1) return;
   const x = Math.round(X(hover)) + 0.5, surf = cssv("--surface");
   ctx.strokeStyle = cssv("--ink-2"); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, p.t); ctx.lineTo(x, p.t + ph); ctx.stroke();
-  const dot = (y, r, col) => { ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI); ctx.lineWidth = 2; ctx.strokeStyle = surf; ctx.stroke(); ctx.fillStyle = col; ctx.fill(); };
+  const dot = (y, r, col) => {
+    if (y < p.t - 1 || y > p.t + ph + 1) return;   // off a zoomed axis; the tooltip still lists it
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI); ctx.lineWidth = 2; ctx.strokeStyle = surf; ctx.stroke(); ctx.fillStyle = col; ctx.fill();
+  };
   if (og && hover < og.length) dot(Y(og[hover]), 6, cssv("--s1"));
   dot(Y(nw[hover]), 3.5, cssv("--s2"));
   if (Ya && df && hover < df.length) dot(Ya(df[hover]), 3.5, cssv("--ink-2"));
@@ -953,11 +986,12 @@ function drawSeries() {
   const anomOn = showAnom && !!e && e.hasOld;
   pad = { ...PAD0, r: anomOn ? 80 : PAD0.r };
   const c = prepCanvas(cvS, pad);
-  if (!current || !e) { message(c, "Loading…"); return; }
+  if (!current || !e) { frame = null; message(c, "Loading…"); return; }
   const nw = current.nw[v], og = e.hasOld ? current.og[v] : null, df = e.hasOld ? current.df[v] : null;
   const zero = v === "prcp" || v === "swe" || v === "srad" || v === "vp";
   const [lo, hi] = viewExtent([nw, og], i0, i1);
-  const [y0, y1, ystep] = niceRange(lo, hi, zero);
+  const fit = niceRange(lo, hi, zero);
+  const [y0, y1, ystep] = yZoom ? zoomRange(yZoom) : fit;
   const { X, Y } = drawFrame(c, pad, i0, i1, y0, y1, ystep, D.units[v]);
   if (og && i1 > M.nOld) {
     const xa = X(Math.max(i0, M.nOld)), xb = pad.l + c.pw;
@@ -966,11 +1000,15 @@ function drawSeries() {
   }
   let mx = 0, ss = 0, sm = 0, n = 0;
   if (df) for (let j = i0, e1 = Math.min(i1, M.nOld); j < e1; j++) { const d = df[j], a = Math.abs(d); if (a > mx) mx = a; ss += d * d; sm += d; n++; }
-  let Ya = null;
-  if (anomOn) { const lim = mx > 0 ? mx : 1e-6, [d0, d1, dstep] = niceRange(-lim, lim, false); Ya = drawRightAxis(c, pad, d0, d1, dstep, D.units[v]); }
-  drawTrace(c, pad, og, i0, i1, X, Y, cssv("--s1"), "halo");
-  drawTrace(c, pad, nw, i0, i1, X, Y, cssv("--s2"), "core");
-  if (Ya && n) drawTrace(c, pad, df, i0, i1, X, Ya, cssv("--ink-2"), "anom");
+  let Ya = null, d0 = 0, d1 = 0;
+  if (anomOn) {
+    const lim = mx > 0 ? mx : 1e-6, [a0, a1, dstep] = aZoom ? zoomRange(aZoom) : niceRange(-lim, lim, false);
+    d0 = a0; d1 = a1; Ya = drawRightAxis(c, pad, d0, d1, dstep, D.units[v]);
+  }
+  frame = { y0, y1, d0, d1, fit, anomOn };
+  drawTrace(c, pad, og, i0, i1, X, Y, cssv("--s1"), "halo", yZoom ? 0 : 3);
+  drawTrace(c, pad, nw, i0, i1, X, Y, cssv("--s2"), "core", yZoom ? 0 : 3, og ? M.nOld : 0);
+  if (Ya && n) drawTrace(c, pad, df, i0, i1, X, Ya, cssv("--ink-2"), "anom", aZoom ? 0 : 3);
   if (!og) note(c, pad, e.origNaN ? "Original: NaN on every day for this basin" : "Original: none (basin not in the co-author product)");
   drawCursor(c, pad, X, Y, Ya, i0, i1, og, nw, df);
   $("d-stats").textContent = !df ? "" : n
@@ -993,28 +1031,71 @@ function seriesTip(x, y) {
     if (hasO) tipRow(t, cssv("--ink-2"), sciSigned(current.df[v][j], 3), "anomaly, new − original");
   });
 }
+// Drag to zoom, with the rule of Plotly's zoom box: a mostly sideways drag zooms the dates, a mostly vertical one
+// the values, anything else both. A drag that starts on an axis' labels zooms that axis alone.
+const MINDRAG = 8, MINZOOM = 20;
+const local = e => { const r = cvS.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top, r]; };
+const zoneAt = (x, w) => x < pad.l ? "left" : x > w - pad.r && frame && frame.anomOn ? "right" : "plot";
+function syncFit() { $("y-fit").setAttribute("aria-disabled", String(!(yZoom || aZoom))); }
+function applyZoom(b, r) {
+  if (b.mode !== "y") {
+    let a = idxAt(r.left + Math.min(b.x0, b.x1)), z = idxAt(r.left + Math.max(b.x0, b.x1)) + 1;
+    if (z - a < 14) { const m = (a + z) / 2; a = Math.max(0, Math.round(m - 7)); z = Math.min(M.nNew, a + 14); }
+    setView(a, z);
+  }
+  if (b.mode !== "x") {   // the band's share of the plot height, read on the scale it was drawn on
+    const ph = r.height - pad.t - pad.b, f = y => Math.min(1, Math.max(0, (pad.t + ph - y) / ph));
+    const right = b.zone === "right", [u0, u1] = right ? [frame.d0, frame.d1] : [frame.y0, frame.y1];
+    const lo = u0 + f(Math.max(b.y0, b.y1)) * (u1 - u0), hi = u0 + f(Math.min(b.y0, b.y1)) * (u1 - u0);
+    if (hi > lo) { if (right) aZoom = [lo, hi]; else yZoom = [lo, hi]; syncFit(); }
+  }
+}
 cvS.addEventListener("pointerdown", e => {
-  if (e.button !== 0) return;
-  brush = { a: idxAt(e.clientX), b: null, x: e.clientX }; cvS.setPointerCapture(e.pointerId);
+  if (e.button !== 0 || !frame) return;
+  const [x, y, r] = local(e);
+  brush = { zone: zoneAt(x, r.width), x0: x, y0: y, x1: x, y1: y, mode: null };
+  cvS.setPointerCapture(e.pointerId);
 });
 cvS.addEventListener("pointermove", e => {
-  hover = idxAt(e.clientX);
-  if (brush && Math.abs(e.clientX - brush.x) > 5) brush.b = hover;
+  const [x, y, r] = local(e), zone = zoneAt(x, r.width);
+  if (brush) {
+    brush.x1 = x; brush.y1 = y;
+    const dx = Math.abs(x - brush.x0), dy = Math.abs(y - brush.y0);
+    brush.mode = brush.zone !== "plot" ? (dy >= MINDRAG ? "y" : null)
+      : dy < Math.min(Math.max(dx * 0.6, MINDRAG), MINZOOM) ? (dx >= MINDRAG ? "x" : null)
+      : dx < Math.min(dy * 0.6, MINZOOM) ? "y" : "xy";
+  } else cvS.style.cursor = zone === "plot" ? "" : "ns-resize";
+  hover = (brush ? brush.zone : zone) === "plot" ? idxAt(e.clientX) : null;
   requestDraw(drawSeries);
-  if (brush && brush.b != null) hideTip(); else seriesTip(e.clientX, e.clientY);
+  if (hover == null || (brush && brush.mode)) hideTip(); else seriesTip(e.clientX, e.clientY);
 });
 cvS.addEventListener("pointerup", () => {
-  if (brush && brush.b != null) {
-    let a = Math.min(brush.a, brush.b), b = Math.max(brush.a, brush.b) + 1;
-    if (b - a < 14) { const m = (a + b) / 2; a = Math.max(0, Math.round(m - 7)); b = Math.min(M.nNew, a + 14); }
-    setView(a, b);
-  }
+  if (brush && brush.mode && frame) applyZoom(brush, cvS.getBoundingClientRect());
   brush = null; requestDraw(drawSeries);
 });
 cvS.addEventListener("pointercancel", () => { brush = null; requestDraw(drawSeries); });
 cvS.addEventListener("pointerleave", () => { if (!brush) { hover = null; hideTip(); requestDraw(drawSeries); } });
-cvS.addEventListener("dblclick", () => setView(0, M.nNew));
+cvS.addEventListener("dblclick", e => {
+  const [x, , r] = local(e), zone = zoneAt(x, r.width);
+  if (zone === "left") yZoom = null;
+  else if (zone === "right") aZoom = null;
+  else { yZoom = aZoom = null; setView(0, M.nNew); }
+  syncFit(); requestDraw(drawSeries);
+});
+$("y-fit").addEventListener("click", () => { if (!(yZoom || aZoom)) return; yZoom = aZoom = null; syncFit(); requestDraw(drawSeries); });
 cvS.addEventListener("keydown", e => {
+  if ((e.key === "ArrowUp" || e.key === "ArrowDown") && frame) {
+    // Zoom the values in or out by 2 around the new value under the cursor; zooming out stops at the fitted range.
+    e.preventDefault();
+    const [y0, y1] = yZoom || [frame.y0, frame.y1], fit = frame.fit, k = e.key === "ArrowUp" ? 0.5 : 2;
+    const v = hover != null && current ? current.nw[sVar][hover] : NaN;
+    const at = Number.isFinite(v) ? Math.min(y1, Math.max(y0, v)) : (y0 + y1) / 2;
+    let a = at - (at - y0) * k, b = at + (y1 - at) * k;
+    if (k > 1) { a = Math.max(a, fit[0]); b = Math.min(b, fit[1]); }
+    yZoom = k > 1 && a <= fit[0] && b >= fit[1] ? null : [a, b];
+    syncFit(); requestDraw(drawSeries);
+    return;
+  }
   if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
   e.preventDefault();
   const step = (e.shiftKey ? 30 : 1) * (e.key === "ArrowLeft" ? -1 : 1);
@@ -1025,7 +1106,7 @@ cvS.addEventListener("keydown", e => {
 });
 cvS.addEventListener("blur", () => { hover = null; hideTip(); requestDraw(drawSeries); });
 anomBtn.addEventListener("click", () => {
-  showAnom = !showAnom;
+  showAnom = !showAnom; aZoom = null; syncFit();
   anomBtn.setAttribute("aria-checked", String(showAnom));
   $("a-leg").hidden = !(showAnom && selK != null && EMB[selK].hasOld);
   requestDraw(drawSeries);
@@ -1065,7 +1146,7 @@ function updateSubs() {
   $("a-leg").hidden = !(showAnom && e.hasOld);
 }
 async function select(k, fromMap, userPick = true) {
-  selK = k; current = null;
+  selK = k; current = null; yZoom = aZoom = null; syncFit();   // value ranges differ between basins; the window is kept
   const e = EMB[k], i = e.i, g = GROUP[e.group];
   rows.forEach((r, kk) => r && r.setAttribute("aria-current", String(kk === k)));
   $("sel-title").textContent = `${B.id[i]}${B.name[i] ? " · " + B.name[i] : ""}`;
@@ -1108,6 +1189,7 @@ function renderFoot() {
   li(`Both read the same Daymet V4 R1 cells, so agreement shows that the reprocessing reproduces the co-authors' aggregation; it does not test Daymet itself.`);
   li(`Metrics come from daymet_validate.py over 1980–2023, one row per basin, variable and year (${M.validation_file}). Map values are per basin over the whole record: RMSE pooled over its days, largest |Δ| over its years.`);
   li(`Embedded series are quantized for display: the new values to 0.01 mm, 0.01 °C, 0.1 Pa or 0.01 W/m² (coarser only for series with a very wide range); the difference to 1/32,767 of its largest value in the record. The original is drawn as new − difference, floored at zero for precipitation, SWE, vapour pressure and radiation (the rounding of the new values can otherwise dip a few thousandths below zero).`);
+  li(`Zoomed out, when more than 1.5 days share a pixel, each pixel column shows the range of its days: the original as a filled blue band, the new as orange lines along the edges of its own band (filled only where no original lies beneath it).`);
   li(`Daymet uses a 365-day calendar: December 31 is dropped in leap years, and both series follow it.`);
   li(`Selection: ${M.n} basins per group, seed ${M.seed}. Built ${M.generated} by EO_data_processing/viz/build_daymet_record_explorer.py (commit ${M.commit}).`);
   f.append(ul);
@@ -1135,7 +1217,7 @@ seg($("mapmode-seg"), [["coverage", "Coverage"], ["rmse", "Record RMSE"], ["max_
 });
 $("mapvar-ctl").hidden = true;
 seg($("mapvar-seg"), VARS.map(v => [v, D.short[v]]), mapVar, k => { mapVar = k; requestDraw(drawMap); });
-seg($("svar-seg"), VARS.map(v => [v, D.short[v]]), sVar, k => { sVar = k; updateSubs(); requestDraw(drawSeries); renderAnnual(); });
+seg($("svar-seg"), VARS.map(v => [v, D.short[v]]), sVar, k => { sVar = k; yZoom = aZoom = null; syncFit(); updateSubs(); requestDraw(drawSeries); renderAnnual(); });
 const ys = $("w-year");
 ys.append(new Option("Year…", ""));
 for (let y = M.year0; y <= M.yearNewEnd; y++) ys.append(new Option(String(y), String(y)));
