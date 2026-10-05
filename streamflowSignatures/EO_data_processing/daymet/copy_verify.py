@@ -12,8 +12,9 @@ rewritten after each verified file, through a temporary file and an fsync. A fil
 manifest line records OTHER content is refused unless --replace is given, so a truncated
 or wrong source cannot quietly overwrite a known-good copy.
 
-The re-read rate is printed. A rate far above the drive's own (exFAT reads ~30-50 MB/s)
-means the pages came from memory, not the device, and the check proved less than it says.
+The re-read rate is printed. A rate far above the drive's own (the exFAT thumb drive reads
+~30-50 MB/s) means the pages came from memory, not the device: F_NOCACHE does not evict
+pages that are already resident. Such a file is noted; re-hash it after a remount to be sure.
 
 Usage: python copy_verify.py [--replace] <src_root> <dst_root> <relpath> [<relpath> ...]
 Hidden files and folders are skipped.
@@ -105,7 +106,8 @@ def main():
         entries[rel] = f"{hs}  {ss:>14}  {rel}"
         write_manifest(man, entries)
         total += ss
-        note = "  (faster than the drive reads: the re-read may have come from memory)" if rate > 1000 and sd > 1e8 else ""
+        note = ("  (faster than the drive reads: the re-read may have come from memory; re-hash after a remount "
+                "to be sure)") if rate > 500 and sd > 1e6 else ""
         print(f"OK {rel}: {ss:,} B, re-read at {rate:,.0f} MB/s{note}", flush=True)
     print(f"copied {len(files) - bad} of {len(files)} files, {total / 1e9:.2f} GB; md5 + size verified on the drive: "
           f"{len(files) - bad} OK, {bad} mismatches; manifest {man}")
