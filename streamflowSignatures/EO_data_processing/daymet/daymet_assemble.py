@@ -21,11 +21,16 @@ Structural checks (fatal):
 NaN counts per variable are reported (a NaN day = no valid Daymet cell under the basin
 that day).
 
-Verification (fatal; skipped with --no-verify): after writing, the output is re-read and
-compared value by value with the per-variable-year inputs. That covers keys, row order
-and every float bit, NaN and -0.0 included. daymet_validate.py compares the per-year
-files with the stale product, so this check is what carries that validation over to the
-assembled file.
+Inputs: every variable-year needs its <var>_<year>.done (an unfinished or out-of-range
+aggregation has none), and all must come from one weights file (the md5 in the .done or
+the timing JSON, where recorded).
+
+Verification (fatal; skipped with --no-verify): the output is written to <out>.tmp, re-read
+and compared value by value with the per-variable-year inputs. That covers keys, row order
+and every float bit, NaN and -0.0 included (NaN is stored as NaN, never as NULL). Only a
+verified file replaces <out>; on failure the .tmp is deleted and an earlier <out> is left
+as it was. daymet_validate.py compares the per-year files with the stale product, so this
+check is what carries that validation over to the assembled file.
 
 Provenance sidecar <out>.provenance.json:
   * the inputs and their md5s, row and NaN counts, and the output size and md5;
@@ -112,6 +117,8 @@ def verify_output(out, in_dir, years, variables):
                                                      pa.date32()))).as_py():
             sys.exit(f"VERIFY: {year}: Date differs from the inputs")
         for v in variables:
+            if got[v].null_count:
+                sys.exit(f"VERIFY: {year} {v}: {got[v].null_count} NULLs; the inputs hold values or NaN there")
             a = got[v].to_numpy().view(np.int64)
             b = np.ascontiguousarray(exp[v].to_numpy(dtype=np.float64)).view(np.int64)
             if not np.array_equal(a, b):
@@ -162,6 +169,43 @@ def run_provenance(in_dir, years, variables):
             "aggregate_commits": sorted({(t.get("git") or {}).get("commit") for t in timing} - {None})}
 
 
+def check_output(path, a, years, variables):
+    """PAR1 at both ends, then (unless --no-verify) the bit-for-bit re-read against the inputs."""
+    with open(path, "rb") as fh:
+        head = fh.read(4)
+        fh.seek(-4, 2)
+        if head != b"PAR1" or fh.read(4) != b"PAR1":
+            sys.exit(f"{path}: no PAR1 magic at both ends")
+    if a.no_verify:
+        return None
+    t0 = time.time()
+    ver = dict(verify_output(path, a.in_dir, years, variables), seconds=round(time.time() - t0, 1), at_utc=utc_now())
+    print(f"verified: {ver['values_compared']:,} values equal the inputs ({ver['seconds']} s)", flush=True)
+    return ver
+
+
+def done_weights(in_dir, years, variables):
+    """Every variable-year must have its .done (an out-of-range or unfinished aggregation has none),
+    and all must come from one weights file: the md5 recorded in the .done or the timing JSON."""
+    missing = [f"{v}_{y}" for y in years for v in variables if not os.path.exists(os.path.join(in_dir, f"{v}_{y}.done"))]
+    if missing:
+        sys.exit(f"{len(missing)} variable-years have no .done (unfinished, or out of range), e.g. {missing[:5]}")
+    seen = set()
+    for y in years:
+        for v in variables:
+            for f in (f"{v}_{y}.done", f"{v}_{y}_timing.json"):
+                try:
+                    w = json.load(open(os.path.join(in_dir, f))).get("weights_md5")
+                except (OSError, ValueError):
+                    w = None
+                if w:
+                    seen.add(w)
+                    break
+    if len(seen) > 1:
+        sys.exit(f"the inputs were aggregated with {len(seen)} different weights files: {sorted(seen)}")
+    return seen.pop() if seen else None
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--in-dir", required=True)
@@ -196,10 +240,11 @@ def main():
         prov["sidecar_rewritten_by"] = {"git": git_state(), "software": software_versions()}
     else:
         prov = {"created": time.strftime("%Y-%m-%dT%H:%M:%S"), "created_utc": utc_now(), "years": years,
-                "vars": variables, "inputs": {}, "rows": 0, "nan_days": {v: 0 for v in variables}}
+                "vars": variables, "inputs": {}, "rows": 0, "nan_days": {v: 0 for v in variables},
+                "weights_md5": done_weights(a.in_dir, years, variables)}
         sites_ref = None
         tmp = a.out + ".tmp"
-        writer = pq.ParquetWriter(tmp, schema, compression="zstd")
+        writer, written = pq.ParquetWriter(tmp, schema, compression="zstd"), False
         try:
             for year in years:
                 frame, sites = load_year(a.in_dir, year, variables, md5s=prov["inputs"])
@@ -209,27 +254,31 @@ def main():
                     sys.exit(f"{year}: site set differs from {years[0]}")
                 for v in variables:
                     prov["nan_days"][v] += int(frame[v].isna().sum())
-                writer.write_table(pa.Table.from_pandas(frame[["site_id", "Date"] + variables], schema=schema,
-                                                        preserve_index=False))
+                # NaN stays NaN (pandas conversion would store it as NULL)
+                cols = [pa.array(frame["site_id"].to_numpy(), pa.string()),
+                        pa.array(frame["Date"].to_numpy().astype("datetime64[D]"), pa.date32())]
+                cols += [pa.array(frame[v].to_numpy(dtype=np.float64), pa.float64()) for v in variables]
+                writer.write_table(pa.Table.from_arrays(cols, schema=schema))
                 prov["rows"] += len(frame)
                 print(f"  {year}: {len(frame):,} rows, {len(sites):,} sites", flush=True)
+            written = True
         finally:
             writer.close()
+            if not written and os.path.exists(tmp):
+                os.remove(tmp)
+        try:
+            ver = check_output(tmp, a, years, variables)
+        except BaseException:
+            os.remove(tmp)      # an unverified file never takes the output's name
+            raise
         os.replace(tmp, a.out)
         prov.update({"sites": len(sites_ref), "out": os.path.basename(a.out), "out_bytes": os.path.getsize(a.out),
                      "out_md5": md5sum(a.out), "git": git_state(), "software": software_versions()})
-    with open(a.out, "rb") as fh:
-        head = fh.read(4)
-        fh.seek(-4, 2)
-        if head != b"PAR1" or fh.read(4) != b"PAR1":
-            sys.exit(f"{a.out}: no PAR1 magic at both ends")
+    if a.provenance_only:
+        ver = check_output(a.out, a, years, variables)
     prov["row_order"] = "year, site_id, Date (written year by year)"
-    if not a.no_verify:
-        t0 = time.time()
-        prov["verification"] = dict(verify_output(a.out, a.in_dir, years, variables),
-                                    seconds=round(time.time() - t0, 1), at_utc=utc_now())
-        print(f"verified: {prov['verification']['values_compared']:,} values equal the inputs "
-              f"({prov['verification']['seconds']} s)", flush=True)
+    if ver:
+        prov["verification"] = ver
     prov["run"] = run_provenance(a.in_dir, years, variables)
     write_json(side, prov)
     print(f"{'sidecar rewritten for' if a.provenance_only else 'wrote'} {a.out}: {prov['rows']:,} rows, "

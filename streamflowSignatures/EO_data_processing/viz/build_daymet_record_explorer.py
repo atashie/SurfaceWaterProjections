@@ -22,7 +22,7 @@ Encoding. Per basin and variable, the new series is stored as int16 day-to-day s
 quantum (0.01 mm, 0.01 degC, 0.1 Pa, 0.01 W/m2; coarser only when the series' range needs more
 than 32,000 quanta). The difference new - original is stored as int16 scaled to its own largest
 |value|. Both are byte-shuffled and gzipped, and the browser decodes them (DecompressionStream).
-The original is drawn as new - difference, so the two panels differ by exactly the stored
+The original is drawn as new - difference, so the two series differ by exactly the stored
 difference. Before encoding, the builder checks every embedded basin-year against the validation
 table: the per-year largest |difference| recomputed from the extracted series must equal it.
 
@@ -75,7 +75,8 @@ METRICS = [
     ("omr2", "1 − R²", "1 - r2_identity", "log", VARS,
      "1 − R² about the 1:1 line (identity R²), per basin-year. The seasonal cycle dominates R², so "
      "the absolute differences are the informative numbers. Basin-years whose original is constant "
-     "(all-zero SWE) have no R² and are left out."),
+     "(all-zero SWE) have no R² and are left out. Below about 1e-15 the values are double-precision "
+     "rounding, and where R² rounds to exactly 1 they are counted apart."),
     ("annual", "Annual total Δ", "100 * (sum_ratio - 1)", "lin", ["prcp", "swe", "vp", "srad"],
      "Relative difference of the annual sum, new vs original, in %. Not shown for temperatures: "
      "their annual sums cross zero, so a ratio means nothing."),
@@ -100,13 +101,13 @@ def check_block(b64, desc, new, old):
         k = np.cumsum(unshuffle16(u8, off, N_NEW).astype(np.int64))
         off += 2 * N_NEW
         nv = d["lo"] + k * d["q"]
-        if np.abs(nv - new[var].to_numpy(float)).max() > d["q"] / 2 + 1e-9:
+        if not np.isfinite(nv).all() or np.abs(nv - new[var].to_numpy(float)).max() > d["q"] / 2 + 1e-9:
             sys.exit(f"{var}: decoded new series off by more than half a quantum")
         if old is not None:
             e = unshuffle16(u8, off, N_OLD).astype(float) * d["ds"]
             off += 2 * N_OLD
             true = new[var].to_numpy(float)[:N_OLD] - old[var].to_numpy(float)
-            if np.abs(e - true).max() > d["ds"] / 2 + 1e-15:
+            if not np.isfinite(true).all() or np.abs(e - true).max() > d["ds"] / 2 + 1e-15:
                 sys.exit(f"{var}: decoded difference off by more than half its quantum")
     if off != len(u8):
         sys.exit("a block has unread bytes")
@@ -257,13 +258,17 @@ def main():
         metrics.append(m)
     lag = {}
     for var in VARS:
-        r = con.sql(f"""SELECT count(*) n, median(r_lag_m1) m1, median(r) r0, median(r_lag_p1) p1,
-            sum(CASE WHEN r_lag_m1 > r OR r_lag_p1 > r THEN 1 ELSE 0 END) beats,
+        # the lag test needs all three correlations; a constant series (all-zero SWE) has none
+        ok = "r IS NOT NULL AND r_lag_m1 IS NOT NULL AND r_lag_p1 IS NOT NULL"
+        r = con.sql(f"""SELECT count(*) n, count(*) FILTER (WHERE {ok}) n_r,
+            median(r_lag_m1) FILTER (WHERE {ok}) m1, median(r) FILTER (WHERE {ok}) r0,
+            median(r_lag_p1) FILTER (WHERE {ok}) p1,
+            count(*) FILTER (WHERE {ok} AND (r_lag_m1 > r OR r_lag_p1 > r)) beats,
             sum(n_both_finite) n_day_total, count(DISTINCT canon_id) n_basin FROM v WHERE var = '{var}'""").fetchone()
-        lag[var] = {"n": int(r[0]), "m1": sig(r[1], 6), "r0": sig(r[2], 12), "p1": sig(r[3], 6), "beats": int(r[4])}
+        lag[var] = {"n": int(r[1]), "m1": sig(r[2], 6), "r0": sig(r[3], 12), "p1": sig(r[4], 6), "beats": int(r[5])}
         top = rec[rec["var"] == var].sort_values("max_abs", ascending=False).iloc[0]
         headline["vars"][var] = {"max_abs": sig(top["max_abs"], 3), "max_site": b.loc[idx_of[top["canon_id"]], "site_id"],
-                                 "max_year": int(top["max_year"]), "basin_years": int(r[0]), "days": int(r[5]),
+                                 "max_year": int(top["max_year"]), "basin_years": int(r[0]), "days": int(r[6]),
                                  "basins": int(r[6])}
     ann = next(m for m in metrics if m["key"] == "annual")["vars"]["prcp"]
     headline.update({"compared": len(compared), "shared": int(in_old.sum()), "orig_nan": int((status == 1).sum()),
@@ -348,7 +353,10 @@ def main():
             raw += shuffle16(steps)
             d = {"lo": lo, "q": qn, "err": sig(np.abs(lo + kq * qn - xv).max(), 2)}
             if has_old:
-                dv = xv[:N_OLD] - o[var].to_numpy(dtype=float)
+                ov = o[var].to_numpy(dtype=float)
+                if not np.isfinite(ov).all():
+                    sys.exit(f"{cid} {var}: the original series has a NaN on some days")
+                dv = xv[:N_OLD] - ov
                 per_year = np.abs(dv).reshape(-1, 365).max(axis=1)
                 ref = vmax.loc[cid, var].reindex(range(YEAR0, YEAR_OLD_END + 1)).to_numpy()
                 worst_check = max(worst_check, float(np.nanmax(np.abs(per_year - ref))))
@@ -410,10 +418,12 @@ def main():
     if a.fragment:
         with open(a.fragment, "w", encoding="utf-8") as fh:
             fh.write(page)
+    title = re.match(r"\s*(<title>.*?</title>)\s*", page, re.S)
+    head, body = (title.group(1) + "\n", page[title.end():]) if title else ("", page)
     with open(a.out, "w", encoding="utf-8") as fh:
         fh.write("<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
                  "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover\">\n"
-                 "</head>\n<body>\n" + page + "\n</body>\n</html>\n")
+                 + head + "</head>\n<body>\n" + body + "\n</body>\n</html>\n")
     print(f"embedded {len(embedded)} basins (worst {len(sel['worst'])}, random {len(sel['random'])}, "
           f"new {len(sel['new'])}); series check vs validation table: max |per-year max diff| gap {worst_check:.2g}; "
           f"metadata {len(payload) / 1e6:.2f} MB, series {len(bl) / 1e6:.2f} MB; page "

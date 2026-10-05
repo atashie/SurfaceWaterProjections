@@ -61,6 +61,8 @@ p { margin: 0; }
 .note { color: var(--ink-2); max-width: 80ch; font-size: 13px; }
 header.top { display: grid; gap: 10px; }
 section { display: grid; gap: 14px; min-width: 0; }
+section > * { min-width: 0; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .section-head { display: grid; gap: 4px; }
 
 /* headline tiles */
@@ -224,7 +226,7 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; max-width: 1
     <div class="explore">
       <div class="card mapcard">
         <div class="mapbox" id="mapbox">
-          <canvas id="map" tabindex="0" aria-label="Map of basins. Use the list beside it to pick an embedded basin."></canvas>
+          <canvas id="map" role="img" aria-label="Map of basins. Use the list beside it to pick an embedded basin."></canvas>
           <div class="zoom">
             <button class="btn" id="zin" type="button" aria-label="Zoom in">+</button>
             <button class="btn" id="zout" type="button" aria-label="Zoom out">−</button>
@@ -257,6 +259,8 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; max-width: 1
         <button class="btn" id="w-next" type="button" aria-label="Next window">▶</button>
       </div>
       <div class="ctl"><span class="lab" id="lab-yax">Value axis</span>
+        <button class="btn" id="y-out" type="button" aria-label="Zoom the values out">−</button>
+        <button class="btn" id="y-in" type="button" aria-label="Zoom the values in">+</button>
         <button class="btn" id="y-fit" type="button" aria-disabled="true" aria-describedby="y-fit-d">Reset zoom</button>
         <span id="y-fit-d" hidden>Fits the value axes to the data in view again</span>
       </div>
@@ -264,7 +268,8 @@ footer ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; max-width: 1
         <button class="switch" id="anom" type="button" role="switch" aria-checked="false" aria-labelledby="lab-anom anom-text"><span class="track"></span><span id="anom-text">new − original, right axis</span></button>
       </div>
     </div>
-    <p class="hint">Drag across the chart to zoom: sideways for dates, up or down for values, diagonally for both; drag along an axis to zoom only that axis. Double-click to reset (on an axis, only that axis). With the chart focused, ← → step a day (Shift: a month) and ↑ ↓ zoom the values.</p>
+    <p class="hint">Drag across the chart to zoom: sideways for dates, up or down for values, diagonally for both; drag along an axis to zoom only that axis. Double-click to reset (on an axis, only that axis). With the chart focused, ← → step a day (Shift: a month) and ↑ ↓ zoom the values, as − and + do.</p>
+    <div class="sr" id="sr-live" aria-live="polite"></div>
     <div id="series-msg" class="warn" hidden></div>
     <div class="card panel">
       <div class="ph">
@@ -332,23 +337,27 @@ function trimNum(x, sigd) {
 const signed = s => (s.startsWith("-") ? "−" + s.slice(1) : (s === "0" ? s : "+" + s));
 const sciSigned = (x, d = 3) => (x == null || !isFinite(x)) ? "—" : signed(sci(x, d).replace("−", "-"));
 const val = (x, v) => (x == null || !isFinite(x)) ? "—" : x.toLocaleString("en-US", { minimumFractionDigits: DEC[v], maximumFractionDigits: DEC[v] }).replace("-", "−");
+// Decimals a tick step needs: 2.5 -> 1, 0.25 -> 2, 0.002 -> 3.
+function stepDecimals(step) {
+  for (let d = 0; d <= 15; d++) { const x = step * Math.pow(10, d); if (Math.abs(x - Math.round(x)) <= 1e-6 * x) return d; }
+  return 15;
+}
 function tickFmt(t, step) {
   if (t === 0) return "0";
-  const a = Math.abs(step);
-  if (a >= 1e-3 && Math.abs(t) < 1e5) {
-    const dec = Math.max(0, -Math.floor(Math.log10(a) + 1e-9));
+  const a = Math.abs(step), dec = stepDecimals(a);
+  if (dec <= 6 && Math.abs(t) < 1e5)
     return t.toLocaleString("en-US", { minimumFractionDigits: dec, maximumFractionDigits: dec }).replace("-", "−");
-  }
-  const e = Math.floor(Math.log10(Math.abs(t)) + 1e-9);
-  const m = Number((t / Math.pow(10, e)).toPrecision(2));
-  return `${String(m).replace("-", "−")}e${e}`;
+  // exponent form, with as many significant digits as the step resolves
+  const e = Math.floor(Math.log10(Math.abs(t)) + 1e-9), es = Math.floor(Math.log10(a) + 1e-9);
+  const sigd = Math.min(15, Math.max(1, e - es + 1 + stepDecimals(a / Math.pow(10, es))));
+  return `${String(Number((t / Math.pow(10, e)).toPrecision(sigd))).replace("-", "−")}e${e}`;
 }
 function niceTicks(lo, hi, n = 4) {
   if (!(hi > lo)) { const d = Math.abs(lo) || 1; lo -= d; hi += d; }
   const raw = (hi - lo) / n, p = Math.pow(10, Math.floor(Math.log10(raw)));
   const step = [1, 2, 2.5, 5, 10].map(m => m * p).find(s => s >= raw) || 10 * p;
   const t0 = Math.ceil(lo / step - 1e-9) * step, out = [];
-  for (let t = t0; t <= hi + step * 1e-9; t += step) out.push(Math.abs(t) < step * 1e-9 ? 0 : t);
+  for (let t = t0, n = 0; t <= hi + step * 1e-9 && n < 1000; t += step, n++) out.push(Math.abs(t) < step * 1e-9 ? 0 : t);
   return { ticks: out, step };
 }
 function niceRange(lo, hi, zeroBase) {
@@ -369,6 +378,15 @@ const monthStart = (y, m) => yearStart(y) + Math.round((Date.UTC(y, m, 1) - Date
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 function xTicks(i0, i1, pw) {
   const years = (i1 - i0) / 365, out = [];
+  if (i1 - i0 <= 62) {
+    const every = [1, 2, 7].find(e => pw / (i1 - i0) * e >= 44) || 7;
+    for (let i = i0; i < i1; i++) {
+      const d = dayDate(i), dom = d.getUTCDate(), mo = d.getUTCMonth();
+      if (every === 7 ? ![1, 8, 15, 22].includes(dom) : every === 2 ? dom % 2 === 0 : false) continue;
+      out.push({ i, label: dom === 1 && mo === 0 ? String(d.getUTCFullYear()) : `${MON[mo]} ${dom}` });
+    }
+    return out;
+  }
   const y0 = M.year0 + Math.floor(i0 / 365), y1 = M.year0 + Math.floor((i1 - 1) / 365);
   if (years > 2.5) {
     const per = pw / years, every = [1, 2, 5, 10, 20].find(e => per * e >= 46) || 20;
@@ -437,14 +455,14 @@ function renderHeadline() {
     `On all ${int(H.compared)} basins that both files cover, every day of 1980–2023, the reprocessed series reproduce the co-authors' ` +
     `to within ${sci(HV.prcp.max_abs)} ${u.prcp} of daily precipitation, ${sci(Math.max(HV.tmin.max_abs, HV.tmax.max_abs))} ${u.tmin}, ` +
     `${sci(HV.vp.max_abs)} ${u.vp}, ${sci(HV.srad.max_abs)} ${u.srad} and ${sci(HV.swe.max_abs)} ${u.swe} of snow water equivalent. ` +
-    `The new file adds ${int(H.new_only + H.orig_nan)} basins and the years 2024–2025.`;
+    `The new file also covers ${int(H.new_only + H.orig_nan)} basins without an original series (${int(H.new_only)} absent from the original file, ${H.orig_nan} NaN on every day there) and the years 2024–2025.`;
   const days = VARS.reduce((s, v) => s + HV[v].days, 0);
   const tiles = [
     ["Basins compared", int(H.compared), `of ${int(H.shared)} in both files; ${H.orig_nan} are NaN on every day in the original`],
     ["Daily values compared", `${(days / 1e6).toFixed(0)} M`, `${(HV.prcp.days / 1e6).toFixed(1)} M per variable × 6 variables, 1980–2023`],
-    ["Largest daily |Δ|, precipitation", [sci(HV.prcp.max_abs), D.units.prcp], `basin ${HV.prcp.max_site} in ${HV.prcp.max_year}; the median basin-year's largest is ${sci(D.metrics[0].vars.prcp.q.p50)} mm`],
+    ["Largest daily |Δ|, precipitation", [sci(HV.prcp.max_abs), D.units.prcp], `basin ${HV.prcp.max_site} in ${HV.prcp.max_year}; the median basin-year's largest is ${sci(D.metrics[0].vars.prcp.q.p50)} ${D.units.prcp}`],
     ["Annual precipitation totals", [`${pct(H.prcp_annual_p01)} to ${pct(H.prcp_annual_p99)}`, "%"], `1st–99th percentile of ${int(HV.prcp.basin_years)} basin-years; extremes ${pct(H.prcp_annual_min)} and ${pct(H.prcp_annual_max)} %`],
-    ["Date alignment", `${int(VARS.reduce((s, v) => s + D.lag[v].beats, 0))} shifts`, `no basin-year of any variable correlates better one day earlier or later`],
+    ["Date alignment", `${int(VARS.reduce((s, v) => s + D.lag[v].beats, 0))} shifts`, VARS.some(v => D.lag[v].beats) ? `basin-years that correlate better shifted by a day; see the table below` : `no basin-year of any variable correlates better one day earlier or later`],
     ["New coverage", `${int(H.new_only + H.orig_nan)} basins`, `no original series (${int(H.new_only)} absent, ${H.orig_nan} NaN); 2024–2025 are new for all ${int(H.n_new)}`],
   ];
   const host = $("tiles"); host.replaceChildren();
@@ -534,7 +552,7 @@ function drawHists() {
     let lastX = -1e9;
     for (const [name, q] of marks) {
       const x = pos(q); if (x == null || x < L || x > L + pw) continue;
-      s.append(sv("line", { x1: x, x2: x, y1: T - 2, y2: T + ph, stroke: "var(--ink-2)", "stroke-width": 1 }));
+      s.append(sv("line", { x1: x, x2: x, y1: T - 2, y2: T + ph, stroke: "var(--ink-2)", "stroke-width": 1, ...(name === "p99" ? { "stroke-dasharray": "3 2" } : {}) }));
       if (x - lastX > 40) {
         const lab = sv("text", { x, y: T - 4, "text-anchor": "middle", "font-size": 10.5, fill: "var(--ink-2)" });
         lab.textContent = name; s.append(lab); lastX = x;
@@ -546,10 +564,10 @@ function drawHists() {
     const part = (k, t) => { cap.append(el("span", "k", k + " "), document.createTextNode(t)); };
     const fmtq = q => m.kind === "lin" ? sciSigned(q, 2) : sci(q, 2);
     part("median", fmtq(h.q.p50) + u); cap.append(document.createTextNode(" · "));
-    part("p99", fmtq(h.q.p99) + u); cap.append(document.createTextNode(" · "));
+    part("p99 (dashed)", fmtq(h.q.p99) + u); cap.append(document.createTextNode(" · "));
     part(m.kind === "lin" ? "range" : "max", m.kind === "lin" ? `${fmtq(h.min)} to ${fmtq(h.max)}${u}` : fmtq(h.max) + u);
     const extra = [];
-    if (h.zeros) extra.push(`${int(h.zeros)} exactly 0 (not drawn)`);
+    if (h.zeros) extra.push(m.key === "omr2" ? `${int(h.zeros)} where R² rounds to 1 in double precision (not drawn)` : `${int(h.zeros)} exactly 0 (not drawn)`);
     if (h.below || h.above) extra.push(`${int((h.below || 0) + (h.above || 0))} beyond the axis`);
     extra.push(`n = ${int(h.n)}`);
     cap.append(el("div", "k", extra.join(" · ")));
@@ -568,7 +586,7 @@ function renderQTable() {
 }
 function renderLag() {
   const t = $("lag-table"); t.replaceChildren();
-  const hr = el("tr"); for (const c of ["Variable", "Basin-years", "Median r, new 1 day earlier", "Median r, lag 0", "Median r, new 1 day later", "Basin-years a shift beats lag 0"]) hr.append(el("th", null, c));
+  const hr = el("tr"); for (const c of ["Variable", "Basin-years with r", "Median r, new 1 day earlier", "Median r, lag 0", "Median r, new 1 day later", "Basin-years a shift beats lag 0"]) hr.append(el("th", null, c));
   t.append(hr);
   for (const v of VARS) {
     const g = D.lag[v], r = el("tr");
@@ -620,14 +638,17 @@ function drawMap() {
   }
   ctx.stroke();
   const zoom = MV.s / MV.fit, r = Math.min(3.2, 1.5 * Math.sqrt(zoom));
-  if (mapMode === "coverage") {
+  if (mapMode === "coverage") {   // compared: squares; no original series: circles
     const cBoth = cssv("--dot"), cNew = cssv("--dot-new");
     for (const pass of [0, 1]) {
       ctx.fillStyle = pass === 0 ? cBoth : cNew;
+      if (pass === 1) ctx.beginPath();
       for (let i = 0; i < NB; i++) {
         if ((B.status[i] === 0) !== (pass === 0) || embAt.has(i)) continue;
-        ctx.fillRect(sx(B.x[i]) - r, sy(B.y[i]) - r, 2 * r, 2 * r);
+        if (pass === 0) ctx.fillRect(sx(B.x[i]) - r, sy(B.y[i]) - r, 2 * r, 2 * r);
+        else { ctx.moveTo(sx(B.x[i]) + r * 1.1, sy(B.y[i])); ctx.arc(sx(B.x[i]), sy(B.y[i]), r * 1.1, 0, 2 * Math.PI); }
       }
+      if (pass === 1) ctx.fill();
     }
   } else {
     const sc = mapScale(), lo = cssv("--seq-lo"), hi = cssv("--seq-hi"), vals = D.rec[mapMode][mapVar];
@@ -666,15 +687,17 @@ function renderMapLegend() {
   const item = (sym, label) => { const s = el("span", "item"); s.append(sym, document.createTextNode(label)); host.append(s); };
   for (const g of GROUPS) item(symbolSVG(g.shape, g.color), `${g.label} (${EMB.filter(e => e.group === g.key).length})`);
   if (mapMode === "coverage") {
-    const dot = c => { const s = sv("svg", { width: 10, height: 10, viewBox: "0 0 10 10", "aria-hidden": "true" }); s.append(sv("rect", { x: 2, y: 2, width: 6, height: 6, fill: `var(${c})` })); return s; };
-    item(dot("--dot"), `In both files (${int(H.compared)})`);
-    item(dot("--dot-new"), `New file only (${int(H.new_only + H.orig_nan)})`);
+    const dot = (c, round) => { const s = sv("svg", { width: 10, height: 10, viewBox: "0 0 10 10", "aria-hidden": "true" }); s.append(round ? sv("circle", { cx: 5, cy: 5, r: 3.3, fill: `var(${c})` }) : sv("rect", { x: 2, y: 2, width: 6, height: 6, fill: `var(${c})` })); return s; };
+    item(dot("--dot", false), `Compared (${int(H.compared)})`);
+    item(dot("--dot-new", true), `No original series (${int(H.new_only + H.orig_nan)})`);
   } else {
     const sc = mapScale(), r = el("span", "ramp");
     const bar = el("span", "bar"); bar.style.background = `linear-gradient(90deg, ${cssv("--seq-lo")}, ${cssv("--seq-hi")})`;
     const lbl = mapMode === "rmse" ? "Record RMSE" : "Largest daily |Δ|";
-    r.append(el("span", null, `${lbl}, ${D.short[mapVar]}: ${sci(Math.pow(10, sc.lo))}`), bar, el("span", null, `${sci(Math.pow(10, sc.hi))} ${D.units[mapVar]}`));
+    const vmax = Math.max(...D.rec[mapMode][mapVar]);
+    r.append(el("span", null, `${lbl}, ${D.short[mapVar]}: ≤ ${sci(Math.pow(10, sc.lo))}`), bar, el("span", null, `≥ ${sci(Math.pow(10, sc.hi))} ${D.units[mapVar]}`));
     host.append(r);
+    host.append(el("span", "item", `colour clipped at the 2nd and 98th percentiles; largest ${sci(vmax)} ${D.units[mapVar]}`));
     const s = sv("svg", { width: 10, height: 10, viewBox: "0 0 10 10", "aria-hidden": "true" });
     s.append(sv("rect", { x: 2, y: 2, width: 6, height: 6, fill: "none", stroke: "var(--muted)" }));
     item(s, "No original series");
@@ -694,7 +717,7 @@ function basinTip(t, i) {
   const head = el("div", "r"); head.append(el("b", null, B.id[i]), el("span", "t", B.region[i] || (B.country[i] === "US" ? "USA" : "Canada")));
   t.append(head);
   if (B.name[i]) t.append(el("div", null, placeName(i)));
-  t.append(el("div", "t", `${sci(B.area[i], 3)} km² · ${int(B.cells[i])} Daymet cells`));
+  t.append(el("div", "t", `${sci(B.area[i], 3)} km² · touches ${int(B.cells[i])} Daymet cells`));
   const st = B.status[i] === 0 ? "In both files" : B.status[i] === 1 ? "Original is NaN on every day" : "New file only";
   t.append(el("div", "t", st));
   if (REC.has(i)) {
@@ -851,7 +874,7 @@ function viewExtent(arrs, i0, i1) {
 }
 // Left axis (the variable), year/month grid and the x axis.
 // Multiples of `step` within [y0, y1]; a zoomed axis need not start on one.
-const stepTicks = (y0, y1, step) => { const out = []; for (let k = Math.ceil(y0 / step - 1e-6); k * step <= y1 + step * 1e-6; k++) { const t = k * step; out.push(Math.abs(t) < step * 1e-6 ? 0 : t); } return out; };
+const stepTicks = (y0, y1, step) => { const out = []; for (let k = Math.ceil(y0 / step - 1e-6); k * step <= y1 + step * 1e-6 && out.length < 1000; k++) { const t = k * step; out.push(Math.abs(t) < step * 1e-6 ? 0 : t); } return out; };
 const zoomRange = ([a, b]) => [a, b, niceTicks(a, b, 4).step];
 function drawFrame(c, p, i0, i1, y0, y1, step, unit) {
   const { ctx, pw, ph } = c;
@@ -1001,11 +1024,11 @@ function drawSeries() {
   let mx = 0, ss = 0, sm = 0, n = 0;
   if (df) for (let j = i0, e1 = Math.min(i1, M.nOld); j < e1; j++) { const d = df[j], a = Math.abs(d); if (a > mx) mx = a; ss += d * d; sm += d; n++; }
   let Ya = null, d0 = 0, d1 = 0;
-  if (anomOn) {
+  if (anomOn && n) {
     const lim = mx > 0 ? mx : 1e-6, [a0, a1, dstep] = aZoom ? zoomRange(aZoom) : niceRange(-lim, lim, false);
     d0 = a0; d1 = a1; Ya = drawRightAxis(c, pad, d0, d1, dstep, D.units[v]);
   }
-  frame = { y0, y1, d0, d1, fit, anomOn };
+  frame = { y0, y1, d0, d1, fit, anomOn: !!Ya };
   drawTrace(c, pad, og, i0, i1, X, Y, cssv("--s1"), "halo", yZoom ? 0 : 3);
   drawTrace(c, pad, nw, i0, i1, X, Y, cssv("--s2"), "core", yZoom ? 0 : 3, og ? M.nOld : 0);
   if (Ya && n) drawTrace(c, pad, df, i0, i1, X, Ya, cssv("--ink-2"), "anom", aZoom ? 0 : 3);
@@ -1040,15 +1063,41 @@ function syncFit() { $("y-fit").setAttribute("aria-disabled", String(!(yZoom || 
 function applyZoom(b, r) {
   if (b.mode !== "y") {
     let a = idxAt(r.left + Math.min(b.x0, b.x1)), z = idxAt(r.left + Math.max(b.x0, b.x1)) + 1;
-    if (z - a < 14) { const m = (a + z) / 2; a = Math.max(0, Math.round(m - 7)); z = Math.min(M.nNew, a + 14); }
+    if (z - a < 14) { const m = (a + z) / 2; a = Math.max(0, Math.round(m - 7)); z = Math.min(M.nNew, a + 14); a = Math.max(0, z - 14); }
     setView(a, z);
   }
   if (b.mode !== "x") {   // the band's share of the plot height, read on the scale it was drawn on
     const ph = r.height - pad.t - pad.b, f = y => Math.min(1, Math.max(0, (pad.t + ph - y) / ph));
     const right = b.zone === "right", [u0, u1] = right ? [frame.d0, frame.d1] : [frame.y0, frame.y1];
     const lo = u0 + f(Math.max(b.y0, b.y1)) * (u1 - u0), hi = u0 + f(Math.min(b.y0, b.y1)) * (u1 - u0);
-    if (hi > lo) { if (right) aZoom = [lo, hi]; else yZoom = [lo, hi]; syncFit(); }
+    if (hi > lo) { if (right) aZoom = clampSpan(lo, hi, true); else yZoom = clampSpan(lo, hi, false); syncFit(); announceZoom(); }
   }
+}
+// The narrowest value range worth showing: 10 quanta of the embedded series (anything finer shows only the
+// encoding), and never so narrow that the axis loses floating-point resolution.
+function clampSpan(lo, hi, right) {
+  const d = EMB[selK].vars[sVar], q = right ? d.ds : d.q;
+  const min = Math.max(10 * q, 1e-9 * Math.max(Math.abs(lo), Math.abs(hi)), 1e-12);
+  if (hi - lo >= min) return [lo, hi];
+  const mid = (lo + hi) / 2;
+  return [mid - min / 2, mid + min / 2];
+}
+// Zoom the values (left axis) in (k = 0.5) or out (k = 2) around the new value at the cursor, or the middle;
+// zooming out stops at the range that fits the data in view.
+function zoomValues(k) {
+  if (!frame) return;
+  const [y0, y1] = yZoom || [frame.y0, frame.y1], fit = frame.fit;
+  const v = hover != null && current ? current.nw[sVar][hover] : NaN;
+  const at = Number.isFinite(v) ? Math.min(y1, Math.max(y0, v)) : (y0 + y1) / 2;
+  let a = at - (at - y0) * k, b = at + (y1 - at) * k;
+  if (k > 1) { a = Math.max(a, fit[0]); b = Math.min(b, fit[1]); }
+  yZoom = k > 1 && a <= fit[0] && b >= fit[1] ? null : clampSpan(a, b, false);
+  syncFit(); requestDraw(drawSeries); announceZoom();
+}
+const live = $("sr-live");
+function announceZoom() {
+  const u = D.units[sVar];
+  live.textContent = yZoom ? `Values zoomed to ${sci(yZoom[0], 3)} to ${sci(yZoom[1], 3)} ${u}` : "Values fit the data in view";
 }
 cvS.addEventListener("pointerdown", e => {
   if (e.button !== 0 || !frame) return;
@@ -1082,18 +1131,13 @@ cvS.addEventListener("dblclick", e => {
   else { yZoom = aZoom = null; setView(0, M.nNew); }
   syncFit(); requestDraw(drawSeries);
 });
-$("y-fit").addEventListener("click", () => { if (!(yZoom || aZoom)) return; yZoom = aZoom = null; syncFit(); requestDraw(drawSeries); });
+$("y-fit").addEventListener("click", () => { if (!(yZoom || aZoom)) return; yZoom = aZoom = null; syncFit(); requestDraw(drawSeries); announceZoom(); });
+$("y-in").addEventListener("click", () => zoomValues(0.5));
+$("y-out").addEventListener("click", () => zoomValues(2));
 cvS.addEventListener("keydown", e => {
-  if ((e.key === "ArrowUp" || e.key === "ArrowDown") && frame) {
-    // Zoom the values in or out by 2 around the new value under the cursor; zooming out stops at the fitted range.
+  if (e.key === "ArrowUp" || e.key === "ArrowDown") {
     e.preventDefault();
-    const [y0, y1] = yZoom || [frame.y0, frame.y1], fit = frame.fit, k = e.key === "ArrowUp" ? 0.5 : 2;
-    const v = hover != null && current ? current.nw[sVar][hover] : NaN;
-    const at = Number.isFinite(v) ? Math.min(y1, Math.max(y0, v)) : (y0 + y1) / 2;
-    let a = at - (at - y0) * k, b = at + (y1 - at) * k;
-    if (k > 1) { a = Math.max(a, fit[0]); b = Math.min(b, fit[1]); }
-    yZoom = k > 1 && a <= fit[0] && b >= fit[1] ? null : [a, b];
-    syncFit(); requestDraw(drawSeries);
+    zoomValues(e.key === "ArrowUp" ? 0.5 : 2);
     return;
   }
   if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
@@ -1103,6 +1147,11 @@ cvS.addEventListener("keydown", e => {
   requestDraw(drawSeries);
   const r = cvS.getBoundingClientRect(), pw = r.width - pad.l - pad.r;
   seriesTip(r.left + pad.l + (hover - view[0]) / (view[1] - view[0]) * pw, r.top + 24);
+  if (current) {
+    const j = hover, v = sVar, hasO = EMB[selK].hasOld && j < M.nOld;
+    live.textContent = `${iso(j)}: new ${val(current.nw[v][j], v)}` +
+      (hasO ? `, original ${val(current.og[v][j], v)}, difference ${sciSigned(current.df[v][j], 3)}` : ", no original") + ` ${D.units[v]}`;
+  }
 });
 cvS.addEventListener("blur", () => { hover = null; hideTip(); requestDraw(drawSeries); });
 anomBtn.addEventListener("click", () => {
@@ -1130,9 +1179,11 @@ function renderAnnual() {
     const n = agg(current.nw[v]), hasO = e.hasOld && y <= M.yearOldEnd;
     let d = null; if (hasO) { let x = 0; for (let j = s; j < s + 365; j++) x += current.df[v][j]; d = tot ? x : x / 365; }
     const o = hasO ? n - d : null;
-    const rel = hasO && Math.abs(o) > 1e-9 && v !== "tmin" && v !== "tmax" ? `${sciSigned(100 * d / o, 2)} %` : "—";
+    const qd = e.vars[v].q * (tot ? 365 : 1);   // the series' quantum, summed over the year for totals
+    const rel = hasO && Math.abs(o) >= 200 * qd && v !== "tmin" && v !== "tmax" ? `${sciSigned(100 * d / o, 2)} %` : "—";
     const r = el("tr");
-    for (const c of [String(y), hasO ? o.toFixed(DEC[v] + 1) : "—", n.toFixed(DEC[v] + 1), hasO ? sciSigned(d, 3) : "—", rel]) r.append(el("td", null, c));
+    const dec = Math.max(0, tot ? DEC[v] - 1 : DEC[v]);
+    for (const c of [String(y), hasO ? o.toFixed(dec) : "—", n.toFixed(dec), hasO ? sciSigned(d, 3) : "—", rel]) r.append(el("td", null, c));
     t.append(r);
   }
 }
@@ -1155,10 +1206,10 @@ async function select(k, fromMap, userPick = true) {
   chip(g.label, symbolSVG(g.shape, g.color, 11));
   chip([B.region[i], B.country[i] === "US" ? "USA" : "Canada"].filter(Boolean).join(", "));
   chip(`${sci(B.area[i], 3)} km²`);
-  chip(`${int(B.cells[i])} Daymet cells`);
+  chip(`Touches ${int(B.cells[i])} Daymet cells`);
   chip(e.hasOld ? "In both files" : e.origNaN ? "Original NaN on every day" : "New file only");
   if (B.lowconf[i]) chip("⚠ Low-confidence polygon", null, "flag");
-  if (B.lowpix[i]) chip("⚠ Fewer than 4 Daymet cells", null, "flag");
+  if (B.lowpix[i]) chip("⚠ Less than 4 cells of area", null, "flag");
   $("sel-why").textContent = whyText(e).join(". ") + ".";
   updateSubs();
   requestDraw(drawMap);
@@ -1188,7 +1239,7 @@ function renderFoot() {
   li(`New: ${M.new_file}${M.new_md5 ? ` (md5 ${M.new_md5})` : ""}; ${int(H.n_new)} basins, 1980–2025. Exactextract coverage × true cell area on the full-resolution polygons; daily mean over the valid cells.`);
   li(`Both read the same Daymet V4 R1 cells, so agreement shows that the reprocessing reproduces the co-authors' aggregation; it does not test Daymet itself.`);
   li(`Metrics come from daymet_validate.py over 1980–2023, one row per basin, variable and year (${M.validation_file}). Map values are per basin over the whole record: RMSE pooled over its days, largest |Δ| over its years.`);
-  li(`Embedded series are quantized for display: the new values to 0.01 mm, 0.01 °C, 0.1 Pa or 0.01 W/m² (coarser only for series with a very wide range); the difference to 1/32,767 of its largest value in the record. The original is drawn as new − difference, floored at zero for precipitation, SWE, vapour pressure and radiation (the rounding of the new values can otherwise dip a few thousandths below zero).`);
+  li(`Embedded series are quantized for display: the new values to 0.01 mm, 0.01 °C, 0.1 Pa or 0.01 W/m², coarser when a series' range needs more than 32,000 steps (shortwave radiation always does, at about 0.02–0.03 W/m²); the difference to 1/32,767 of its largest value in the record. The original is drawn as new − difference, floored at zero for precipitation, SWE, vapour pressure and radiation (the rounding of the new values can otherwise dip up to about 10⁻⁴ below zero). The annual table is computed from these series: its totals and means carry no more digits than the quantum allows, the difference column comes from the stored differences, and the relative difference is left out where the original's annual value is within 200 quanta of zero.`);
   li(`Zoomed out, when more than 1.5 days share a pixel, each pixel column shows the range of its days: the original as a filled blue band, the new as orange lines along the edges of its own band (filled only where no original lies beneath it).`);
   li(`Daymet uses a 365-day calendar: December 31 is dropped in leap years, and both series follow it.`);
   li(`Selection: ${M.n} basins per group, seed ${M.seed}. Built ${M.generated} by EO_data_processing/viz/build_daymet_record_explorer.py (commit ${M.commit}).`);
@@ -1203,7 +1254,11 @@ function requestDraw(fn) {
   requestAnimationFrame(() => { pending.delete(fn); fn(); });
 }
 function redrawAll() { requestDraw(drawMap); requestDraw(drawSeries); drawHists(); }
-new ResizeObserver(() => { MV.fit = null; redrawAll(); }).observe(document.querySelector(".wrap"));
+let mapW = 0, mapH = 0;   // re-fit the map only when its own box changes size, so zoom and pan survive layout changes
+new ResizeObserver(() => {
+  if (mapBox.clientWidth !== mapW || mapBox.clientHeight !== mapH) { mapW = mapBox.clientWidth; mapH = mapBox.clientHeight; MV.fit = null; }
+  redrawAll();
+}).observe(document.querySelector(".wrap"));
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", redrawAll);
 new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 

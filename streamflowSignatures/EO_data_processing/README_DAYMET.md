@@ -36,8 +36,8 @@ agreement below sufficient and dropped a signature-level replay (2026-10-01). To
   defaults reproduce Resource 4). On 2026-10-01 the layer rebuilt byte-identically from the
   recorded inputs; their md5s are in the run's
   `polygons/*.provenance_rebuild_2026-10-01.json`.
-- **Validity.** All 8,017 polygons are valid and non-empty. Their ids match the streamflow
-  parquet exactly.
+- **Validity.** All 8,017 polygons are valid and non-empty. 8,013 of their ids match the
+  streamflow parquet; the other 4 have no streamflow record (Caveats).
 
 ## Method
 - **Grid.** Polygons are reprojected to the Daymet Lambert Conformal Conic grid; the raster
@@ -127,10 +127,11 @@ verified equal to them in all 807,632,580 values (`daymet_assemble.py --provenan
 2026-10-01).
 
 **Not compared with any earlier product:**
-- 2,048 of the 8,017 basins, among them all 53 basins > 100,000 km², all 30
-  HydroBASINS-fallback polygons and 47 of the 57 low-confidence polygons;
+- 2,052 of the 8,017 basins, which have no original series: 2,048 absent from the stale
+  file (among them all 53 basins > 100,000 km², all 30 HydroBASINS-fallback polygons and 47
+  of the 57 low-confidence polygons) and 4 NaN on every day there;
 - calendar 2024–2025, for every basin;
-- the 7 basins that touch Daymet fill cells (≤ 0.14 % of their weight).
+- the 7 basins that touch Daymet fill cells (≤ 0.14 % of their weight; the 4 above among them).
 
 For these, the evidence is ORNL's Single Pixel API. The basin means of 8 small basins (4
 USGS, 4 Canadian; 3–6 cells), recomputed from ORNL's own cell series, match the file in
@@ -161,19 +162,21 @@ its own right-hand axis. The chart zooms on the dates and on either value axis.
   `low_confidence`: 30 HydroBASINS fallbacks and 28 whose area is > 50 % off the metadata area
   (one is both). 12 of them are in product #1 and 13 in #2.
   - Example: 06FD001, 28,997 km² against a reported 289,000.
-  - 27 of the HydroBASINS polygons have no metadata area to check against.
+  - 27 of the HydroBASINS polygons have no metadata area to check against. 46 official ECCC
+    outlines lack one too; they are not flagged.
   - The flags are in `daymet_basin_flags.csv`, next to the climate file. It has one row per
     flagged basin (101, the 45 small basins included): the reason, both areas, and product
     membership. `daymet/daymet_basin_flags.py` builds it.
   - At a rerun the table goes with the products as a companion file; the signature CSV's
     column contract is unchanged.
-- **Small basins.** 45 basins cover fewer than 4 grid cells (`low_pixel_support`; 35 in
-  #1, 21 in #2).
+- **Small basins.** 45 basins have less than 4 Daymet cells of area (coverage sum < 4,
+  `low_pixel_support`; 35 in #1, 21 in #2). Only 5 of them touch fewer than 4 cells.
 - **No streamflow.** 4 basins have no streamflow record (01591000, 01591400, 01591610,
   01591700); they keep their boundary id.
-- **Memory.** The file is 37 % larger than the stale input. The Julia runner reads all eight
+- **Memory.** The file has 38 % more rows than the stale input (27 % more bytes). The Julia runner reads all eight
   columns before keeping four, so expect about 8.6 GB resident (extrapolated from one row
   group). On the 16 GB laptop, run it in gage batches with
   `docs/benchmarks/run_batched_julia.py`, which writes 4-column batch inputs. In the
   2026-10-01 control run (stale input), each of 6 batches (~1,336 gages) peaked at
-  4.8–5.5 GB RSS.
+  4.8–5.5 GB RSS. Batches of the new input carry ~40 % more climate rows and have not been
+  measured: use more batches (8) or watch the `--min-avail-gb` guard.

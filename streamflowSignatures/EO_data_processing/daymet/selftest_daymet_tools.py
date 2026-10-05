@@ -8,8 +8,9 @@ rest stays unallocated, so the file is small. It then checks:
     .done carry the source SHA-256 and the weights md5; an out-of-range value is fatal
     unless --allow-out-of-range;
   * daymet_assemble.py: the written file verifies; --provenance-only works; a tampered
-    copy fails verification;
-  * copy_verify.py: re-copying a file replaces its manifest line;
+    copy fails verification; a missing .done is refused and the earlier output kept;
+  * copy_verify.py: changed content is refused without --replace (the drive copy and its
+    manifest line stay as they were) and replaces the line with it; hidden folders are skipped;
   * daymet_stream.fetch against a local server:
       - the bearer token reaches the server but never curl's argv;
       - HTTP 401 and 404 end a source at once;
@@ -205,6 +206,15 @@ def test_assemble(tmp, in_dir):
     prov = json.load(open(out + ".provenance.json")) if os.path.exists(out + ".provenance.json") else {}
     check("assemble writes and verifies the file", r.returncode == 0 and prov.get("verification", {}).get("mismatches") == 0,
           r.stdout[-500:] + r.stderr[-500:])
+    before = hashlib.md5(open(out, "rb").read()).hexdigest()
+    done = os.path.join(in_dir, "prcp_2024.done")
+    os.rename(done, done + ".away")
+    r = run([os.path.join(HERE, "daymet_assemble.py"), "--in-dir", in_dir, "--years", "2024", "--vars", "prcp",
+             "--out", out])
+    os.rename(done + ".away", done)
+    check("assemble refuses a variable-year without .done and leaves the earlier output as it was",
+          r.returncode != 0 and ".done" in r.stderr and hashlib.md5(open(out, "rb").read()).hexdigest() == before
+          and not os.path.exists(out + ".tmp"), r.stderr[-300:])
     r = run([os.path.join(HERE, "daymet_assemble.py"), "--in-dir", in_dir, "--years", "2024", "--vars", "prcp",
              "--out", out, "--provenance-only"])
     prov2 = json.load(open(out + ".provenance.json"))
@@ -227,13 +237,25 @@ def test_copy(tmp):
     for n in ("a.txt", "b.txt"):
         open(os.path.join(src, n), "w").write(n)
     cv = os.path.join(HERE, "copy_verify.py")
-    r1 = run([cv, src, dst, "a.txt", "b.txt"])
-    open(os.path.join(src, "a.txt"), "w").write("changed")
+    os.makedirs(os.path.join(src, "sub", ".hidden"))
+    open(os.path.join(src, "sub", "c.txt"), "w").write("c")
+    open(os.path.join(src, "sub", ".hidden", "d.txt"), "w").write("d")
+    r1 = run([cv, src, dst, "a.txt", "./b.txt", "sub"])
+    man = os.path.join(dst, "MANIFEST_md5.txt")
+    lines1 = open(man).read().splitlines()
+    open(os.path.join(src, "a.txt"), "w").write("")          # a truncated source must not replace a good copy
     r2 = run([cv, src, dst, "a.txt"])
-    lines = open(os.path.join(dst, "MANIFEST_md5.txt")).read().splitlines()
+    kept = open(os.path.join(dst, "a.txt")).read() == "a.txt" and open(man).read().splitlines() == lines1
+    check("copy_verify refuses changed content without --replace and keeps the drive copy",
+          r1.returncode == 0 and r2.returncode != 0 and kept and len(lines1) == 3
+          and not os.path.exists(os.path.join(dst, "sub", ".hidden")), "\n".join(lines1))
+    open(os.path.join(src, "a.txt"), "w").write("changed")
+    r3 = run([cv, "--replace", src, dst, "a.txt"])
+    lines = open(man).read().splitlines()
     md5a = hashlib.md5(b"changed").hexdigest()
-    check("copy_verify replaces a re-copied file's manifest line",
-          r1.returncode == r2.returncode == 0 and len(lines) == 2 and lines[0].startswith(md5a), "\n".join(lines))
+    check("copy_verify --replace replaces the file and its manifest line",
+          r3.returncode == 0 and len(lines) == 3 and lines[0].startswith(md5a)
+          and open(os.path.join(dst, "a.txt")).read() == "changed", "\n".join(lines))
 
 
 class Handler(BaseHTTPRequestHandler):

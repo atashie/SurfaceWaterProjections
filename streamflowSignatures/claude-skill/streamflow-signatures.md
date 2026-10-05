@@ -92,7 +92,7 @@ Interpretation keys:
   calendar 1980–2023 for 6,087 basins (5,965 of the 8,014 gages). A reprocessed input
   for 8,017 basins and calendar 1980–2025 was built on 2026-09-30
   (`EO_data_processing/README_DAYMET.md`). It reproduces the original series on the
-  5,965 shared basins, but no product uses it yet: every climate value in the delivered
+  5,965 basins with original data, but no product uses it yet: every climate value in the delivered
   products still comes from the original input.
 - Daymet SWE is modeled, not observed — prefer timing/trend signals over absolute
   magnitudes, especially in mountain terrain.

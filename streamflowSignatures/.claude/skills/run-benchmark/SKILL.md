@@ -53,9 +53,12 @@ Rscript docs/benchmarks/run_rpkg_benchmark.R                                    
 ```
 
 On the 16 GB laptop a full Julia run needs more memory than is usually free. Run it in gage
-batches with `python docs/benchmarks/run_batched_julia.py` (`split` → `run`, which stops
-Julia if available memory drops below `--min-avail-gb` → `merge`, which checks that the
-headers match and restores the reference gage order). See the script's docstring.
+batches with `docs/benchmarks/run_batched_julia.py`, using a Python that has duckdb:
+- `split` records the sources' sha256;
+- `run` kills Julia's whole process group when memory runs low or a batch hangs;
+- `merge` refuses an incomplete or inconsistent set of batches and orders the gages like
+  `--reference`, or by gage id without one.
+Self-test: `docs/benchmarks/selftest_run_batched_julia.py`.
 
 **Every artifact of a run goes in that run's OWN folder** (`processedOuts_<experiment>_<date>`):
 signatures CSV, annual parquet, timing JSON (with its provenance block), run log, signature

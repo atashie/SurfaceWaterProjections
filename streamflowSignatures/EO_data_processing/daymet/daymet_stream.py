@@ -200,14 +200,16 @@ def stop_downloads():
             p.kill()
 
 
-def fetch(name, exp_bytes, raw_dir, auth, prefer, min_bps=20e6, speed_time=30):
+def fetch(name, exp_bytes, raw_dir, auth, prefer, min_bps=20e6, speed_time=30, mirror_min_bps=10e6):
     """Download to raw_dir/name (resumable). Returns (source(s), seconds, attempts, bytes fetched now).
 
     Sources are tried in order of preference; a partial file is resumed across sources
     (the two serve identical bytes; SHA-256 is checked afterwards). Per source:
       * HTTP 401/403/404 ends the source at once;
-      * a connection below `min_bps` for `speed_time` s (curl exit 28) that still made
-        progress is resumed at once and does not count as a failure;
+      * a connection below `min_bps` (`mirror_min_bps` on the mirror, which delivers ~15-21 MB/s)
+        for `speed_time` s (curl exit 28) that still made progress is resumed at once and does not
+        count as a failure;
+    The mirror is asked for the file's size only when it is about to be used.
       * any other failure counts, with back-off, up to 30 per source.
     """
     dest = os.path.join(raw_dir, name)
@@ -220,16 +222,18 @@ def fetch(name, exp_bytes, raw_dir, auth, prefer, min_bps=20e6, speed_time=30):
     free, need = shutil.disk_usage(raw_dir).free, exp_bytes - size() + DISK_HEADROOM
     if free < need:
         raise RuntimeError(f"{name}: {free / 1e9:.1f} GB free in {raw_dir}, {need / 1e9:.1f} GB needed")
-    on_mirror = mirror_size(name) == exp_bytes
     order = ["ornl", "mirror"] if prefer == "ornl" else ["mirror", "ornl"]
-    order = [s for s in order if (s != "mirror" or on_mirror) and (s != "ornl" or auth["ornl_ok"])]
-    base = ["-sS", "-L", "-f", "-C", "-", "--connect-timeout", "30",
-            "--speed-limit", str(int(min_bps)), "--speed-time", str(int(speed_time))]
+    order = [s for s in order if s != "ornl" or auth["ornl_ok"]]
+    base = ["-sS", "-L", "-f", "-C", "-", "--connect-timeout", "30", "--speed-time", str(int(speed_time))]
     t0, start, n, used, why = time.time(), size(), 0, [], []
     for src in order:
         if STOP.is_set():
             break
+        if src == "mirror" and mirror_size(name) != exp_bytes:
+            why.append("mirror lacks the file at the CMR size")
+            continue
         url = (MIRROR if src == "mirror" else ORNL) + name
+        floor = ["--speed-limit", str(int(mirror_min_bps if src == "mirror" else min_bps))]
         config, extra = None, []
         if src == "ornl":
             if auth["token_file"]:
@@ -242,7 +246,7 @@ def fetch(name, exp_bytes, raw_dir, auth, prefer, min_bps=20e6, speed_time=30):
         while size() < exp_bytes and fails < 30 and not STOP.is_set():
             n += 1
             before = size()
-            rc, http = run_curl(base + extra + ["-o", part, url], config)
+            rc, http = run_curl(base + floor + extra + ["-o", part, url], config)
             grew = size() > before
             if size() > exp_bytes:                     # never expected: start the file over
                 os.remove(part)
@@ -275,7 +279,9 @@ def main():
     ap.add_argument("--weights-dir", required=True)
     ap.add_argument("--out-dir", required=True)
     ap.add_argument("--raw-dir", required=True)
-    ap.add_argument("--workers", type=int, default=8)
+    ap.add_argument("--workers", type=int, default=6,
+                    help="aggregation workers; 6 fit the 16 GB laptop with the 8,017-basin weights "
+                         "(5.0 GB parent + 1.46 GB per worker, 2026-09-30)")
     ap.add_argument("--weight", choices=["area", "coverage"], default="area")
     ap.add_argument("--edl-token-file", default=os.path.expanduser("~/.config/earthdata/edl_token"))
     ap.add_argument("--prefer", choices=["auto", "ornl", "mirror"], default="auto",
@@ -284,6 +290,8 @@ def main():
     ap.add_argument("--min-speed-mbps", type=float, default=20.0,
                     help="drop and resume a connection below this rate (MB/s) for --speed-time s; the "
                          "2026-09-29 run's 200 KB/s floor let 26 of 269 files crawl at 3-30 MB/s (6.8 h lost)")
+    ap.add_argument("--mirror-min-speed-mbps", type=float, default=10.0,
+                    help="the same floor on the NCAR mirror, which delivers ~15-21 MB/s")
     ap.add_argument("--speed-time", type=int, default=30)
     ap.add_argument("--keep-raw", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
@@ -303,7 +311,10 @@ def main():
         for yr in years:
             dp = os.path.join(a.out_dir, f"{v}_{yr}.done")
             if os.path.exists(dp):
-                d = json.loads(open(dp).read() or "{}")
+                try:
+                    d = json.loads(open(dp).read() or "{}")
+                except ValueError:
+                    sys.exit(f"{dp} is not JSON; delete it (and its outputs) to redo {v} {yr}")
                 if not d.get("weights_md5"):
                     legacy += 1
                 elif weights_md5 and d["weights_md5"] != weights_md5:
@@ -362,7 +373,8 @@ def main():
         "started": stamp, "started_utc": utc_now(), "argv": sys.argv, "years": [years[0], years[-1]],
         "vars": variables, "planned": len(planned := [fname(v, yr) for v, yr in plan]), "first_files": planned[:8],
         "bytes_to_download": total, "auth": auth_desc, "token_expiry_utc": exp, "prefer": a.prefer,
-        "min_speed_mbps": a.min_speed_mbps, "speed_time": a.speed_time, "weights_md5": weights_md5,
+        "min_speed_mbps": a.min_speed_mbps, "mirror_min_speed_mbps": a.mirror_min_speed_mbps,
+        "speed_time": a.speed_time, "weights_md5": weights_md5,
         "git": git_state(), "host": platform.node(), "software": software_versions()})
 
     auth = {"token_file": tok, "cookie": os.path.join(a.raw_dir, ".edl_cookies"), "ornl_ok": bool(tok or has_netrc)}
@@ -385,7 +397,7 @@ def main():
             name = fname(v, yr)
             try:
                 res = fetch(name, man[name]["bytes"], a.raw_dir, auth, prefer,
-                            a.min_speed_mbps * 1e6, a.speed_time)
+                            a.min_speed_mbps * 1e6, a.speed_time, a.mirror_min_speed_mbps * 1e6)
             except Exception as e:            # noqa: BLE001 -- surfaced to the main thread
                 put((v, yr, name, "ERROR", str(e), 0, 0))
                 return

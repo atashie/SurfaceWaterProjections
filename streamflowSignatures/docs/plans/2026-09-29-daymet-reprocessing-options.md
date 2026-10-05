@@ -1,7 +1,7 @@
 # Daymet climate input — reprocessing options and feasibility plan
 
-**Date**: 2026-09-29 · **Status**: options review + test plan (no data pulled — the
-polygons are not on this machine) · **Author**: Claude Code session for A. Tashie
+**Date**: 2026-09-29 · **Status**: options review + test plan, written before any data was pulled;
+superseded by the action plan §0 (the 1980–2025 file was built 2026-09-30) · **Author**: Claude Code session for A. Tashie
 
 **Action plan (how to run it on the dedicated machine)**: `2026-09-29-daymet-reprocessing-action-plan.md`.
 
@@ -400,13 +400,16 @@ implementations can be diffed.
 ## 6. Decisions to take (user / co-authors)
 
 1. **Variables**: prcp + swe now, the other four later (recommended), or all six in one
-   pass (needs B, or a week of transfers and a 4 TB SSD).
+   pass (needs B, or a week of transfers and a 4 TB SSD). **DECIDED 2026-09-29: all six in
+   one pass** (action plan D2).
 2. **Size cap**: compute for all 7,964 polygons (cheap) and (a) keep the 85,000 km² rule
    as a documented downstream filter, or (b) drop it — the boundary layer already stops at
    100,000 km² and only 6 basins sit between the thresholds. The manuscript's HUC8
    justification argues for (a); a uniform product argues for (b).
 3. **Polygons**: the rebuilt 2026-08-25 layer (Resource 4, the published one) —
-   recommended — versus whatever the co-authors used (unknown until T4).
+   recommended — versus whatever the co-authors used (unknown until T4). **DECIDED
+   2026-09-29: the full-resolution polygons, plus the 53 basins > 100,000 km²** (action
+   plan D1, D4).
 4. **Schedule vs. the Nov 9 submission**: a reprocess implies regenerating both standard
    products (~30 min each in Julia), re-staging Resources 1–3, and rewriting §2.1.3 / §3
    and three READMEs. Feasible in October if T1 passes in the first week; otherwise ship

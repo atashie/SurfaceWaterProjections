@@ -10,7 +10,8 @@ flag:
   no_area_reference      no metadata drainage area, so the area screen that caught 05KH009
                          cannot run (only flagged for HydroBASINS polygons; official outlines
                          without a metadata area are not flagged)
-  low_pixel_support      the basin covers fewer than 4 Daymet cells (coverage sum < 4)
+  low_pixel_support      the basin's area is under 4 Daymet cells (coverage sum < 4; it may
+                         touch more cells partially, so `n_cells` can exceed 4)
 `low_confidence` (from the polygon layer) = hydrobasins_fallback or area_mismatch. Which
 of the two areas is wrong is NOT decided here: the table gives both.
 
@@ -40,9 +41,12 @@ def main():
     b = pd.read_csv(a.basins, dtype={"site_id": str, "boundary_gage_id": str, "canon_id": str})
     q = pd.read_csv(a.polygons_qa, dtype={"gage_id": str, "canon_id": str})
     q = q[["canon_id", "basin_area", "area_rel_diff", "area_flag"]]
-    t = b.merge(q, on="canon_id", how="left", validate="one_to_one")
-    if t["basin_area"].isna().all():
-        sys.exit("no polygon QA row matched: check the canon_id spelling of the two files")
+    t = b.merge(q, on="canon_id", how="left", validate="one_to_one", indicator=True)
+    miss = t.loc[t["_merge"] == "left_only", "site_id"].tolist()
+    if miss:      # an unmatched basin would silently skip the area screen
+        sys.exit(f"{len(miss)} basins have no polygon QA row (e.g. {miss[:5]}): check the canon_id "
+                 f"spelling of the two files")
+    t = t.drop(columns="_merge")
     t["hydrobasins_fallback"] = t["watershed_geom_source"] == "hydrobasins"
     t["area_mismatch"] = t["area_flag"].fillna(False).astype(bool)
     t["no_area_reference"] = t["hydrobasins_fallback"] & t["basin_area"].isna()

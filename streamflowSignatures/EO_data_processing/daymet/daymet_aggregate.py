@@ -138,7 +138,7 @@ def main():
     ap.add_argument("--file", required=True)
     ap.add_argument("--weights-dir", required=True)
     ap.add_argument("--out-dir", required=True)
-    ap.add_argument("--workers", type=int, default=8)
+    ap.add_argument("--workers", type=int, default=6)
     ap.add_argument("--weight", choices=["area", "coverage"], default="area")
     ap.add_argument("--source-sha256", default=None,
                     help="the input file's SHA-256 as verified by the caller; recorded in the outputs")

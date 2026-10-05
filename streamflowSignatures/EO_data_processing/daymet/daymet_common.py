@@ -1,7 +1,7 @@
 """Shared helpers for the Daymet basin-aggregation tools (EO_data_processing/daymet/).
 
 Plan: docs/plans/2026-09-29-daymet-reprocessing-action-plan.md. The tools compute a
-coverage-weighted daily mean per watershed polygon straight from the Daymet V4 R1
+coverage × true-cell-area weighted daily mean per watershed polygon straight from the Daymet V4 R1
 North America annual mosaics (one NetCDF-4 file per variable-year), without
 resampling the raster: the polygons are reprojected to the Daymet grid instead.
 
@@ -218,12 +218,13 @@ def software_versions():
 
 
 def git_state(path=HERE):
-    """Commit of the checkout holding `path`, and whether `path` has uncommitted changes."""
+    """Commit of the checkout holding `path`, and whether `path` has uncommitted changes
+    (None for both when git cannot tell, e.g. outside a checkout)."""
     def run(*args):
         r = subprocess.run(["git", "-C", path] + list(args), capture_output=True, text=True)
         return r.stdout.strip() if r.returncode == 0 else None
-    return {"commit": run("rev-parse", "HEAD"),
-            "daymet_tools_dirty": bool(run("status", "--porcelain", "--", path))}
+    status = run("status", "--porcelain", "--", path)
+    return {"commit": run("rev-parse", "HEAD"), "daymet_tools_dirty": None if status is None else bool(status)}
 
 
 def utc_now():

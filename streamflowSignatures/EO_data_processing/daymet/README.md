@@ -39,7 +39,7 @@ Calendar 2025 exists only at ORNL. Every file is checked against NASA CMR's SHA-
 | `../viz/build_daymet_record_explorer.py` | self-contained HTML explorer of the whole record: the agreement metrics as distributions, a basin map, and the original and new daily series overlaid (with an optional anomaly axis, new − original, and zoom on dates and values) for 3 × N embedded basins (least matching, random, no original). It checks the embedded series against the validation table |
 | `daymet_crosscheck.py` | independent check: exactextract's own weighted mean on a few days (needs a raw file) |
 | `daymet_pixelcheck.py` | georeferencing check of a raw file against ORNL's Single Pixel API |
-| `copy_verify.py` | copy run outputs to the exFAT drive and re-read every file from the device (md5 + size); re-copying replaces the manifest line |
+| `copy_verify.py` | copy run outputs to the exFAT drive and re-read every file from the device (md5 + size). A copy replaces the drive file and its manifest line only after it verifies; a file whose line records other content needs `--replace` |
 | `../viz/build_daymet_comparison_dashboard.py` | HTML dashboard: fresh vs original values and daily series |
 | `selftest_daymet_tools.py` | synthetic-file and local-server tests of the above (grid asserts, aggregation, assembly verification, manifest, download path) |
 
@@ -52,12 +52,14 @@ product covers, then `daymet_outputcheck.py --years <a spread incl. the newest>`
 The 2026-09-29 run took 25.9 h from ORNL, median 50.5 MB/s per file. But 26 of the 269
 files crawled at 3–30 MB/s, mostly one at a time between full-speed files, and lost 6.8 h.
 The old 200 KB/s stall floor never caught that. The default floor is now 20 MB/s for
-30 s, with an immediate resume, which would have recovered most of the loss.
+30 s, with an immediate resume, which would have recovered most of the loss. On the NCAR
+mirror, which delivers ~15–21 MB/s, it is 10 MB/s (`--mirror-min-speed-mbps`).
 
 **Processing.**
 - Afterwards: assemble 1 min (plus ~40 s for its verification), validate 7 min, drive copy
   27 min (13 GB).
 - Aggregation takes 15–56 s per variable-year and hides behind the downloads.
-- With the 8,017-basin weights (45.8 M entries) use `--workers 6`: peak 5.0 GB parent +
-  1.5 GB per worker. The one-time weights build peaks at ≈ 8 GB.
+- With the 8,017-basin weights (45.8 M entries) use `--workers 6`, the default: peak 5.0 GB
+  parent + 1.5 GB per worker. The one-time weights build peaks at ≈ 8 GB RSS (11 GB memory
+  footprint).
 - Start long runs under `caffeinate -i`.

@@ -47,7 +47,7 @@ aggregate → delete, one file ahead).
 
 **Correctness, independent of the stale product.** (1) exactextract's own `weighted_mean`
 on five days per variable, all 7,964 basins, matches the chunk-aligned aggregation to
-≤ 5e-11 absolute, ≤ 1e-13 relative (`daymet_crosscheck.py`). (2) ORNL's Single Pixel API
+≤ 5e-11 absolute, ≤ 3e-13 relative (corrected 2026-10-01; `daymet_crosscheck.py`). (2) ORNL's Single Pixel API
 at six points (TN, WA, CO, QC, FL, YT), all six 2023 variables and prcp 1980: our LCC x/y equal ORNL's to 0.00 m and the
 pixel series match to float32 rounding while the neighbouring pixel differs by up to 18 mm
 (`daymet_pixelcheck.py`). (3) Output is bit-identical across reruns and worker counts
@@ -61,7 +61,7 @@ three method findings:
    are an area-weighted mean. Coverage fractions of the conformal LCC grid (areal scale
    0.91–1.21 over the basins) over-weight cells where k < 1 and move annual totals of large
    northern basins by up to 0.3 %. With coverage × true cell area and full-resolution
-   polygons, all six 2023 variables reproduce the stale values: R² ≥ 0.99999996 in every
+   polygons, all six 2023 variables reproduce the stale values: R² ≥ 0.99999995 (corrected 2026-10-01) in every
    basin (swe: 0.99979 in a basin whose mean SWE is 4e-8 mm); prcp annual totals within
    ±0.0011 % (1st–99th percentile).
 2. **The published Resource 4 layer is 200 m-simplified (7,823 of 7,964 basins), and that is
@@ -106,8 +106,8 @@ Earthdata Login on this Mac; the six 2025 files need one.** U12 measured.
   the user states access is free and not rate-limited). The token expires ≈ 2026-10-25, so
   the run must finish before then; fetch the six 2025 files first. Store it at run time
   outside the repo (e.g. `~/.config/earthdata/edl_token`, mode 600) and never in docs,
-  memory or git. DONE: `daymet_stream.py` sends the token through a mode-600 header file
-  (never on a command line; curl drops it on the redirect to ORNL's CloudFront store) and
+  memory or git. DONE: `daymet_stream.py` hands the token to curl on stdin (until 2026-10-01
+  through a mode-600 header file; never on a command line; curl drops it on the redirect to ORNL's CloudFront store) and
   downloads the ORNL-only 2025 files first; a 1 MB range request with it returned HTTP 206.
 - **D4 large basins: INCLUDE the 53 correctly delineated basins > 100,000 km² if RAM
   allows.** 05KH009 stays out: its HydroBASINS fallback drew a 328,000 km² river as 200 km².
@@ -145,7 +145,7 @@ laptop awake for the ~2-day run) → `daymet_assemble.py` → `daymet_validate.p
   basin-year for prcp, tmin, tmax, vp, srad (100 % ≥ 0.999 against the ≥ 95 % bar); swe
   ≥ 0.999 in all but 2 of 262,460 basin-years, both trace-snow basins (mean < 1e-6 mm);
   prcp annual totals within ±0.0011 % (p01–p99); no date offset in any year; (4) replay —
-  NOT yet run; (5) provenance ✓ (CMR manifest, SHA-256 per file, run meta with commit,
+  DROPPED (user decision 2026-10-01, block (c) below); (5) provenance ✓ (CMR manifest, SHA-256 per file, run meta with commit,
   per-file timing JSON, assembled-file md5 — spread over five files until the 2026-10-01
   sidecar upgrade gathered them).
 - Coverage: every gage of both delivered products is in the new file — #1 6,678 (was
@@ -166,11 +166,14 @@ laptop awake for the ~2-day run) → `daymet_assemble.py` → `daymet_validate.p
   calendar asserts; CMR drift check; 20 MB/s reconnect floor; fatal out-of-range values;
   value-verified assembly with a self-contained sidecar; `daymet_outputcheck.py`;
   `selftest_daymet_tools.py`.
-- **Not compared with any earlier product:** 2,048 basins (all 53 large, all 30 HydroBASINS,
-  47 of the 57 low-confidence polygons), 2024–2025, the 7 fill-touching basins.
+- **Not compared with any earlier product:** 2,052 basins (2,048 absent from the stale file:
+  all 53 large, all 30 HydroBASINS, 47 of the 57 low-confidence polygons; and 4 NaN there),
+  2024–2025, the 7 fill-touching basins (the 4 among them).
 
 Before a rerun (state 2026-10-01, end of day):
-- (a) **Memory** — SOLVED. The Julia runner reads all eight columns (~8.6 GB for this file,
+- (a) **Memory** — SOLVED for the stale input; batches of the new input carry ~40 % more
+  climate rows and are not yet measured (use 8 batches, or watch the guard). The Julia runner
+  reads all eight columns (~8.6 GB for this file,
   extrapolated) before keeping four. `docs/benchmarks/run_batched_julia.py` runs it in gage
   batches on 4-column inputs. The replay's control arm took 6 batches of ~1,336 gages,
   121–177 s and 4.8–5.5 GB peak RSS each.
@@ -186,7 +189,7 @@ Before a rerun (state 2026-10-01, end of day):
   equivalent then that is all we need to know". The evidence is the raw-data comparison and
   `validation/daymet_record_explorer_2026-10-01.html`. Only the control arm ran (current
   code, stale input; product #1's shape, never compared). The design was: first product
-  #1's config restricted to calendar 1980–2023 and the 5,965 shared basins (isolates the
+  #1's config restricted to calendar 1980–2023 and the 5,965 basins with stale data (isolates the
   weighting effect); then the full file (adds two years and 1,165 gages, which move
   climate-signature means, trends and qualification by themselves).
 - (d) Ask the co-authors to confirm their polygon version, weighting and fill handling
@@ -204,10 +207,11 @@ Produce a new basin-averaged Daymet daily climate input for the signature pipeli
 | Years | calendar 1980–2023 | **calendar 1980–2025** (= WY 1980–2025; 2026 does not exist yet) |
 | Variables | prcp, tmin, tmax, swe, vp, srad | same six; `dayl` optional (off by default) |
 | Source | Daymet V4 (R1) via co-authors' gdptools | Daymet V4 R1 annual NA mosaics: **NCAR GDEX mirror for 1980–2024**, ORNL for 2025 |
-| Method | gdptools area-weighted mean | **coverage-weighted mean** (exactextract weights once, chunk-aligned accumulation) |
+| Method | gdptools area-weighted mean | **coverage-weighted mean** (exactextract weights once, chunk-aligned accumulation); as built: coverage × true cell area (§0) |
 | Output | parquet `site_id, Date, prcp, tmin, tmax, swe, vp, srad` | same schema + provenance + per-basin QA |
 
-**Defaults chosen for this plan** (change them consciously, they are not user decisions
+(Superseded by the user decisions of 2026-09-29 in §0: all six variables in one pass,
+full-resolution polygons and the 53 basins > 100,000 km².) **Defaults chosen for this plan** (change them consciously, they are not user decisions
 yet — see options doc §6): process variables in the order **prcp, swe** (tranche 1,
 usable on its own), then **tmin, tmax, vp, srad** (tranche 2); compute for all 7,964
 polygons regardless of size (the 85,000 km² rule becomes a downstream filter if the
@@ -287,6 +291,11 @@ The Julia environment of this repo is needed only for the §6 replay.
 ---
 
 ## 5. Tools to write (all under `docs/benchmarks/daymet/`, outputs in the run folder)
+
+As built (§0): the tools live in `EO_data_processing/daymet/` (user decision 2026-09-29), and
+`daymet_stream.py` does the manifest and fetch steps of 5.1–5.2 itself (CMR re-query on every
+start, resumable curl, SHA-256 against CMR); `daymet_manifest.py` and `daymet_fetch.py` were
+never written.
 
 Repo convention: tools live in `docs/benchmarks/`, every run artifact lives in ONE
 experiment folder on the data drive, e.g. `daymet_1980_2025_<ddmonyyyy>/`
@@ -449,7 +458,7 @@ Active Parquet Files, and the claude-skill. Log everything in CHANGELOG.
    the acceptance threshold is the Phase 0 one (≥ 95 % at ≥ 0.999 for daily prcp) with a
    written explanation of the rest. This is agreement with the co-authors' *run*, not a
    proof of correctness — the synthetic tests in §5.4 are the correctness check.
-4. Replay: `check_additivity.jl` reports 0 columns added/dropped and an identical gage
+4. Replay (dropped by user decision 2026-10-01): `check_additivity.jl` reports 0 columns added/dropped and an identical gage
    set for the shared basins' streamflow-only columns (they must not move at all), and the
    climate-dependent columns move only where the daily series differ.
 5. Provenance JSON complete (manifest, md5s, versions, timings).
@@ -460,7 +469,7 @@ Active Parquet Files, and the claude-skill. Log everything in CHANGELOG.
 
 | Artifact | Location |
 |---|---|
-| Tools | `docs/benchmarks/daymet/*.py` (+ tests) — committed |
+| Tools | `docs/benchmarks/daymet/*.py` (+ tests) — committed; as built in `EO_data_processing/daymet/` (+ `selftest_daymet_tools.py`) |
 | Run folder | `daymet_1980_2025_<date>/` on the data drive: `manifest.json`, `weights.npz`, `basin_qa.csv`, per-variable-year parquets, `stream_log.csv`, `provenance.json`, `validation_*.csv/md`, the assembled parquet(s) — NOT in the repo |
 | The input for the pipeline | `daymet_1980_2025_<date>.parquet` (and the prcp+swe interim file) — referenced by `STREAMFLOW_CLIMATE_PATH`; add to DEVELOPMENT.md → Active Parquet Files with size and footer check |
 | Docs | this plan updated with the measured numbers (fill the **E** cells), CHANGELOG entry, DATA_SOURCES.md row 4 |

@@ -312,7 +312,8 @@ def write_provenance(a, stem, final, inputs):
             "rows": int(len(final)), "by_source": final["watershed_geom_source"].value_counts().to_dict(),
             "low_confidence": int(final["low_confidence"].sum()), "area_flag": int(final["area_flag"].fillna(False).sum()),
             "git": {"commit": git("rev-parse", "HEAD"),
-                    "geometry_tools_dirty": bool(git("status", "--porcelain", "--", "."))},
+                    "geometry_tools_dirty": (lambda st: None if st is None else bool(st))(
+                        git("status", "--porcelain", "--", "."))},
             "software": {"python": sys.version.split()[0], "platform": platform.platform(),
                          "geopandas": gpd.__version__, "pandas": pd.__version__, "shapely": shapely.__version__,
                          "geos": shapely.geos_version_string, "pyogrio": pyogrio.__version__,

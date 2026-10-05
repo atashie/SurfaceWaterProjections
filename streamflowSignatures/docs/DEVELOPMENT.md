@@ -751,6 +751,8 @@ python docs/benchmarks/build_experiment_vs_julia_dashboard.py startIn1993_80pct
 | `docs/benchmarks/run_julia_benchmark_prod_1980_2025_60pct_drought.jl` | **STANDARD PRODUCT #2** wrapper — WY 1980-2025 @ 60% with the drought family (run 2026-08-11; defaults to the rebuilt climate parquet) |
 | `docs/benchmarks/check_additivity.jl` | Proves a run ADDED columns without changing pre-existing ones (column/gage set, per-gage value identity, population gate) |
 | `docs/benchmarks/analyze_drought_redundancy.jl` | Measures drought-duration overlap with the pulse metrics on the annual series |
+| `docs/benchmarks/run_batched_julia.py` | Runs a Julia benchmark wrapper in gage batches to bound memory on the 16 GB laptop: `split` the inputs (source sha256 recorded), `run` each batch under a memory and time guard, `merge` (refuses incomplete or inconsistent batches; reference gage order, else sorted by id) |
+| `docs/benchmarks/selftest_run_batched_julia.py` | Self-test of the batched runner on synthetic inputs with a fake julia (split, resume, guards, merge refusals) |
 | `docs/benchmarks/convert_daymet_csvs_to_parquet.py` | Rebuilds `daymet_1980_2023.parquet` from the 44 annual Daymet CSVs (Python equivalent of the R `convert_daymet_zip_to_parquet()`) |
 | `docs/benchmarks/comparison_report.md` | Generated comparison report |
 | `docs/benchmarks/julia_vs_golden_r_summary.md` | Generated Julia vs Golden R detailed report |

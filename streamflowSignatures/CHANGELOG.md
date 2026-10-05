@@ -281,6 +281,76 @@ Moved 2026-09-29 to `docs/reconciliation/guidelines_todos.md` and
 
 ## [October 2026]
 
+### Fixed (HIGH): second review of the session's Daymet work — batched runner, explorer, tools (2026-10-05)
+Four Sonnet 5.5 reviewers (2026-10-01) re-checked every update since 2026-09-29: the Daymet
+tools and flags, the batched Julia runner, the record explorer, and the docs. They found **no
+wrong value** in the climate file, the flags table or the explorer's numbers, all recomputed
+independently. Fixed:
+- **Batched runner (HIGH for a rerun; no product was affected).**
+  - `merge` took whatever batch folders existed, so a missing or failed batch gave an
+    incomplete product with exit 0. It now requires every batch of `batches.json`: done, one
+    CSV and timing JSON each, and an annual parquet in all or none.
+  - It also checks each CSV's gages against the batch assignment, and the CSV and annual row
+    counts against the batch's timing JSON. It refuses batches from different code, config or
+    inputs.
+  - Rows follow `--reference`; a gage on one side only is an error unless `--allow-missing`.
+    Without a reference they are sorted by gage id.
+  - `split` records each source's sha256, size and PAR1 footer, which the merged provenance
+    reports.
+  - `run` checks that every input exists. Julia runs in its own process group, killed on low
+    memory, a failed memory sample, `--max-minutes` or SIGTERM.
+  - The annual merge sorts in gage chunks: peak 1.3 GB instead of 2.8 GB.
+  - Re-merging the 2026-10-01 control batches reproduces its CSV and annual parquet byte for
+    byte. New `selftest_run_batched_julia.py` (28 checks).
+- **Record explorer.**
+  - Holding ↑ could hang the tab. Value zoom now stops at 10 quanta, and the tick loops are
+    capped.
+  - Steps like 2.5 were labelled with rounded values; 58,814 fuzzed ticks now parse back
+    exactly.
+  - "Exactly 0" was false for 1 − R², where R² rounds to 1.
+  - The map legend states its 2nd–98th percentile clipping. Map zoom survives page-height
+    changes, and tables no longer widen the page on phones.
+  - Wording: "2,052 basins without an original series" (2,048 absent, 4 NaN), cells touched
+    vs cells of area, lag counts of basin-years that have r, and annual-table digits.
+  - Edge cases: no anomaly axis without overlap; day ticks for short windows; 14-day windows at
+    the record end.
+  - Accessibility: − / + value-zoom buttons (touch), screen-reader announcements, coverage
+    shown by shape too, and the map no longer an empty tab stop.
+  - Builder: NaN guards on the embedded series, and `<title>` moved into `<head>`.
+- **Daymet tools.**
+  - `copy_verify.py` writes `<file>.new`, flushes it with F_FULLFSYNC and replaces the drive
+    file and its manifest line only after verifying. Before, a truncated source could replace
+    a good copy. A file whose line records other content now needs `--replace`.
+  - `daymet_assemble.py` verifies before replacing the output; before, a failed verification
+    left an unverified file in place of a good one. It requires every `.done` and one weights
+    md5, and stores NaN as NaN.
+  - `--workers` defaults to 6 (8 needs ~16.7 GB). The NCAR mirror has its own 10 MB/s floor
+    and is queried only when used.
+  - `git_state` records a git failure as unknown, not clean.
+  - `daymet_basin_flags.py` stops when any basin lacks a QA row. It still regenerates the
+    delivered table byte for byte.
+  - Tool self-test: 25 checks.
+- **Docs.**
+  - 2,052 basins are not compared (not 2,048).
+  - 45 basins have less than 4 cells of area; only 5 touch fewer than 4.
+  - 46 ECCC outlines also lack a metadata area.
+  - The file has 38 % more rows, but 27 % more bytes.
+  - 8,013 of the 8,017 ids match the streamflow parquet.
+  - The memory caveat now covers the new input's batches.
+  - The plans had stale replay, token-handling and precision statements.
+- **Deferred (LOW):**
+  - `daymet_stream.py`'s CMR re-query has no retry or offline path, and it does not notice a
+    granule that vanished from CMR.
+  - In dark mode the explorer's blue and orange are close in luminance, so zoomed-out edges fade
+    in greyscale. Its group markers reuse the series colours.
+- **Left to the user:**
+  - CLAUDE.md and `/add-signature` say to publish the mirror after every merge, while STATUS
+    records the 2026-10-01 deferral.
+  - `EO_data_processing/CLAUDE.md` ships to the public mirror and mentions the token pasted on
+    2026-09-29.
+  - The STATUS line "37 Canadian gages … 27/37" describes the canonical run; the products hold
+    32 / 28 such gages, of which 22 / 25 are flagged.
+
 ### Added: Daymet record explorer, basin flags, batched Julia runner; signature replay dropped (2026-10-01)
 **Decisions (user, 2026-10-01):**
 - Keep the questionable polygons and FLAG them. The flags travel as a companion table; the
@@ -293,8 +363,9 @@ Moved 2026-09-29 to `docs/reconciliation/guidelines_todos.md` and
 What was built:
 - **Basin flags.** `EO_data_processing/daymet/daymet_basin_flags.py` writes
   `daymet_basin_flags.csv` next to the climate file: 101 flagged basins.
-  - 30 HydroBASINS fallbacks, 28 area mismatches (> 50 %), 27 with no metadata area,
-    45 under 4 Daymet cells.
+  - 30 HydroBASINS fallbacks, 28 area mismatches (> 50 %), 27 HydroBASINS polygons with no
+    metadata area (46 ECCC outlines lack one too and are not flagged), 45 with less than 4
+    Daymet cells of area (coverage sum; wording corrected 2026-10-05).
   - 57 of them are low-confidence: 12 in product #1, 13 in #2.
 - **Batched runner.** `docs/benchmarks/run_batched_julia.py` splits, runs and merges a
   Julia run in gage batches.
@@ -353,8 +424,9 @@ What they found, and what changed:
   - The CRS was not asserted per file.
   - Bit-reproducibility holds only for a fixed weights file.
   - The crosscheck covered the 7,964 gate basins, not every basin.
-  - Added what was not compared at all: 2,048 basins, including all 53 large and all 30
-    HydroBASINS polygons; 2024–2025; the 7 basins that touch fill cells.
+  - Added what was not compared at all: 2,052 basins (2,048 absent from the stale file,
+    including all 53 large and all 30 HydroBASINS polygons, and 4 NaN there; count corrected
+    2026-10-05); 2024–2025; the 7 basins that touch fill cells.
   - Added that agreement shows reproduction of the co-authors' aggregation of the same
     Daymet cells, not accuracy.
 - **Toolchain hardened (the existing file is unaffected).**
@@ -503,7 +575,8 @@ climate input was found truncated.
 ## [July 2026] – [March 2026]
 
 Condensed summaries of these months — the Julia annual-values export, b = 1 recession
-alpha, snow and drought families, 20-value stats floor and both standard products (July);
+alpha, snow and drought families, 20-value stats floor, Q-to-PPT unit gate and 60 % trend
+gate, both standard products and the Annual NLCD product (July);
 the MODIS LAI/LULC EO products (June); the
 HydroATLAS watershed metadata + static HTML explorer (May); the April 2026 release (Pettitt
 changepoints, recession-parameterized BFI, Section 3 signatures, the Julia-canonical

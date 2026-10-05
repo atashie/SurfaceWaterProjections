@@ -754,7 +754,7 @@ multi-year run.
   for the 1980–2019 chunk layout) → 1980–2025 is download-bound, ≈ 50 h (prcp + swe
   ≈ 8.5 h). Exactness: exactextract's own weighted mean agrees to ≤ 5e-11 in all 7,964 gate
   basins; ORNL's Single Pixel API agrees at six points; output is bit-identical across
-  reruns for a fixed weights file.
+  reruns for a fixed weights file (scope made explicit 2026-10-01).
   Probe on prcp 1980 (old layout, leap year): all chunks stored, Feb 29 kept / Dec 31
   dropped as in the stale data, stale values reproduced.
 - Against the stale product (5,969 shared basins): with true-area weights and
