@@ -31,7 +31,7 @@ Rules that still bite:
   reproduces the co-authors' series; coverage-only or the simplified layer do not); fill is
   excluded per day, never NaN-propagated. The Earthdata token lives in
   `~/.config/earthdata/edl_token` (mode 600), never in the repo, docs or memory. The user
-  writes it from their own terminal: a token pasted into a session persists in the Claude
-  transcripts (the 2026-09-29 one did). The stream hands it to curl on stdin. Use
-  `--workers 6` on the 16 GB laptop with the 8,017-basin weights. Run
+  writes it from their own terminal, since a token pasted into a session persists in the
+  Claude transcripts. The stream hands it to curl on stdin. `--workers 6` (the default)
+  suits the 16 GB laptop with the 8,017-basin weights. Run
   `daymet/selftest_daymet_tools.py` after changing the tools.

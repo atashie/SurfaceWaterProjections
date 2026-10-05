@@ -343,13 +343,14 @@ independently. Fixed:
     granule that vanished from CMR.
   - In dark mode the explorer's blue and orange are close in luminance, so zoomed-out edges fade
     in greyscale. Its group markers reuse the series colours.
-- **Left to the user:**
-  - CLAUDE.md and `/add-signature` say to publish the mirror after every merge, while STATUS
-    records the 2026-10-01 deferral.
-  - `EO_data_processing/CLAUDE.md` ships to the public mirror and mentions the token pasted on
-    2026-09-29.
+- **DECISIONS (user, 2026-10-05) on the three items the review left open:**
+  - Publish the mirror at every merge as the general preference; skip only for a good one-off
+    reason (the 2026-10-01 deferral was one). Republished 2026-10-05 from a clean checkout of
+    HEAD, since other sessions had uncommitted edits.
+  - The sentence about the pasted token is trimmed from `EO_data_processing/CLAUDE.md`, which
+    ships to the mirror.
   - The STATUS line "37 Canadian gages … 27/37" describes the canonical run; the products hold
-    32 / 28 such gages, of which 22 / 25 are flagged.
+    32 / 28 such gages, of which 22 / 25 are flagged. To be corrected in an upcoming update.
 
 ### Added: Daymet record explorer, basin flags, batched Julia runner; signature replay dropped (2026-10-01)
 **Decisions (user, 2026-10-01):**
