@@ -10,8 +10,9 @@ Usage:
     python build_signature_explorer.py --csv <signatures.csv> --out <explorer.html>
         [--annual <signatures_annual.parquet>] [--title "..."] [--limit N]
 
-Needs internet at view time for the Leaflet/CARTO CDN (same as the other explorers);
-points and summary data are fully inlined.
+Needs internet at view time for the Leaflet CDN and the basemap tiles (keyless Esri gray
+canvas with an OpenStreetMap fallback and a manual switch, like the other explorers; CARTO's
+tiles require an API key since October 2026); points and summary data are fully inlined.
 
 With --annual, per-signature sidecar files (<out-stem>_annual/<signature>.js, ~90 files)
 are written next to the HTML and lazily loaded on gage click to draw the annual
@@ -326,8 +327,40 @@ function quantile(sorted,q){if(!sorted.length)return NaN;const p=(sorted.length-
 function fmt(v){if(v===null||v===undefined||Number.isNaN(v))return "NA";const a=Math.abs(v);if(a!==0&&(a<0.001||a>=100000))return v.toExponential(2);return (Math.round(v*10000)/10000).toString();}
 
 const map=L.map('map',{preferCanvas:true}).setView([48,-98],4);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-  {attribution:'&copy; OpenStreetMap &copy; CARTO',maxZoom:12}).addTo(map);
+// Basemap tiles: keyless providers, automatic fallback on tile errors, manual switch in the
+// layers control. CARTO's basemap tiles require an API key since October 2026
+// (keyless requests get an "API KEY REQUIRED" watermark tile), hence the change of 2026-10-13.
+function hisssBasemap(map, variant, maxZoom, position) {
+  const esri = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_' +
+    (variant === 'dark' ? 'Dark' : 'Light') + '_Gray_';
+  const providers = [
+    {name: 'Esri gray canvas', maxNativeZoom: 16,
+     urls: [esri + 'Base/MapServer/tile/{z}/{y}/{x}', esri + 'Reference/MapServer/tile/{z}/{y}/{x}'],
+     attribution: 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap contributors'},
+    {name: 'OpenStreetMap', maxNativeZoom: 19,
+     urls: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}
+  ];
+  const groups = {};
+  providers.forEach((p, i) => {
+    const layers = p.urls.map(u => L.tileLayer(u, {attribution: p.attribution, maxZoom: maxZoom, maxNativeZoom: p.maxNativeZoom}));
+    const group = L.layerGroup(layers);
+    let loaded = false, errors = 0;
+    layers[0].on('tileload', () => { loaded = true; });
+    layers[0].on('tileerror', () => {
+      errors += 1;
+      if (!loaded && errors >= 3 && map.hasLayer(group) && i + 1 < providers.length) {
+        map.removeLayer(group);
+        groups[providers[i + 1].name].addTo(map);
+      }
+    });
+    groups[p.name] = group;
+  });
+  groups[providers[0].name].addTo(map);
+  L.control.layers(groups, null, {position: position || 'topright', collapsed: true}).addTo(map);
+  return groups;
+}
+hisssBasemap(map, 'light', 12, 'bottomright');
 const renderer=L.canvas({padding:0.3});
 
 document.getElementById('subtitle').textContent =

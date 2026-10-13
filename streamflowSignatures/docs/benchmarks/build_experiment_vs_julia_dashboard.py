@@ -59,6 +59,18 @@ SIGNATURE_GROUPS = {
     "Streamflow Drought": [f"drought_{m}_fixed_p{p}"
                            for m in ("duration", "deficit")
                            for p in (2, 5, 10, 20, 30)],
+    # Climate (guidelines 3.9, 2026-10-12): two function families of the Climate category
+    "Precipitation": ["prcp_annual", "prcp_win", "prcp_spr", "prcp_sum", "prcp_fal",
+                      "prcp_1d_max", "prcp_5d_max", "prcp_max_dowy", "prcp_50_dowy",
+                      "prcp_cm_dowy", "prcp_ndays_abv_10mm", "prcp_ndays_abv_25mm",
+                      "prcp_ndays_abv_50mm", "prcp_annual_sd", "prcp_annual_cv",
+                      "prcp_intermit_annual", "prcp_intermit_annual_dowy_start",
+                      "prcp_intermit_annual_dowy_end", "prcp_gini", "prcp_seasonality_index"],
+    "Temperature": ["temp_max_annual", "temp_max_annual_dowy", "temp_min_annual",
+                    "temp_min_annual_dowy", "temp_max_win", "temp_max_spr", "temp_max_sum",
+                    "temp_max_fal", "temp_min_win", "temp_min_spr", "temp_min_sum",
+                    "temp_min_fal", "frost_first_dowy", "frost_last_dowy", "gdd_cum_annual",
+                    "gdd_cum_win", "gdd_cum_spr", "gdd_cum_sum", "gdd_cum_fal"],
 }
 
 STATS = ["_mean", "_median", "_senn_slp", "_linear_slp",
@@ -394,12 +406,41 @@ function computeGlobalTiers() {
 const mapBase = L.map("map-base", { preferCanvas: true }).setView([41.3, -95.6], 4);
 const mapExp = L.map("map-exp", { preferCanvas: true }).setView([41.3, -95.6], 4);
 
-L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-  attribution: '&copy; OSM &copy; CARTO', maxZoom: 18
-}).addTo(mapBase);
-L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-  attribution: '&copy; OSM &copy; CARTO', maxZoom: 18
-}).addTo(mapExp);
+// Basemap tiles: keyless providers, automatic fallback on tile errors, manual switch in the
+// layers control. CARTO's basemap tiles require an API key since October 2026
+// (keyless requests get an "API KEY REQUIRED" watermark tile), hence the change of 2026-10-13.
+function hisssBasemap(map, variant, maxZoom, position) {
+  const esri = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_' +
+    (variant === 'dark' ? 'Dark' : 'Light') + '_Gray_';
+  const providers = [
+    {name: 'Esri gray canvas', maxNativeZoom: 16,
+     urls: [esri + 'Base/MapServer/tile/{z}/{y}/{x}', esri + 'Reference/MapServer/tile/{z}/{y}/{x}'],
+     attribution: 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap contributors'},
+    {name: 'OpenStreetMap', maxNativeZoom: 19,
+     urls: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}
+  ];
+  const groups = {};
+  providers.forEach((p, i) => {
+    const layers = p.urls.map(u => L.tileLayer(u, {attribution: p.attribution, maxZoom: maxZoom, maxNativeZoom: p.maxNativeZoom}));
+    const group = L.layerGroup(layers);
+    let loaded = false, errors = 0;
+    layers[0].on('tileload', () => { loaded = true; });
+    layers[0].on('tileerror', () => {
+      errors += 1;
+      if (!loaded && errors >= 3 && map.hasLayer(group) && i + 1 < providers.length) {
+        map.removeLayer(group);
+        groups[providers[i + 1].name].addTo(map);
+      }
+    });
+    groups[p.name] = group;
+  });
+  groups[providers[0].name].addTo(map);
+  L.control.layers(groups, null, {position: position || 'topright', collapsed: true}).addTo(map);
+  return groups;
+}
+hisssBasemap(mapBase, 'dark', 18, 'topright');
+hisssBasemap(mapExp, 'dark', 18, 'topright');
 
 let syncing = false;
 function syncMap(source, target) {

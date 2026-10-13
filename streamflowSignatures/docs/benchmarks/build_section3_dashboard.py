@@ -423,12 +423,41 @@ function percentile(arr, p) {
 const mapR = L.map("map-r", { preferCanvas: true }).setView([41.3, -95.6], 4);
 const mapJ = L.map("map-julia", { preferCanvas: true }).setView([41.3, -95.6], 4);
 
-L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-  attribution: '&copy; OSM &copy; CARTO', maxZoom: 18
-}).addTo(mapR);
-L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-  attribution: '&copy; OSM &copy; CARTO', maxZoom: 18
-}).addTo(mapJ);
+// Basemap tiles: keyless providers, automatic fallback on tile errors, manual switch in the
+// layers control. CARTO's basemap tiles require an API key since October 2026
+// (keyless requests get an "API KEY REQUIRED" watermark tile), hence the change of 2026-10-13.
+function hisssBasemap(map, variant, maxZoom, position) {
+  const esri = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_' +
+    (variant === 'dark' ? 'Dark' : 'Light') + '_Gray_';
+  const providers = [
+    {name: 'Esri gray canvas', maxNativeZoom: 16,
+     urls: [esri + 'Base/MapServer/tile/{z}/{y}/{x}', esri + 'Reference/MapServer/tile/{z}/{y}/{x}'],
+     attribution: 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap contributors'},
+    {name: 'OpenStreetMap', maxNativeZoom: 19,
+     urls: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}
+  ];
+  const groups = {};
+  providers.forEach((p, i) => {
+    const layers = p.urls.map(u => L.tileLayer(u, {attribution: p.attribution, maxZoom: maxZoom, maxNativeZoom: p.maxNativeZoom}));
+    const group = L.layerGroup(layers);
+    let loaded = false, errors = 0;
+    layers[0].on('tileload', () => { loaded = true; });
+    layers[0].on('tileerror', () => {
+      errors += 1;
+      if (!loaded && errors >= 3 && map.hasLayer(group) && i + 1 < providers.length) {
+        map.removeLayer(group);
+        groups[providers[i + 1].name].addTo(map);
+      }
+    });
+    groups[p.name] = group;
+  });
+  groups[providers[0].name].addTo(map);
+  L.control.layers(groups, null, {position: position || 'topright', collapsed: true}).addTo(map);
+  return groups;
+}
+hisssBasemap(mapR, 'dark', 18, 'topright');
+hisssBasemap(mapJ, 'dark', 18, 'topright');
 
 // Sync maps
 let syncing = false;

@@ -253,8 +253,40 @@ const POINTS=__POINTS__, VARS=__VARS__, TS=__TS__, EXCLUDED=__EXCLUDED__;
 </script><script>
 const cvs=L.canvas({padding:0.5});
 const map=L.map('map',{preferCanvas:true}).setView([39.5,-98],4);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
- {attribution:'&copy; OpenStreetMap &copy; CARTO',subdomains:'abcd',maxZoom:19}).addTo(map);
+// Basemap tiles: keyless providers, automatic fallback on tile errors, manual switch in the
+// layers control. CARTO's basemap tiles require an API key since October 2026
+// (keyless requests get an "API KEY REQUIRED" watermark tile), hence the change of 2026-10-13.
+function hisssBasemap(map, variant, maxZoom, position) {
+  const esri = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_' +
+    (variant === 'dark' ? 'Dark' : 'Light') + '_Gray_';
+  const providers = [
+    {name: 'Esri gray canvas', maxNativeZoom: 16,
+     urls: [esri + 'Base/MapServer/tile/{z}/{y}/{x}', esri + 'Reference/MapServer/tile/{z}/{y}/{x}'],
+     attribution: 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap contributors'},
+    {name: 'OpenStreetMap', maxNativeZoom: 19,
+     urls: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}
+  ];
+  const groups = {};
+  providers.forEach((p, i) => {
+    const layers = p.urls.map(u => L.tileLayer(u, {attribution: p.attribution, maxZoom: maxZoom, maxNativeZoom: p.maxNativeZoom}));
+    const group = L.layerGroup(layers);
+    let loaded = false, errors = 0;
+    layers[0].on('tileload', () => { loaded = true; });
+    layers[0].on('tileerror', () => {
+      errors += 1;
+      if (!loaded && errors >= 3 && map.hasLayer(group) && i + 1 < providers.length) {
+        map.removeLayer(group);
+        groups[providers[i + 1].name].addTo(map);
+      }
+    });
+    groups[p.name] = group;
+  });
+  groups[providers[0].name].addTo(map);
+  L.control.layers(groups, null, {position: position || 'topright', collapsed: true}).addTo(map);
+  return groups;
+}
+hisssBasemap(map, 'light', 19, 'topright');
 const VIR=[[68,1,84],[59,82,139],[33,145,140],[94,201,98],[253,231,37]];
 const lerp=(a,b,t)=>a+(b-a)*t;
 function viridis(t){t=Math.max(0,Math.min(1,t));const s=t*(VIR.length-1),i=Math.floor(s),f=s-i,a=VIR[i],b=VIR[Math.min(i+1,VIR.length-1)];
