@@ -11,7 +11,8 @@ read_parquet <- function(path) {
 
   # Normalize column names to match expected schema
   nmap <- c(Date = "date", site_id = "gage_id", prcp = "PPT",
-            site_no = "gage_id", PRCP = "PPT", swe = "SWE")
+            site_no = "gage_id", PRCP = "PPT", swe = "SWE",
+            tmin = "TMIN", tmax = "TMAX")  # Daymet temperature pair (2026-10-12)
   for (old in names(nmap)) {
     if (old %in% names(dt) && !nmap[[old]] %in% names(dt)) {
       data.table::setnames(dt, old, nmap[[old]])
@@ -92,6 +93,34 @@ filter_qualifying_years <- function(dt) {
   )
 }
 
+#' Linearly fill internal NA runs of length <= max_gap with Julia's exact expression
+#'
+#' \code{left + (right - left) * offset / span} evaluated in that order (offset and span
+#' integers), so filled values are bit-identical with \code{julia/src/io.jl} (review
+#' 2026-10-12: \code{stats::approx} divides first and rounds differently). Leading /
+#' trailing runs and runs longer than max_gap stay NA; max_gap 0 fills nothing.
+#' @keywords internal
+#' @noRd
+.fill_internal_gaps <- function(x, max_gap) {
+  x <- as.numeric(x)
+  n <- length(x)
+  if (n == 0L || !anyNA(x)) return(x)
+  r <- rle(is.na(x))
+  ends <- cumsum(r$lengths); starts <- c(1L, ends[-length(ends)] + 1L)
+  for (ri in seq_along(r$lengths)) {
+    if (!r$values[ri]) next
+    gap_len <- r$lengths[ri]
+    if (gap_len > max_gap) next
+    s <- starts[ri]; e <- ends[ri]
+    if (s > 1L && e < n && is.finite(x[s - 1L]) && is.finite(x[e + 1L])) {   # finite neighbours only
+      left_val <- x[s - 1L]; right_val <- x[e + 1L]
+      span <- (e + 1L) - (s - 1L)
+      for (k in s:e) x[k] <- left_val + (right_val - left_val) * (k - (s - 1L)) / span
+    }
+  }
+  x
+}
+
 #' Preprocess daily data with NA handling, interpolation, and diagnostics
 #'
 #' For each water year, normalizes to a complete daily grid (Oct 1 - Sep 30),
@@ -115,7 +144,6 @@ filter_qualifying_years <- function(dt) {
 #'   }
 #' @export
 #' @importFrom data.table as.data.table copy setorder data.table rbindlist
-#' @importFrom stats approx
 preprocess_daily_data <- function(gage_flow, config = NULL) {
   # Build config from pkg_env defaults if not provided
   if (is.null(config)) {
@@ -136,27 +164,43 @@ preprocess_daily_data <- function(gage_flow, config = NULL) {
         max_unique_values = pkg_env$na_constant_sd_max_unique
       ),
       seasonal_completeness = list(
-        min_fraction = pkg_env$na_seasonal_min_fraction
+        min_fraction = pkg_env$na_seasonal_min_fraction,
+        season_definitions = pkg_env$na_season_definitions   # configured, not hard-coded (review round 3)
       ),
       climate_na_policy = list(
         max_raw_na_per_year_ppt = pkg_env$na_max_raw_na_ppt,
         max_interpolation_gap_ppt = pkg_env$na_max_gap_ppt,
         reject_negative_ppt = pkg_env$na_reject_negative_ppt
+      ),
+      temperature_na_policy = list(
+        max_raw_na_per_year_temp = pkg_env$na_max_raw_na_temp,
+        max_interpolation_gap_temp = pkg_env$na_max_gap_temp
+      ),
+      snow_na_policy = list(
+        max_raw_na_per_year_swe = pkg_env$na_max_raw_na_swe,
+        max_interpolation_gap_swe = pkg_env$na_max_gap_swe,
+        reject_negative_swe = pkg_env$na_reject_negative_swe
       )
     )
   }
 
-  # Extract parameters from config
-  max_gap_days       <- config$interpolation$max_gap_days %||% 3L
-  max_raw_na         <- config$year_rejection$max_raw_na_per_year %||% 30L
-  reject_negative    <- config$year_rejection$reject_negative_flow %||% TRUE
-  reject_residual    <- config$year_rejection$reject_residual_na %||% TRUE
-  constant_sd_enabled   <- config$constant_sd_flag$enabled %||% TRUE
-  constant_sd_min_days  <- config$constant_sd_flag$min_nonzero_days_per_month %||% 15L
-  constant_sd_max_unique <- config$constant_sd_flag$max_unique_values %||% 1L
-  seasonal_min_frac  <- config$seasonal_completeness$min_fraction %||% 0.80
+  # Extract parameters from config — every limit a whole number >= 0, every flag a real
+  # logical, also when supplied explicitly (review round 3; Julia types them as Int)
+  max_gap_days       <- .cfg_int(config$interpolation$max_gap_days, "max_gap_days", 3L)
+  max_raw_na         <- .cfg_int(config$year_rejection$max_raw_na_per_year, "max_raw_na_per_year", 30L)
+  reject_negative    <- .cfg_bool(config$year_rejection$reject_negative_flow, "reject_negative_flow", TRUE)
+  reject_residual    <- .cfg_bool(config$year_rejection$reject_residual_na, "reject_residual_na", TRUE)
+  constant_sd_enabled   <- .cfg_bool(config$constant_sd_flag$enabled, "constant_sd_enabled", TRUE)
+  constant_sd_min_days  <- .cfg_int(config$constant_sd_flag$min_nonzero_days_per_month, "min_nonzero_days_per_month", 15L)
+  constant_sd_max_unique <- .cfg_int(config$constant_sd_flag$max_unique_values, "max_unique_values", 1L)
+  seasonal_min_frac  <- .cfg_num(config$seasonal_completeness$min_fraction, "min_fraction", 0.80)
+  if (max_gap_days < 0L || max_raw_na < 0L) stop("preprocess_daily_data: missing-day limits and interpolation gaps must be >= 0")
   season_defs <- if (!is.null(config$seasonal_completeness$season_definitions)) {
-    config$seasonal_completeness$season_definitions
+    sd_in <- config$seasonal_completeness$season_definitions
+    list(winter = .cfg_months(sd_in$winter, "winter", c(12L, 1L, 2L)), spring = .cfg_months(sd_in$spring, "spring", c(3L, 4L, 5L)),
+         summer = .cfg_months(sd_in$summer, "summer", c(6L, 7L, 8L)), fall = .cfg_months(sd_in$fall, "fall", c(9L, 10L, 11L)))
+  } else if (!is.null(pkg_env$na_season_definitions)) {
+    pkg_env$na_season_definitions
   } else {
     list(winter = c(12L, 1L, 2L), spring = c(3L, 4L, 5L),
          summer = c(6L, 7L, 8L), fall = c(9L, 10L, 11L))
@@ -165,9 +209,21 @@ preprocess_daily_data <- function(gage_flow, config = NULL) {
   # Climate NA policy
   has_ppt <- "PPT" %in% names(gage_flow)
   has_swe <- "SWE" %in% names(gage_flow)
-  max_raw_na_ppt     <- config$climate_na_policy$max_raw_na_per_year_ppt %||% 30L
-  max_gap_ppt        <- config$climate_na_policy$max_interpolation_gap_ppt %||% 3L
-  reject_negative_ppt <- config$climate_na_policy$reject_negative_ppt %||% TRUE
+  has_temp <- "TMIN" %in% names(gage_flow) && "TMAX" %in% names(gage_flow)
+  max_raw_na_ppt     <- .cfg_int(config$climate_na_policy$max_raw_na_per_year_ppt, "max_raw_na_per_year_ppt", 30L)
+  max_gap_ppt        <- .cfg_int(config$climate_na_policy$max_interpolation_gap_ppt, "max_interpolation_gap_ppt", 3L)
+  reject_negative_ppt <- .cfg_bool(config$climate_na_policy$reject_negative_ppt, "reject_negative_ppt", TRUE)
+  if (max_raw_na_ppt < 0L || max_gap_ppt < 0L) stop("climate_na_policy limits must be >= 0")
+  # SWE policy: the supplied config first, the package defaults when absent (review round 4)
+  max_raw_na_swe     <- .cfg_int(config$snow_na_policy$max_raw_na_per_year_swe, "max_raw_na_per_year_swe", pkg_env$na_max_raw_na_swe %||% 30L)
+  max_gap_swe        <- .cfg_int(config$snow_na_policy$max_interpolation_gap_swe, "max_interpolation_gap_swe", pkg_env$na_max_gap_swe %||% 3L)
+  reject_negative_swe <- .cfg_bool(config$snow_na_policy$reject_negative_swe, "reject_negative_swe", pkg_env$na_reject_negative_swe %||% TRUE)
+  if (max_raw_na_swe < 0L || max_gap_swe < 0L) stop("snow_na_policy limits must be >= 0")
+  # temperature policy: the supplied config first, the package defaults when absent —
+  # validated like the package config (whole non-negative counts; review round 2)
+  max_raw_na_temp    <- .cfg_int(config$temperature_na_policy$max_raw_na_per_year_temp, "max_raw_na_per_year_temp", pkg_env$na_max_raw_na_temp %||% 30L)
+  max_gap_temp       <- .cfg_int(config$temperature_na_policy$max_interpolation_gap_temp, "max_interpolation_gap_temp", pkg_env$na_max_gap_temp %||% 3L)
+  if (max_raw_na_temp < 0L || max_gap_temp < 0L) stop("temperature_na_policy limits must be >= 0")
 
   gage_flow <- data.table::copy(data.table::as.data.table(gage_flow))
 
@@ -181,6 +237,14 @@ preprocess_daily_data <- function(gage_flow, config = NULL) {
     gage_flow[, Date := as.Date(Date)]
   }
 
+  # Observation columns are numeric from here on (Julia's _real_vector contract: real
+  # numbers incl. logicals are observations, anything else is missing). Converting the
+  # whole frame once keeps the per-year rbind below from restoring a list or character
+  # type that would break the downstream families (review round 5, 2026-10-13).
+  for (col in intersect(c("Q", "PPT", "SWE", "TMIN", "TMAX"), names(gage_flow))) {
+    if (!is.double(gage_flow[[col]])) data.table::set(gage_flow, j = col, value = .real_values(gage_flow[[col]]))
+  }
+
   water_years <- sort(unique(gage_flow$water_year))
 
   # Initialize result containers
@@ -190,6 +254,7 @@ preprocess_daily_data <- function(gage_flow, config = NULL) {
   valid_years    <- integer(0)
   valid_climate_years <- integer(0)
   valid_swe_years <- integer(0)
+  valid_temp_years <- integer(0)
 
   for (wy in water_years) {
     # Step a: Normalize to complete daily grid
@@ -206,6 +271,13 @@ preprocess_daily_data <- function(gage_flow, config = NULL) {
     wy_data[, water_year := wy]
     wy_data[, month := as.integer(format(Date, "%m"))]
     wy_data[, dowy := as.integer(Date - wy_start + 1L)]
+
+    # Observations are real numbers; non-finite values (NaN, ±Inf), strings, complex
+    # and other types are missing, for every series (review 2026-10-12; mirrors
+    # julia/src/io.jl and _real_vector)
+    wy_data$Q <- .real_values(wy_data$Q); wy_data$Q[!is.finite(wy_data$Q)] <- NA_real_
+    if (has_ppt) { wy_data$PPT <- .real_values(wy_data$PPT); wy_data$PPT[!is.finite(wy_data$PPT)] <- NA_real_ }
+    if (has_swe) { wy_data$SWE <- .real_values(wy_data$SWE); wy_data$SWE[!is.finite(wy_data$SWE)] <- NA_real_ }
 
     # Step b: Compute raw diagnostics (BEFORE interpolation)
     q_vals <- wy_data$Q
@@ -303,14 +375,11 @@ preprocess_daily_data <- function(gage_flow, config = NULL) {
         right_ok <- (e < n)  && !is.na(wy_data$Q[e + 1L])
 
         if (left_ok && right_ok) {
+          # Julia's exact expression order (bit-identical fills across languages)
           left_val  <- wy_data$Q[s - 1L]
           right_val <- wy_data$Q[e + 1L]
-          interp_vals <- stats::approx(
-            x = c(s - 1L, e + 1L),
-            y = c(left_val, right_val),
-            xout = s:e, rule = 1
-          )$y
-          wy_data$Q[s:e] <- interp_vals
+          span <- (e + 1L) - (s - 1L)
+          for (k in s:e) wy_data$Q[k] <- left_val + (right_val - left_val) * (k - (s - 1L)) / span
           interpolated_count <- interpolated_count + gap_len
         }
       }
@@ -364,12 +433,9 @@ preprocess_daily_data <- function(gage_flow, config = NULL) {
             right_ok <- (e < n_ppt) && !is.na(wy_data$PPT[e + 1L])
 
             if (left_ok && right_ok) {
-              interp_vals <- stats::approx(
-                x = c(s - 1L, e + 1L),
-                y = c(wy_data$PPT[s - 1L], wy_data$PPT[e + 1L]),
-                xout = s:e, rule = 1
-              )$y
-              wy_data$PPT[s:e] <- interp_vals
+              left_val <- wy_data$PPT[s - 1L]; right_val <- wy_data$PPT[e + 1L]
+              span <- (e + 1L) - (s - 1L)
+              for (k in s:e) wy_data$PPT[k] <- left_val + (right_val - left_val) * (k - (s - 1L)) / span
             }
           }
 
@@ -387,8 +453,6 @@ preprocess_daily_data <- function(gage_flow, config = NULL) {
     if (has_swe) {
       swe_vals <- wy_data$SWE
       swe_raw_na <- sum(is.na(swe_vals))
-      max_raw_na_swe <- pkg_env$na_max_raw_na_swe
-      max_gap_swe    <- pkg_env$na_max_gap_swe
 
       if (swe_raw_na > max_raw_na_swe) {
         swe_valid <- FALSE
@@ -409,19 +473,40 @@ preprocess_daily_data <- function(gage_flow, config = NULL) {
             left_ok  <- (s2 > 1L) && !is.na(wy_data$SWE[s2 - 1L])
             right_ok <- (e2 < n_swe) && !is.na(wy_data$SWE[e2 + 1L])
             if (left_ok && right_ok) {
-              wy_data$SWE[s2:e2] <- stats::approx(
-                x = c(s2 - 1L, e2 + 1L),
-                y = c(wy_data$SWE[s2 - 1L], wy_data$SWE[e2 + 1L]),
-                xout = s2:e2, rule = 1
-              )$y
+              left_val <- wy_data$SWE[s2 - 1L]; right_val <- wy_data$SWE[e2 + 1L]
+              span <- (e2 + 1L) - (s2 - 1L)
+              for (k in s2:e2) wy_data$SWE[k] <- left_val + (right_val - left_val) * (k - (s2 - 1L)) / span
             }
           }
           if (sum(is.na(wy_data$SWE)) > 0) swe_valid <- FALSE
         }
       }
-      if (swe_valid && isTRUE(pkg_env$na_reject_negative_swe) &&
+      if (swe_valid && isTRUE(reject_negative_swe) &&
           any(wy_data$SWE < 0, na.rm = TRUE)) {
         swe_valid <- FALSE
+      }
+    }
+
+    # Step f3: TMIN/TMAX handling (2026-10-12): the SWE rules without the sign check
+    # (temperatures are signed); non-finite values count as missing; the year is
+    # temperature-valid only when BOTH series pass, and both are written back together
+    temp_valid <- TRUE
+    if (has_temp) {
+      filled <- list()
+      for (col in c("TMIN", "TMAX")) {
+        tv <- .real_values(wy_data[[col]])
+        tv[!is.finite(tv)] <- NA_real_
+        if (sum(is.na(tv)) > max_raw_na_temp) {
+          temp_valid <- FALSE
+        } else if (sum(is.na(tv)) > 0) {
+          tv <- .fill_internal_gaps(tv, max_gap_temp)
+          if (sum(is.na(tv)) > 0) temp_valid <- FALSE
+        }
+        filled[[col]] <- tv
+      }
+      if (temp_valid) {
+        wy_data$TMIN <- filled$TMIN
+        wy_data$TMAX <- filled$TMAX
       }
     }
 
@@ -432,6 +517,9 @@ preprocess_daily_data <- function(gage_flow, config = NULL) {
     }
     if (has_swe && swe_valid) {
       valid_swe_years <- c(valid_swe_years, wy)
+    }
+    if (has_temp && temp_valid) {
+      valid_temp_years <- c(valid_temp_years, wy)
     }
 
     diag_list[[length(diag_list) + 1L]] <- data.table::data.table(
@@ -486,6 +574,7 @@ preprocess_daily_data <- function(gage_flow, config = NULL) {
     valid_years = valid_years,
     valid_climate_years = valid_climate_years,
     valid_swe_years = valid_swe_years,
+    valid_temp_years = valid_temp_years,
     rejected_years = rejected_years,
     seasonal_flags = seasonal_flags_dt,
     diagnostics = diagnostics

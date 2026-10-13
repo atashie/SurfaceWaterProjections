@@ -12,6 +12,10 @@ see the pending list at the end.
 
 ## A. Manuscript — every location that must change
 
+> **Status 2026-09-15**: items 1, 2 and 8 are DONE in the published draft (§2 preamble,
+> §2.2.1 and §1 now carry the eight categories); 3–4 and 6–7 need no text change; 5 (the
+> §4 figure scheme) is still unknown — the new Figure 2 caption says "signature category".
+
 | # | Location | Current text | Change to |
 |---|----------|--------------|-----------|
 | 1 | §2 preamble | "we computed 121 signatures across 14 streamflow and hydroclimate categories: 100 annually resolved signatures … plus 21 per-gage diagnostics" | "… across eight signature categories (Flow Volume, Flow Duration, Storage, Flashiness, Drought, Flow Timing, Precipitation Streamflow, Snow): 100 annually resolved signatures … plus 21 per-gage diagnostics" |

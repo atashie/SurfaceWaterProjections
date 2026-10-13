@@ -1,29 +1,26 @@
 # Summary Documentation for Streamflow Signatures
 
 > **Auto-synced from**: [Google Doc](https://docs.google.com/document/d/e/2PACX-1vSVjtqLKk1r9TczxLEBhlnzfBWbm1TQVfvqERm-jEwLISZTEWx73ofV4Ng9H0JaXA/pub)
-> **Last synced**: 2026-09-29 (277 extracted paragraphs vs 270 on 2026-09-10). Structure
-> unchanged (Parts 1–6, eight Part-3 modules); 20 wording regions changed. Substantive:
-> Part 1.2 now cites "Hecht et al. 2024" for the four QA conditions (not in Part 6) and
-> drops the "tell us if there is a data-driven answer" request; Part 3.3 rewrites the
-> b = 1 recession paragraph (same rule), cites Tashie et al. 2020a/b (both added to
-> Part 6), names `recession_alpha_point_cloud` in the L-H param line, and changes the
-> parameterized-BFI validity interval from (0, 1) to **[0, 1] — the code rejects
-> alpha ≤ 0 or ≥ 1, so the open interval was right**; Part 3.4 adds "Threshold of 2%
-> selected to remove error / noise"; Part 3.8 rewords four snow definitions (no rule
-> change); **Part 4 rewritten** — entry-point intro, `Function:` headings, the compilation
-> gate restated ("at least 20 calendar years each have at least 30 days with daily
-> discharge above 0.0001 mm … applies only at compilation"), "All daily records in the
-> retrieval window are kept …", the USGS qualifier mask / HYDAT-never-masked sentence
-> (three 2026-09-04 relay items now landed), the 95 % coverage-warning bullet dropped;
-> **Part 5 rewritten** as a `compute_qa_flags()` block — high_na redefined as ">30 % of a
-> gage's signature columns (the 16 statistics of every signature plus the 21 per-gage
-> scalars)", "confirmatory" BFI notes, and a new Requirements block ("recomputed from an
-> output CSV without rerunning any signature"; "aligned 2026-09-04"). NOT landed: the
-> released-product high_na known-issue sentence; "(see 3.12)"; avg_storage;
-> ice_affected_days_total; the shipped `_linear_reservoir` column name. See
-> `docs/reconciliation/guidelines_todos.md` (2026-09-29).
+> **Last synced**: 2026-10-12 (315 extracted paragraphs vs 277 on 2026-09-29). **Two new
+> metric sets and a naming convention; nothing implemented yet.** (1) NEW **§3.9 Climate
+> Metrics** — 39 annual metrics from Daymet prcp/tmin/tmax: precipitation totals (annual +
+> 4 seasons), 1-day and 5-day maxima and their timing, 50 % and centre-of-mass dates, days
+> above 10/25/50 mm, annual sd and cv, longest dry spell (+ start/end dowy), Gini index,
+> Walsh–Lawler seasonality index, temperature maxima/minima (annual + 4 seasons) and their
+> timing, first/last frost dowy, growing degree days (annual + 4 seasons). The Gini and
+> seasonality equations are images the text extraction does not capture. (2) **§3.8 Snow
+> gains five snowfall metrics** (snowfall_annual/_xSeason, snowfall_max_dowy,
+> snowfall_frac_annual, snowfall_frac_coldseason Nov–Apr) — Daymet carries no snowfall
+> variable, so a derivation rule is needed. (3) **Part 1.1 prescribes
+> `variableName_annual` / `variableName_xSeason` (win, spr, sumr, fall)** and the doc
+> renames shipped columns (Q_annual, Qsumr, Qfall, Negative_annual, runoff_ratio_annual /
+> _Xseason, Flow_Reversals_xSeason) — a CSV-contract change, user decision pending. (4) A
+> new §1.1 "Streamflow data sources" (duplicate 1.1 numbering); Part 6 is now a "Resource
+> Collections" placeholder with co-author notes and References moved to Part 7; six wording
+> edits. Open items: `docs/reconciliation/guidelines_todos.md` (2026-10-12).
 
 ---
+
 
 # Summary Documentation for Streamflow Signatures
 
@@ -33,23 +30,25 @@ How this document is organized. Part 1 holds the global rules that apply to ever
 
 ## Part 1: Global Rules (apply to every signature)
 
+### 1.1 Streamflow data sources
+
+Signatures are based on daily mean streamflow records from 01 October 1979 to 30 September 2025 for 16,994 gages across the United States (9,154; U.S. Geological Survey (USGS) Water Data for the Nation) and Canada (7,840; HYDAT). Streamflow was compiled using the dataRetrieval R package (DeCicco et al., 2026) for US gages and the Water Survey of Canada’s tidyhydat R package (Albers et al., 2026) for Canadian gages. We filtered for gages with watersheds smaller than 85,000 km2 and at least 20 total years of valid daily flow observations, resulting in 8,014 gages (6,160 USGS; 1,854 HYDAT) and more than 111 million daily streamflow observations.
+
 ### 1.1 Time conventions
 
-All annual metrics are calculated on the water year, October 1 – September 30.
+All annual metrics are calculated on the water year, October 1 – September 30, naming convention `variableName`_annual
 
-Seasonal periods are defined as: Winter: December–February; Spring: March–May; Summer: June–August; Fall: September–November.
+Seasonal periods are defined as: Winter: December–February; Spring: March–May; Summer: June–August; Fall: September–November. Naming conventions are `variableName`_xSeason, where xSeason is win, spr, sumr, fall
 
 ### 1.2 NA handling and per-year screening
 
-Do not replace NAs with zeros; streamflow that is zero is okay.
+Do not replace NAs with zeros; a zero flow value is a valid observation.
 
 NAs can be for various reasons, we need to use the U.S. Geological Survey (USGS) codes that describe what creates those NAs (e.g. Ice affected, etc.); for each site that has ice affected days we need a total count of the number of days that are ice affected.
 
 If there are up to 3 days of continuous missing streamflow data, interpolate between the points.
 
-Following Hecht et al. 2024 QA criteria, four conditions are screened per water year: (i) more than 3 consecutive days of missing data, (ii) more than 30 total missing days in the year, (iii) negative flow values, and (iv) constant monthly standard deviations during periods of non-zero streamflow (indicative of data errors or highly controlled discharge). Items i and ii REMOVE the year: any gap longer than 3 consecutive days, or more than 30 missing days in total, excludes that water year from all calculations. Internal gaps of up to 3 days are filled by linear interpolation for years that pass, but interpolated days still count toward the 30-missing-day limit (the count is taken on the raw data, before interpolation). Items iii and iv FLAG but do not remove: negative values are retained by default (config option reject_negative_flow, default false) and are counted in Negative_ann (see 3.12); a constant monthly standard deviation sets a QA flag only and never rejects a year.
-
-Flag years with constant monthly standard deviations during periods of non-zero streamflow, indicative of highly controlled discharges.
+Following Hecht et al. 2024 QA criteria, four conditions are screened per water year: (i) more than 3 consecutive days of missing data, (ii) more than 30 total missing days in the water year, (iii) negative flow values, and (iv) constant monthly standard deviations during periods of non-zero streamflow (indicative of data errors or highly controlled discharge). Items i and ii REMOVE the year: any gap longer than 3 consecutive days, or more than 30 missing days in total, excludes that water year from all calculations. Internal gaps of up to 3 days are filled by linear interpolation for years that pass, but interpolated days still count toward the 30-missing-day limit (the count is taken on the raw data, before interpolation). Items iii and iv FLAG but do not remove: negative values are retained by default (config option reject_negative_flow, default false) and are counted in Negative_ann (see 3.12); a constant monthly standard deviation sets a QA flag only and never rejects a year. Constant monthly standard deviations during periods of non-zero streamflow are indicative of highly controlled discharges.
 
 ### 1.3 Completeness requirements
 
@@ -65,7 +64,7 @@ Gage inclusion (standard products): a gage is included only if it has at least 2
 
 ## Part 2: Statistical Metrics (16 per signature)
 
-The following 16 statistics are calculated for every streamflow signature metric (except where otherwise noted):
+The following 16 statistics are calculated for every signature (except where otherwise noted):
 
 senn_slp: Theil-Sen slope — robust non-parametric trend estimate (median of pairwise slopes), in signature units per year.
 
@@ -113,9 +112,9 @@ Purpose: Calculates annual and seasonal flow volumes, as well as flow percentile
 
 Metrics:
 
-Qann: Annual total streamflow, in mm (sum of daily mm/day values).
+Q_annual: Annual total streamflow, in mm (sum of daicly mm/day values).
 
-Qwin, Qspr, Qsum, Qfal: Winter, spring, summer, and fall total streamflow, in mm.
+Q_Xseason (e.g. Qwin, Qspr, Qsumr, Qfall): Winter, spring, summer, and fall total streamflow, in mm.
 
 Qxx: Flow percentiles (Q1, Q5, Q10, Q20, Q25, Q30, Q40, Q50, Q60, Q70, Q75, Q80, Q90, Q95, Q99), in mm/day.
 
@@ -135,7 +134,7 @@ Function: calculate_negative_days()
 
 Metrics:
 
-Negative_ann: The number of days with negative flow values per gage per year. Negative-flow days are retained in the data by default (reject_negative_flow = false, Part 1.2); this metric accounts for them.
+Negative_annual: The number of days with negative flow values per gage per year. Negative-flow days are retained in the data by default (reject_negative_flow = false, Part 1.2); this metric accounts for them.
 
 ### 3.2 Flow Duration
 
@@ -153,7 +152,7 @@ FDCmid: Slope of the annual flow duration curve over the midsegment (exceedance 
 
 Method and parameters:
 
-Within each water year, NaN and negative daily flows are dropped (zeros retained); at least 10 valid daily values are required, otherwise all three slopes are NA for that year.
+Within each water year, NA and negative daily flows are dropped (zeros retained); at least 10 valid daily values are required, otherwise all three slopes are NA for that year.
 
 Valid flows are sorted descending and assigned exceedance probabilities via the Weibull plotting position p = i / (n + 1).
 
@@ -251,15 +250,9 @@ Purpose: Analyzes runoff ratios (streamflow divided by precipitation).
 
 Metrics:
 
-annual_runoff_ratio: Annual water year total streamflow divided by annual precipitation (Q/P).
+runoff_ratio_annual: Annual water year total streamflow divided by annual precipitation (Q/P).
 
-winter_runoff_ratio: Winter (Dec–Feb) total streamflow divided by winter precipitation.
-
-spring_runoff_ratio: Spring (Mar–May) total streamflow divided by spring precipitation.
-
-summer_runoff_ratio: Summer (Jun–Aug) total streamflow divided by summer precipitation.
-
-fall_runoff_ratio: Fall (Sep–Nov) total streamflow divided by fall precipitation.
+runoff_ratio_Xseason: seasonal streamflow divided by seasonal precipitation.
 
 runoff_ratio_high_count: Count of years where the annual runoff ratio is greater than 2 (per-gage diagnostic scalar).
 
@@ -291,7 +284,7 @@ dur_low_pulses_year / dur_low_pulses_all: Mean duration in days of low-flow puls
 
 TQmean: Percentage of days with flow above the annual mean.
 
-Flow_Reversals_annual / _winter / _spring / _summer / _fall: Number of flow reversals (annual and seasonal). Only includes changes in flow direction exceeding 2% of current flow: a reversal day requires a sign change between the incoming and outgoing day-to-day flow differences, with the outgoing change larger than 2% of that day's flow. Threshold of 2% selected to remove error / noise.
+Flow_Reversals_annual / _xSeason: Number of flow reversals (annual and seasonal). Only includes changes in flow direction exceeding 2% of current flow: a reversal day requires a sign change between the incoming and outgoing day-to-day flow differences, with the outgoing change larger than 2% of that day's flow. Threshold of 2% selected to remove error / noise.
 
 Requirements and decisions:
 
@@ -445,6 +438,16 @@ melt_com_dowy: Day of water year when cumulative melt reaches 50% of the water-y
 
 swe_max_to_ppt: swe_max divided by total water-year precipitation (years with precipitation ≤ 10 mm return NA).
 
+snowfall_annual / _Xseason: annual or seasonal snowfall (depth, mm)
+
+snowfall_xSeason: seasonal snowfall (depth, mm)
+
+snowfall_max_dowy: maximum daily snowfall
+
+snowfall_frac_annual: annual snowfall fraction (0 to 1, where 1 = all precipitation is snowfall and 0 = no precipitation is snowfall)
+
+snowfall_frac_coldseason: Nov-April snowfall fraction (0 to 1, where 1 = all precipitation is snowfall and 0 = no precipitation is snowfall)
+
 Requirements and decisions:
 
 snow_on_dowy and snow_off_dowy are censored (NA) when the anchor spell touches Oct 1 or Sep 30, since the snowpack predates or outlasts the water year.
@@ -452,6 +455,68 @@ snow_on_dowy and snow_off_dowy are censored (NA) when the anchor spell touches O
 Timing and melt metrics are NA in snow-free years; magnitude metrics (swe_max, snow_cover_days, swe_apr1, swe_max_to_ppt) report valid zeros.
 
 In addition to the standard trend-completeness requirements, the ten timing/melt/regime metrics require at least 80% of SWE-valid years in both the first and last decade of the gage's SWE record to be snowy before trend statistics are reported (prevents trends conditioned only on snow-present years at gages whose snow is disappearing or appearing).
+
+3.9 Climate Metrics
+
+prcp_annual / _xSeason: total amount of precipitation in one year or season (depth, mm)
+
+prcp_1d_max: maximum precipitation (depth, mm) in a water year
+
+prcp_5d_max: maximum 5 consecutive day precipitation (depth, mm) total in a given water year
+
+prcp_max_dowy: day of water year when maximum precipitation (i.e., prcp_1d_max) occurs
+
+prcp_50_dowy: day of water year when precipitation hits 50% of total annual precipitation (i.e., prcp_annual)
+
+prcp_cm_dowy: center of mass is calculated by summing the day of water year weighted rainfall (mm) and dividing by prcp_annual
+
+prcp_ndays_abv_10mm: number of days in a water year with precipitation above 10mm
+
+prcp_ndays_abv_25mm: number of days in a water year with precipitation above 25mm
+
+prcp_ndays_abv_50mm: number of days in a water year with precipitation above 50mm
+
+prcp_annual_sd: standard deviation for annual precipitation
+
+prcp_annual_cv: coefficient of variability for annual precipitation
+
+precip_intermit_annual: Annual precipitation intermittency; maximum number of consecutive days in water year without precipitation
+
+precip_intermit_annual_dowy_start: day of water year corresponding to the start of the maximum number of consecutive days in water year without precipitation
+
+precip_intermit_annual_dowy_end: day of water year corresponding to the end of the maximum number of consecutive days in water year without precipitation
+
+prcp_gini : Gini index of precipitation, where 0 is perfectly uniform and 1 is all rain occurs on a single day (Sahbeni et al. 2023)
+
+Where G is the Gini index, n is the total number of days, and yi is the precipitation for the ith day
+
+prcp_seasonality_index: quantification of the variability of precipitation through the year. Hypothetically values can vary from 0-1.83, if every month of a year has the same magnitude of rainfall then the value is 0, if total annual rainfall occurs within one month then value is 1.83. Based on calculation from Sumner et al. 1988
+
+where Ri is the total annual precipitation for the particular year under study and Xmm is the actual monthly precipitation for month n.
+
+temp_max_annual: Maximum annual temperature (deg C)
+
+temp_max_annual_dowy: day of water year on which temp_max_annual occurs
+
+temp_min_annual: Minimum annual temp (deg C)
+
+temp_min_annual_dowy: day of water year on which temp_min_annual occurs
+
+temp_max_xSeason: Maximum temperature for each season
+
+temp_min_xSeason: Minimum temperature for each season
+
+frost_first_dowy: First day of water year below 0 degrees C
+
+frost_last_dowy: Last day of water year below 0 degrees C between October and June
+
+GDD_cum_annual: annual growing degree days are a metric of heat accumulation; calculated as the annual cumulative sum of daily growing degree days
+
+GDD = ∑((Tmax+Tmin)/2)
+
+GDD_cum_xSeason: growing degree days are a metric of heat accumulation; calculated as the cumulative sum of daily growing degree days for each season
+
+GDD = ∑((Tmax+Tmin)/2)
 
 ## Part 4: Data Ingestion and Utility Functions
 
@@ -547,7 +612,15 @@ Because the flags depend only on the summary table, they can be recomputed from 
 
 The same function, thresholds, and high-NA denominator are implemented in the Julia, Python, and R libraries (aligned 2026-09-04).
 
-## Part 6: References
+Part 6: Resource Collections
+
+Insert the table with where/how these get compiled?
+
+Here is the original
+
+Here is the updated while we were trying to figure out the daymet stuff - we need to update the “signatures” to maybe be “hydroclimate signatures / metrics”
+
+## Part 7: References
 
 Adelsperger, S., et al. (in review). A novel severity-based approach for assessing streamflow drought characteristics and drivers.
 

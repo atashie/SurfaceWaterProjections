@@ -8,8 +8,8 @@ Detailed documentation of all hydrological signatures calculated by this project
 
 ### Signature categories
 
-Every output belongs to one of **eight signature categories** (grouping adopted
-2026-09-10 from the co-authors' categorization; canonical mapping in
+Every output belongs to one of **nine signature categories** (the eight adopted
+2026-09-10 from the co-authors' categorization plus Climate, 2026-10-12; canonical mapping in
 [`signature_categories.csv`](signature_categories.csv)). The numbered sections of this
 file are **function families** — one per computing function — and each category
 gathers one or more of them:
@@ -24,9 +24,11 @@ gathers one or more of them:
 | Flow Timing | 7 Flow Timing | 15 | — |
 | Precipitation Streamflow | 10 Q-P Seasonality | 2 | — |
 | Snow | 12 Snow Metrics | 14 | — |
+| Climate | 14 Climate Metrics (precipitation + temperature families; October 2026) | 20 + 19 | — |
 
-Totals: 100 annual signatures and 20 scalars; the 21st scalar,
-`ice_affected_days_total`, is a preprocessing diagnostic outside the categories.
+Totals: 139 annual signatures (100 through August 2026 + 39 climate, 2026-10-12) and
+20 scalars; the 21st scalar, `ice_affected_days_total`, is a preprocessing diagnostic
+outside the categories. Nine categories, 17 computing function families.
 *Category* is the term used by the manuscript, the guidelines document, and the
 HydroShare data dictionary; *function family* names the computing function.
 
@@ -162,7 +164,9 @@ The parameterized BFI signatures use a recession-derived discrete filter constan
 
 **Function**: `analyze_recession_parameters`
 
-Analyzes recession curve behavior using the dQ/dt = -a*Q^b relationship.
+Analyzes recession curve behavior using the dQ/dt = -a*Q^b relationship (event
+identification, free-fit exponent, concavity and log(a) seasonality follow Tashie et
+al. 2020).
 
 **Parameter conventions (July 2026)**: the exponent **b** (and concavity) are estimated
 with FREE power-law fits, but all **alpha** outputs assume a **linear reservoir (b fixed
@@ -205,6 +209,9 @@ median only commutes exactly with the monotone transform at odd pair counts.
 - `alpha_linear` per-year values require >10 valid alpha pairs per year; same 25-event gate as other recession metrics for trend statistics
 - `recession_alpha_point_cloud_linear_reservoir` is a per-gage scalar (whole-record median of Q_{i+1}/Q_i ratios across all recession events). Computed independently of the 25-event gate (only requires >10 alpha pairs). Used to parameterize `BFI_Eckhardt_param` and `BFI_LyneHollick_param`.
 - Recession events are identified as contiguous windows where both Q and |dQ/dt| are monotonically decreasing, with a minimum length of 5 days
+
+### Reference
+Tashie, A., Pavelsky, T., & Band, L.E. (2020). An empirical reevaluation of streamflow recession analysis at the continental scale. *Water Resources Research*, 56(1), e2019WR025448.
 
 ---
 
@@ -674,6 +681,116 @@ five levels mirror the operational U.S. Drought Monitor classes:
 
 ---
 
+## 14. Climate Metrics
+
+**Functions**: `calculate_precipitation_metrics` (20 bases), `calculate_temperature_metrics`
+(19 bases) — `julia/src/climate.jl` (October 2026, Julia first; Python and rpkg ports
+cross-checked bit-for-bit on the annual values the same day)
+
+**Requires Daymet `prcp`, `tmin`, `tmax`** via the climate parquet. Category **Climate**
+(the ninth; guidelines §3.9, synced 2026-10-12). Pure-climate series: no Q enters them,
+so they are computed for the un-normalized gages too, and no Q-derived seasonal mask
+applies. Configuration: `config/signatures_config.json` → `climate` (dry-day threshold,
+wet-day thresholds, multi-day window, cumulative fraction, frost temperature and cut-off
+month, GDD base, decade gate) and `na_handling.temperature_na_policy`.
+
+Conventions: seasons are the calendar months DJF / MAM / JJA / SON within the water year
+(the `Qwin/Qspr/Qsum/Qfal` convention — `fal` = Oct + Nov of the water-year start plus
+Sep of its end; suffixes `win`, `spr`, `sum`, `fal`); dowy 1 = Oct 1; ties take the first
+occurrence; a year is used only on a complete grid (the water year's exact day count, no
+NaN after preprocessing). Every sum is a plain sequential double accumulation in all
+three languages, so a cumulative sum's last element equals the total it is compared
+against and the annual values are bit-identical across Julia, Python and R.
+
+### Precipitation metrics (PPT-qualified years — the `climate_data` frame)
+
+| Metric | Description | Units | Year NaN when |
+|--------|-------------|-------|---------------|
+| **prcp_annual** | Water-year total | mm | — |
+| **prcp_win / prcp_spr / prcp_sum / prcp_fal** | Seasonal totals | mm | — |
+| **prcp_1d_max** | Maximum daily precipitation | mm | — |
+| **prcp_5d_max** | Maximum 5-consecutive-day total (window inside the water year) | mm | — |
+| **prcp_max_dowy** | Day of the 1-day maximum (first on ties; an all-zero year gives day 1 — none in the input) | day | — |
+| **prcp_50_dowy** | First day whose cumulative precipitation reaches 50 % of the total | day | total ≤ 0 |
+| **prcp_cm_dowy** | Centre of mass Σ(dowy·P) ÷ ΣP | day | total ≤ 0 |
+| **prcp_ndays_abv_10mm / _25mm / _50mm** | Days with P strictly above 10 / 25 / 50 mm | days | — |
+| **prcp_annual_sd** | Sample sd (n − 1) of the daily values within the year | mm | — |
+| **prcp_annual_cv** | sd ÷ mean of the daily values | – | mean ≤ 0 |
+| **prcp_intermit_annual** | Longest run of dry days (P ≤ 0.1 mm); 0 when every day is wet | days | — |
+| **prcp_intermit_annual_dowy_start / _dowy_end** | First / last day of the first longest dry run | day | no dry day |
+| **prcp_gini** | Gini index of the daily values over all days, zeros included: G = Σᵢ(2i − n − 1)·y₍ᵢ₎ ÷ (n·Σy), y ascending (0 uniform … (n−1)/n one wet day) | – | total ≤ 0 |
+| **prcp_seasonality_index** | Walsh & Lawler (1981): SI = (1/R)·Σₘ₌₁¹² \|Xₘ − R/12\| over the water year's calendar-month totals Xₘ (0 … 1.83) | – | R ≤ 0 |
+
+### Temperature metrics (temperature-qualified years — the `temp_data` frame)
+
+| Metric | Description | Units | Year NaN when |
+|--------|-------------|-------|---------------|
+| **temp_max_annual / temp_max_annual_dowy** | Maximum of daily TMAX and the first day it occurs | °C, day | — |
+| **temp_min_annual / temp_min_annual_dowy** | Minimum of daily TMIN and the first day it occurs | °C, day | — |
+| **temp_max_win / _spr / _sum / _fal** | Seasonal maximum of daily TMAX | °C | — |
+| **temp_min_win / _spr / _sum / _fal** | Seasonal minimum of daily TMIN | °C | — |
+| **frost_first_dowy** | First day with basin-mean TMIN < 0 °C | day | no frost day |
+| **frost_last_dowy** | Last day with TMIN < 0 °C among Oct 1 – Jun 30 | day | no such day |
+| **gdd_cum_annual** | Growing degree days Σ max(0, (TMAX + TMIN)/2 − 0 °C) | °C·day | — |
+| **gdd_cum_win / _spr / _sum / _fal** | The same over the season's months | °C·day | — |
+
+### Method and gates
+
+1. The runner keeps six climate columns (`prcp`, `swe`, `tmin`, `tmax` + keys). The
+   preprocessor qualifies the temperature pair per water year with the PPT/SWE rules
+   (≤ 30 raw NaN, internal gaps ≤ 3 days linearly filled, no residual NaN; no sign
+   check; both series must pass; non-finite values count as missing) and returns
+   `valid_temp_years`. As for PPT and SWE, temperature is evaluated only for
+   streamflow-valid years (the snow-family precedent, user decision 2026-10-12).
+2. Precipitation metrics run ONLY on the explicit PPT-qualified `climate_data` frame;
+   temperature metrics ONLY on the explicit `temp_data` frame (never on columns inside
+   the gage frame). Both are config-gated: an absent `climate` section emits no climate
+   columns (the additivity switch).
+3. Standard gates: 60 % / 80 % trend completeness, the 20-value stats floor, the 16
+   statistics via `generate_stats()`. The two frost dates, NaN in frost-free years, carry
+   the snow family's record-anchored decade gate (anchored to the temperature-valid
+   years): their six trend statistics are suppressed unless ≥ 80 % of the anchor years
+   in both the first and the last decade have a frost.
+4. Column names derive from the config (`prcp_5d_max`, `prcp_50_dowy`,
+   `prcp_ndays_abv_<t>mm`), the `D{p}_day` pattern; the config validation rejects a
+   window outside 2..366 and a cumulative fraction that is not a whole percentage.
+
+### Data quality and caveats
+
+- **The interpolated Dec 31.** Daymet's 365-day calendar omits Dec 31 of every leap
+  CALENDAR year, so the water year that follows one (WY 1981, 1985, …, 2025: 12 of the 45
+  climate years of the WY 1980–2025 product, 9 of 33 for WY 1993–2025) has one day that was
+  never observed: the preprocessor fills it linearly from Dec 30 and Jan 1, as it does for
+  PPT and SWE in every family. That day enters every precipitation and temperature metric
+  of that year (totals, `prcp_win`, the 5-day window, wet-day counts, dry runs, the 50 %
+  and centre-of-mass dates, sd, Gini, SI, `temp_*_win`, `gdd_cum_win/annual`). Size (40
+  batch-1 gages, 480 such gage-years, Sonnet review 2026-10-12): mean 0.25 % of the annual
+  total, median 0.1 %, max 2.1 %; above 10 mm in 5 % of those gage-years, so
+  `prcp_ndays_abv_10mm` can count one unobserved day.
+- **Non-finite inputs** (NaN, ±Inf) are missing observations in preprocessing for every
+  series, and the climate kernels require finite values (a year with a residual
+  non-finite value is NaN in every metric).
+- The climate input starts on 1980-01-01, so WY 1980 has no climate metrics in the
+  WY 1980–2025 product.
+- Values are basin means: a dry day is a basin-mean day ≤ 0.1 mm, and frost is a
+  basin-mean minimum below 0 °C, not "any part of the basin".
+- **The 50 % crossing carries a 1e-12 relative tolerance** (`cumulative ≥ 0.5 × total −
+  1e-12 × total`): two mathematically equal rainfall blocks are tied at 50 %, but their
+  sequential sums differ in the last bits and the strict test moved the date by hundreds
+  of days in such synthetic cases. 1e-12 of an annual total is physically nothing, and the
+  closest real margin in the 360,585 production water years is 1.3e-9, so no production
+  value depends on it. `D50_day` keeps its strict comparison (its own precedent).
+- Review record: `docs/plans/2026-10-12-climate-reviews/` (blind Codex and Sonnet
+  reviews per language; the Julia round-1 findings and their fixes are in CHANGELOG
+  [October 2026]).
+
+### References
+
+- Walsh, R.P.D. & Lawler, D.M. (1981). Rainfall seasonality: description, spatial patterns and change through time. *Weather*, 36(7), 201–208 (via Sumner, G. (1988). *Precipitation: Process and Analysis*).
+- Sahbeni, G. et al. (2023). Rainfall Gini index as a drought indicator. *Atmospheric Science Letters* (the co-authors' citation for `prcp_gini`).
+
+---
+
 ## Summary Table
 
 | Category | Function family | Function | Requires Climate | Notes |
@@ -694,6 +811,8 @@ five levels mirror the operational U.S. Drought Monitor classes:
 | Flow Timing | Flow Timing | `analyze_flow_timing_trends` | No | 15 metrics |
 | Precipitation Streamflow | Q-P Seasonality | `calculate_qp_seasonality` | Yes | 2 metrics |
 | Snow | Snow Metrics | `calculate_snow_metrics` | SWE (Daymet) | 14 metrics (July 2026; all 3 languages since Aug 2026) |
+| Climate | Precipitation | `calculate_precipitation_metrics` | PPT (Daymet) | 20 metrics (October 2026; all 3 languages) |
+| Climate | Temperature | `calculate_temperature_metrics` | TMIN + TMAX (Daymet) | 19 metrics (October 2026; all 3 languages) |
 
 ---
 
@@ -707,8 +826,9 @@ one that needs care is:
 
 - **`flagged_for_high_na`** — more than 30 % of the gage's **signature columns** are
   NA/NaN. The denominator is every signature-derived column present in the table —
-  everything except the gage metadata and the flag columns (1,621 of the 1,653 product
-  columns: the 16 statistics of each signature plus the single-value-per-gage outputs) —
+  everything except the gage metadata and the flag columns (1,621 of the 1,653 columns of
+  the 2026 products; 2,245 of 2,277 with the climate family: the 16 statistics of each
+  signature plus the single-value-per-gage outputs) —
   selected by name from the config manifest `qa_qc.high_na_denominator`. Families
   NA-filled for a gage (no Daymet, no SWE) DO count, which is why the flag mostly marks
   missing climate coverage rather than bad streamflow.

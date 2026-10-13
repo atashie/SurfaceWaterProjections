@@ -145,12 +145,14 @@ if (has_daymet) {
   # signatures. Raw names cover pre-/post-normalization variants.
   sch_names <- arrow::open_dataset(daymet_path)$schema$names
   raw_wanted <- c("gage_id", "site_id", "site_no", "date", "Date",
-                  "PPT", "prcp", "PRCP", "SWE", "swe")
+                  "PPT", "prcp", "PRCP", "SWE", "swe",
+                  "TMIN", "tmin", "TMAX", "tmax")  # temperature pair since 2026-10-12
   sel <- intersect(raw_wanted, sch_names)
   daymet <- data.table::as.data.table(arrow::read_parquet(daymet_path, col_select = sel))
   # Same normalization map as rpkg::read_parquet
   nmap <- c(Date = "date", site_id = "gage_id", prcp = "PPT",
-            site_no = "gage_id", PRCP = "PPT", swe = "SWE")
+            site_no = "gage_id", PRCP = "PPT", swe = "SWE",
+            tmin = "TMIN", tmax = "TMAX")
   for (old in names(nmap)) {
     if (old %in% names(daymet) && !nmap[[old]] %in% names(daymet)) {
       data.table::setnames(daymet, old, nmap[[old]])
@@ -266,11 +268,13 @@ for (i in seq_along(all_gages)) {
     if (gage %in% names(daymet_idx)) {
       daymet_rows <- daymet_idx[[gage]]
       gage_climate <- daymet[daymet_rows, ]
-      clim_cols <- intersect(c("date", "PPT", "SWE"), names(gage_climate))
-      if ("PPT" %in% clim_cols) {
+      clim_cols <- intersect(c("date", "PPT", "SWE", "TMIN", "TMAX"), names(gage_climate))
+      # merge every available climate variable (temperature-only input must reach the
+      # preprocessor too — review 2026-10-12); has_climate means PPT is present
+      if (length(setdiff(clim_cols, "date")) > 0) {
         climate_merge <- gage_climate[, clim_cols, with = FALSE]
         gage_data <- merge(gage_data, climate_merge, by = "date", all.x = TRUE)
-        has_climate <- TRUE
+        has_climate <- "PPT" %in% clim_cols
       }
     }
 
@@ -309,6 +313,10 @@ for (i in seq_along(all_gages)) {
         if (!is.null(pp$valid_swe_years)) {  # NULL only when the preprocessor saw no SWE
           pp$valid_swe_years <- pp$valid_swe_years[
             pp$valid_swe_years >= wy_lo & pp$valid_swe_years <= wy_hi]
+        }
+        if (!is.null(pp$valid_temp_years)) {  # temperature-valid years (2026-10-12)
+          pp$valid_temp_years <- pp$valid_temp_years[
+            pp$valid_temp_years >= wy_lo & pp$valid_temp_years <= wy_hi]
         }
         # seasonal_flags / diagnostics are data.tables in rpkg (not row lists)
         pp$seasonal_flags <- pp$seasonal_flags[
@@ -357,6 +365,11 @@ for (i in seq_along(all_gages)) {
       if ("SWE" %in% names(pp_data)) {
         snow_data <- pp_data[pp_data$water_year %in% pp$valid_swe_years, , drop = FALSE]
       }
+      # Temperature data (2026-10-12): the same explicit opt-in contract as snow
+      temp_data <- NULL
+      if (all(c("TMIN", "TMAX") %in% names(pp_data))) {
+        temp_data <- pp_data[pp_data$water_year %in% pp$valid_temp_years, , drop = FALSE]
+      }
 
       gage_collector <- if (save_annual) annual_collector() else NULL
 
@@ -372,7 +385,8 @@ for (i in seq_along(all_gages)) {
         collector = gage_collector,
         snow_data = snow_data,
         snow_climate_years = pp$valid_climate_years,
-        gage_id = gage
+        gage_id = gage,
+        temp_data = temp_data
       )
 
       # Drain this gage's annual values

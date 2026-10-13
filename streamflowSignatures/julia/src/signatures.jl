@@ -20,6 +20,14 @@ so that a failure in one does not prevent others from being calculated.
   frame is valid and yields the full NaN-stat snow key set.
 - `snow_climate_years::Union{Nothing, Vector{Int}}`: PPT-qualified years for
   `swe_max_to_ppt` (pass `preprocess_daily_data`'s `valid_climate_years`).
+- `temp_data::Union{Nothing, DataFrame}`: OPT-IN temperature input (2026-10-12) — a
+  frame already filtered to temperature-valid years (`valid_temp_years`) with TMIN
+  and TMAX columns. The temperature climate metrics run ONLY when this is provided,
+  never from TMIN/TMAX columns inside `gage_data` (the snow contract). A 0-row frame
+  yields the full NaN-stat temperature key set. The precipitation climate metrics
+  run ONLY on an explicit PPT-qualified `climate_data` frame (never on `gage_data`),
+  regardless of `area_normalized` (no Q is involved). Both families are config-gated
+  (`CFG_CLIMATE_ENABLED`).
 - `min_values_for_stats::Union{Nothing, Int}`: stats floor (July 2026) — metrics
   with fewer non-NaN annual values emit NaN for all 8 statistics + changepoint
   fields. NOT applied to recession/elasticity (inherently sparse; same exemption
@@ -42,6 +50,7 @@ function calculate_all_signatures(
     climate_data::Union{Nothing, DataFrame}=nothing,
     snow_data::Union{Nothing, DataFrame}=nothing,
     snow_climate_years::Union{Nothing, Vector{Int}}=nothing,
+    temp_data::Union{Nothing, DataFrame}=nothing,
     include_qa_flags::Bool=false,
     changepoint::Union{Nothing, NamedTuple}=nothing,
     collector::Union{Nothing, AnnualCollector}=nothing,
@@ -194,6 +203,32 @@ function calculate_all_signatures(
                 changepoint=cp, collector=coll))
         catch e
             @warn "calculate_snow_metrics failed for gage $gage_id" exception=(e, catch_backtrace())
+        end
+    end
+
+    # Climate metrics (guidelines 3.9, 2026-10-12) — config-gated like drought: an
+    # absent `climate` section emits no climate columns.
+    if CFG_CLIMATE_ENABLED
+        # Precipitation: ONLY on the explicit PPT-qualified frame (climate_data, filtered
+        # to valid_climate_years) — no legacy fallback to gage_data, whose streamflow-
+        # valid years may have failed precipitation qualification (review finding 2,
+        # 2026-10-12). Pure climate — NOT behind the area_normalized gate.
+        if has_climate && climate_data !== nothing && "PPT" in names(climate_data)
+            try
+                merge!(results, calculate_precipitation_metrics(climate_data; trend_completeness=tc, decade_completeness=dc, min_values_for_stats=mv, changepoint=cp, collector=coll))
+            catch e
+                @warn "calculate_precipitation_metrics failed for gage $gage_id" exception=(e, catch_backtrace())
+            end
+        end
+
+        # Temperature: ONLY on an explicit temp_data frame (temperature-valid years);
+        # TMIN/TMAX inside gage_data are never used implicitly (snow precedent).
+        if temp_data !== nothing && "TMIN" in names(temp_data) && "TMAX" in names(temp_data)
+            try
+                merge!(results, calculate_temperature_metrics(temp_data; trend_completeness=tc, decade_completeness=dc, min_values_for_stats=mv, changepoint=cp, collector=coll))
+            catch e
+                @warn "calculate_temperature_metrics failed for gage $gage_id" exception=(e, catch_backtrace())
+            end
         end
     end
 

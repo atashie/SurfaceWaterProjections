@@ -68,3 +68,7 @@ temp/
 # mermaid render byproducts (docs/plans/render_mermaid.py downloads/creates these)
 docs/plans/mermaid.min.js
 docs/plans/mermaid_render.html
+
+# testthat failure records (regenerated on every failing run)
+rpkg/tests/testthat/_problems/
+rpkg/tests/testthat/testthat-problems.rds

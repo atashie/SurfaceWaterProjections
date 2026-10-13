@@ -70,7 +70,11 @@ function main()
         if has_swe
             push!(climate_cols, :SWE)
         end
-        println("  Loaded $(nrow(climate)) climate rows (SWE: $(has_swe ? "yes" : "no"))")
+        has_temp = "TMIN" in names(climate) && "TMAX" in names(climate)
+        if has_temp
+            push!(climate_cols, :TMIN, :TMAX)
+        end
+        println("  Loaded $(nrow(climate)) climate rows (SWE: $(has_swe ? "yes" : "no"); TMIN/TMAX: $(has_temp ? "yes" : "no"))")
     else
         println("\nPhase 2: Skipping climate data (file not found)")
     end
@@ -113,12 +117,25 @@ function main()
         # the filtered frame, exercising the same plumbing as the benchmark's
         # non-legacy path (rest of the harness stays legacy-style)
         snow_input = nothing
-        if "SWE" in names(gage_data)
-            pp_snow = preprocess_daily_data(gage_data)
-            snow_input = pp_snow.data[in.(pp_snow.data.water_year, Ref(Set(pp_snow.valid_swe_years))), :]
+        temp_input = nothing
+        climate_input = nothing
+        gage_has_temp = "TMIN" in names(gage_data) && "TMAX" in names(gage_data)
+        if "SWE" in names(gage_data) || gage_has_temp || "PPT" in names(gage_data)
+            pp_c = preprocess_daily_data(gage_data)
+            if "SWE" in names(gage_data)
+                snow_input = pp_c.data[in.(pp_c.data.water_year, Ref(Set(pp_c.valid_swe_years))), :]
+            end
+            # Temperature input (2026-10-12): the same opt-in contract as snow
+            if gage_has_temp
+                temp_input = pp_c.data[in.(pp_c.data.water_year, Ref(Set(pp_c.valid_temp_years))), :]
+            end
+            # PPT-qualified frame (2026-10-12): the precipitation family runs only on it
+            if "PPT" in names(gage_data) && !isempty(pp_c.valid_climate_years)
+                climate_input = pp_c.data[in.(pp_c.data.water_year, Ref(Set(pp_c.valid_climate_years))), :]
+            end
         end
 
-        sigs = calculate_all_signatures(gage_data, has_climate; gage_id=gage_id, snow_data=snow_input)
+        sigs = calculate_all_signatures(gage_data, has_climate; gage_id=gage_id, climate_data=climate_input, snow_data=snow_input, temp_data=temp_input)
         sigs["gage_id"] = gage_id
 
         n_cols = length(sigs) - 1  # exclude gage_id
@@ -317,6 +334,49 @@ function main()
     println("\n" * "=" ^ 70)
     println("Gages: $n_passed passed, $n_skipped skipped")
     println("Total time: $(round(elapsed, digits=1))s")
+
+    # Check 5: Climate metrics (guidelines 3.9, 2026-10-12) — every base present, values
+    # finite and physically plausible for these 10 New England gages
+    println("\n  Climate metrics (39 bases):")
+    climate_bases = vcat(PRECIP_METRICS, TEMP_METRICS)
+    missing_bases = [b for b in climate_bases if !haskey(results[1], "$(b)_mean")]
+    if isempty(missing_bases)
+        println("  [PASS] Climate metrics: all $(length(climate_bases)) bases present")
+    else
+        println("  [FAIL] Climate metrics: missing bases $(missing_bases)")
+        all_ok = false
+    end
+    climate_ranges = Dict(
+        "prcp_annual_mean" => (200.0, 5000.0), "prcp_1d_max_mean" => (10.0, 500.0),
+        "prcp_5d_max_mean" => (20.0, 1000.0), "prcp_max_dowy_mean" => (1.0, 366.0),
+        "prcp_50_dowy_mean" => (100.0, 300.0), "prcp_cm_dowy_mean" => (100.0, 300.0),
+        "prcp_ndays_abv_10mm_mean" => (5.0, 150.0), "prcp_annual_cv_mean" => (0.5, 5.0),
+        "prcp_intermit_annual_mean" => (3.0, 120.0), "prcp_gini_mean" => (0.0, 1.0),
+        "prcp_seasonality_index_mean" => (0.0, 1.84),
+        "temp_max_annual_mean" => (15.0, 50.0), "temp_min_annual_mean" => (-60.0, 10.0),
+        "temp_max_annual_dowy_mean" => (1.0, 366.0), "frost_first_dowy_mean" => (1.0, 366.0),
+        "frost_last_dowy_mean" => (1.0, 273.0), "gdd_cum_annual_mean" => (500.0, 8000.0),
+        "gdd_cum_win_mean" => (0.0, 2000.0),
+    )
+    for (col, (lo, hi)) in sort(collect(climate_ranges); by=first)
+        vals = [r[col] for r in results if haskey(r, col) && !ismissing(r[col]) && !(r[col] isa Number && isnan(r[col]))]
+        if length(vals) == length(results) && all(v -> lo <= v <= hi, vals)
+            println("  [PASS] $col range check ($lo-$hi), $(length(vals))/$(length(results)) finite")
+        else
+            println("  [FAIL] $col: $(length(vals))/$(length(results)) finite, range [$(isempty(vals) ? NaN : minimum(vals)), $(isempty(vals) ? NaN : maximum(vals))] vs ($lo-$hi)")
+            all_ok = false
+        end
+    end
+    # Internal identity: prcp_fal x fall_runoff_ratio == Qfal on the climate-valid years
+    # cannot be checked on summary means, but seasonal totals must add up to the annual
+    for r in results
+        parts = sum(r["prcp_$(s)_mean"] for s in ["win", "spr", "sum", "fal"])
+        if !(abs(parts - r["prcp_annual_mean"]) < 1e-6 * r["prcp_annual_mean"])
+            println("  [FAIL] seasonal prcp means do not add up to the annual mean for $(r["gage_id"])")
+            all_ok = false
+        end
+    end
+    println("  [PASS] seasonal prcp means add up to the annual mean for every gage")
 
     if all_ok
         println("\nSTATUS: SMOKE TEST PASSED")

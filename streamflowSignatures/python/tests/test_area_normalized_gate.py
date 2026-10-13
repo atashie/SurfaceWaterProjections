@@ -82,11 +82,20 @@ def test_gate_skips_all_climate_signatures(gage_with_climate):
 
 
 def test_gated_identical_to_no_climate(gage_with_climate):
-    r_gated = calculate_all_signatures(gage_with_climate, True, area_normalized=False)
+    # 2026-10-12: the precipitation climate metrics (guidelines 3.9, prcp_*) are PURE
+    # climate — no Q enters them — so, like the snow family, they are NOT gated and
+    # are present for un-normalized gages. The invariant holds on every other key.
+    r_gated = calculate_all_signatures(gage_with_climate, True, area_normalized=False,
+                                       climate_data=gage_with_climate)
     r_noclimate = calculate_all_signatures(
         gage_with_climate.drop(columns="PPT"), False)
-    assert set(r_gated) == set(r_noclimate)
-    mismatches = [k for k in r_gated if not _same(r_gated[k], r_noclimate[k])]
+    prcp_keys = [k for k in r_gated if k.startswith("prcp_")]
+    assert len(prcp_keys) == 20 * 8
+    assert not math.isnan(r_gated["prcp_annual_mean"])
+    assert not any(k.startswith("prcp_") for k in r_noclimate)
+    r_gated_q = {k: v for k, v in r_gated.items() if not k.startswith("prcp_")}
+    assert set(r_gated_q) == set(r_noclimate)
+    mismatches = [k for k in r_gated_q if not _same(r_gated_q[k], r_noclimate[k])]
     assert not mismatches
 
 

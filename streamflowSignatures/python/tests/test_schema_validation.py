@@ -3,7 +3,7 @@ Tests for the io.py schema model and validate_schema().
 
 Pins the August 2026 product arithmetic:
 
-    1,653 = 20 metadata + 100 bases x 16 suffixes + 21 scalars + 12 QA flags
+    2,277 = 20 metadata + 139 bases x 16 suffixes + 21 scalars + 12 QA flags (1,653 before the 2026-10-12 climate family)
 
 and exercises both validation modes: strict (complete production CSV — every
 expected column required, nothing unexpected) and non-strict (partial outputs
@@ -36,7 +36,7 @@ def _full_header_df():
 class TestSchemaArithmetic:
     def test_component_counts(self):
         assert len(METADATA_COLUMNS) == 20
-        assert len(EXPECTED_SIGNATURE_BASES) == 100
+        assert len(EXPECTED_SIGNATURE_BASES) == 139
         assert len(STAT_SUFFIXES) == 8
         assert len(PETTITT_SUFFIXES) == 8
         assert len(ALL_STAT_SUFFIXES) == 16
@@ -45,16 +45,16 @@ class TestSchemaArithmetic:
 
     def test_no_duplicates_within_components(self):
         assert len(set(METADATA_COLUMNS)) == 20
-        assert len(set(EXPECTED_SIGNATURE_BASES)) == 100
+        assert len(set(EXPECTED_SIGNATURE_BASES)) == 139
         assert len(set(ALL_STAT_SUFFIXES)) == 16
         assert len(set(PER_GAGE_SCALARS)) == 21
         assert len(set(QA_FLAG_COLUMNS)) == 12
 
-    def test_total_is_1653(self):
+    def test_total_is_2277(self):
         expected = expected_output_columns()
-        assert len(expected) == 1653
-        assert len(set(expected)) == 1653  # no collisions across components
-        assert 20 + 100 * 16 + 21 + 12 == 1653
+        assert len(expected) == 2277
+        assert len(set(expected)) == 2277  # no collisions across components
+        assert 20 + 139 * 16 + 21 + 12 == 2277
 
     def test_expected_contains_known_columns(self):
         expected = set(expected_output_columns())
@@ -83,7 +83,7 @@ class TestValidateSchemaStrict:
         assert result["missing_signatures"] == []
         assert result["missing_columns"] == []
         assert result["extra_columns"] == []
-        assert result["n_expected"] == 1653
+        assert result["n_expected"] == 2277
 
     @pytest.mark.parametrize(
         "dropped",
@@ -117,7 +117,7 @@ class TestValidateSchemaNonStrict:
         assert result["missing_signatures"] == []
         # The gaps are still reported, just not fatal
         assert result["missing_metadata"] == METADATA_COLUMNS
-        assert len(result["missing_columns"]) == 1653 - len(cols)
+        assert len(result["missing_columns"]) == 2277 - len(cols)
         assert result["extra_columns"] == []
 
     def test_entirely_absent_base_fails_non_strict(self):

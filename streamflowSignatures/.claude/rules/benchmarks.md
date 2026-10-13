@@ -21,17 +21,27 @@ paths:
 - `STREAMFLOW_CONFIG` is read at PRECOMPILE time; the window, fraction, path and output
   overrides are read at runtime inside `main()`. A config-variant result obtained
   without a cache purge, a probe, or an observed expected delta is untrustworthy.
-- Climate input is `daymet_1980_2023_rebuilt_10aug2026.parquet`; the canonical-named
-  file is truncated. The reprocessed `daymet_1980_2025_29sep2026.parquet` (8,017 basins)
-  is not adopted until the user decides on a product rerun. Verify parquet byte sizes and
-  `PAR1` footers against the last timing JSON's `provenance` block before any long run.
+- Climate input since 2026-10-12 is the reprocessed `daymet_1980_2025_29sep2026.parquet`
+  (8,017 basins, six variables; the runner keeps prcp, swe, tmin, tmax); the 2026
+  products used `daymet_1980_2023_rebuilt_10aug2026.parquet`; the canonical-named
+  `daymet_1980_2023.parquet` is truncated. Verify parquet byte sizes and `PAR1` footers
+  against the last timing JSON's `provenance` block before any long run; prefer the
+  verified local copies under `~/HISSS_data/` to the exFAT drive.
+- `run_batched_julia.py merge` sorts the annual parquet in DuckDB under `--memory-limit`
+  (default 1GB): the 46-year product's 34.7 M rows need `--memory-limit 3GB` (2026-10-13).
+  Never trust a chain's echoed exit codes — `echo "[$(date)] exit=$?"` reports the date
+  substitution's status; read `merge.log` and the `validation_*.txt` files.
 - Gates vs diagnostics: `check_schema_equality.py`, `check_annual_parquet_equality.py`,
   `check_signature_failures.py` and `check_additivity.jl` are GATES (non-zero exit,
   waivers named on the command line). The `compare_*` scripts intersect columns and
   exit 0 on a missing family — diagnostics only. `validate_annual_values.py` is
   self-referential (necessary, not sufficient).
-- Dashboards and explorers group by FUNCTION FAMILY (the 15 computing functions); the
-  eight signature CATEGORIES come from `docs/signature_categories.csv`. Keep every
+- Dashboards and explorers group by FUNCTION FAMILY (the 17 computing functions); the
+  nine signature CATEGORIES come from `docs/signature_categories.csv`. Keep every
   `SIGNATURE_GROUPS` list complete when a family is added — the snow family was silently
-  absent from every dashboard before 2026-08-10.
+  absent from every dashboard before 2026-08-10 (all four lists completed 2026-10-12).
+- Basemaps: keyless tiles only. Every Leaflet builder calls `hisssBasemap()` (Esri gray canvas →
+  OpenStreetMap fallback → layers control); CARTO's tiles watermark keyless requests since
+  2026-10 — never reintroduce them. Check a rebuilt HTML with `check_html_basemap.py` (tiles
+  loaded, attribution, screenshot) before staging it.
 - Procedure, env vars and the post-run checklist: `/run-benchmark`.

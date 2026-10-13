@@ -21,7 +21,8 @@ const TEMPORAL_COLS = ["water_year", "month", "dowy"]
 Read a parquet file into a DataFrame.
 
 If `normalize_columns` is true (default), auto-renames common column variants
-to standard names: Date->date, site_id->gage_id, prcp->PPT, swe->SWE.
+to standard names: Date->date, site_id->gage_id, prcp->PPT, swe->SWE,
+tmin->TMIN, tmax->TMAX (the climate metrics, 2026-10-12).
 """
 function read_parquet(path::String; normalize_columns::Bool=true)
     if !isfile(path)
@@ -41,6 +42,12 @@ function read_parquet(path::String; normalize_columns::Bool=true)
         end
         if "swe" in names(df) && !("SWE" in names(df))
             rename!(df, :swe => :SWE)
+        end
+        if "tmin" in names(df) && !("TMIN" in names(df))
+            rename!(df, :tmin => :TMIN)
+        end
+        if "tmax" in names(df) && !("TMAX" in names(df))
+            rename!(df, :tmax => :TMAX)
         end
     end
 
@@ -163,18 +170,58 @@ end
 
 
 """
+    _interpolate_internal_gaps!(x::Vector{Float64}, max_gap::Int)
+
+Linearly fill every INTERNAL run of NaNs of length <= max_gap whose two neighbours are
+finite (the rule the PPT and SWE blocks apply inline below); leading/trailing runs and
+longer runs are left as NaN. Used by the temperature block (2026-10-12).
+"""
+function _interpolate_internal_gaps!(x::Vector{Float64}, max_gap::Int)
+    i = 1
+    n = length(x)
+    while i <= n
+        if isnan(x[i])
+            gap_start = i
+            gap_end = i
+            while gap_end < n && isnan(x[gap_end + 1])
+                gap_end += 1
+            end
+            gap_len = gap_end - gap_start + 1
+            if gap_start > 1 && gap_end < n && gap_len <= max_gap
+                left_val = x[gap_start - 1]
+                right_val = x[gap_end + 1]
+                if isfinite(left_val) && isfinite(right_val)   # finite neighbours only
+                    span = (gap_end + 1) - (gap_start - 1)
+                    for k in gap_start:gap_end
+                        x[k] = left_val + (right_val - left_val) * (k - (gap_start - 1)) / span
+                    end
+                end
+            end
+            i = gap_end + 1
+        else
+            i += 1
+        end
+    end
+    return x
+end
+
+
+"""
     preprocess_daily_data(gage_flow::DataFrame; kwargs...) -> NamedTuple
 
 Preprocess daily streamflow data with NA handling, gap interpolation,
 and per-year quality diagnostics.
 
 Accepts a DataFrame with columns: date, Q, water_year, month, dowy (and optional
-PPT and/or SWE).
+PPT, SWE and/or the TMIN + TMAX pair).
 Returns a NamedTuple with fields:
 - data: DataFrame with cleaned/interpolated daily data
 - valid_years: Vector{Int} of years passing all quality checks
 - valid_climate_years: Vector{Int} of years also passing PPT checks
 - valid_swe_years: Vector{Int} of years also passing SWE checks
+- valid_temp_years: Vector{Int} of years also passing the TMIN and TMAX checks
+  (2026-10-12; same thresholds, no negative-value check; evaluated, like PPT and
+  SWE, only for years that passed the streamflow checks)
 - rejected_years: DataFrame with columns (water_year, reason)
 - seasonal_flags: DataFrame with per-year seasonal completeness flags
 - diagnostics: DataFrame with per-year raw diagnostics
@@ -192,17 +239,26 @@ function preprocess_daily_data(
     max_raw_na_swe::Int = CFG_NA_MAX_RAW_NA_SWE,
     max_gap_swe::Int = CFG_NA_MAX_GAP_SWE,
     reject_negative_swe::Bool = CFG_NA_REJECT_NEGATIVE_SWE,
+    max_raw_na_temp::Int = CFG_NA_MAX_RAW_NA_TEMP,
+    max_gap_temp::Int = CFG_NA_MAX_GAP_TEMP,
     constant_sd_enabled::Bool = CFG_NA_CONSTANT_SD_ENABLED,
     constant_sd_min_days::Int = CFG_NA_CONSTANT_SD_MIN_DAYS,
     constant_sd_max_unique::Int = CFG_NA_CONSTANT_SD_MAX_UNIQUE
 )
+    # Policy values must be whole non-negative counts also when passed directly
+    (max_raw_na >= 0 && max_gap_days >= 0 && max_raw_na_ppt >= 0 && max_gap_ppt >= 0 &&
+     max_raw_na_swe >= 0 && max_gap_swe >= 0 && max_raw_na_temp >= 0 && max_gap_temp >= 0) ||
+        throw(ArgumentError("preprocess_daily_data: missing-day limits and interpolation gaps must be >= 0"))
+
     has_ppt = "PPT" in names(gage_flow)
     has_swe = "SWE" in names(gage_flow)
+    has_temp = "TMIN" in names(gage_flow) && "TMAX" in names(gage_flow)
     years = sort(unique(gage_flow.water_year))
 
     valid_years = Int[]
     valid_climate_years = Int[]
     valid_swe_years = Int[]
+    valid_temp_years = Int[]
     rejected_rows = NamedTuple{(:water_year, :reason), Tuple{Int, String}}[]
     seasonal_rows = NamedTuple{(:water_year, :win_complete, :spr_complete, :sum_complete, :fal_complete), Tuple{Int, Bool, Bool, Bool, Bool}}[]
     diag_rows = NamedTuple{(:water_year, :na_count, :max_na_run, :interpolated_count, :negative_flag, :constant_sd_flag, :na_cause_ice, :na_cause_other), Tuple{Int, Int, Int, Int, Bool, Bool, Int, Int}}[]
@@ -238,14 +294,15 @@ function preprocess_daily_data(
         if eltype(yr_df.date) != Date
             yr_df.date = Date.(yr_df.date)
         end
-        joined = leftjoin(grid, select(yr_df, :date, :Q, (has_ppt ? [:PPT] : Symbol[])..., (has_swe ? [:SWE] : Symbol[])...); on=:date)
+        joined = leftjoin(grid, select(yr_df, :date, :Q, (has_ppt ? [:PPT] : Symbol[])..., (has_swe ? [:SWE] : Symbol[])..., (has_temp ? [:TMIN, :TMAX] : Symbol[])...); on=:date)
         sort!(joined, :dowy)
 
-        # Convert Q to Float64 with NaN for missing
+        # Convert Q to Float64 with NaN for missing. A non-finite value (NaN, ±Inf) or a
+        # non-Real entry is missing (review 2026-10-12: ±Inf is not an observation)
         Q = Vector{Float64}(undef, nrow(joined))
         for i in 1:nrow(joined)
             v = joined[i, :Q]
-            if ismissing(v) || (v isa Number && isnan(v))
+            if ismissing(v) || !(v isa Real) || !isfinite(v)
                 Q[i] = NaN
             else
                 Q[i] = Float64(v)
@@ -397,7 +454,7 @@ function preprocess_daily_data(
             P = Vector{Float64}(undef, nrow(joined))
             for i in 1:nrow(joined)
                 v = joined[i, :PPT]
-                if ismissing(v) || (v isa Number && isnan(v))
+                if ismissing(v) || !(v isa Real) || !isfinite(v)   # non-finite = missing
                     P[i] = NaN
                 else
                     P[i] = Float64(v)
@@ -458,7 +515,7 @@ function preprocess_daily_data(
             S = Vector{Float64}(undef, nrow(joined))
             for i in 1:nrow(joined)
                 v = joined[i, :SWE]
-                if ismissing(v) || (v isa Number && isnan(v))
+                if ismissing(v) || !(v isa Real) || !isfinite(v)   # non-finite = missing
                     S[i] = NaN
                 else
                     S[i] = Float64(v)
@@ -513,6 +570,37 @@ function preprocess_daily_data(
             end
         end
 
+        # --- (f3) Handle TMIN/TMAX if present (2026-10-12): the SWE policy without
+        # the negative-value check (temperatures are signed). The year is
+        # temperature-valid only when BOTH series pass; both are written back
+        # together so a frame never carries one filled and one raw series.
+        temp_ok = true
+        if has_temp
+            filled = Dict{Symbol, Vector{Float64}}()
+            for col in (:TMIN, :TMAX)
+                T = Vector{Float64}(undef, nrow(joined))
+                for i in 1:nrow(joined)
+                    v = joined[i, col]
+                    # non-finite values (NaN, ±Inf, missing) are all "missing" here —
+                    # an Inf neighbour must not be interpolated from (review note 7)
+                    T[i] = (ismissing(v) || !(v isa Real) || !isfinite(v)) ? NaN : Float64(v)
+                end
+                if count(isnan, T) > max_raw_na_temp
+                    temp_ok = false
+                else
+                    _interpolate_internal_gaps!(T, max_gap_temp)
+                    if count(isnan, T) > 0
+                        temp_ok = false
+                    end
+                end
+                filled[col] = T
+            end
+            if temp_ok
+                joined[!, :TMIN] = filled[:TMIN]
+                joined[!, :TMAX] = filled[:TMAX]
+            end
+        end
+
         push!(cleaned_dfs, joined)
         push!(valid_years, yr)
         if has_ppt && ppt_ok
@@ -520,6 +608,9 @@ function preprocess_daily_data(
         end
         if has_swe && swe_ok
             push!(valid_swe_years, yr)
+        end
+        if has_temp && temp_ok
+            push!(valid_temp_years, yr)
         end
     end
 
@@ -531,6 +622,10 @@ function preprocess_daily_data(
         end
         if has_swe
             out_data[!, :SWE] = Float64[]
+        end
+        if has_temp
+            out_data[!, :TMIN] = Float64[]
+            out_data[!, :TMAX] = Float64[]
         end
     else
         out_data = vcat(cleaned_dfs...)
@@ -559,6 +654,7 @@ function preprocess_daily_data(
         valid_years = valid_years,
         valid_climate_years = valid_climate_years,
         valid_swe_years = valid_swe_years,
+        valid_temp_years = valid_temp_years,
         rejected_years = rejected_df,
         seasonal_flags = seasonal_df,
         diagnostics = diagnostics_df

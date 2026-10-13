@@ -51,9 +51,12 @@ preprocess_daily_data()           ◄── Called ONCE per gage, BEFORE all sig
     ├── 5. Residual check (boundary NAs → reject year)
     ├── 6. PPT handling (same rules, tracked separately)
     ├── 7. SWE handling (same rules, tracked separately — July 2026)
+    ├── 8. TMIN/TMAX handling (same thresholds, no sign check, both series must
+    │      pass, non-finite = missing — October 2026, climate metrics)
     │
     └── Returns: cleaned data, valid_years, valid_climate_years,
-                 valid_swe_years, seasonal_flags, diagnostics, rejected_years
+                 valid_swe_years, valid_temp_years, seasonal_flags, diagnostics,
+                 rejected_years
     │
     ▼
 Signature functions receive clean data
@@ -61,6 +64,9 @@ Signature functions receive clean data
     ├── Climate signatures use valid_climate_years subset
     ├── Snow signatures use an EXPLICIT snow_data frame filtered to valid_swe_years
     │   (opt-in — never derived implicitly from an SWE column in the gage frame)
+    ├── Climate metrics (Oct 2026): precipitation ONLY on the explicit climate_data
+    │   frame, temperature ONLY on an explicit temp_data frame (valid_temp_years);
+    │   pure climate, so not behind the area_normalized gate; config-gated (`climate`)
     ├── Drought signatures smooth Q within contiguous date runs (never across a
     │   rejected-year gap) before thresholding — July 2026; all 3 languages
     └── Seasonal signatures respect seasonal_flags (incomplete → NA)
@@ -483,7 +489,8 @@ Rscript assemble_explorer.R  # join points + inject into explorer_template.html 
 
 Full-resolution borders for all ~7,100 *nested* watersheds are **~111 MB** (un-inline-able); the
 clean-dissolve + simplified + vertex-capped build is **~9.5 MB**, giving a ~28 MB self-contained HTML. The page
-needs internet to load Leaflet + the CARTO basemap from CDN (points/borders still render offline
+needs internet to load Leaflet from CDN and the basemap tiles (Esri gray canvas with an OpenStreetMap
+fallback since 2026-10-13; CARTO's tiles now require an API key; points/borders still render offline
 once loaded). For a lighter file, trim the variable list in `assemble_explorer.R` or lower `--maxv`.
 
 ## Adding a New Signature
@@ -591,6 +598,7 @@ the WY 1993–2025 window:
 |---|---|---|---|---|---|
 | Python | 1,653 | 6,678 | 1,615 Perfect / 5 Good / **0 below 0.99** | 0.999988 | 18,898,405 / 18,898,406 |
 | rpkg | 1,653 | 6,678 | 1,601 Perfect / 10 Good / 9 Poor / **0 below 0.95** | 0.999843 | 18,898,405 / 18,898,406 |
+| rpkg, version-2 reference (climate family, 2026-10-13) | 2,277 | 6,678 | 2,228 Perfect / 10 Good / 6 Poor / **0 below 0.95** | 0.999925 | 27,602,160 / 27,602,161 |
 
 Both share 0 NA-pattern mismatches. rpkg's 19 non-Perfect columns are entirely
 the pre-existing irreducible classes (FDC90th near-zero-tail OLS plus its

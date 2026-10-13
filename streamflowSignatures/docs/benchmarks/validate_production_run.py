@@ -44,6 +44,10 @@ def main():
                     help="another run's CSV for column-set + overlap comparison")
     ap.add_argument("--floor", type=int, default=None,
                     help="stats floor in effect (checks non-exempt signatures)")
+    ap.add_argument("--expect-signatures", type=int, default=139,
+                    help="distinct annual signatures the parquet must hold (default 139 = "
+                         "100 through Aug 2026 + 39 climate bases, 2026-10-12; pass 100 for "
+                         "a pre-climate run)")
     args = ap.parse_args()
 
     prod = pd.read_csv(args.csv, dtype={"gage_id": str}, low_memory=False)
@@ -88,8 +92,9 @@ def main():
     ann = pd.read_parquet(args.annual)
     with open(args.timing) as f:
         tj = json.load(f)
-    # 100 = 90 (July 2026: 76 base + 14 snow) + 10 drought (2 metrics x 5 levels)
-    g4 = (len(ann) == tj.get("n_annual_rows") and ann.signature.nunique() == 100
+    # 100 = 90 (July 2026: 76 base + 14 snow) + 10 drought (2 metrics x 5 levels);
+    # 139 = 100 + 39 climate (20 precipitation + 19 temperature, 2026-10-12)
+    g4 = (len(ann) == tj.get("n_annual_rows") and ann.signature.nunique() == args.expect_signatures
           and ann.water_year.min() >= args.start_year
           and ann.water_year.max() <= args.end_year
           and set(ann.gage_id.unique()) <= set(prod.gage_id)

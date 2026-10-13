@@ -291,3 +291,4 @@ include("test_drought_metrics.jl")
 include("test_changepoint.jl")  # was never wired in — found by Codex review 2026-08-24
 include("test_runoff_ratio_seasonal_mask.jl")
 include("test_qa_high_na.jl")  # flagged_for_high_na denominator, 2026-09-04
+include("test_climate_metrics.jl")  # guidelines 3.9 climate metrics, 2026-10-12

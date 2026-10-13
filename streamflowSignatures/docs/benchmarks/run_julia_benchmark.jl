@@ -100,6 +100,7 @@ function main()
 
     has_climate = false
     has_swe = false
+    has_temp = false
     climate_cols = [:gage_id, :date, :PPT]
     local climate
     if isfile(CLIMATE_PATH)
@@ -108,7 +109,7 @@ function main()
         # Memory: keep only the columns this runner uses BEFORE the water-year copy —
         # the full 8-column ~98M-row frame OOMs on 16 GB machines (result-identical:
         # the dropped columns are never read by any signature path in this runner)
-        climate_keep = intersect(["gage_id", "date", "PPT", "SWE"], names(climate))
+        climate_keep = intersect(["gage_id", "date", "PPT", "SWE", "TMIN", "TMAX"], names(climate))
         select!(climate, climate_keep)
 
         # Add water year columns if needed
@@ -121,10 +122,18 @@ function main()
         if has_swe
             push!(climate_cols, :SWE)
         end
+        # Temperature pair (2026-10-12): both or neither — the temperature climate
+        # metrics need TMIN and TMAX together
+        has_temp = "TMIN" in names(climate) && "TMAX" in names(climate)
+        if has_temp
+            push!(climate_cols, :TMIN, :TMAX)
+        end
+        timing["climate_columns"] = String.(climate_keep)
         t1 = time()
         timing["phases"]["load_climate"] = t1 - t0
         println("  Loaded $(nrow(climate)) rows in $(round(t1-t0, digits=2))s")
         println("  SWE column: $(has_swe ? "present (snow metrics enabled)" : "absent (snow metrics skipped)")")
+        println("  TMIN/TMAX columns: $(has_temp ? "present (temperature climate metrics enabled)" : "absent (temperature climate metrics skipped)")")
     else
         println("  Climate file not found, skipping climate signatures")
         timing["phases"]["load_climate"] = 0.0
@@ -228,6 +237,7 @@ function main()
                     valid_years = filter(yr -> wy_lo <= yr <= wy_hi, result.valid_years),
                     valid_climate_years = filter(yr -> wy_lo <= yr <= wy_hi, result.valid_climate_years),
                     valid_swe_years = filter(yr -> wy_lo <= yr <= wy_hi, result.valid_swe_years),
+                    valid_temp_years = filter(yr -> wy_lo <= yr <= wy_hi, result.valid_temp_years),
                     rejected_years = result.rejected_years,
                     seasonal_flags = result.seasonal_flags[wy_mask_sf, :],
                     diagnostics = result.diagnostics[wy_mask_diag, :],
@@ -355,6 +365,14 @@ function main()
                 snow_data = gage_data[in.(gage_data.water_year, Ref(swe_yr_set)), :]
             end
 
+            # Temperature data (2026-10-12): the same explicit opt-in contract as
+            # snow_data — a frame filtered to temperature-valid years, possibly 0 rows.
+            temp_data = nothing
+            if "TMIN" in names(gage_data) && "TMAX" in names(gage_data)
+                temp_yr_set = Set(pp.valid_temp_years)
+                temp_data = gage_data[in.(gage_data.water_year, Ref(temp_yr_set)), :]
+            end
+
             signatures = calculate_all_signatures(
                 gage_data, gage_has_climate;
                 gage_id=gage_id_str,
@@ -365,6 +383,7 @@ function main()
                 climate_data=climate_data,
                 snow_data=snow_data,
                 snow_climate_years=pp.valid_climate_years,
+                temp_data=temp_data,
                 changepoint=cp_config,
                 collector=gage_collector,
                 area_normalized=gage_area_normalized

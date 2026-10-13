@@ -18,6 +18,10 @@
 #'   If provided, used instead of \code{streamflow_data} for climate signatures.
 #' @param include_qa_flags Logical. If TRUE, append 12 QA/QC flag columns from
 #'   \code{compute_qa_flags()} to the output. Default FALSE.
+#' @param temp_data Optional data.frame of temperature-valid years with TMIN and
+#'   TMAX (2026-10-12): the temperature climate metrics run ONLY when this is
+#'   provided (the snow contract); the precipitation climate metrics run only on an
+#'   explicit \code{climate_data} frame, regardless of \code{area_normalized}.
 #' @param area_normalized Logical. Whether Q is area-normalized to mm/day.
 #'   When FALSE (gages with no drainage area — Q left in raw m3/s), all
 #'   Q-to-PPT signatures (runoff ratios, elasticity, Q-P seasonality, storage)
@@ -40,7 +44,8 @@ calculate_all_signatures <- function(streamflow_data, has_climate = FALSE,
                                      collector = NULL,
                                      snow_data = NULL,
                                      snow_climate_years = NULL,
-                                     gage_id = NULL) {
+                                     gage_id = NULL,
+                                     temp_data = NULL) {
   results <- list()
 
   # Season exclusion year counts (per-gage scalar diagnostics)
@@ -186,6 +191,31 @@ calculate_all_signatures <- function(streamflow_data, has_climate = FALSE,
                      min_values_for_stats = min_values_for_stats,
                      changepoint = changepoint, collector = collector)
     if (!is.null(out)) results <- c(results, out)
+  }
+
+  # Climate metrics (guidelines 3.9, 2026-10-12) — config-gated like drought.
+  # Precipitation: ONLY the explicit PPT-qualified climate_data frame (no fallback to
+  # streamflow_data); pure climate, so NOT behind the area_normalized gate.
+  # Temperature: explicit temp_data only.
+  if (isTRUE(pkg_env$climate_enabled)) {
+    if (has_climate && !is.null(climate_data) && "PPT" %in% colnames(climate_data)) {
+      out <- safe_call(calculate_precipitation_metrics, "Precipitation",
+                       climate_data,
+                       trend_completeness = trend_completeness,
+                       decade_completeness = decade_completeness,
+                       min_values_for_stats = min_values_for_stats,
+                       changepoint = changepoint, collector = collector)
+      if (!is.null(out)) results <- c(results, out)
+    }
+    if (!is.null(temp_data) && all(c("TMIN", "TMAX") %in% names(temp_data))) {
+      out <- safe_call(calculate_temperature_metrics, "Temperature",
+                       temp_data,
+                       trend_completeness = trend_completeness,
+                       decade_completeness = decade_completeness,
+                       min_values_for_stats = min_values_for_stats,
+                       changepoint = changepoint, collector = collector)
+      if (!is.null(out)) results <- c(results, out)
+    }
   }
 
   # QA/QC flags (optional)

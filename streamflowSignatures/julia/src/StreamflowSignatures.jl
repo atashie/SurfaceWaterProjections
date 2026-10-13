@@ -22,6 +22,7 @@ using Statistics
 using StatsBase
 using LinearAlgebra
 using JSON3
+using Printf: @sprintf
 
 # Include configuration first
 include("config.jl")
@@ -43,6 +44,7 @@ include("elasticity.jl")
 include("qp_seasonality.jl")
 include("storage.jl")
 include("snow.jl")
+include("climate.jl")
 include("qa_qc.jl")
 include("metadata.jl")
 include("signatures.jl")
@@ -85,6 +87,11 @@ export calculate_average_storage
 # Export snow signatures (SWE-dependent; opt-in via snow_data)
 export calculate_snow_metrics
 
+# Export climate metrics (guidelines 3.9, 2026-10-12): precipitation on PPT-valid
+# years, temperature on an explicit temp_data frame (TMIN/TMAX-valid years)
+export calculate_precipitation_metrics, calculate_temperature_metrics
+export PRECIP_METRICS, TEMP_METRICS
+
 # Export QA/QC functions
 export compute_qa_flags, get_flag_columns, high_na_denominator_columns
 
@@ -101,6 +108,7 @@ export CFG_MIN_NUM_YEARS, CFG_MIN_FRAC_GOOD_DATA, CFG_MIN_Q_VALUE,
        CFG_CP_MIN_TOTAL_OBS, CFG_CP_MIN_SEGMENT_OBS,
        CFG_SAVE_ANNUAL_VALUES,
        CFG_MIN_VALUES_FOR_STATS,
-       CFG_DROUGHT_ENABLED, CFG_DROUGHT_PERCENTILES
+       CFG_DROUGHT_ENABLED, CFG_DROUGHT_PERCENTILES,
+       CFG_CLIMATE_ENABLED
 
 end # module

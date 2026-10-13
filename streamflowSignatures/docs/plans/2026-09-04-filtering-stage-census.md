@@ -169,3 +169,105 @@ python docs/benchmarks/summarize_qualification_census.py /path/census.csv \
   /Volumes/Untitled/processedOuts_1980_2025_11aug2026/streamflow_1980_2025_60pct_11aug2026_signatures.csv \
   /Volumes/Untitled/processedOuts_feb2026/combined_watershed_metadata_09feb2026.csv
 ```
+
+
+## 7. Addendum 2026-09-15 — coverage intersections for the manuscript's §2.1 placeholder
+
+Measured on the staged deposit (`~/Downloads/Signatures`), joining every table on the
+zero-stripped `gage_id` (script: session scratch `intersections.py` / `daymet_why.py`;
+Daymet ids = distinct `site_id` of `hisss_daymet_basin_daily.parquet`, 6,087; MODIS ids =
+distinct `gage_id` of `hisss_modis_lulc_annual.parquet`, 7,964; NLCD 6,119).
+
+| Set | WY 1993–2025 | WY 1980–2025 |
+|---|---|---|
+| signature gages | 6,678 | 6,250 |
+| … with Daymet | 5,517 | 5,638 |
+| … with MODIS LULC/LAI | 6,634 | 6,205 |
+| … with Daymet AND MODIS | **5,517** | **5,638** |
+| … with Daymet AND MODIS — in EITHER product / in BOTH (added 2026-09-18) | 5,665 / 5,490 | (union / intersection of the two gage sets: 7,157 / 5,771) |
+| … with Daymet AND MODIS — all 8,014 usable gages (added 2026-09-18) | 5,965 | — |
+| … with MODIS but no Daymet | 1,117 | 567 |
+| … with NLCD | 5,454 | 5,007 |
+| … with Daymet, MODIS and NLCD | 4,464 | 4,524 |
+| … without Daymet | 1,161 | 612 |
+| ↳ polygon area > 85,000 km² | 6 | 6 |
+| ↳ agency `basin_area` > 85,000 km² | 46 | 47 |
+
+**2026-09-18 check of the manuscript's "6,041" (the §2.1 XXXX fill-in)**: matches nothing
+above. Ceiling is 5,969 = Daymet sites with a polygon (6,087 − 118 without one); 122 of the
+6,087 Daymet sites are not usable-streamflow gages (109 `processing`, 13 `no_data`); every
+site has all 16,060 rows (5 carry some NaN prcp/swe). Script: session scratch `check_6041.py`.
+
+Every Daymet site is also a MODIS gage (8,014-level: MODIS 7,960, Daymet 5,965, both
+5,965), so "signatures + climate + MODIS" is simply the Daymet count. **Why 2,049 of the
+8,014 usable gages have no Daymet series is NOT basin size**: only 55 of them exceed
+85,000 km² by agency area. The 6,087-basin Daymet request list predates the Feb 2026
+compilation — all 5,707 gages of `golden-outputs/streamflow_signatures_full_10feb2026.csv`
+have Daymet (Daymet has 380 more, 122 of them never-compiled candidates); Daymet gages are
+the long-record ones (median 46 record years, 75 % starting 1979) and the no-Daymet gages
+are the shorter/later records the 20-year rule admits (median 27 years, median start 1992,
+end year < 2023 for 543 of them). The exact selection rule of the January 2026 request is
+not recorded in this repo.
+
+## 8. Addendum 2026-09-15 — measured counts of every staged deposit file (for the manuscript's resources table)
+
+Review of the co-authors' resources sheet (`1Hx8hnr02c…`, tab 1694936652, column C "Data
+Rows"). Counted directly on `~/Downloads/Signatures` with pyarrow/pandas; ids joined
+zero-stripped.
+
+| Resource / file | Gages (distinct) | Rows |
+|---|---|---|
+| R1 `hisss_signatures_wy1993_2025.csv` | 6,678 | 6,678 (1,653 columns) |
+| R1 `hisss_signatures_annual_wy1993_2025.parquet` | 6,678 | 18,898,406 |
+| R2 `hisss_signatures_wy1980_2025.csv` | 6,250 | 6,250 |
+| R2 `hisss_signatures_annual_wy1980_2025.parquet` | 6,250 | 24,366,487 |
+| R1/R2 `hisss_data_dictionary.csv` / `hisss_signature_categories.csv` | — | 1,653 / 100 |
+| R3 `hisss_streamflow_daily.parquet` | 8,014 | 111,624,189 |
+| R3 `hisss_gage_metadata.csv` | 16,994 candidates (8,014 success, 113 processing, 80 insufficient_years, 8,787 no_data) | 16,994 |
+| R3 `hisss_daymet_basin_daily.parquet` | 6,087 sites (5,965 of the 8,014) | 97,757,220 |
+| R3 `hisss_hydat_interference.csv` | 8,012 stations | 8,012 |
+| R4 `hisss_watershed_boundaries.{gpkg,parquet}` + `_qa.csv` | 7,964 (7,958 ≤ 85,000 km² by polygon area; max 97,182 km²; the exclusion rule was 100,000 km², 54 dropped) | 7,964 |
+| R4 `hisss_watershed_hydroatlas_attributes.{csv,parquet}` | 8,014 (every success gage; 54 have no polygon) | 8,014 × 211 columns |
+| R5 `hisss_modis_lai_monthly.parquet` | 7,964 | 2,150,280 |
+| R5 `hisss_modis_lulc_annual.parquet` | 7,964 | 191,136 |
+| R5 `hisss_nlcd_annual.parquet` (+ 45 excluded Alaska gages) | 6,119 | 250,879 |
+
+Sheet values that match nothing measured: **6,041** (R3), **8,044** ("total streamflow
+timeseries" → 8,014), **6,014** ("sites with daymet and modis" → 5,969 in the boundary
+layer, 5,965 of the 8,014 usable gages, 5,517 / 5,638 within the products). R4's **8,014**
+is the attribute table, not the boundary layer (7,964).
+
+## 9. Addendum 2026-09-28 — why 1,995 polygon gages have no Daymet (the rule is now recovered)
+
+Co-author question: is the gap between the 7,964 polygons and the Daymet sites entirely due to
+processing, with the Daymet sites under stricter data requirements? **Mostly yes.** The Daymet
+request list was built from the ORIGINAL compilation, preserved in git as
+`combined_streamflow_output/combined_watershed_metadata_og.csv` (added in `27c38d9`,
+2026-02-12; 16,994 rows: 6,046 success, 134 processing, 81 insufficient_years, 10,733 no_data).
+That run used **`min_num_years = 30`** (raw-data script and `config.R`; lowered to 20 in
+`27c38d9`, which produced the final 8,014). Measured on the staged deposit, ids zero-stripped:
+
+- Daymet list = 5,956 og-success + 131 og-processing (retrieval unfinished) = 6,087.
+- **Polygon gages without Daymet = 1,995:**
+  - **1,952 failed the 30-year compilation**: 1,910 og `no_data` ("No valid streamflow data
+    retrieved"), all with < 365 × 30 = 10,950 daily records (max 10,943), so they failed the
+    retrieval pre-check `nrow > 365 × min_num_years`; 42 og `insufficient_years` (20–29
+    qualifying calendar years). All passed the final 20-year compilation.
+  - **6 > 85,000 km²** (Canadian; polygons 87,150–97,182 km²) — the Daymet size rule.
+  - **22 USGS gages with 9–10-digit site numbers** — none of the 66 such usable gages has
+    Daymet; the same leading-zero id-format loss as §5.1 (the request list almost certainly
+    mis-keyed them).
+  - **15 Canadian HydroBASINS-fallback polygons** — none of the 29 fallback polygons has
+    Daymet; the Daymet run used an earlier boundary set without them.
+- Usable gages WITH Daymet (5,965): 5,952 passed the 30-year compilation, 13 were still in
+  retrieval in the og run. The other direction: 118 Daymet sites have no polygon (105
+  `processing`, 13 `no_data` in the final metadata).
+- "Stricter" means record LENGTH at compilation only (≥ 30 vs ≥ 20 calendar years with ≥ 30
+  days of Q > 0.0001); per-year QA, the 60 % window rule and the trend gates are identical
+  for all gages in the products. Separation in the final metadata: 5,960 of 5,965 Daymet
+  gages have ≥ 30 qualifying years vs 564 of 2,049 no-Daymet gages.
+- **Correction to §7**: "all 5,707 golden gages have Daymet" is circular, not evidence of
+  vintage — `process_signatures_from_parquet()` iterates over the Daymet `site_id`s when a
+  Daymet path is given, so the R golden run could only contain Daymet gages.
+- The unexplained "6,041" (§7) is within 5 of the og run's 6,046 successes; probably a count
+  from that run, not verified.

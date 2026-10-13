@@ -2,17 +2,35 @@
 % Please edit documentation in R/qa_qc.R
 \name{compute_qa_flags}
 \alias{compute_qa_flags}
-\title{Compute QA/QC flags for a named list of signature results}
+\title{Compute QA/QC flags for signature results}
 \usage{
 compute_qa_flags(sigs)
 }
 \arguments{
-\item{sigs}{Named list of signature values (output of calculate_all_signatures).}
+\item{sigs}{Named list (one gage) or data.frame (one row per gage).}
 }
 \value{
-Named list of 12 logical flags (TRUE = potential issue).
+Named list of 12 logicals, or a data.frame with 12 logical columns.
 }
 \description{
-Checks ranges for common signatures and returns a named logical list
-of 12 flags matching the Python/Julia \code{flagged_for_*} convention.
+Checks ranges for common signatures and returns the 12 \code{flagged_for_*}
+flags matching the Python/Julia convention.
+}
+\details{
+Two input shapes:
+\itemize{
+\item a named \strong{list} (one gage, the output of
+\code{calculate_all_signatures}) — returns a named list of 12 logicals;
+\code{flagged_for_high_na} is evaluated over the signature keys the gage
+EMITTED (families it never computed are absent, not NA);
+\item a \strong{data.frame} (the assembled output table, one row per gage) —
+returns a data.frame of 12 logical columns; \code{flagged_for_high_na} is
+evaluated over the signature columns PRESENT in the table, so families
+NA-filled by the table union DO count. This is the production path (the
+benchmark runner) and matches the Julia and Python runners exactly.
+}
+The denominator is \code{high_na_denominator_columns(names)}: the 16 statistic
+suffixes plus the per-gage scalar registry. Metadata, unregistered diagnostics
+and flag columns never enter it (before 2026-09-04 rpkg counted only the
+\code{_mean}/\code{_median} keys the gage emitted).
 }

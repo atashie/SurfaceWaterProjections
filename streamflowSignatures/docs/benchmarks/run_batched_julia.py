@@ -25,8 +25,8 @@ Steps:
       Gages (sorted ids) go to batch rank % K.
       Writes:
         * streamflow_b<k>.parquet: every column, rows in the original file order;
-        * climate_<NAME>_b<k>.parquet: site_id, Date, prcp, swe, the four columns the
-          runner keeps;
+        * climate_<NAME>_b<k>.parquet: site_id, Date, prcp, swe, tmin, tmax, the six
+          columns the runner keeps (tmin/tmax since 2026-10-12, for the climate metrics);
         * batches.json: the assignment, plus size, mtime, PAR1 footer and sha256 of every
           source file. These become the merged run's input provenance.
       Climate filters: max_date drops later rows; sites_with_data_in keeps only sites
@@ -83,7 +83,7 @@ import duckdb
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-CLIMATE_COLS = ["site_id", "Date", "prcp", "swe"]
+CLIMATE_COLS = ["site_id", "Date", "prcp", "swe", "tmin", "tmax"]  # tmin/tmax since 2026-10-12 (climate metrics)
 CLIMATE_OPTIONS = {"max_date", "sites_with_data_in"}
 # provenance every batch must share; the streamflow and climate entries are per batch
 SHARED_PROVENANCE = ["git_revision", "git_working_tree_dirty", "julia_version", "hostname", "config", "metadata",

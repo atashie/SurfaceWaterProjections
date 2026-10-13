@@ -4,8 +4,9 @@
 
 ## What this is
 
-Extraction of 100 annual hydrological signatures (+ 21 per-gage scalars → a 1,653-column
-summary CSV and an annual-values parquet) from daily streamflow for ~8,000 US and Canadian
+Extraction of 139 annual hydrological and climate signatures (+ 21 per-gage scalars → a
+2,277-column summary CSV and an annual-values parquet; 100 / 1,653 in the 2026 products
+before the climate family of 2026-10-12) from daily streamflow for ~8,000 US and Canadian
 gages, for the HISSS data paper (Scientific Data, submission target 2026-11-09). Three
 implementations: **Julia is canonical** (`julia/src/`); Python
 (`python/streamflow_signatures/`) and R (`rpkg/`) are ports validated at full scale. The R
@@ -57,7 +58,7 @@ Suffixes `_senn_slp, _linear_slp, _spearman_rho, _spearman_pval, _mk_rho, _mk_pv
 _median` plus `_pettitt_{cp_year, pval, pre_mean, post_mean, delta_mean, pct_change,
 pre_mk_pval, post_mk_pval}`. Trend statistics require 60 % overall and 80 %
 first-and-last-decade completeness and ≥ 20 annual values (recession and elasticity are
-exempt). Eight signature CATEGORIES (`docs/signature_categories.csv`) group the 15
+exempt). Nine signature CATEGORIES (`docs/signature_categories.csv`) group the 17
 computing FUNCTION FAMILIES; "category" is the manuscript's and the guidelines' word.
 
 ## Procedures and scoped rules

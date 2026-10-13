@@ -10,8 +10,9 @@ This skill assists scientists working with hydrological signature extraction fro
 
 Streamflow signatures are quantitative metrics that characterize watershed hydrology. Each signature captures a different aspect of streamflow behavior:
 
-The 121 outputs (100 annual signatures + 21 per-gage scalars) fall into **eight
-signature categories** (adopted 2026-09-10 from the co-authors' categorization;
+The 160 outputs (139 annual signatures + 21 per-gage scalars; 121 in the 2026 products,
+before the climate family) fall into **nine signature categories** (eight adopted
+2026-09-10 from the co-authors' categorization, plus Climate added 2026-10-12;
 canonical mapping `docs/signature_categories.csv`):
 
 - **Flow Volume**: annual/seasonal totals, flow percentiles, TQmean, negative-flow days
@@ -22,10 +23,14 @@ canonical mapping `docs/signature_categories.csv`):
 - **Flow Timing**: day of water year at cumulative-flow percentiles, Dmax
 - **Precipitation Streamflow**: Q-P seasonality (qp_slope_sd, qp_bimodality)
 - **Snow**: 14 SWE-derived metrics
+- **Climate** (October 2026): 20 precipitation metrics (totals, 1-/5-day maxima and
+  timing, 50 % and centre-of-mass dates, days above 10/25/50 mm, within-year sd/cv,
+  longest dry spell, Gini index, seasonality index) and 19 temperature metrics (annual
+  and seasonal extremes with timing, first/last frost, growing degree days)
 
-Terminology: *category* = one of the eight (the term used by the manuscript, the
+Terminology: *category* = one of the nine (the term used by the manuscript, the
 guidelines document, and the HydroShare dictionary); *function family* = the function
-that computes a metric (the 15 functions called by `calculate_all_signatures()`, the
+that computes a metric (the 17 functions called by `calculate_all_signatures()`, the
 numbered sections of `docs/SIGNATURES.md`). `ice_affected_days_total` is a
 preprocessing diagnostic outside the categories.
 
@@ -96,6 +101,27 @@ Interpretation keys:
   products still comes from the original input.
 - Daymet SWE is modeled, not observed — prefer timing/trend signals over absolute
   magnitudes, especially in mountain terrain.
+
+### Climate Metrics (October 2026)
+
+Thirty-nine pure-climate signatures from Daymet precipitation and temperature
+(`docs/SIGNATURES.md` §14; guidelines §3.9). Interpretation notes:
+- They describe the FORCING, not the response: use them alongside the runoff ratios,
+  elasticity and snow metrics, never as substitutes. They exist for the un-normalized
+  Canadian gages too (no Q is involved).
+- Seasons follow the Q convention (DJF/MAM/JJA/SON within the water year; `fal` mixes
+  Oct–Nov of the start with Sep of the end of the same water year).
+- A "dry day" is a basin-mean day ≤ 0.1 mm; counts above 10/25/50 mm are strict; frost is
+  basin-mean TMIN < 0 °C, so large or high-relief basins under-count local frost.
+- GDD uses base 0 °C with the negative days clamped to 0 (°C·day).
+- `prcp_gini` (0 uniform … ~1 all rain on one day) and `prcp_seasonality_index`
+  (0 … 1.83, Walsh & Lawler) are concentration measures; `prcp_50_dowy` and
+  `prcp_cm_dowy` are timing dates like `D50_day`.
+- Frost dates are NaN in frost-free years and carry the snow-style first/last-decade
+  gate on their trend statistics; `prcp_intermit_annual_dowy_*` are NaN when a year has
+  no dry day.
+- Products rerun on the reprocessed Daymet input (calendar 1980–2025, every gage) carry
+  climate for WY 2024–2025 as well; WY 1980 has none (the input starts 1980-01-01).
 
 ### Streamflow Drought Metrics (July 2026)
 
@@ -171,6 +197,15 @@ fraction, 20-year floor, one self-contained folder each):
   `processedOuts_1980_2025_11aug2026`, **superseding the 22 Jul folder**
   (`processedOuts_1980_2025_22jul2026`, 1,488 columns). Both standards now carry
   the drought family.
+- **Version 2 of both (2026-10-12/13; 2,277 columns; validated and staged, NOT yet
+  deposited)** — reruns on the reprocessed Daymet input (every gage, calendar 1980–2025)
+  with the 39-signature climate family (`prcp_*`, `temp_*`, `frost_*`, `gdd_*`; §14 of
+  `docs/SIGNATURES.md`). Same gage sets; Q-only columns identical to the 2026 products;
+  climate-dependent columns differ (new input, two added climate years WY 2024–2025,
+  1,165 / 615 gages that gained climate); `flagged_for_high_na` regenerated (560 / 401
+  TRUE). Folders `~/HISSS_data/climate-rerun-12oct2026/processedOuts_{1993,1980}_2025_climate_12oct2026`;
+  staged `~/Downloads/Signatures_v2_12oct2026/`. Until deposited, the HydroShare
+  resources still hold the 2026 columns.
 
 Provenance caveat: #1 was built from the original Daymet parquet, #2 from a
 parquet rebuilt out of the annual Daymet CSVs after the original was found
@@ -286,7 +321,7 @@ A: Its `area_normalized` column is FALSE — HYDAT publishes no drainage area fo
 The output may include flags for:
 - `flagged_for_qann_range`: Annual flow outside expected range (0-2000 mm) — does NOT catch all un-normalized (raw m³/s) Canadian gages; check `area_normalized` too
 - `flagged_for_bfi_eckhardt_range` / `flagged_for_bfi_lynehollick_range`: Baseflow index outside [0, 1] (defensive — per-year BFI is clamped, so these cannot fire)
-- `flagged_for_high_na`: more than 30 % of the gage's signature-derived columns are NA (every column except the gage metadata and the flag columns; 1,621 of 1,653) — usually "no Daymet / no SWE coverage", not bad streamflow. ⚠ KNOWN ISSUE in both delivered products (WY 1993–2025 and WY 1980–2025): this column was computed over the 16 numeric metadata columns only, so it marks every Canadian gage (plus USGS gages lacking GAGES-II attributes) and says nothing about signature completeness — do not use it to screen gages. Code fixed 2026-09-04; the column is regenerated at the next rerun of any portion of the data.
+- `flagged_for_high_na`: more than 30 % of the gage's signature-derived columns are NA (every column except the gage metadata and the flag columns; 1,621 of 1,653) — usually "no Daymet / no SWE coverage", not bad streamflow. ⚠ KNOWN ISSUE in both delivered products (WY 1993–2025 and WY 1980–2025): this column was computed over the 16 numeric metadata columns only, so it marks every Canadian gage (plus USGS gages lacking GAGES-II attributes) and says nothing about signature completeness — do not use it to screen gages. Code fixed 2026-09-04; regenerated in the version-2 reruns of 2026-10-12/13 (560 / 401 gages TRUE), which are staged but not yet deposited.
 - `area_normalized`: FALSE = flow in raw m³/s (no drainage area in HYDAT) — exclude from cross-gage comparison of unit-carrying signatures
 - `processing_status`: "success" or error description
 

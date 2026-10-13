@@ -23,6 +23,59 @@ fails GitHub's rich rendering because of a GitHub-side mermaid bundle crash (ver
 against GitHub's own mermaid README, not this file) — re-check after GitHub ships a fixed
 bundle; until then the 3x PNG beside the doc is the review copy.
 
+**2026-10-12 — co-author edits synced (109 vs 110 paragraphs; nine regions); reconciliation
+pass.** Snapshot overwritten. The edits track the guidelines' new §3.9 Climate Metrics (same
+day): the §2 preamble now lists NINE signature families. Every changed methods claim was
+checked against the code, the config and the delivered products. Findings by direction of fix:
+- **Manuscript wrong, code/docs right (relay):**
+  1. **§2.1.1 now defines the seasons as "Winter: January–March, Spring: April–June, Summer:
+     July–September, Fall: October–December"** — the water-year quarters. The code
+     (`config/signatures_config.json` → `na_handling.seasonal_completeness.season_definitions`,
+     `CFG_NA_SEASON_MONTHS`, `SEASONS` in `flow_volumes.jl` / `runoff_ratios.jl` / `pulses.jl`),
+     the guidelines Part 1.1 and the manuscript's own previous §2.2.1 sentence all use
+     Winter Dec–Feb, Spring Mar–May, Summer Jun–Aug, Fall Sep–Nov. The correct sentence was
+     deleted from §2.2.1 in the same edit, so the manuscript now states only the wrong
+     definition. Restore DJF / MAM / JJA / SON.
+  2. **Family count and signature count disagree within the text**: §2 preamble "121
+     signatures across nine signature families (…, snow, storage, climate)" vs §2.2.1 "eight
+     signature families" and "121 … 100 annually resolved metrics … 21 stand-alone". No climate
+     family exists in the code or the products yet (guidelines §3.9 is a request, logged
+     2026-10-12 in `guidelines_todos.md`); if it is implemented before submission the counts
+     become ~160 annual signatures (+39 climate, +5 snowfall; final numbers at implementation)
+     and both passages, Table 1 and the data dictionary change together. Until then: eight.
+  3. **§2.1.3 Daymet**: the sentence explaining the 6,087 / 6,041 gap was removed (good — the
+     reprocessed input covers every gage) but the paragraph still says "covering 1980–2023",
+     "gdptools", and keeps no statement of coverage. If the products are rerun on
+     `daymet_1980_2025_29sep2026.parquet` (planned, 2026-10-12) the paragraph must say
+     1980–2025, 8,017 basins (all gages with a boundary + 53 > 100,000 km²), exactextract
+     true-area weights over the full-resolution polygons, masked mean over valid cells
+     (`EO_data_processing/README_DAYMET.md`); if not, "6,087 basins (5,965 usable gages)"
+     must come back.
+  4. **§2.2.1 and §2.2.2 dropped two rules the code still applies**: (a) "any WY-season with
+     fewer than 80 % of raw observations passing QA → seasonal metrics NA" — implemented
+     (`seasonal_completeness.min_fraction` 0.80 on raw observations; applied to Qwin/Qspr/
+     Qsum/Qfal and the four seasonal runoff ratios; the seasonal flow reversals are NOT
+     masked, a code nuance worth one clause); (b) "We also computed 12 automated data-quality
+     flags" — implemented (`compute_qa_flags`, 12 `flagged_for_*` columns in both products).
+     Either restore both sentences or state deliberately that they were cut.
+  5. **§4 size quartiles describe product #2 only**: "median 698 km², 25 % > 2,700 km², 25 % <
+     180 km²" (190 → 180 in this edit) = product #2's `basin_area` quartiles 184 / 698 / 2,718
+     (6,222 of 6,250 gages carry an area). Product #1 gives 166 / 645 / 2,500 (6,646 of 6,678).
+     Say "for the WY 1980–2025 product" (or report both). "(Figure 2)" added — fine.
+  6. §5.1.2 "joined on the leading-zero-stripped form for each dataset … (see resource README
+     for details))" — double closing parenthesis; otherwise consistent with
+     `docs/plans/2026-09-04-dataset-join-guidance.md`.
+  7. Still open from 2026-09-29: the gap-rule wording ("those days were set to NA" — the
+     year is rejected); the 20-year floor is counted in-window; 85,000 vs 100,000 km²;
+     cross-references after the §2.1.1/§2.1.2 swap; title/abstract naming; citations
+     (Albers 2026 vs 2017, Myneni DOI, Hatchett year, Condon 2010 → 2020, "htpps://");
+     "Claude Code 0.145.0"; §5.1.2 "0103500".
+- **Verified consistent:** the §2.1.4 edit (dropped "(average ~ 110 km²)") changes nothing
+  of substance; the funding sentence (NSF EAR Postdoctoral Fellowship 9500317412, DSM) needs
+  no check.
+- **Code/docs-side: none from this sync.** The climate family itself is tracked in
+  `guidelines_todos.md` (2026-10-12) and `docs/STATUS.md` → Pending user decisions.
+
 **2026-09-29 (later) — data finding from the Daymet single-year test (relay; no doc change
 yet).** Five of the 6,087 stale Daymet basins are NaN on every day of 1980–2023 (02234500,
 02236000, 02236125, 02244040, 01372058), so §2.1.3's "6,087 basins" holds 6,082 with data and
@@ -89,6 +142,111 @@ Petersky, gdptools 0.3.11 added). Snapshot overwritten. Findings by direction of
   CSVs on the drive.
 - **Code/docs-side: none.** Note for later: §2.1.3 and Resource 3 will need rewriting if
   the Daymet input is reprocessed (plan above).
+
+**2026-09-28 — Daymet selection rule RECOVERED (co-author question: is the 7,964-polygon vs
+Daymet gap all processing?).** Mostly yes. The 6,087-site request list came from the
+ORIGINAL compilation (`combined_watershed_metadata_og.csv`, in git at `27c38d9`), run with
+`min_num_years = 30` before the final 20-year recompile: list = 5,956 og-success + 131
+og-processing. Of the 1,995 polygon gages without Daymet, **1,952 failed that 30-year
+compilation** (1,910 at the retrieval pre-check `nrow > 365 × 30`, 42 on qualifying years);
+**6** exceed 85,000 km²; **22** are 9–10-digit USGS ids (none of the 66 such usable gages has
+Daymet — the leading-zero id loss); **15** are HydroBASINS-fallback polygons (none of the 29
+has Daymet). "Stricter" = record length at compilation only (≥ 30 vs ≥ 20 years); per-year
+QA and trend gates are identical. Relay: the manuscript §2.1 placeholder's "too large to
+aggregate" explanation → "gages added when the compilation's minimum record was lowered from
+30 to 20 years". Correction: the census §7 "all 5,707 golden gages have Daymet" evidence is
+circular (the R path iterates over Daymet sites). Record: census §9.
+
+**2026-09-18 — §2.1 "signatures + Daymet + MODIS/LULC = 6,041" checked (user request):
+NOT supported by any file in the deposit (relay).** Measured on the staged deposit, ids
+joined zero-stripped: signature gages with Daymet AND MODIS LULC = **5,517** (WY
+1993–2025), **5,638** (WY 1980–2025), **5,665** in either product, 5,490 in both; 5,965 if
+"signatures" is read as the 8,014 usable-streamflow gages. 6,041 exceeds the hard ceiling
+of 5,969 (Daymet sites that have a watershed polygon, hence MODIS): 122 of the 6,087 Daymet
+sites never reached the usable set (109 `processing`, 13 `no_data`), and all 6,087 are
+complete (16,060 rows each), so no "complete-Daymet" subset yields it either. It is the
+same untraceable figure that appeared in §2.1.3 in August ("6,041 basins via gdptools") and
+in the R3 row of the resources sheet on 2026-09-15 — presumably a count from the
+co-authors' upstream gdptools run, not from any delivered file — and it contradicts the
+manuscript's own §2.1.3 (5,965 / 5,517 / 5,638). Suggested fill: 5,517 (product #1, the
+window the Abstract's trends refer to), or 5,665 across both products. Census record:
+`docs/plans/2026-09-04-filtering-stage-census.md` §7.
+
+**2026-09-18 (later) — §2.1.1 boundary sentence checked (user request).** "54 excluded … 7,964
+remaining" is right but the base is **8,018**, not 8,014: the boundary/EO layers carry four
+`processing`-status USGS gages (01591000/400/610/700 — GAGES-II polygons, retrieval never
+completed, no streamflow or signatures). Verified on the staged deposit: the 54 absent
+`success` gages are all Canadian, 49 with published area > 100,000 km² and 5 delineated
+> 100,000 km² with no published area; **no gage was dropped for lacking a boundary** (31
+Canadian fallbacks → 29 survive). Relay: "shapefile" → "layer" (GeoPackage/GeoParquet,
+WGS84); drop the claim that climate was aggregated with these boundaries "only where we had
+sufficient streamflow data coverage for trends analyses" — Daymet used the earlier 6,087-basin
+list (≤ 85,000 km²; 118 sites have no polygon in the layer, 122 never compiled; selection rule
+unrecorded). Replacement sentence delivered in-session.
+
+**2026-09-15 (later) — resources-table sheet reviewed (user request; the manuscript's
+Table [x]).** Column C "Data Rows" checked file-by-file against the staged deposit (full
+count table: `docs/plans/2026-09-04-filtering-stage-census.md` §8). Correct: R1 6,678, R2
+6,250, R5 7,964 (MODIS; NLCD is 6,119). Wrong (relay): R3 "6,041" matches no file — it is
+8,014 gages / 111,624,189 daily rows of streamflow, 16,994 metadata rows, 6,087 Daymet
+sites / 97,757,220 rows, 8,012 HYDAT rows; R4 "8,014" is the HydroATLAS attribute table,
+the boundary layer has 7,964; the notes "8,044" → 8,014, "polygons < 85,000 km²: 8,014" →
+7,964 polygons (exclusion at 100,000 km²; 7,958 of them ≤ 85,000 km²), "with daymet and
+modis: 6,014" → 5,969 (5,965 of the 8,014; 5,517 / 5,638 within the products). The
+column mixes gage counts with row counts; suggest a "Gages" column plus per-file rows.
+**Re-checked after the user's edit the same day: every value now matches the deposit**
+(column renamed "Number of Gages"; R3 split 8,014 / 6,087, R4 8,014 / 7,964, R5 7,964 /
+6,119; notes 8,014 / 7,964 / 5,965). Only nuance left: the R3 metadata table lists all
+16,994 candidates, and the 8,012-row HYDAT interference table is not named in Contents.
+
+**2026-09-15 — co-author revision synced; reconciliation pass (user request).** Changes:
+new co-author (Dymond, S.F.); a new Abstract; §1 rewritten; §2 preamble and §2.2.1 now
+carry the EIGHT categories (category-edit catalogue items 1, 2 and 8 RESOLVED; item 5, the
+§4 figure scheme, still unknown); a new placeholder paragraph under §2.1; §3 join sentence
+revised; a Figure 2 caption. Snapshot overwritten. Every changed number was checked against
+the code, the config and the staged deposit files (`~/Downloads/Signatures`, joins on
+zero-stripped ids; script record in `docs/plans/2026-09-04-filtering-stage-census.md` §7):
+- **WRONG (relay) — gage counts in the Abstract and §1.** ">8,000 North American
+  watersheds" / ">8,000 stream gages" / "For over 8000 watersheds … we calculate roughly
+  100 hydrological streamflow signatures": 8,014 is the number of gages with USABLE DAILY
+  STREAMFLOW (Resource 3); boundaries and EO tables cover 7,964 (below 8,000); signatures
+  and trends exist for 6,678 (WY 1993–2025) and 6,250 (WY 1980–2025); Daymet for 5,965 of
+  the 8,014. "Trends (1993 to 2025)" describes product #1 only.
+- **WRONG (relay) — the new §2.1 placeholder paragraph, three numbers.** (a) ">30 days
+  over .001mm/day": the compilation gate is ≥ 30 days per calendar year with Q >
+  **0.0001** mm/d in ≥ 20 calendar years (`config.R` `MIN_Q_VALUE_AND_DAYS = c(0.0001,
+  30)`, `MIN_NUM_YEARS = 20`; strict `>` in `R/helperFunctions.R`). (b) "smaller than
+  8,500 km (about average ~ HUC8)": the manuscript's own §2.1.3 says **85,000 km²** (the
+  LARGEST HUC8); the geometry exclusion is 100,000 km²; "km" → "km²". (c) The XXXX fill-ins,
+  measured on the staged deposit: gages with signatures AND Daymet AND MODIS LULC =
+  **5,517** (WY 1993–2025) / **5,638** (WY 1980–2025) — every Daymet gage also has MODIS,
+  so this equals §2.1.3's Daymet counts; signatures only 6,678 / 6,250; MODIS but no
+  Daymet 1,117 / 567; NLCD 5,454 / 5,007; all four 4,464 / 4,524. At the 8,014 level:
+  MODIS 7,960, Daymet 5,965, both 5,965.
+- **WRONG (relay) — "additional gages … too large to reasonably aggregate climatic
+  metrics".** Of the 1,161 product-#1 gages without Daymet only **6** have polygon area
+  > 85,000 km² (46 by agency drainage area; median 230 km²). The cause is that the
+  6,087-basin Daymet request list predates the Feb 2026 compilation: all 5,707 gages of the
+  Feb 2026 R golden set have Daymet; Daymet gages are the long-record ones (median 46 record
+  years, 75 % starting 1979) and the no-Daymet gages the shorter/later records admitted by
+  the 20-year rule (median 27 years, median start 1992). Suggested wording: Daymet was
+  aggregated for the 6,087 candidate basins (≤ 85,000 km²) of the earlier compilation; the
+  ~2,000 gages added by the final 20-year compilation carry no climate series.
+- Minor (relay): §2 preamble category order differs from §2.2.1; "Precipitation-Streamflow"
+  (hyphen) vs the sheet's "Precipitation Streamflow"; "(FIG REG TO WORKFLOW SCHEMATIC)"
+  placeholder — the schematic is `docs/plans/dataset_workflow_schematic.png`; §3
+  Conventions now states canon_id twice (the new "join with leading zeroes removed" clause
+  makes the older canon_id sentence redundant); Figure 2 "ecoregion" — HISSS carries no
+  ecoregion column except the HydroATLAS majority classes `tec_cl_smj` / `fec_cl_smj`
+  (Resource 4); name the ecoregion layer in the caption.
+- RESOLVED by the co-authors' edits: ">6,000stream", "7, 964", "wtih", "Linke et al.,
+  2013" (paragraph deleted), the unclosed "(e.g., CAMELS-Chem," parenthesis (sentence
+  deleted). Still open from earlier passes: §5.1.2 "0103500" (seven digits) and "may be
+  read" → "must"; §5.1.3 "compared against" → "between"; "s(e.g.,"; "[tbd]" citations;
+  "fitted checksums …" garble; "Claude Code 0.145.0" (item 7); references (item 5);
+  CC-BY/DOI labelling (item 11); §2.1.2 end date for Canadian gages (HYDAT, 2026-09-10).
+- Code/docs-side: none — no methods claim changed. The eight-category wording matches
+  `docs/signature_categories.csv`.
 
 **2026-09-10 (evening) — HYDAT citation check (user request).** The manuscript's
 "tbd: ECC hydat citation" and the proposed reference "ECCC (2026). HYDAT: National

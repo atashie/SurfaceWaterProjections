@@ -8,6 +8,93 @@ blocks to `changelog-old.md` when they are fully resolved. Moved here VERBATIM f
 
 ---
 
+**Synced 2026-10-12 — 13 changed regions since 2026-09-29 (315 vs 277 paragraphs); two NEW
+metric sets and a naming convention, NONE implemented. Snapshot overwritten.** Checked against
+code (`julia/src/`, `config/signatures_config.json`): no existing Part 1–3 rule changed in
+substance; every item below is additive or doc-side. The user asked the same day for a plan to
+implement the new metrics, review them adversarially, rerun both standard products on the
+reprocessed Daymet input and re-review the outputs. **DECISIONS (user, 2026-10-12)**: keep the
+shipped column names (convention applies to new metrics only; doc-side revert to relay); new
+season suffixes = the code's `win/spr/sum/fal`; `precip_` → `prcp_`, `GDD_` → `gdd_`; the §3.8
+snowfall metrics are DELETED from the doc (not implemented); GDD base 0 °C, clamped at zero
+(doc updated by the user); dry day = prcp ≤ 0.1 mm; sd/cv = within-year daily spread; ties →
+first occurrence; frost on tmin < 0 °C, last frost within Oct–Jun; Gini over all days, SI on the
+water year's 12 months; year qualification and gating follow the snow-family precedent. Full
+record: `docs/plans/2026-10-12-climate-metrics-plan.md`. The published page had not yet picked
+up the user's edits at the same-day re-sync (315 paragraphs, unchanged).
+- [x] **CODE-SIDE — new §3.9 "Climate Metrics": 39 annual metrics from Daymet `prcp`, `tmin`,
+  `tmax`.** IMPLEMENTED 2026-10-12 in Julia (`climate.jl`), Python and rpkg per the decisions
+  below (CHANGELOG [October 2026]; reviews in `docs/plans/2026-10-12-climate-reviews/`).
+  As found at the sync: the pipeline read only `prcp` (→ PPT) and `swe` (→ SWE)
+  (`julia/src/io.jl` `read_parquet` / `preprocess_daily_data`; the runner keeps four climate
+  columns; `run_batched_julia.py` writes 4-column batch inputs). Needs tmin/tmax loading with a
+  per-year NA policy mirroring `climate_na_policy`, a `climate.jl` family (seasons from
+  `CFG_NA_SEASON_MONTHS`, dowy from the grid), config knobs, every registry of
+  `/add-signature` §2, then the Python and rpkg ports. Definitions that need a decision before
+  coding (the doc gives names and one-line descriptions only):
+  - `prcp_annual` + `prcp_{win,spr,sumr,fall}`: totals (mm) — the annual total already exists
+    internally (`P_annual` in `elasticity.jl`, `total_P` in `runoff_ratios.jl`) but is not output.
+  - `prcp_1d_max`, `prcp_5d_max` (5 consecutive days; window kept inside the water year?),
+    `prcp_max_dowy` (first occurrence on ties?), `prcp_50_dowy` (first day cumulative ≥ 50 %,
+    as `D50_day`), `prcp_cm_dowy` (Σ dowy·P / Σ P).
+  - `prcp_ndays_abv_{10,25,50}mm`: strictly above the threshold.
+  - `prcp_annual_sd`, `prcp_annual_cv`: AMBIGUOUS — sd / cv of the daily values within the
+    water year (an annual signature with 16 statistics) or of the annual totals across years
+    (a per-gage scalar)?
+  - `precip_intermit_annual` (+ `_dowy_start`, `_dowy_end`): longest run of days "without
+    precipitation" — basin means are rarely exactly 0, so a dry-day threshold is required
+    (ETCCDI CDD uses < 1 mm); start/end of the FIRST longest run on ties? Prefix `precip_`
+    differs from every other `prcp_` name.
+  - `prcp_gini` (Sahbeni et al. 2023): the equation is an image the extraction does not
+    capture; standard Gini over all n days of the water year, zeros included, assumed.
+  - `prcp_seasonality_index` (Sumner 1988 = Walsh & Lawler 1981): SI = (1/R) Σ₁₂ |Xₙ − R/12|,
+    0–1.83, equation image not captured; months of the water year.
+  - `temp_max_annual` (+`_dowy`), `temp_min_annual` (+`_dowy`), `temp_max_xSeason`,
+    `temp_min_xSeason`: max of daily tmax / min of daily tmin, assumed.
+  - `frost_first_dowy`, `frost_last_dowy` ("between October and June"): which temperature
+    (tmin assumed); NA when no day qualifies.
+  - `GDD_cum_annual`, `GDD_cum_xSeason`: written as GDD = Σ((Tmax+Tmin)/2) — NO base
+    temperature and NO truncation at zero, so as written it is the sum of daily mean
+    temperatures (negative in cold basins), not a growing-degree-day sum (standard: Σ max(0,
+    Tmean − Tbase), Tbase 0, 5 or 10 °C). Needs Tbase and the clamp decided and written into
+    the doc.
+- [x] **CODE-SIDE — §3.8 Snow gains five snowfall metrics (DELETED from the doc by the user
+  2026-10-12; not implemented):** `snowfall_annual` / `_xSeason`,
+  `snowfall_max_dowy` (described as "maximum daily snowfall" — magnitude or day, or both?),
+  `snowfall_frac_annual`, `snowfall_frac_coldseason` (Nov–Apr: a fifth, non-standard period).
+  Daymet has NO snowfall variable: a derivation rule is needed — positive daily SWE increments
+  of Daymet's own snowpack (net of same-day melt, consistent with the existing SWE metrics)
+  or a temperature partition of `prcp` (threshold or ramp on (tmax+tmin)/2). Snowfall "depth,
+  mm" must mean water equivalent either way. Doc nit: the line "snowfall_xSeason: seasonal
+  snowfall" duplicates the "/ _Xseason" of the line above.
+- [x] **USER DECISION 2026-10-12 (keep shipped names; convention for new metrics only; relay a
+  doc-side revert — `docs/plans/2026-10-12-coauthor-relay.md`) — Part 1.1 now prescribes `variableName_annual` / `variableName_xSeason`
+  (xSeason = win, spr, sumr, fall) and the doc RENAMES shipped columns:** Qann → Q_annual,
+  Qsum → Qsumr, Qfal → Qfall ("Q_Xseason (e.g. Qwin, Qspr, Qsumr, Qfall)"), Negative_ann →
+  Negative_annual, annual/winter/spring/summer/fall_runoff_ratio → runoff_ratio_annual /
+  runoff_ratio_Xseason, Flow_Reversals_winter… → Flow_Reversals_xSeason. The CSV contract
+  freezes shipped names (CLAUDE.md; rule `signatures-code`; `hisss_rename_manifest.csv` in the
+  deposit maps the HydroShare names). Either (a) keep the shipped names and apply the
+  convention to NEW metrics only (doc-side revert of the six renames), or (b) rename
+  everything in a new product version with a rename manifest and dictionary update. The doc
+  is itself inconsistent: `xSeason` / `Xseason` casing, `Q_annual` but `Qsumr` (no
+  underscore), `prcp_` vs `precip_`, `GDD_` upper case.
+- [ ] DOC-SIDE (relay): the new "1.1 Streamflow data sources" paragraph duplicates the "1.1"
+  number of "Time conventions"; "daicly" (Q_annual line); Part 6 is now a "Resource
+  Collections" placeholder carrying co-author notes ("Insert the table with where/how these
+  get compiled?", "update the 'signatures' to maybe be 'hydroclimate signatures / metrics'")
+  and References moved to Part 7; §3.9 lacks the "Function: … Requires …" header, a Purpose
+  line and a Requirements block (NA policy for tmin/tmax, frost temperature, GDD base, dry-day
+  threshold) that every other module has; the Gini and seasonality equations should be typed
+  out, not pasted as images.
+- Wording-only, no action: 1.2 "a zero flow value is a valid observation" and the merged
+  constant-SD sentence; Part 2 "every signature"; 3.3 "NA" for "NaN"; Part 3.4
+  "Flow_Reversals_annual / _xSeason" (same rule).
+- Carried forward unchanged from 2026-09-29: parameterized-BFI interval [0, 1] → (0, 1);
+  Hecht et al. 2024 missing from the references; `recession_alpha_point_cloud` name; Part 5
+  (2) high_na known-issue sentence; "(see 3.12)" → 3.1; `avg_storage` and
+  `ice_affected_days_total` blocks; elasticity "11 consecutive"; Pettitt window paragraph.
+
 **Synced 2026-09-29 — 20 wording regions changed since 2026-09-10; structure unchanged
 (277 vs 270 paragraphs). Snapshot overwritten.** Landed from earlier queues: Part 4
 "missing years excluded" and "handles flagged data" (both 2026-09-04 items, now checked
@@ -29,6 +116,21 @@ items (code is right):
   `ice_affected_days_total` absent; elasticity "11 consecutive qualifying observations";
   Pettitt window paragraph in Part 2. Nit: "occurs ." (stray space) in `swe_max_dowy`.
 
+**Synced 2026-09-15 — six wording regions, no number / threshold / workflow change; Tashie
+et al. (2020) added.** Snapshot overwritten. Checked against code: (1) Part 5
+`flagged_for_high_na` now reads "more than 30% of a gage's signature columns (the 16
+statistics of every signature plus the 21 per-gage scalars)" — matches the 2026-09-04
+manifest (`qa_qc.high_na_denominator`: 16 suffixes + 21 scalars = 1,621 of 1,653 columns,
+`max_na_fraction` 0.30); queued edit (1) of three is APPLIED, (2) the known-issue sentence
+and (3) the "identical across the Julia, Python, and R implementations" qualifier are still
+pending. (2) Recession Purpose (3.3) now "log(a), b, concavity, and recession seasonality …
+following Tashie et al. (2020)" + the Part 6 reference — consistent with `recession.jl`
+(event identification, free-fit b, concavity, sinusoidal log(a) seasonality); reference
+added to docs/SIGNATURES.md §4 and README.md. (3) Part 4 function names are now headings;
+trailing periods on the Part 5 flag lines; two wording nits. Still open (doc-side): Part 1.2
+"(see 3.12)" → 3.1; the avg_storage block; `recession_alpha_point_cloud` / `Negative_ann`
+names; `ice_affected_days_total` module; Part 5 high_na edits (2) and (3).
+
 **Synced 2026-09-10 (pm) — the doc was RESTRUCTURED to the colleague's 8 categories; full
 category crosswalk run (user request).** Part 3 now has eight modules (Flow Volume, Flow
 Duration, Storage, Flashiness, Drought, Flow Timing, Precipitation Streamflow, Snow) with
@@ -37,9 +139,9 @@ are gone. Snapshot overwritten. Manuscript unchanged. Live HydroShare is private
 Chrome was not connected, so the deposit side was checked on the STAGED folder. Record
 and per-output CSV: `docs/plans/2026-09-10-signature-category-review.md` (afternoon
 section) + `2026-09-10-signature-category-crosswalk-pm.csv`. Open items, by product:
-- [ ] **Manuscript** still says 14 categories in the §2 preamble and §2.2.1 (and points to
-  the dictionary for details); the §4 "sites and signature categories" figure scheme is
-  unknown. Needs the 8-category wording once the vocabulary is settled.
+- [x] **Manuscript** — DONE by the co-authors by 2026-09-15: the §2 preamble and §2.2.1
+  now name the eight categories. The §4 figure scheme is still unknown (the new Figure 2
+  caption refers to "signature category").
 - [ ] **HydroShare R1/R2 (staged)**: dictionary `category` + `hisss_signature_categories.csv`
   carry the 9-class grouping (7 bases differ from the doc: flashinessRB, six "Snow
   Timing" bases); the 21 scalars have no group; README lede lists the 14 families; the
@@ -152,7 +254,8 @@ Findings, by direction of fix:
 *Part 5 (thresholds all match `config/signatures_config.json`; 11 of 12 flags verified
 identical across languages on the reference set):*
 - [ ] **`flagged_for_high_na`** — code fixed the same day (one shared definition; see
-  `[September 2026]`); three doc-side edits queued for the Google Doc: (1) redefine the
+  `[September 2026]`); three doc-side edits queued for the Google Doc — **(1) APPLIED in
+  the doc by 2026-09-15, (3) by 2026-09-29; (2) still pending**: (1) redefine the
   flag as ">30 % of a gage's signature-derived columns (every column except the gage
   metadata and the flag columns) are NA"; (2) append the known-issue sentence for the
   released products (column computed over the 16 metadata columns; marks every

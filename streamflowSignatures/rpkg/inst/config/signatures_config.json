@@ -49,6 +49,11 @@
       "max_raw_na_per_year_swe": 30,
       "max_interpolation_gap_swe": 3,
       "reject_negative_swe": true
+    },
+    "temperature_na_policy": {
+      "max_raw_na_per_year_temp": 30,
+      "max_interpolation_gap_temp": 3,
+      "comment": "Daymet tmin/tmax (deg C) for the temperature climate metrics (2026-10-12). Mirrors the PPT/SWE policy: a water year is temperature-valid when BOTH tmin and tmax have <= max_raw_na_per_year_temp raw NaNs and every internal gap <= max_interpolation_gap_temp days is linearly filled with none left; no negative-value check (temperatures are signed). Evaluated only for streamflow-valid years (the snow-family precedent, user decision 2026-10-12)."
     }
   },
   "water_year": {
@@ -102,6 +107,17 @@
     "min_annual_ppt_mm": 10,
     "record_anchored_decade_gate": true,
     "comment": "Snow metrics from daily SWE (Daymet swe). Days with SWE < swe_day_threshold_mm are treated as snow-free for ALL snow metrics, magnitudes AND durations (domain decision 2026-07-14). seasonal_spell_min_days follows Hatchett (2021) Hydrology 8(1):32 / Petersky & Harpold (2018). Set swe_day_threshold_mm near 0 to reproduce the paper's literal SWE>0 rule. record_anchored_decade_gate (July 2026): the 10 threshold-dependent snow metrics require >= decade_min_fraction (na_handling.trend_completeness — LINKED to the streamflow decade gate) of the SWE-valid years in BOTH the first and last decade of the gage's SWE record to be computable (snowy) before trend statistics are computed; on failure the 6 trend stats are NaN (mean/median + Pettitt still computed); absent key => disabled."
+  },
+  "climate": {
+    "dry_day_threshold_mm": 0.1,
+    "wet_day_thresholds_mm": [10, 25, 50],
+    "multi_day_max_window_days": 5,
+    "cumulative_fraction": 0.5,
+    "frost_temp_c": 0.0,
+    "frost_last_end_month": 6,
+    "gdd_base_c": 0.0,
+    "record_anchored_decade_gate": true,
+    "comment": "Climate metrics (guidelines 3.9, 2026-10-12) from basin-mean Daymet prcp (mm/day), tmin and tmax (deg C): 20 precipitation bases on PPT-valid years and 19 temperature bases on temperature-valid years (na_handling.temperature_na_policy), each with the 16 statistics; no per-gage scalar. Decisions (user, 2026-10-12): a dry day has prcp <= dry_day_threshold_mm; wet-day counts are STRICTLY above each wet_day_thresholds_mm value (column prcp_ndays_abv_<t>mm); the multi-day maximum is a window of multi_day_max_window_days consecutive days INSIDE the water year; ties take the first occurrence (max day, longest dry spell); prcp_50_dowy is the first day whose cumulative precipitation reaches cumulative_fraction of the water-year total; frost is basin-mean tmin < frost_temp_c, frost_last_dowy searched from Oct 1 through the end of frost_last_end_month; growing degree days are sum(max(0, (tmax + tmin)/2 - gdd_base_c)); seasons are na_handling.seasonal_completeness.season_definitions applied within the water year (the Qwin/Qspr/Qsum/Qfal convention, suffixes win/spr/sum/fal); prcp_annual_sd/_cv are the within-year spread of the daily values (sample sd, n - 1); prcp_gini uses all days of the year, zeros included; prcp_seasonality_index is the Walsh and Lawler (1981) index on the water year's 12 calendar months. record_anchored_decade_gate applies the snow-family gate to frost_first_dowy and frost_last_dowy, anchored to the temperature-valid years (same decade_min_fraction knob). Absent section => family disabled (no climate columns)."
   },
   "drought": {
     "smoothing_window_days": 7,

@@ -6,6 +6,7 @@ parameters as module-level constants for use across all signature modules.
 """
 
 import json
+import math
 import os
 from pathlib import Path
 from typing import Dict, Any, List, Optional
@@ -41,10 +42,39 @@ def _resolve_config_file() -> Path:
 _CONFIG_FILE = _resolve_config_file()
 
 
+def _reject_json_constant(name):
+    # Julia's JSON3 rejects NaN / Infinity tokens; the ports must not silently accept them
+    raise ValueError(f"signatures_config.json: non-standard JSON constant {name!r} is not allowed")
+
+
 def load_config() -> Dict[str, Any]:
     """Load configuration from the resolved JSON file (see resolution order above)."""
     with open(_CONFIG_FILE, "r") as f:
-        return json.load(f)
+        return json.load(f, parse_constant=_reject_json_constant)
+
+
+def _cfg_int(section, key, default) -> int:
+    """Integer setting with Julia's strictness: no truncation, no bools, finite."""
+    v = section.get(key, default)
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        raise ValueError(f"config {key}: expected an integer, got {v!r}")
+    if isinstance(v, float) and (not math.isfinite(v) or v != int(v)):
+        raise ValueError(f"config {key}: expected an integer, got {v!r}")
+    return int(v)
+
+
+def _cfg_num(section, key, default) -> float:
+    v = section.get(key, default)
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)):
+        raise ValueError(f"config {key}: expected a finite number, got {v!r}")
+    return float(v)
+
+
+def _cfg_bool(section, key, default) -> bool:
+    v = section.get(key, default)
+    if not isinstance(v, bool):
+        raise ValueError(f"config {key}: expected true/false, got {v!r}")
+    return v
 
 
 # Load config at module import time
@@ -210,10 +240,20 @@ NA_TREND_MIN_FRACTION = float(_na_trend.get("min_fraction", 0.80))
 NA_DECADE_MIN_FRACTION = float(_na_trend.get("decade_min_fraction", 0.80))
 NA_SEASONAL_MIN_FRACTION = float(_na_seasonal.get("min_fraction", 0.80))
 NA_SEASONAL_USE_RAW = _na_seasonal.get("use_raw_observations", True)
-NA_SEASONAL_DEFINITIONS = _na_seasonal.get("season_definitions", {
-    "winter": [12, 1, 2], "spring": [3, 4, 5],
-    "summer": [6, 7, 8], "fall": [9, 10, 11]
-})
+_season_defaults = {"winter": [12, 1, 2], "spring": [3, 4, 5], "summer": [6, 7, 8], "fall": [9, 10, 11]}
+_season_raw = _na_seasonal.get("season_definitions", _season_defaults)
+
+
+def _cfg_months(key):
+    """Season months must be whole calendar months 1..12 (no truncation, no bools)."""
+    v = list(_season_raw.get(key, _season_defaults[key]))
+    if not v or any(isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(float(x))
+                    or float(x) != int(x) or not (1 <= int(x) <= 12) for x in v):
+        raise ValueError(f"na_handling.seasonal_completeness.season_definitions.{key}: expected calendar months 1..12, got {v!r}")
+    return [int(x) for x in v]
+
+
+NA_SEASONAL_DEFINITIONS = {k: _cfg_months(k) for k in ("winter", "spring", "summer", "fall")}
 _na_snow = _na_handling.get("snow_na_policy", {})
 NA_MAX_RAW_NA_SWE = int(_na_snow.get("max_raw_na_per_year_swe", 30))
 NA_MAX_GAP_SWE = int(_na_snow.get("max_interpolation_gap_swe", 3))
@@ -221,6 +261,14 @@ NA_REJECT_NEGATIVE_SWE = _na_snow.get("reject_negative_swe", True)
 NA_MAX_RAW_NA_PPT = int(_na_climate.get("max_raw_na_per_year_ppt", 30))
 NA_MAX_GAP_PPT = int(_na_climate.get("max_interpolation_gap_ppt", 3))
 NA_REJECT_NEGATIVE_PPT = _na_climate.get("reject_negative_ppt", True)
+# Temperature (tmin/tmax) policy for the climate metrics (2026-10-12): the PPT/SWE
+# shape without a negative-value check (temperatures are signed) — mirrors config.jl
+_na_temp = _na_handling.get("temperature_na_policy", {})
+NA_MAX_RAW_NA_TEMP = _cfg_int(_na_temp, "max_raw_na_per_year_temp", 30)
+NA_MAX_GAP_TEMP = _cfg_int(_na_temp, "max_interpolation_gap_temp", 3)
+if NA_MAX_RAW_NA_TEMP < 0 or NA_MAX_GAP_TEMP < 0:
+    raise ValueError("na_handling.temperature_na_policy: max_raw_na_per_year_temp and "
+                     "max_interpolation_gap_temp must be >= 0")
 
 # Legacy filtering flag
 USE_LEGACY_FILTERING = _config.get("filtering", {}).get("use_legacy_filtering", True)
@@ -294,6 +342,47 @@ SNOW_MIN_ANNUAL_PPT_MM: float = float(_snow_config.get("min_annual_ppt_mm", 10))
 # decade to be computable before trend stats are computed. Threshold is the SAME
 # decade_min_fraction knob the streamflow gate uses (linked by design).
 SNOW_RECORD_DECADE_GATE: bool = bool(_snow_config.get("record_anchored_decade_gate", False))
+
+# ==============================================================================
+# CLIMATE (guidelines 3.9, 2026-10-12) — fallbacks mirror julia/src/config.jl.
+# An ABSENT section disables the family entirely (no climate columns).
+# ==============================================================================
+_climate_config = _config.get("climate", {})
+CLIMATE_ENABLED: bool = bool(_climate_config)
+CLIMATE_DRY_DAY_MM: float = _cfg_num(_climate_config, "dry_day_threshold_mm", 0.1)
+_wet = _climate_config.get("wet_day_thresholds_mm", [10, 25, 50])
+if not isinstance(_wet, list) or any(isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(float(x)) for x in _wet):
+    raise ValueError(f"climate.wet_day_thresholds_mm must be a list of finite numbers, got {_wet!r}")
+CLIMATE_WET_THRESHOLDS_MM = [float(x) for x in _wet]
+CLIMATE_MULTIDAY_WINDOW: int = _cfg_int(_climate_config, "multi_day_max_window_days", 5)
+_climate_cum_fraction_raw: float = _cfg_num(_climate_config, "cumulative_fraction", 0.5)
+CLIMATE_FROST_TEMP_C: float = _cfg_num(_climate_config, "frost_temp_c", 0.0)
+CLIMATE_FROST_LAST_END_MONTH: int = _cfg_int(_climate_config, "frost_last_end_month", 6)
+CLIMATE_GDD_BASE_C: float = _cfg_num(_climate_config, "gdd_base_c", 0.0)
+CLIMATE_RECORD_DECADE_GATE: bool = _cfg_bool(_climate_config, "record_anchored_decade_gate", False)
+
+if CLIMATE_ENABLED:
+    if CLIMATE_DRY_DAY_MM < 0:
+        raise ValueError(f"climate.dry_day_threshold_mm must be >= 0, got {CLIMATE_DRY_DAY_MM}")
+    if (not CLIMATE_WET_THRESHOLDS_MM or any(x <= 0 for x in CLIMATE_WET_THRESHOLDS_MM)
+            or CLIMATE_WET_THRESHOLDS_MM != sorted(CLIMATE_WET_THRESHOLDS_MM)
+            or len(set(CLIMATE_WET_THRESHOLDS_MM)) != len(CLIMATE_WET_THRESHOLDS_MM)):
+        raise ValueError("climate.wet_day_thresholds_mm must be a non-empty, ascending, unique "
+                         f"list of positive values, got {CLIMATE_WET_THRESHOLDS_MM}")
+    if not (2 <= CLIMATE_MULTIDAY_WINDOW <= 366):
+        raise ValueError(f"climate.multi_day_max_window_days must lie in 2..366, got {CLIMATE_MULTIDAY_WINDOW}")
+    if not (0 < _climate_cum_fraction_raw < 1):
+        raise ValueError(f"climate.cumulative_fraction must lie strictly inside (0, 1), got {_climate_cum_fraction_raw}")
+    if abs(round(100 * _climate_cum_fraction_raw, 9) - round(round(100 * _climate_cum_fraction_raw, 9))) > 0:
+        raise ValueError("climate.cumulative_fraction must be a whole percentage (e.g. 0.5 -> prcp_50_dowy), "
+                         f"got {_climate_cum_fraction_raw}")
+    if not (1 <= CLIMATE_FROST_LAST_END_MONTH <= 12):
+        raise ValueError(f"climate.frost_last_end_month must be a calendar month 1-12, got {CLIMATE_FROST_LAST_END_MONTH}")
+# the fraction USED is the canonical whole percentage the column name shows (mirrors Julia)
+CLIMATE_CUM_FRACTION: float = (round(100 * _climate_cum_fraction_raw) / 100) if CLIMATE_ENABLED else _climate_cum_fraction_raw
+if CLIMATE_ENABLED and not (1 <= int(round(100 * CLIMATE_CUM_FRACTION)) <= 99):
+    raise ValueError("climate.cumulative_fraction must canonicalise to a whole percentage between 1 and 99, "
+                     f"got {_climate_cum_fraction_raw}")
 
 # ==============================================================================
 # ANNUAL VALUES EXPORT — defaults to False when the section is absent

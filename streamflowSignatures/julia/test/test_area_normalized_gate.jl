@@ -4,6 +4,11 @@
 # carry Q in raw m³/s instead of mm/day. Q-to-PPT signatures (runoff ratios,
 # elasticity, Q-P seasonality, storage) mix Q and PPT units and are therefore
 # skipped when area_normalized=false. Q-only signatures must be unaffected.
+#
+# 2026-10-12: the precipitation climate metrics (guidelines 3.9, `prcp_*`) are PURE
+# climate — no Q enters them — so, like the snow family, they are NOT gated and are
+# present for un-normalized gages. The "identical to a gage without climate" invariant
+# below therefore holds on every key except that family.
 
 using StreamflowSignatures
 using Test
@@ -67,11 +72,21 @@ is_climate_key(k::String) = any(startswith(k, p) for p in CLIMATE_SIGNATURE_PREF
         end
     end
 
-    @testset "Gated result identical to gage without climate data" begin
-        r_gated = calculate_all_signatures(df, true; area_normalized=false)
+    @testset "Gated result identical to gage without climate data (except pure-climate prcp_*)" begin
+        # climate_data is the explicit PPT-qualified frame the runner passes; the
+        # precipitation family runs only on it (never on gage_data)
+        r_gated = calculate_all_signatures(df, true; area_normalized=false, climate_data=df)
         df_noclimate = select(df, Not(:PPT))
         r_noclimate = calculate_all_signatures(df_noclimate, false)
-        @test isequal(r_gated, r_noclimate)
+        is_prcp(k) = startswith(k, "prcp_")
+        # Pure-climate precipitation metrics ARE computed for the gated gage ...
+        @test count(is_prcp, collect(keys(r_gated))) == 20 * 8
+        @test haskey(r_gated, "prcp_annual_mean") && !isnan(r_gated["prcp_annual_mean"])
+        # ... and cannot exist without PPT
+        @test !any(is_prcp, keys(r_noclimate))
+        # Every other key is identical (NaN-aware)
+        r_gated_q = Dict(k => v for (k, v) in r_gated if !is_prcp(k))
+        @test isequal(r_gated_q, r_noclimate)
     end
 
     @testset "Gate is inert when area_normalized=true" begin

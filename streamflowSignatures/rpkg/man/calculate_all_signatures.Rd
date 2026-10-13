@@ -18,7 +18,8 @@ calculate_all_signatures(
   collector = NULL,
   snow_data = NULL,
   snow_climate_years = NULL,
-  gage_id = NULL
+  gage_id = NULL,
+  temp_data = NULL
 )
 }
 \arguments{
@@ -49,10 +50,19 @@ When FALSE (gages with no drainage area — Q left in raw m3/s), all
 Q-to-PPT signatures (runoff ratios, elasticity, Q-P seasonality, storage)
 are skipped because Q and PPT units don't match. Q-only signatures are
 unaffected. Default TRUE.}
+
+\item{temp_data}{Optional data.frame of temperature-valid years with TMIN and
+TMAX (2026-10-12): the temperature climate metrics run ONLY when this is
+provided (the snow contract); the precipitation climate metrics run only on an
+explicit \code{climate_data} frame, regardless of \code{area_normalized}.}
 }
 \value{
-Named list with ~478 (no climate) or ~551 (with climate) elements,
+Named list with ~1,653 elements for a full climate+SWE gage (8 stats
+\itemize{
+\item 8 Pettitt fields per signature base, plus per-gage scalars); fewer when
+climate, SWE or the drought family are unavailable/disabled,
 plus 12 flag columns if \code{include_qa_flags = TRUE}.
+}
 }
 \description{
 Orchestrator function that calls all signature modules and merges results

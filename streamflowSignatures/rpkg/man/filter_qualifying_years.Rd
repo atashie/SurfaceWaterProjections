@@ -14,7 +14,9 @@ A list with \code{qualifying_years} (integer vector) and
 \code{qualifies} (logical).
 }
 \description{
-Matches the canonical filtering in process_signatures_from_parquet():
+LEGACY-path filter: mirrors the per-year filtering of the deprecated R shim's
+process_signatures_from_parquet() (R/helperFunctions.R). The non-legacy
+(default) path uses preprocess_daily_data() instead:
 \enumerate{
 \item Minimum days with Q > threshold per water year
 \item Minimum fraction of non-NA days per water year (accounting for leap years)

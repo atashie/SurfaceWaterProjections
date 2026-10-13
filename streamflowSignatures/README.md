@@ -81,10 +81,10 @@ Rscript docs/benchmarks/run_rpkg_benchmark.R
 
 ## Signature Categories
 
-Every output belongs to one of **eight signature categories** (the grouping adopted
-2026-09-10; canonical machine-readable mapping in
-[`docs/signature_categories.csv`](docs/signature_categories.csv)). Each category is
-computed by one or more **function families** — the 15 functions that
+Every output belongs to one of **nine signature categories** (the eight adopted
+2026-09-10 plus Climate, added 2026-10-12 from guidelines §3.9; canonical machine-readable
+mapping in [`docs/signature_categories.csv`](docs/signature_categories.csv)). Each
+category is computed by one or more **function families** — the 17 functions that
 `calculate_all_signatures()` calls (documented function by function in
 [`docs/SIGNATURES.md`](docs/SIGNATURES.md)).
 
@@ -105,9 +105,11 @@ computed by one or more **function families** — the 15 functions that
 | **Flow Timing** | `analyze_flow_timing_trends` | D1–D99_day (13 percentiles), D25_to_D75, Dmax | No |
 | **Precipitation Streamflow** | `calculate_qp_seasonality` | qp_slope_sd, qp_bimodality | Yes |
 | **Snow** | `calculate_snow_metrics` | swe_max, snow on/off timing, melt rate/timing, SSM, … (14 metrics) | SWE (Daymet) |
+| **Climate** | `calculate_precipitation_metrics` | prcp_annual + 4 seasonal totals, 1-/5-day maxima and their timing, 50 % and centre-of-mass dates, days above 10/25/50 mm, within-year sd and cv, longest dry spell (+ start/end), Gini index, seasonality index (20 metrics) | PPT (Daymet) |
+| | `calculate_temperature_metrics` | annual and seasonal TMAX maxima / TMIN minima with timing, first/last frost, growing degree days annual + seasonal (19 metrics) | TMIN + TMAX (Daymet) |
 
-That is 100 annually resolved signatures plus 20 per-gage scalars across the eight
-categories. One further scalar, `ice_affected_days_total`, is a preprocessing
+That is 139 annually resolved signatures (100 through August 2026 + 39 climate metrics,
+October 2026) plus 20 per-gage scalars across the nine categories. One further scalar, `ice_affected_days_total`, is a preprocessing
 diagnostic outside the categories (and structurally 0 in the delivered products — see
 CHANGELOG → Known Issues). **Terminology**: *category* is one of the eight above (the
 term used by the manuscript, the guidelines document, and the HydroShare data
@@ -123,8 +125,9 @@ Julia is canonical; all changes start there. Python and rpkg were validated at f
 |---|---|---|---|---|---|
 | **Python** | 1,653 | 1,615 / 1,620 (99.7%) | 0 | 0.999988 | 2026-08-26 |
 | **rpkg** | 1,653 | 1,601 / 1,620 (98.8%) | 9 | 0.999843 | 2026-08-27 |
+| **rpkg** (version-2 reference: climate family, reprocessed Daymet) | 2,277 | 2,228 / 2,244 (99.3%) | 6 | 0.999925 | 2026-10-13 |
 
-Both ports pass strict schema equality (identical column and gage sets), a swallowed-failure log gate, and cross-language annual-parquet equality (18,898,405 of 18,898,406 rows shared, 0 NA-pattern mismatches). The few remaining sub-0.99 columns are characterized, irreducible library-level differences (near-zero-tail OLS in FDC90th and downstream Pettitt tie flips; Spearman p-value methods at small n). All implementations share configuration via `config/signatures_config.json`.
+Both ports pass strict schema equality (identical column and gage sets), a swallowed-failure log gate, and cross-language annual-parquet equality (18,898,405 of 18,898,406 rows shared, 0 NA-pattern mismatches). The few remaining sub-0.99 columns were characterized library-level differences (near-zero-tail OLS in FDC90th and downstream Pettitt tie flips; Spearman p-value methods at small n — the latter removed on 2026-10-12, when rpkg moved to `cor.test(exact = FALSE)` and a double-precision Mann-Kendall; the rpkg reference is being re-baselined on the version-2 product). All implementations share configuration via `config/signatures_config.json`.
 
 See [`docs/CROSS_LANGUAGE_STATUS.md`](docs/CROSS_LANGUAGE_STATUS.md) for the full methodology, gate definitions, and alignment history.
 
@@ -132,7 +135,7 @@ See [`docs/CROSS_LANGUAGE_STATUS.md`](docs/CROSS_LANGUAGE_STATUS.md) for the ful
 
 A full run writes **two** files to its output folder:
 
-### 1. Summary CSV — one row per gage (1,653 columns)
+### 1. Summary CSV — one row per gage (2,277 columns since the climate family, 2026-10-12; the 2026 products carry 1,653)
 
 | Column Type | Examples | Description |
 |-------------|----------|-------------|
@@ -157,7 +160,7 @@ The per-year value of every signature, **before** aggregation into trends — lo
 | `water_year` | Int32 | Oct 1 – Sep 30 |
 | `value` | Float64 | NaN and absent-row both mean "not computable that year" |
 
-Covers all 100 time-series signatures (per-gage scalars have no annual series and correctly do not appear). Controlled by `annual_values.save` in `config/signatures_config.json` (on by default) and cross-validated against the summary CSV by `docs/benchmarks/validate_annual_values.py`.
+Covers all 139 time-series signatures (100 in the 2026 products; per-gage scalars have no annual series and correctly do not appear). Controlled by `annual_values.save` in `config/signatures_config.json` (on by default) and cross-validated against the summary CSV by `docs/benchmarks/validate_annual_values.py`.
 
 > ⚠️ **Do not re-aggregate record-dependent signatures over a different window.** `drought_*`, the `*_all` pulse metrics, elasticity, and the recession-parameterized BFIs are computed against thresholds or record means from the ORIGINAL run window. Re-run the pipeline for a new window instead. Within-year-computable signatures (flow volumes/percentiles, timing, BFI, FDC, flashiness, runoff ratios, snow) re-aggregate safely.
 
@@ -171,6 +174,8 @@ Two delivered products (both 1,653 columns, 60% qualifying fraction), published 
 | WY 1980–2025 | 6,250 | 24,366,487 |
 
 Neither is a subset of the other, and record-dependent signatures must never be compared across them (thresholds come from each run's own window).
+
+**Version 2 (built 2026-10-12/13, validated, staged for deposit, not yet published):** both windows rerun on the reprocessed Daymet input (`daymet_1980_2025_29sep2026.parquet`, every gage, calendar 1980–2025) with the 39-signature climate family — 2,277 columns, the same gage sets (6,678 / 6,250), annual parquets of 27,602,161 / 34,681,331 rows. Q-only columns are identical to the 2026 deliveries per gage; climate-dependent columns moved (new input values, two added climate years, gages that gained a climate series); `flagged_for_high_na` is regenerated. Run folders `~/HISSS_data/climate-rerun-12oct2026/processedOuts_{1993,1980}_2025_climate_12oct2026`; staged HydroShare folders `~/Downloads/Signatures_v2_12oct2026/`; review record in `docs/plans/2026-10-12-climate-reviews/` and CHANGELOG [October 2026].
 
 ## Reading and Joining the Data (gage identifiers)
 
@@ -315,6 +320,7 @@ See `docs/DEVELOPMENT.md` → "Adding a New Signature" for the full checklist.
 - Eckhardt (2005); Lyne & Hollick (1979); Collischonn & Fan (2013) — baseflow filters
 - Sen (1968); Mann (1945) & Kendall — trend estimation; Pettitt (1979) — changepoint test
 - Baker et al. (2004) — Richards-Baker flashiness index
+- Tashie, Pavelsky & Band (2020) — recession analysis (events, exponent, concavity, log(a) seasonality)
 - Sawicz et al. (2011) — elasticity; Yilmaz et al. (2008) — FDC
 - Hatchett (2021); Petersky & Harpold (2018) — snow seasonality
 - Adelsperger et al. (in review) — streamflow drought severity ladder

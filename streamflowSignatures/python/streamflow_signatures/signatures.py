@@ -20,7 +20,8 @@ from .qp_seasonality import calculate_qp_seasonality
 from .storage import calculate_average_storage
 from .snow import calculate_snow_metrics
 from .drought import calculate_drought_metrics
-from .config import DROUGHT_ENABLED
+from .climate import calculate_precipitation_metrics, calculate_temperature_metrics
+from .config import DROUGHT_ENABLED, CLIMATE_ENABLED
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,7 @@ def calculate_all_signatures(
     snow_data: Optional[pd.DataFrame] = None,
     snow_climate_years: Optional[list] = None,
     gage_id: Optional[str] = None,
+    temp_data: Optional[pd.DataFrame] = None,
 ) -> dict:
     """Calculate all signatures for a single gage.
 
@@ -101,6 +103,15 @@ def calculate_all_signatures(
         valid_climate_years for the PPT-dependent `swe_max_to_ppt` metric.
     gage_id : str, optional
         Gage identifier used only for warning context on per-family failures.
+    temp_data : pd.DataFrame, optional
+        OPT-IN temperature input (2026-10-12): a frame already filtered to
+        temperature-valid years (``valid_temp_years``) with TMIN and TMAX. The
+        temperature climate metrics run ONLY when this is provided, never from
+        TMIN/TMAX columns inside ``gage_data`` (the snow contract). A 0-row frame
+        yields the full NaN-stat temperature key set. The precipitation climate
+        metrics run on the PPT-valid ``climate_data`` frame whenever it carries
+        PPT, regardless of ``area_normalized`` (pure climate). Both families are
+        config-gated (``CLIMATE_ENABLED``).
 
     Returns
     -------
@@ -199,6 +210,16 @@ def calculate_all_signatures(
     if snow_data is not None and "SWE" in snow_data.columns:
         run_family("snow", calculate_snow_metrics, snow_data,
                    valid_climate_years=snow_climate_years, **trend_kwargs)
+
+    # Climate metrics (guidelines 3.9, 2026-10-12) — config-gated like drought.
+    # Precipitation: ONLY the explicit PPT-qualified climate_data frame (no legacy
+    # fallback to gage_data — review finding 2); pure climate, so NOT behind the
+    # area_normalized gate. Temperature: explicit temp_data only.
+    if CLIMATE_ENABLED:
+        if has_climate and climate_data is not None and "PPT" in climate_data.columns:
+            run_family("precipitation", calculate_precipitation_metrics, climate_data, **trend_kwargs)
+        if temp_data is not None and "TMIN" in temp_data.columns and "TMAX" in temp_data.columns:
+            run_family("temperature", calculate_temperature_metrics, temp_data, **trend_kwargs)
 
     # QA/QC flags (optional)
     if include_qa_flags:

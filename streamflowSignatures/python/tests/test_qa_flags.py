@@ -30,8 +30,9 @@ def test_manifest_matches_schema_registries():
 
 def test_full_product_header_selects_1621_columns():
     header = expected_output_columns()
-    assert len(header) == 1653
-    assert len(high_na_denominator_columns(header)) == 1621
+    assert len(header) == 2277  # 1,653 + 624 climate columns (2026-10-12)
+    # 1,621 through Aug 2026; + 39 climate bases x 16 fields = 2,245 (2026-10-12)
+    assert len(high_na_denominator_columns(header)) == 2245
     assert not any(c.startswith("flagged_") for c in high_na_denominator_columns(header))
 
 

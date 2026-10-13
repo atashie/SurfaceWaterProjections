@@ -58,6 +58,9 @@ const EXPECTED_DENSE_SIGNATURES = [
     "drought_duration_fixed_p20", "drought_duration_fixed_p30",
     "drought_deficit_fixed_p2", "drought_deficit_fixed_p5", "drought_deficit_fixed_p10",
     "drought_deficit_fixed_p20", "drought_deficit_fixed_p30",
+    # The climate families (2026-10-12) run only on explicit PPT-qualified /
+    # temperature frames, which this bare synthetic call does not pass, so none of
+    # their 39 series appear here (covered by test_climate_metrics.jl).
 ]
 
 function collector_synthetic_gage(n_years=25; seed=42)

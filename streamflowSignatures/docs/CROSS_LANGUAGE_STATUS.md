@@ -30,6 +30,39 @@ per language below.
 | Snow metrics (14) | yes | yes | yes |
 | Drought metrics (10 + 5 scalars) | yes | yes | yes |
 
+### Climate family (2026-10-12): three-way agreement before the version-2 products
+
+The 39 climate signatures (624 columns, `docs/SIGNATURES.md` §14) were ported Julia →
+Python → rpkg and audited on an exchanged Parquet fixture
+(`docs/benchmarks/crosscheck_climate_fixture.{jl,py,R}`): **1,170 annual values
+bit-identical in both ports; all 624 summary values within 4e-14 relative (1e-12
+absolute).** Reaching that required two library-wide rpkg changes — Mann-Kendall as a
+double-precision port of Julia's formula (`Kendall::MannKendall` is single precision) and
+Spearman via `cor.test(exact = FALSE)` — and the shared conventions that every sum is a
+sequential double accumulation (Python 3.12's compensated `sum()` is avoided), gap filling
+uses Julia's exact expression, non-finite values and non-real observations are missing in
+every series, and the 50 % crossing tolerates 1e-12 of the total. Blind Codex rounds
+(four for Julia and Python, six for rpkg) and Sonnet reviews of all three ports ended GO
+(`docs/plans/2026-10-12-climate-reviews/`, CHANGELOG [October 2026]); the Sonnet
+differential tests found 0 mismatches in 410,156 (Python) and 38,047 (rpkg) annual cells
+against Julia.
+
+**rpkg re-baselined on product #1 v2 (2026-10-13):** the same 8 gage batches as the Julia
+product, 166 min of R, **6,678 gages, 0 errors, 2,277 columns**, merged in the Julia gage
+order. Gates: strict schema equality **PASS**; swallowed-failure scan **PASS** (8 logs);
+annual parquet equality **PASS** at 1e-6 with the residuals named — 1 reference-only row
+(`avg_storage`, signed-zero `unique`) and **319 of 26,782,607 finite pairs** (0.0012 %), all
+discrete threshold crossings moved by a last-bit tie (`D*_day`, `D25_to_D75`, `TQmean`,
+`dur_low_pulses_*`); NA patterns identical; at 1e-9 only `qp_slope_sd` adds 145 rows within
+4.4e-11 relative. **All 39 climate signatures are bit-identical in every annual cell.** The
+August recession-family residual (~199 rows) is gone. Folder
+`~/HISSS_data/climate-rerun-12oct2026/rpkg_reference_1993_2025_13oct2026` (CSV, annual
+parquet, merged timing JSON, batch logs, gate outputs, identity-R² diagnostic). Identity R²
+(diagnostic): **2,228 of 2,244 signature columns Perfect (99.3 %), 10 Good, 6 Poor, 0 below
+0.95; mean 0.999925, median 1.0, min 0.971** — the six Poor columns are all FDC90th
+(near-zero-tail OLS and its Pettitt / p-value descendants); the three recession Spearman
+p-values of August are Perfect now.
+
 ### Python vs Julia — feature-complete validation (2026-08-26)
 
 Strict schema gate **PASS** with no waivers: identical column set (1,653) and
@@ -449,7 +482,7 @@ All three runners compute the same 12 `flagged_*` QA/QC columns on the assembled
 - **Python vs Julia (624 cols, April 27)**: 615 Perfect, 5 Good, 3 Poor. Min R² = 0.984. All 25 new recession-parameterized BFI columns are Perfect (R² = 1.000).
 - **rpkg vs Julia (624 cols, April 27)**: 614 Perfect, 4 Good, 5 Poor. Min R² = 0.969. 24 of 25 new recession-parameterized BFI columns are Perfect (1 poor: `alpha_linear_spearman_pval` — Spearman p-value library difference, R² = 0.971).
 - Python-Julia: 3 columns below 0.99 (all recession seasonality minimum — irreducible sinusoidal fit sensitivity)
-- rpkg-Julia: 5 columns below 0.99 (3 recession Spearman p-values + 2 FDC90th p-values — irreducible library differences)
+- rpkg-Julia: 5 columns below 0.99 (3 recession Spearman p-values + 2 FDC90th p-values — library differences at the time; the Spearman ones were removed 2026-10-12 by `cor.test(exact = FALSE)`, see the climate-family section)
 - All 7,313 gages matched across all three implementations
 - Julia is ~10x faster than Python (~15 min vs ~150 min), ~16x faster than rpkg (~15 min vs ~245 min with contention)
 - Median R² = 1.000 for both Python-Julia and rpkg-Julia

@@ -149,6 +149,88 @@ const CFG_SNOW_MIN_ANNUAL_PPT_MM = Float64(get(_snow_config, "min_annual_ppt_mm"
 const CFG_SNOW_RECORD_DECADE_GATE = Bool(get(_snow_config, "record_anchored_decade_gate", false))
 
 # =============================================================================
+# Climate Parameters (guidelines 3.9, 2026-10-12)
+#
+# 39 metrics from basin-mean Daymet prcp / tmin / tmax: 20 precipitation bases on
+# PPT-valid years, 19 temperature bases on temperature-valid years. Absent section
+# => family disabled (no climate columns emitted) — the additivity-proof switch.
+# =============================================================================
+const _climate_config = get(_config, "climate", Dict())
+const CFG_CLIMATE_ENABLED = !isempty(_climate_config)
+
+# Strict scalar readers (review 2026-10-12): a numeric setting must be a finite Real that
+# is NOT a Bool (Julia would otherwise accept `true` as 1); an integer setting must also
+# be whole; a flag must be an actual Bool (not 0 / 1). Shared with the Python and R ports.
+function _cfg_num(section, key::String, default)::Float64
+    v = get(section, key, default)
+    (v isa Real && !(v isa Bool) && isfinite(v)) || error("config $key: expected a finite number, got $(repr(v))")
+    return Float64(v)
+end
+function _cfg_int(section, key::String, default)::Int
+    v = get(section, key, default)
+    (v isa Real && !(v isa Bool) && isfinite(v) && isinteger(v)) || error("config $key: expected an integer, got $(repr(v))")
+    return Int(v)
+end
+function _cfg_bool(section, key::String, default)::Bool
+    v = get(section, key, default)
+    (v isa Bool) || error("config $key: expected true/false, got $(repr(v))")
+    return v
+end
+function _cfg_numvec(section, key::String, default)::Vector{Float64}
+    v = collect(get(section, key, default))
+    all(x -> x isa Real && !(x isa Bool) && isfinite(x), v) || error("config $key: expected a list of finite numbers, got $(repr(v))")
+    return Float64.(v)
+end
+
+const CFG_CLIMATE_DRY_DAY_MM = _cfg_num(_climate_config, "dry_day_threshold_mm", 0.1)
+const CFG_CLIMATE_WET_THRESHOLDS_MM = _cfg_numvec(_climate_config, "wet_day_thresholds_mm", [10, 25, 50])
+const CFG_CLIMATE_MULTIDAY_WINDOW = _cfg_int(_climate_config, "multi_day_max_window_days", 5)
+const _climate_cum_fraction_raw = _cfg_num(_climate_config, "cumulative_fraction", 0.5)
+const CFG_CLIMATE_FROST_TEMP_C = _cfg_num(_climate_config, "frost_temp_c", 0.0)
+const CFG_CLIMATE_FROST_LAST_END_MONTH = _cfg_int(_climate_config, "frost_last_end_month", 6)
+const CFG_CLIMATE_GDD_BASE_C = _cfg_num(_climate_config, "gdd_base_c", 0.0)
+# Record-anchored decade gate for frost_first_dowy / frost_last_dowy (snow precedent;
+# user decision 2026-10-12). Shipped config = true; absent key => disabled.
+const CFG_CLIMATE_RECORD_DECADE_GATE = _cfg_bool(_climate_config, "record_anchored_decade_gate", false)
+
+if CFG_CLIMATE_ENABLED
+    if CFG_CLIMATE_DRY_DAY_MM < 0
+        error("climate.dry_day_threshold_mm must be >= 0, got $(CFG_CLIMATE_DRY_DAY_MM).")
+    end
+    if isempty(CFG_CLIMATE_WET_THRESHOLDS_MM) || any(x -> x <= 0, CFG_CLIMATE_WET_THRESHOLDS_MM) ||
+       !issorted(CFG_CLIMATE_WET_THRESHOLDS_MM) ||
+       length(unique(CFG_CLIMATE_WET_THRESHOLDS_MM)) != length(CFG_CLIMATE_WET_THRESHOLDS_MM)
+        error("climate.wet_day_thresholds_mm must be a non-empty, ascending, unique list of positive values (column names derive from them), got $(CFG_CLIMATE_WET_THRESHOLDS_MM).")
+    end
+    # Window 1 would duplicate prcp_1d_max under a second name; > 366 can never be
+    # computed on a water year (review finding 6, 2026-10-12)
+    if !(2 <= CFG_CLIMATE_MULTIDAY_WINDOW <= 366)
+        error("climate.multi_day_max_window_days must lie in 2..366, got $(CFG_CLIMATE_MULTIDAY_WINDOW).")
+    end
+    if !(0 < _climate_cum_fraction_raw < 1)
+        error("climate.cumulative_fraction must lie strictly inside (0, 1), got $(_climate_cum_fraction_raw).")
+    end
+    # The column name carries the percentage (prcp_<pct>_dowy), so only whole
+    # percentages are representable (review finding 5)
+    if !isinteger(round(100 * _climate_cum_fraction_raw; digits=9))
+        error("climate.cumulative_fraction must be a whole percentage (e.g. 0.5 -> prcp_50_dowy), got $(_climate_cum_fraction_raw).")
+    end
+end
+# The fraction USED is the canonical whole percentage the column name shows (review
+# round 2: validating a rounded value but computing with the raw one gave two
+# definitions under one name)
+const CFG_CLIMATE_CUM_FRACTION = CFG_CLIMATE_ENABLED ? round(100 * _climate_cum_fraction_raw) / 100 : _climate_cum_fraction_raw
+if CFG_CLIMATE_ENABLED
+    # the canonical percentage must stay strictly inside the open interval (review round 3)
+    if !(1 <= round(Int, 100 * CFG_CLIMATE_CUM_FRACTION) <= 99)
+        error("climate.cumulative_fraction must canonicalise to a whole percentage between 1 and 99, got $(_climate_cum_fraction_raw).")
+    end
+    if !(1 <= CFG_CLIMATE_FROST_LAST_END_MONTH <= 12)
+        error("climate.frost_last_end_month must be a calendar month 1-12, got $(CFG_CLIMATE_FROST_LAST_END_MONTH).")
+    end
+end
+
+# =============================================================================
 # Drought Parameters (Adelsperger et al., in review)
 #
 # Fixed (whole-record) percentile thresholds on the 7-day-smoothed flow series.
@@ -297,11 +379,19 @@ const CFG_NA_DECADE_MIN_FRACTION = Float64(get(_na_trend, "decade_min_fraction",
 const CFG_NA_SEASONAL_MIN_FRACTION = Float64(get(_na_seasonal, "min_fraction", 0.80))
 const CFG_NA_SEASONAL_USE_RAW = get(_na_seasonal, "use_raw_observations", true)
 const _na_season_defs = get(_na_seasonal, "season_definitions", Dict())
+# Season months must be whole calendar months 1..12 (review round 2: a fractional or
+# out-of-range month must fail loading, not be truncated or silently dropped)
+function _cfg_months(section, key::String, default)::Vector{Int}
+    v = collect(get(section, key, default))
+    (!isempty(v) && all(x -> x isa Real && !(x isa Bool) && isfinite(x) && isinteger(x) && 1 <= x <= 12, v)) ||
+        error("na_handling.seasonal_completeness.season_definitions.$key: expected calendar months 1..12, got $(repr(v))")
+    return Int.(v)
+end
 const CFG_NA_SEASON_MONTHS = Dict{String, Vector{Int}}(
-    "win" => Int.(collect(get(_na_season_defs, "winter", [12, 1, 2]))),
-    "spr" => Int.(collect(get(_na_season_defs, "spring", [3, 4, 5]))),
-    "sum" => Int.(collect(get(_na_season_defs, "summer", [6, 7, 8]))),
-    "fal" => Int.(collect(get(_na_season_defs, "fall", [9, 10, 11])))
+    "win" => _cfg_months(_na_season_defs, "winter", [12, 1, 2]),
+    "spr" => _cfg_months(_na_season_defs, "spring", [3, 4, 5]),
+    "sum" => _cfg_months(_na_season_defs, "summer", [6, 7, 8]),
+    "fal" => _cfg_months(_na_season_defs, "fall", [9, 10, 11])
 )
 const CFG_NA_MAX_RAW_NA_PPT = Int(get(_na_climate, "max_raw_na_per_year_ppt", 30))
 const CFG_NA_MAX_GAP_PPT = Int(get(_na_climate, "max_interpolation_gap_ppt", 3))
@@ -310,6 +400,14 @@ const _na_snow = get(_na_handling, "snow_na_policy", Dict())
 const CFG_NA_MAX_RAW_NA_SWE = Int(get(_na_snow, "max_raw_na_per_year_swe", 30))
 const CFG_NA_MAX_GAP_SWE = Int(get(_na_snow, "max_interpolation_gap_swe", 3))
 const CFG_NA_REJECT_NEGATIVE_SWE = get(_na_snow, "reject_negative_swe", true)
+# Temperature (tmin/tmax) policy for the climate metrics (2026-10-12): same shape as
+# the PPT/SWE policies, no negative-value check (temperatures are signed).
+const _na_temp = get(_na_handling, "temperature_na_policy", Dict())
+const CFG_NA_MAX_RAW_NA_TEMP = _cfg_int(_na_temp, "max_raw_na_per_year_temp", 30)
+const CFG_NA_MAX_GAP_TEMP = _cfg_int(_na_temp, "max_interpolation_gap_temp", 3)
+if CFG_NA_MAX_RAW_NA_TEMP < 0 || CFG_NA_MAX_GAP_TEMP < 0
+    error("na_handling.temperature_na_policy: max_raw_na_per_year_temp and max_interpolation_gap_temp must be >= 0, got $(CFG_NA_MAX_RAW_NA_TEMP) / $(CFG_NA_MAX_GAP_TEMP).")
+end
 
 # Changepoint analysis configuration
 const _cp_config = get(_config, "changepoint", Dict())

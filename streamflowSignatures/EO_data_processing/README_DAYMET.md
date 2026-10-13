@@ -3,9 +3,11 @@
 Daily basin means of six Daymet V4 R1 variables for **8,017 watersheds**, calendar
 **1980–2025**, computed in this repo from the gridded Daymet mosaics. It is meant to replace
 the earlier co-author product (gdptools, 6,087 basins, 1980–2023) as the climate input of
-the signature pipeline. **As of 2026-10-01 neither delivered product uses it.** Whether to
-rerun them on it is an open user decision (`docs/STATUS.md`). The user judged the raw-data
-agreement below sufficient and dropped a signature-level replay (2026-10-01). Tools: `daymet/` (see
+the signature pipeline. **Adopted 2026-10-12**: both standard products were rerun on it 2026-10-12/13 (version 2 with the climate family, `~/HISSS_data/climate-rerun-12oct2026/`, staged for deposit — CHANGELOG [October 2026])
+as version 2, together with the new climate-metrics family (guidelines §3.9; the runner now
+also reads `tmin` and `tmax`) — CHANGELOG [October 2026], `docs/plans/2026-10-12-climate-metrics-plan.md`.
+The user judged the raw-data agreement below sufficient and dropped a signature-level replay
+(2026-10-01); the product-level comparison lives with the version-2 run folders. Tools: `daymet/` (see
 `daymet/README.md`); polygons: `geometry/`.
 
 ## Source
@@ -153,7 +155,7 @@ its own right-hand axis. The chart zooms on the dates and on either value axis.
 **Coverage.**
 - Every gage of both delivered products is in this file (#1 6,678, #2 6,250).
 - The stale file has 5,517 / 5,638 of them; 4 / 3 of those are all-NaN (St. Johns River, FL).
-- A rerun on this file would give a usable climate series to 1,165 (#1) / 615 (#2) gages:
+- The version-2 rerun (2026-10-12/13) gives a usable climate series to every gage of product #1 (6,678) and to 6,223 of the 6,250 of product #2 (the 27 others have only 19 climate-valid years, below the 20-value stats floor, since WY 1980 has no climate value); before it, a rerun was expected to add 1,165 (#1) / 615 (#2) gages:
   the 1,161 / 612 absent from the stale file plus the 4 / 3 all-NaN ones.
 - The stale file's other 118 sites belong to neither product.
 

@@ -88,9 +88,10 @@ def main():
         sf = [(g, d0 + datetime.timedelta(days=i), float(i)) for i in range(3) for g in gages]
         pq.write_table(pa.table({"gage_id": [r[0] for r in sf], "date": [r[1] for r in sf], "Q": [r[2] for r in sf]}),
                        f"{T}/sf.parquet")
-        cl = [(g, d, 1.0, 0.0, -1.0) for g in gages + ["99"] for d in (d0, datetime.date(2001, 1, 1))]
+        cl = [(g, d, 1.0, 0.0, -1.0, 9.0, 500.0) for g in gages + ["99"] for d in (d0, datetime.date(2001, 1, 1))]
         pq.write_table(pa.table({"site_id": [r[0] for r in cl], "Date": [r[1] for r in cl], "prcp": [r[2] for r in cl],
-                                 "swe": [r[3] for r in cl], "tmin": [r[4] for r in cl]}), f"{T}/cl.parquet")
+                                 "swe": [r[3] for r in cl], "tmin": [r[4] for r in cl], "tmax": [r[5] for r in cl],
+                                 "vp": [r[6] for r in cl]}), f"{T}/cl.parquet")
         os.makedirs(f"{T}/repo/julia")
         for f in ("meta.csv", "wrapper.jl"):
             open(f"{T}/{f}", "w").write("x\n")
@@ -115,8 +116,9 @@ def main():
                and bj["sources"]["climate"]["c"]["options"] == {"max_date": "2000-12-31"})
         expect("split assigns sorted gages by rank % K", bj["batch_gages"] == [["01", "10", "20"], ["02", "11"], ["03", "12"]])
         c1 = pq.read_table(f"{T}/in/climate_c_b1.parquet").to_pydict()
-        expect("split keeps four climate columns and applies max_date",
-               list(c1) == ["site_id", "Date", "prcp", "swe"] and max(c1["Date"]) == d0 and set(c1["site_id"]) == {"01", "10", "20"})
+        expect("split keeps the six climate columns (no vp) and applies max_date",
+               list(c1) == ["site_id", "Date", "prcp", "swe", "tmin", "tmax"] and max(c1["Date"]) == d0
+               and set(c1["site_id"]) == {"01", "10", "20"})
 
         # ---- run, resume
         r = tool(["run"] + base + ["--out-dir", f"{T}/out"])

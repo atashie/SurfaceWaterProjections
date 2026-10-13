@@ -1,7 +1,9 @@
 #' Mann-Kendall trend test with the canonical NA contract
 #'
-#' Thin wrapper around \code{Kendall::MannKendall} that mirrors
-#' \code{mann_kendall_test} in \code{julia/src/stats.jl} (and the Python port):
+#' Double-precision port of \code{mann_kendall_test} in \code{julia/src/stats.jl}
+#' (and the Python port) — S statistic, tie-corrected variance, continuity-corrected
+#' normal approximation; it replaced the \code{Kendall::MannKendall} wrapper on
+#' 2026-10-12 (single-precision Fortran, cross-language residual ~1e-7):
 #' NA values are dropped; fewer than 3 values, or a CONSTANT series (zero
 #' tie-corrected variance of S), return \code{NA} for both tau and the p-value.
 #' Without the constant guard \code{Kendall::MannKendall} warns
@@ -14,14 +16,30 @@
 #' @return Named list \code{tau}, \code{pval} (each \code{NA_real_} when not computable).
 #' @export
 mann_kendall_test <- function(values) {
+  # Double-precision port of julia/src/stats.jl mann_kendall_test (2026-10-12; the
+  # Kendall::MannKendall Fortran backend works in single precision, collapsed distinct
+  # doubles into ties and rounded small p-values to 0 — review of the climate port).
   v <- as.numeric(values)
   v <- v[!is.na(v)]
-  if (length(v) < 3 || length(unique(v)) < 2) {
-    return(list(tau = NA_real_, pval = NA_real_))
+  n <- length(v)
+  if (n < 3) return(list(tau = NA_real_, pval = NA_real_))
+  S <- 0
+  for (i in seq_len(n - 1L)) {
+    d <- v[(i + 1L):n] - v[i]
+    S <- S + sum(d > 0) - sum(d < 0)
   }
-  mk <- tryCatch(Kendall::MannKendall(v), error = function(e) NULL)
-  if (is.null(mk)) return(list(tau = NA_real_, pval = NA_real_))
-  list(tau = as.numeric(mk$tau), pval = as.numeric(mk$sl))
+  tg <- rle(sort(v))$lengths                       # tie-group sizes on the exact doubles
+  tie_correction <- sum(tg * (tg - 1) * (2 * tg + 5))
+  var_S <- (n * (n - 1) * (2 * n + 5) - tie_correction) / 18
+  if (var_S <= 0) return(list(tau = NA_real_, pval = NA_real_))
+  n_pairs <- n * (n - 1) / 2
+  T_y <- sum(tg * (tg - 1) / 2)
+  denom <- sqrt((n_pairs - T_y) * n_pairs)
+  tau <- if (denom > 0) S / denom else NA_real_
+  z <- if (S > 0) (S - 1) / sqrt(var_S) else if (S < 0) (S + 1) / sqrt(var_S) else 0
+  pval <- 2 * (1 - stats::pnorm(abs(z)))
+  if (n <= 3) pval <- 1
+  list(tau = tau, pval = pval)
 }
 
 #' Generate 8 summary statistics for each metric column
@@ -177,8 +195,10 @@ generate_stats <- function(data, value_cols = NULL, year_col = "water_year",
     }, error = function(e) NA_real_)
 
     # Spearman correlation
+    # exact = FALSE: the t-approximation p-value, as Julia (spearman_correlation) and
+    # scipy; the default exact / AS89 method gave different p-values (review 2026-10-12)
     sp <- tryCatch({
-      cor.test(w_years, w_values, method = "spearman")
+      suppressWarnings(cor.test(w_years, w_values, method = "spearman", exact = FALSE))
     }, error = function(e) NULL)
     sp_rho  <- if (!is.null(sp)) unname(sp$estimate) else NA_real_
     sp_pval <- if (!is.null(sp)) sp$p.value          else NA_real_

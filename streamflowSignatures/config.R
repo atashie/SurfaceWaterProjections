@@ -626,7 +626,19 @@ EXPECTED_SIGNATURE_BASES <- c(
   "drought_duration_fixed_p2", "drought_duration_fixed_p5", "drought_duration_fixed_p10",
   "drought_duration_fixed_p20", "drought_duration_fixed_p30",
   "drought_deficit_fixed_p2", "drought_deficit_fixed_p5", "drought_deficit_fixed_p10",
-  "drought_deficit_fixed_p20", "drought_deficit_fixed_p30"
+  "drought_deficit_fixed_p20", "drought_deficit_fixed_p30",
+  # Climate metrics (guidelines 3.9; 2026-10-12, Julia-first): 20 precipitation bases on
+  # PPT-valid years and 19 temperature bases on temperature-valid years (Daymet tmin/tmax).
+  "prcp_annual", "prcp_win", "prcp_spr", "prcp_sum",
+  "prcp_fal", "prcp_1d_max", "prcp_5d_max", "prcp_max_dowy",
+  "prcp_50_dowy", "prcp_cm_dowy", "prcp_ndays_abv_10mm", "prcp_ndays_abv_25mm",
+  "prcp_ndays_abv_50mm", "prcp_annual_sd", "prcp_annual_cv", "prcp_intermit_annual",
+  "prcp_intermit_annual_dowy_start", "prcp_intermit_annual_dowy_end", "prcp_gini", "prcp_seasonality_index",
+  "temp_max_annual", "temp_max_annual_dowy", "temp_min_annual", "temp_min_annual_dowy",
+  "temp_max_win", "temp_max_spr", "temp_max_sum", "temp_max_fal",
+  "temp_min_win", "temp_min_spr", "temp_min_sum", "temp_min_fal",
+  "frost_first_dowy", "frost_last_dowy", "gdd_cum_annual", "gdd_cum_win",
+  "gdd_cum_spr", "gdd_cum_sum", "gdd_cum_fal"
 )
 
 # Static elasticity column (doesn't follow standard suffix pattern)

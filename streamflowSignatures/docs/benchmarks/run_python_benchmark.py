@@ -78,8 +78,9 @@ GAGES_II_DIR_EFFECTIVE = os.environ.get("STREAMFLOW_GAGES_II_DIR", GAGES_II_DIR)
 
 # Climate columns this runner consumes (post-normalization names): PPT for the
 # climate signatures, SWE for snow. Extend here AND in the raw-name projection.
-CLIMATE_KEEP = ["gage_id", "date", "PPT", "SWE"]
-_CLIMATE_RAW_WANTED = ("gage_id", "site_id", "date", "Date", "PPT", "prcp", "SWE", "swe")
+CLIMATE_KEEP = ["gage_id", "date", "PPT", "SWE", "TMIN", "TMAX"]  # TMIN/TMAX since 2026-10-12
+_CLIMATE_RAW_WANTED = ("gage_id", "site_id", "date", "Date", "PPT", "prcp", "SWE", "swe",
+                       "TMIN", "tmin", "TMAX", "tmax")
 
 
 def _env_int(name):
@@ -337,6 +338,9 @@ def main():
                     # valid_swe_years is present whenever the preprocessor saw SWE
                     **({"valid_swe_years": [yr for yr in result["valid_swe_years"] if wy_lo <= yr <= wy_hi]}
                        if "valid_swe_years" in result else {}),
+                    # valid_temp_years (2026-10-12): present whenever the preprocessor saw TMIN+TMAX
+                    **({"valid_temp_years": [yr for yr in result["valid_temp_years"] if wy_lo <= yr <= wy_hi]}
+                       if "valid_temp_years" in result else {}),
                 }
 
             # Apply min qualifying data fraction filter if configured.
@@ -433,6 +437,11 @@ def main():
             if "SWE" in pp_data.columns:
                 swe_yr_set = set(pp.get("valid_swe_years", []))
                 snow_data = pp_data[pp_data["water_year"].isin(swe_yr_set)]
+            # Temperature data (2026-10-12): the same explicit opt-in contract as snow
+            temp_data = None
+            if "TMIN" in pp_data.columns and "TMAX" in pp_data.columns:
+                temp_yr_set = set(pp.get("valid_temp_years", []))
+                temp_data = pp_data[pp_data["water_year"].isin(temp_yr_set)]
             signatures = calculate_all_signatures(
                 pp_data, gage_has_climate,
                 seasonal_flags=pp.get("seasonal_flags"),
@@ -446,6 +455,7 @@ def main():
                 snow_data=snow_data,
                 snow_climate_years=pp.get("valid_climate_years"),
                 gage_id=str(gage_id),
+                temp_data=temp_data,
             )
 
             # Drain this gage's annual values into the global accumulators

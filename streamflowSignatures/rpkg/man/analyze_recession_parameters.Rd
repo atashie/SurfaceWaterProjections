@@ -16,7 +16,10 @@ analyze_recession_parameters(
 \item{streamflow_data}{A data.frame with columns: water_year, Q, dowy.}
 }
 \value{
-Named list with 5 metrics x 8 stats + 6 seasonality values.
+Named list with 7 annual metrics x 8 stats (log_a_pointcloud,
+log_a_events, b_pointcloud, b_events, concavity, n_recession_events,
+alpha_linear) + 6 seasonality values + the per-gage
+recession_alpha_point_cloud_linear_reservoir scalar.
 }
 \description{
 Computes point cloud and event-based recession parameters (log_a, b),

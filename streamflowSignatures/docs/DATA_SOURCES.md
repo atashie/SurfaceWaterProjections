@@ -43,7 +43,8 @@ Boundary cases that are not counted as project data sources, with reasons:
   access routes, not providers. **Access to these buckets was lost on 2026-08-24**;
   most delivered outputs were backed up to the project Google Drive first (link in
   CHANGELOG → August 2026).
-- **Viz-only third parties**: Leaflet/Plotly CDN and CARTO basemap tiles used by the
+- **Viz-only third parties**: Leaflet/Plotly CDN and the basemap tiles (Esri gray canvas with an
+  OpenStreetMap fallback since 2026-10-13; CARTO's tiles now require an API key) used by the
   HTML explorers and dashboards; they render maps but contribute no analysis data.
 - **US geometry backstops never exercised**: USGS NLDI
   (`https://api.water.usgs.gov/nldi/`), Streamgage NHDPlus V1 Basins

@@ -16,10 +16,15 @@ description: Run and validate a full Julia signature-extraction benchmark, exper
      echo "$f $(stat -c%s "$p" 2>/dev/null || stat -f%z "$p") footer=$(tail -c 4 "$p")"
    done
    ```
-   The canonical-named `daymet_1980_2023.parquet` is TRUNCATED and left in place;
-   always point `STREAMFLOW_CLIMATE_PATH` at `daymet_1980_2023_rebuilt_10aug2026.parquet`
-   (rebuild recipe: `docs/benchmarks/convert_daymet_csvs_to_parquet.py`; Daymet uses a
-   365-day calendar).
+   The canonical-named `daymet_1980_2023.parquet` is TRUNCATED and left in place.
+   **Since 2026-10-12 the climate input is the reprocessed
+   `daymet_1980_2025_29sep2026.parquet`** (8,017 basins, calendar 1980–2025, six
+   variables; 5,134,193,404 bytes, md5 `c059076088cd8abd963c64094468e90f`; verified local
+   copy `~/HISSS_data/daymet-processed-29sep2026/`, md5-verified copy on the drive). The
+   runner keeps SIX climate columns (`prcp, swe, tmin, tmax` + keys) for the climate
+   metrics; `run_batched_julia.py split` writes the same six. The 2026 products used
+   `daymet_1980_2023_rebuilt_10aug2026.parquet` (rebuild recipe:
+   `docs/benchmarks/convert_daymet_csvs_to_parquet.py`; Daymet uses a 365-day calendar).
 2. **A config variant does NOT take effect on a precompiled package.** Every `CFG_*`
    constant is evaluated at precompile time; an env-var change does not invalidate the
    cache and neither does `touch` (Julia checks file CONTENT). Purge, then probe:
@@ -48,6 +53,8 @@ description: Run and validate a full Julia signature-extraction benchmark, exper
 julia --project=julia docs/benchmarks/run_julia_benchmark.jl                               # generic, ~27 min
 julia --project=julia docs/benchmarks/run_julia_benchmark_drought_1993_2025_60pct.jl       # standard product #1 wrapper
 julia --project=julia docs/benchmarks/run_julia_benchmark_prod_1980_2025_60pct_drought.jl  # standard product #2 wrapper (rebuilt climate parquet by default)
+julia --project=julia docs/benchmarks/run_julia_benchmark_prod_1993_2025_60pct_climate.jl  # product #1 VERSION 2 (climate family, reprocessed Daymet; local verified inputs)
+julia --project=julia docs/benchmarks/run_julia_benchmark_prod_1980_2025_60pct_climate.jl  # product #2 VERSION 2
 python docs/benchmarks/run_python_benchmark.py                                             # Python port
 Rscript docs/benchmarks/run_rpkg_benchmark.R                                               # rpkg port
 ```
@@ -58,6 +65,9 @@ batches with `docs/benchmarks/run_batched_julia.py`, using a Python that has duc
 - `run` kills Julia's whole process group when memory runs low or a batch hangs;
 - `merge` refuses an incomplete or inconsistent set of batches and orders the gages like
   `--reference`, or by gage id without one.
+  Pass `--memory-limit 3GB` for the 46-year product (34.7 M annual rows; the 1GB default
+  ran out of memory 2026-10-13) and read `merge.log` — a chain's echoed `$?` after `$(date)`
+  is the date command's status.
 Self-test: `docs/benchmarks/selftest_run_batched_julia.py`.
 
 **Every artifact of a run goes in that run's OWN folder** (`processedOuts_<experiment>_<date>`):
@@ -68,7 +78,8 @@ explorer + `_annual/` sidecar, and every comparison dashboard/CSV/summary produc
 ## After the run
 
 1. `python docs/benchmarks/validate_production_run.py` (see `--help`) — column count,
-   signature count, gage set.
+   signature count (139 since the climate family; `--expect-signatures 100` for an older
+   run), gage set.
 2. `python docs/benchmarks/validate_annual_values.py` — annual parquet vs summary CSV.
    Self-referential: necessary, not sufficient.
 3. `python docs/benchmarks/check_signature_failures.py <run log>` — swallowed per-gage
@@ -82,6 +93,10 @@ explorer + `_annual/` sidecar, and every comparison dashboard/CSV/summary produc
    `check_annual_parquet_equality.py`, `run_rpkg_acceptance_gates.sh`;
    `compare_*_vs_golden_julia.py` and `build_julia_golden_dashboard.py` are diagnostics.
 6. Explorer: `docs/benchmarks/build_signature_explorer.py`, output into the run folder.
+6b. A rerun on a new climate input: `docs/benchmarks/compare_climate_rerun.py --new NEW.csv
+   --old OLD.csv [--new-annual --old-annual]` classifies every column (Q-only must be
+   identical; climate-dependent reported with R² and gained/lost cells; new columns
+   populated + sniff ranges; annual values on shared gage-years).
 7. **If ANY portion of the data was rerun**: regenerate `flagged_for_high_na` in both
    delivered products (`docs/benchmarks/recompute_high_na_flag.py --write`), update the
    HydroShare READMEs and dictionary row, and rerun the rpkg benchmark so its reference

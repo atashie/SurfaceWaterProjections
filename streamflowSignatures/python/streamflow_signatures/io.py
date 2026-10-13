@@ -32,10 +32,13 @@ from .config import (
     NA_REJECT_RESIDUAL_NA, NA_CONSTANT_SD_ENABLED, NA_CONSTANT_SD_MIN_DAYS,
     NA_CONSTANT_SD_MAX_UNIQUE, NA_SEASONAL_MIN_FRACTION, NA_SEASONAL_DEFINITIONS,
     NA_MAX_RAW_NA_PPT, NA_MAX_GAP_PPT, NA_REJECT_NEGATIVE_PPT,
+    NA_MAX_RAW_NA_TEMP, NA_MAX_GAP_TEMP,
     NA_MAX_RAW_NA_SWE, NA_MAX_GAP_SWE, NA_REJECT_NEGATIVE_SWE,
 )
 from .stats import STAT_SUFFIXES, CP_SUFFIXES
 from .qa_qc import get_flag_columns
+from .climate import _real_values   # one observation contract (Julia's _real_vector) for every series
+import numbers
 
 
 # The 16 per-base statistic suffixes of the full product: the 8 ordinary
@@ -100,6 +103,18 @@ EXPECTED_SIGNATURE_BASES = [
     "drought_deficit_fixed_p2", "drought_deficit_fixed_p5",
     "drought_deficit_fixed_p10", "drought_deficit_fixed_p20",
     "drought_deficit_fixed_p30",
+    # Climate metrics (guidelines 3.9; 2026-10-12): 20 precipitation + 19 temperature
+    "prcp_annual", "prcp_win", "prcp_spr", "prcp_sum", "prcp_fal",
+    "prcp_1d_max", "prcp_5d_max", "prcp_max_dowy", "prcp_50_dowy", "prcp_cm_dowy",
+    "prcp_ndays_abv_10mm", "prcp_ndays_abv_25mm", "prcp_ndays_abv_50mm",
+    "prcp_annual_sd", "prcp_annual_cv",
+    "prcp_intermit_annual", "prcp_intermit_annual_dowy_start", "prcp_intermit_annual_dowy_end",
+    "prcp_gini", "prcp_seasonality_index",
+    "temp_max_annual", "temp_max_annual_dowy", "temp_min_annual", "temp_min_annual_dowy",
+    "temp_max_win", "temp_max_spr", "temp_max_sum", "temp_max_fal",
+    "temp_min_win", "temp_min_spr", "temp_min_sum", "temp_min_fal",
+    "frost_first_dowy", "frost_last_dowy",
+    "gdd_cum_annual", "gdd_cum_win", "gdd_cum_spr", "gdd_cum_sum", "gdd_cum_fal",
 ]
 
 # Metadata columns of the production output (20), in the exact order the
@@ -250,6 +265,11 @@ def read_parquet(
             rename_map["prcp"] = "PPT"
         if "swe" in df.columns and "SWE" not in df.columns:
             rename_map["swe"] = "SWE"
+        # Daymet temperature pair for the climate metrics (2026-10-12)
+        if "tmin" in df.columns and "TMIN" not in df.columns:
+            rename_map["tmin"] = "TMIN"
+        if "tmax" in df.columns and "TMAX" not in df.columns:
+            rename_map["tmax"] = "TMAX"
         if rename_map:
             df.rename(columns=rename_map, inplace=True)
 
@@ -569,13 +589,38 @@ def preprocess_daily_data(
     max_raw_na_ppt = config.get("max_raw_na_ppt", NA_MAX_RAW_NA_PPT)
     max_gap_ppt = config.get("max_gap_ppt", NA_MAX_GAP_PPT)
     reject_neg_ppt = config.get("reject_negative_ppt", NA_REJECT_NEGATIVE_PPT)
+    max_raw_na_temp = config.get("max_raw_na_temp", NA_MAX_RAW_NA_TEMP)
+    max_gap_temp = config.get("max_gap_temp", NA_MAX_GAP_TEMP)
+    # Every missing-day limit and interpolation gap — Q, PPT, SWE and temperature alike —
+    # must be a whole number >= 0, also when overridden (review round 3; Julia types them
+    # as Int and rejects negatives)
+    _limits = {"max_gap_days": max_gap_days, "max_raw_na_per_year": max_raw_na,
+               "max_raw_na_ppt": max_raw_na_ppt, "max_gap_ppt": max_gap_ppt,
+               "max_raw_na_swe": max_raw_na_swe, "max_gap_swe": max_gap_swe,
+               "max_raw_na_temp": max_raw_na_temp, "max_gap_temp": max_gap_temp}
+    for _k, _v in _limits.items():
+        # any real number type (Python or NumPy) that is a whole number >= 0; never a boolean
+        if (isinstance(_v, (bool, np.bool_)) or not isinstance(_v, numbers.Real) or not np.isfinite(_v)
+                or _v != int(_v) or _v < 0):
+            raise ValueError(f"preprocess_daily_data: {_k} must be a whole number >= 0, got {_v!r}")
+    max_gap_days = int(max_gap_days); max_raw_na = int(max_raw_na)
+    max_raw_na_ppt = int(max_raw_na_ppt); max_gap_ppt = int(max_gap_ppt)
+    max_raw_na_swe = int(max_raw_na_swe); max_gap_swe = int(max_gap_swe)
+    max_raw_na_temp = int(max_raw_na_temp); max_gap_temp = int(max_gap_temp)
+    for _k, _v in (("reject_negative_flow", reject_negative), ("reject_residual_na", reject_residual),
+                   ("reject_negative_ppt", reject_neg_ppt), ("reject_negative_swe", reject_neg_swe),
+                   ("constant_sd_enabled", const_sd_enabled)):
+        if not isinstance(_v, (bool, np.bool_)):
+            raise ValueError(f"preprocess_daily_data: {_k} must be true/false, got {_v!r}")
 
     has_ppt = "PPT" in gage_flow.columns
     has_swe = "SWE" in gage_flow.columns
+    has_temp = "TMIN" in gage_flow.columns and "TMAX" in gage_flow.columns
 
     valid_years: List[int] = []
     valid_climate_years: List[int] = []
     valid_swe_years: List[int] = []
+    valid_temp_years: List[int] = []
     rejected_years: List[Dict] = []
     seasonal_flags: List[Dict] = []
     diagnostics: List[Dict] = []
@@ -608,7 +653,10 @@ def preprocess_daily_data(
 
         n_days = len(yr_data)
 
-        # --- (b) Raw diagnostics ---
+        # --- (b) Raw diagnostics --- (an observation is a real number; anything else, and
+        # any non-finite value, is missing: review 2026-10-12, mirrors julia/src/io.jl)
+        _q = _real_values(yr_data["Q"])
+        yr_data["Q"] = np.where(np.isfinite(_q), _q, np.nan)
         q_raw = yr_data["Q"].values.copy()
         raw_na_count = int(np.sum(np.isnan(q_raw.astype(float))))
 
@@ -683,9 +731,7 @@ def preprocess_daily_data(
             continue
 
         # --- (d) Interpolate internal gaps <= max_gap_days ---
-        yr_data["Q"] = yr_data["Q"].interpolate(
-            method="linear", limit=max_gap_days, limit_area="inside"
-        )
+        yr_data["Q"] = _interpolate_internal_gaps(yr_data["Q"].to_numpy(dtype=float), max_gap_days)
 
         # --- (e) Post-interpolation residual NA check ---
         post_na_count = int(yr_data["Q"].isna().sum())
@@ -699,32 +745,26 @@ def preprocess_daily_data(
         diagnostics.append(diag)
         valid_years.append(wy)
 
-        # --- (f) PPT handling ---
+        # --- (f) PPT handling (mirrors julia/src/io.jl: the cleaned, gap-filled series is
+        # written back ONLY when the year is PPT-valid, so an invalid year keeps its raw
+        # column; a residual NaN after filling — an edge gap or a run longer than the
+        # allowance — always rejects, independent of reject_residual_na; review 2026-10-12)
         ppt_valid = False
         if has_ppt:
-            ppt_raw = yr_data["PPT"].values.copy()
-            ppt_raw_na = int(np.sum(np.isnan(ppt_raw.astype(float))))
-            ppt_max_run = _max_consecutive_na(yr_data["PPT"])
-            ppt_finite = ppt_raw[~np.isnan(ppt_raw.astype(float))]
+            P = _real_values(yr_data["PPT"])              # real observations only
+            P = np.where(np.isfinite(P), P, np.nan)        # non-finite = missing
+            ppt_raw_na = int(np.isnan(P).sum())
+            ppt_finite = P[~np.isnan(P)]
             ppt_negative = bool(np.any(ppt_finite < 0)) if len(ppt_finite) > 0 else False
 
-            ppt_reject = False
-            if ppt_raw_na > max_raw_na_ppt:
-                ppt_reject = True
-            if ppt_max_run > max_gap_ppt:
-                ppt_reject = True
-            if reject_neg_ppt and ppt_negative:
-                ppt_reject = True
-
+            ppt_reject = ppt_raw_na > max_raw_na_ppt or (reject_neg_ppt and ppt_negative)
             if not ppt_reject:
-                yr_data["PPT"] = yr_data["PPT"].interpolate(
-                    method="linear", limit=max_gap_ppt, limit_area="inside"
-                )
-                ppt_post_na = int(yr_data["PPT"].isna().sum())
-                if reject_residual and ppt_post_na > 0:
+                P = _interpolate_internal_gaps(P, max_gap_ppt)
+                if int(np.isnan(P).sum()) > 0:
                     ppt_reject = True
 
             if not ppt_reject:
+                yr_data["PPT"] = P
                 ppt_valid = True
 
         if ppt_valid:
@@ -733,33 +773,48 @@ def preprocess_daily_data(
         # --- (f2) SWE handling (same rules as PPT, tracked separately) ---
         swe_valid = False
         if has_swe:
-            swe_raw = yr_data["SWE"].values.copy()
-            swe_raw_na = int(np.sum(np.isnan(swe_raw.astype(float))))
-            swe_max_run = _max_consecutive_na(yr_data["SWE"])
-            swe_finite = swe_raw[~np.isnan(swe_raw.astype(float))]
+            S = _real_values(yr_data["SWE"])              # real observations only
+            S = np.where(np.isfinite(S), S, np.nan)        # non-finite = missing
+            swe_raw_na = int(np.isnan(S).sum())
+            swe_finite = S[~np.isnan(S)]
             swe_negative = bool(np.any(swe_finite < 0)) if len(swe_finite) > 0 else False
 
-            swe_reject = False
-            if swe_raw_na > max_raw_na_swe:
-                swe_reject = True
-            if swe_max_run > max_gap_swe:
-                swe_reject = True
-            if reject_neg_swe and swe_negative:
-                swe_reject = True
-
+            swe_reject = swe_raw_na > max_raw_na_swe or (reject_neg_swe and swe_negative)
             if not swe_reject:
-                yr_data["SWE"] = yr_data["SWE"].interpolate(
-                    method="linear", limit=max_gap_swe, limit_area="inside"
-                )
-                swe_post_na = int(yr_data["SWE"].isna().sum())
-                if reject_residual and swe_post_na > 0:
+                S = _interpolate_internal_gaps(S, max_gap_swe)
+                if int(np.isnan(S).sum()) > 0:
                     swe_reject = True
 
             if not swe_reject:
+                yr_data["SWE"] = S
                 swe_valid = True
 
         if swe_valid:
             valid_swe_years.append(wy)
+
+        # --- (f3) TMIN/TMAX handling (2026-10-12): the SWE rules without the sign
+        # check (temperatures are signed); the year is temperature-valid only when
+        # BOTH series pass, and both are written back together (mirrors Julia io.jl)
+        temp_valid = False
+        if has_temp:
+            temp_ok = True
+            filled = {}
+            for col in ("TMIN", "TMAX"):
+                raw = _real_values(yr_data[col])
+                raw = np.where(np.isfinite(raw), raw, np.nan)  # ±Inf -> NaN (review note 7)
+                if int(np.isnan(raw).sum()) > max_raw_na_temp:
+                    temp_ok = False
+                else:
+                    s = _interpolate_internal_gaps(raw, max_gap_temp)
+                    if int(np.isnan(s).sum()) > 0:
+                        temp_ok = False
+                    filled[col] = s
+            if temp_ok:
+                yr_data["TMIN"] = filled["TMIN"]
+                yr_data["TMAX"] = filled["TMAX"]
+                temp_valid = True
+        if temp_valid:
+            valid_temp_years.append(wy)
 
         cleaned_frames.append(yr_data)
 
@@ -774,10 +829,41 @@ def preprocess_daily_data(
         "valid_years": valid_years,
         "valid_climate_years": valid_climate_years,
         "valid_swe_years": valid_swe_years,
+        "valid_temp_years": valid_temp_years,
         "rejected_years": rejected_years,
         "seasonal_flags": seasonal_flags,
         "diagnostics": diagnostics,
     }
+
+
+def _interpolate_internal_gaps(values, max_gap: int) -> np.ndarray:
+    """Linearly fill every INTERNAL run of NaNs of length <= max_gap whose two neighbours
+    are finite, with Julia's exact expression and evaluation order
+    (``left + (right - left) * offset / span``, offset and span integers), so the filled
+    values are bit-identical with the canonical preprocessor (review 2026-10-12: pandas'
+    ``interpolate`` rounds differently). Leading / trailing runs and longer runs stay NaN;
+    a run longer than max_gap is left entirely unfilled (pandas filled its first max_gap
+    values, which only changed a rejected year's residual count). max_gap 0 fills nothing."""
+    x = np.array(values, dtype=float, copy=True)
+    n = len(x)
+    i = 0
+    while i < n:
+        if np.isnan(x[i]):
+            gap_start = i
+            gap_end = i
+            while gap_end < n - 1 and np.isnan(x[gap_end + 1]):
+                gap_end += 1
+            gap_len = gap_end - gap_start + 1
+            if gap_start > 0 and gap_end < n - 1 and gap_len <= max_gap:
+                left_val = float(x[gap_start - 1]); right_val = float(x[gap_end + 1])
+                if np.isfinite(left_val) and np.isfinite(right_val):   # finite neighbours only
+                    span = (gap_end + 1) - (gap_start - 1)
+                    for k in range(gap_start, gap_end + 1):
+                        x[k] = left_val + (right_val - left_val) * (k - (gap_start - 1)) / span
+            i = gap_end + 1
+        else:
+            i += 1
+    return x
 
 
 def _max_consecutive_na(series: pd.Series) -> int:

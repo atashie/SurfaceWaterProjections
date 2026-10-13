@@ -34,6 +34,7 @@ from .qp_seasonality import calculate_qp_seasonality
 from .storage import calculate_average_storage
 from .snow import calculate_snow_metrics, SNOW_METRICS
 from .drought import calculate_drought_metrics, DROUGHT_METRICS, DROUGHT_THRESHOLD_SCALARS
+from .climate import calculate_precipitation_metrics, calculate_temperature_metrics, PRECIP_METRICS, TEMP_METRICS
 
 __all__ = [
     # Stats
@@ -81,4 +82,9 @@ __all__ = [
     "calculate_drought_metrics",
     "DROUGHT_METRICS",
     "DROUGHT_THRESHOLD_SCALARS",
+    # Climate (guidelines 3.9, 2026-10-12)
+    "calculate_precipitation_metrics",
+    "calculate_temperature_metrics",
+    "PRECIP_METRICS",
+    "TEMP_METRICS",
 ]

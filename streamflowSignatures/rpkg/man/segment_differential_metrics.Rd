@@ -22,6 +22,6 @@ Computes delta_mean, pct_change, and the pre/post Mann-Kendall p-values at a
 given changepoint year. Mirrors \code{segment_differential_metrics} in
 \code{julia/src/changepoint.jl}, including the >= 3 values-per-segment guard
 and the \code{abs(pre_mean) > 1e-10} percentage guard. Each language reuses
-its own MK implementation (here \code{Kendall::MannKendall}, as
-\code{generate_stats} does).
+its own MK implementation (here \code{mann_kendall_test}, the wrapper
+\code{generate_stats} uses, so constant segments give NA as in Julia).
 }

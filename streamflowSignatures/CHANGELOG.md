@@ -126,6 +126,13 @@ loads every session is `docs/STATUS.md`.
 - BFImax estimation via Collischonn & Fan (2013) backward filter — would give BFI_Eckhardt_param per-gage BFImax instead of fixed 0.8, improving discriminating power (currently range [0.47–0.80] due to BFImax saturation)
 
 ### Known Issues
+- **Explorers and dashboards built before 2026-10-13 show CARTO's "API KEY REQUIRED"
+  watermark instead of a basemap** (CARTO withdrew keyless tiles; points and panels still
+  work). Affected deliveries: the 2026 explorers and validation dashboards of HydroShare
+  R1 / R2 (superseded by the version-2 deposit) and the three EO explorers of R5
+  (`hisss_modis_lai_explorer.html`, `hisss_modis_lulc_explorer.html`,
+  `hisss_nlcd_explorer.html`) — rebuilding and redepositing R5's explorers is a user
+  decision. Builders fixed 2026-10-13 (October 2026 → Fixed).
 - **LOW (both delivered products + staged Resource 3, found 2026-09-29) — five Daymet sites
   are NaN on every day of 1980–2023, all six variables**: 02234500, 02236000, 02236125,
   02244040 (St. Johns River, FL) and 01372058. The co-authors' aggregation returned NaN for
@@ -280,6 +287,368 @@ Moved 2026-09-29 to `docs/reconciliation/guidelines_todos.md` and
 ---
 
 ## [October 2026]
+
+### Fixed: explorer and dashboard basemaps — CARTO's tiles now require an API key (2026-10-13)
+
+The user's review of the version-2 explorers found no basemap, only CARTO's "API KEY
+REQUIRED" watermark: `basemaps.cartocdn.com` now answers every keyless request with that
+2 KB tile (HTTP 200, etag `wm-…`; CARTO's offer is a free key at 5 M tiles/month for
+non-commercial use), so every HTML the twelve Leaflet builders ever produced lost its basemap
+(`explorer_template.html`, the three EO explorers, `build_signature_explorer.py`, the seven
+`build_*_dashboard.py`). All twelve now call one `hisssBasemap(map, variant, maxZoom,
+position)`: Esri's keyless World Light / Dark Gray canvas (base + reference labels, native
+zoom 16) first, an automatic switch to OpenStreetMap when three tiles fail before any loads,
+and a Leaflet layers control for a manual switch (bottom-right in the signature explorer,
+whose top-right corner is the gage panel; top-right elsewhere). Esri's legacy raster
+basemaps are in mature support (no updates since 2021) with retirement phases announced for
+March 2028 and December 2029 — the fallback and the switch exist for that day. Verified
+headlessly with Playwright (new `docs/benchmarks/check_html_basemap.py`): light and dark
+test pages load 60 / 60 Esri tiles, a page whose Esri host does not resolve switches to
+OpenStreetMap (30 / 30 tiles, "OpenStreetMap" selected); the two version-2 explorers and
+comparison dashboards were rebuilt (each explorer differs from its 08:54 build in the 34-line
+basemap block only; 60 / 60 and 24 / 24 tiles loaded; the 139-file `_annual/` sidecars
+byte-identical) and the explorers re-staged in
+`~/Downloads/Signatures_v2_12oct2026/` (the `_annual/` sidecars unchanged; the staged READMEs
+now say the explorer needs internet for Leaflet and the tiles). KNOWN ISSUE below: every HTML
+built before this date shows the watermark — the deposited 2026 explorers and validation
+dashboards of HydroShare R1 / R2 (replaced by the version-2 deposit) and the three EO
+explorers of R5 (rebuild on request). Docs: `docs/DEVELOPMENT.md`, `docs/DATA_SOURCES.md`,
+`.claude/rules/benchmarks.md`.
+
+### Added: Climate metrics family — guidelines §3.9, 39 annual signatures (2026-10-12, Julia first)
+**Trigger.** The guidelines doc gained §3.9 "Climate Metrics" (synced 2026-10-12,
+`docs/reconciliation/guidelines_todos.md`) and the reprocessed Daymet input
+(`daymet_1980_2025_29sep2026.parquet`, every gage, calendar 1980–2025) is ready. The user
+asked (2026-10-12) for: the code, blind adversarial reviews, a rerun of both standard
+products on the new input, output reviews, explorers and a staged deposit. Design record
+and run plan: `docs/plans/2026-10-12-climate-metrics-plan.md`; relay list for the
+co-authors: `docs/plans/2026-10-12-coauthor-relay.md`.
+
+**DECISIONS (user, 2026-10-12)** — shipped column names stay (the doc's `_annual` /
+`_xSeason` convention applies to new metrics only; doc-side revert relayed); new season
+suffixes are the code's `win/spr/sum/fal`; `precip_` → `prcp_`, `GDD_` → `gdd_`; the §3.8
+snowfall lines are deleted from the doc (not implemented); GDD = Σ max(0, (tmax+tmin)/2 −
+0 °C); a dry day has prcp ≤ 0.1 mm; `prcp_annual_sd/_cv` are the within-year spread of the
+daily values; ties take the first occurrence; the 5-day window stays inside the water year;
+frost = basin-mean tmin < 0 °C, last frost within Oct 1 – Jun 30; Gini over all days (zeros
+included), Walsh–Lawler index on the water year's 12 months; year qualification and gating
+follow the snow-family precedent (climate years evaluated for streamflow-valid years;
+record-anchored decade gate on the two frost dates); both products are rerun on the new
+Daymet input as new versions (the delivered ones are not rewritten), Julia first, the
+ports validated before publication; `flagged_for_high_na` regenerated and the rpkg
+reference rerun fold in; HydroShare staged only.
+
+**What changed (Julia canonical).**
+- `julia/src/climate.jl` (new): `calculate_precipitation_metrics` — 20 bases on PPT-valid
+  years (`prcp_annual`, `prcp_win/spr/sum/fal`, `prcp_1d_max`, `prcp_5d_max`,
+  `prcp_max_dowy`, `prcp_50_dowy`, `prcp_cm_dowy`, `prcp_ndays_abv_10/25/50mm`,
+  `prcp_annual_sd`, `prcp_annual_cv`, `prcp_intermit_annual` + `_dowy_start` / `_dowy_end`,
+  `prcp_gini`, `prcp_seasonality_index`); `calculate_temperature_metrics` — 19 bases on an
+  explicit `temp_data` frame of temperature-valid years (`temp_max_annual` + `_dowy`,
+  `temp_min_annual` + `_dowy`, `temp_max_<s>`, `temp_min_<s>`, `frost_first_dowy`,
+  `frost_last_dowy`, `gdd_cum_annual`, `gdd_cum_<s>`). Every base carries the 16 statistics;
+  no per-gage scalar. **39 × 16 = 624 new columns → 2,277 per product; 139 annual
+  signatures.** Category **Climate** (ninth), function families Precipitation and
+  Temperature (`docs/signature_categories.csv`).
+- `io.jl`: `read_parquet` maps `tmin`/`tmax` → `TMIN`/`TMAX`; `preprocess_daily_data` gains
+  the temperature block (≤ 30 raw NaN, gaps ≤ 3 days filled, no sign check; both series must
+  pass) and returns `valid_temp_years`. `signatures.jl`: `temp_data` kwarg; the precipitation
+  family runs on the PPT-valid frame regardless of `area_normalized` (pure climate — the snow
+  precedent; the gate test's "identical to no-climate" invariant now excludes `prcp_*`).
+- Config: `climate` section + `na_handling.temperature_na_policy` (bundled copies
+  byte-identical, sha256 a9e8ed31…). Absent `climate` section ⇒ no climate columns (the
+  additivity switch). Column names derive from the config (`prcp_5d_max`, `prcp_50_dowy`,
+  `prcp_ndays_abv_<t>mm`), the `D{p}_day` pattern.
+- Runner, smoke test and `run_batched_julia.py` keep six climate columns (`+ tmin, tmax`);
+  the runner records `climate_columns` in the timing JSON. Registries: `config.R`
+  `EXPECTED_SIGNATURE_BASES`, `EXPECTED_DENSE_SIGNATURES`, `validate_production_run.py`
+  (`--expect-signatures`, default 139), the four dashboards' `SIGNATURE_GROUPS` (snow and
+  drought added to the three lists that still lacked them).
+- Tests: `julia/test/test_climate_metrics.jl` — closed-form years (single-storm Gini
+  (n−1)/n and SI 11/6, uniform year, threshold boundaries, tie rules, the non-contiguous fall
+  season, leap-year grid, frost window incl. the Jun 30 cut-off, GDD clamp, the decade gate,
+  the preprocessor's temperature validity, the opt-in orchestrator contract). Unit suite green
+  after the gate-test update; smoke test on 10 real gages with the new Daymet file: all 39
+  bases present, ranges plausible.
+- **Same-machine check (2026-10-12):** the 2026-10-01 control run of product #1's
+  configuration on this laptop reproduces product #1 with every Q-only column bitwise
+  identical; the 98 columns that differ are all climate-dependent, ≤ 3.4e-13 (the rebuilt
+  input). So the reruns' Q-only columns must match the delivered products exactly.
+
+**Blind review round 1 (Codex, Julia; `docs/plans/2026-10-12-climate-reviews/`) —
+NO-GO, seven findings, all resolved the same day:**
+1. MAJOR `prcp_50_dowy` compared a `cumsum` against a differently accumulated `sum`
+   (two equal 5 mm blocks separated by a dry interval returned day 301, not 50). FIX:
+   every sum, mean, sd and cumulative sum in the family is a plain sequential double
+   accumulation (`_seqsum` / `_seqcumsum`), so the cumulative sum's last element equals
+   the total and the crossing test is `cum ≥ frac × total`; the same loop in Python (the
+   builtin `sum` is compensated since 3.12 and must not be used) and R (whose `sum` /
+   `cumsum` accumulate in long double) — which also makes the annual values bit-identical
+   across the three languages.
+2. MAJOR the precipitation family inherited the legacy fallback to `gage_data` when no
+   `climate_data` is passed, bypassing PPT qualification. FIX: it runs ONLY on the
+   explicit PPT-qualified frame (the snow contract); tests, smoke test and the gate test
+   pass the frame explicitly.
+3. MAJOR the complete-grid guard accepted a leap water year truncated to 365 rows. FIX:
+   the guard takes the water year and requires its exact day count.
+4. MINOR a missing `month` value silently dropped days from every season. FIX: months are
+   derived from the date on the grid; the `month` column is no longer read.
+5. MINOR a fractional percentage would be mislabelled (`cumulative_fraction` 0.504 →
+   `prcp_50_dowy`). FIX: config validation requires a whole percentage.
+6. MINOR window 1 duplicated `prcp_1d_max`, window > 366 was always NaN. FIX: window
+   validated to 2..366.
+7. NOTE ±Inf counted as a valid interpolation neighbour. FIX: non-finite temperatures are
+   treated as missing.
+Regression tests for 1, 3 and 4 in all three languages. Round-2 additivity on batch 1
+after the fixes: PASS again (1,652 shared columns bitwise, +624 populated, 0 failures).
+
+**Ports (same day):** `python/streamflow_signatures/climate.py` and `rpkg/R/climate.R`
+module for module (loader, preprocessor temperature block, orchestrator, runners,
+schema registries, tests). Cross-language audit tool `docs/benchmarks/crosscheck_climate_fixture.{jl,py,R}`:
+a deterministic 30-year fixture exchanged as Parquet (CSV float parsers in pandas and R
+are not round-trip exact); **1,170 annual values bit-identical in Julia, Python and R;
+all 624 summary values within 4e-14 / 1e-12**, except rpkg's Mann-Kendall statistics
+at ~6e-8 relative (the `Kendall` package's single-precision Fortran — the documented
+pre-existing residual; tolerance 1e-6 for those four suffixes). Unit suites green in
+all three languages (Julia 355 climate assertions, Python 173 tests, rpkg 81).
+
+**Blind review round 1 of the ports (Codex, Python and rpkg) — both NO-GO; all findings
+resolved the same day, several of them pre-existing port-wide residuals:**
+- BLOCKER (both ports) interpolation arithmetic: pandas `interpolate` and R's
+  `stats::approx` round differently from Julia's `left + (right − left) × offset / span`,
+  so a filled day (Daymet's absent Dec 31 in every leap year) broke bit-identity and could
+  flip a frost date. FIX: one explicit gap filler with Julia's expression order in each
+  port, used for Q, PPT, SWE and TMIN/TMAX alike (the ports' existing families move
+  toward Julia by last bits on interpolated days).
+- BLOCKER (rpkg, library-wide) Spearman p-values came from `cor.test`'s exact / AS89
+  method; Julia and Python use the t-approximation. FIX: `exact = FALSE`.
+- BLOCKER (rpkg, library-wide) `Kendall::MannKendall` computes in single precision
+  (distinct doubles collapsed into ties, small p-values rounded to 0, tau off by ~1e-7).
+  FIX: `mann_kendall_test` is now a double-precision port of Julia's formula; the climate
+  fixture's Mann-Kendall statistics agree to 4e-14 (were 6e-8). Both library-wide fixes
+  land in the rpkg reference rerun already scheduled (user decision 2026-10-12).
+- MAJOR (both) signed zeros: −0.0 / +0.0 extrema and ties differed by language. FIX:
+  `+ 0.0` normalisation before the kernels in all three languages.
+- MAJOR (Python) `limit = 0` crashed pandas when a temperature gap setting is 0 — gone
+  with the explicit filler; negative policy values now rejected in all three.
+- MAJOR (both) config coercion: `int()` / `as.integer()` truncated 5.9 → 5, string or
+  numeric "booleans" were accepted, Python's JSON reader accepted NaN / Infinity. FIX:
+  strict typed readers (integrality, finiteness, real booleans) for the climate and
+  temperature keys; NaN / Infinity JSON tokens rejected.
+- MAJOR (rpkg) the complete-grid guard truncated fractional dowy values; explicit
+  temperature-policy overrides were ignored; the hard-coded DJF/MAM/JJA/SON ignored a
+  configured `season_definitions`; the runner dropped temperature-only climate input.
+  All fixed (exact numeric comparison; policy from the supplied config; definitions read
+  in `.onLoad`; climate columns merged independently of PPT).
+- MINOR (both) threshold labels diverged for scientific notation / large values and could
+  collide. FIX: one shared formatter (integer, else C `%g`, `.`→`p`, `-`→`m`) plus a
+  uniqueness check in all three.
+- NOTE (all three) ±Inf passed the annual guards. FIX: the kernels require finite values.
+Python 174 tests green; rpkg full suite green (the Mann-Kendall test now tolerates the
+documented 1e-7 Fortran residual of the old backend). Three-way cross-check after the
+fixes: annual values bit-identical, every summary value within 4e-14 / 1e-12 in both
+ports.
+
+**Blind review round 2 (Codex, all three languages; Sonnet, Julia) — Codex NO-GO on a
+residual list, Sonnet GO. Resolved the same day:**
+- MAJOR (shared) the 50 % crossing at a mathematical tie: two equal 7-day rainfall blocks
+  gave sequential prefix 0.7 against half-total 0.7000000000000001, moving the date by
+  294 days; a constant-0.1 mm leap year gave day 184 for 183. DECISION (implementer
+  2026-10-12, confirmed by the user 2026-10-13): the crossing is
+  `cumulative ≥ fraction × total − 1e-12 × total` in all three languages
+  (`CLIMATE_CROSSING_REL_TOL`); 1e-12 of an annual total is physically nothing, and the
+  closest real margin in the 360,585 production water years is 1.3e-9 (Sonnet's scan), so
+  no production value depends on it. `D50_day` keeps its strict comparison.
+- MAJOR (shared) non-finite precipitation was an "observation" in preprocessing (an
+  isolated +Inf qualified the year and then voided every metric; −Inf tripped the
+  negative-value rejection). FIX: NaN, ±Inf (and in Julia any non-Real) are MISSING for Q,
+  PPT, SWE, TMIN and TMAX alike — counted, sign-checked and interpolated as such; the
+  helpers require finite neighbours. No effect on real data (the inputs hold no Inf).
+- MINOR (Julia) config readers accepted `true` as 1 and 0/1 as a flag; (shared) the
+  validated-but-not-used cumulative fraction (0.500000000001 under the `prcp_50_dowy`
+  name); season months and explicit policy overrides not validated (R overrides accepted
+  3.5 / Inf / TRUE); Python's kernels coerced numeric strings while its preprocessor did
+  not. FIX: strict typed readers in Julia too (Bool excluded from numbers, real Bool for
+  flags, list elements checked), the fraction canonicalised to the percentage shown, whole
+  months 1..12 enforced in all three, overrides validated, one `numbers.Real` observation
+  contract across Python's entry points. Residual (documented): R's jsonlite simplifies a
+  one-element array to a scalar before validation (not in the shipped config).
+- Sonnet (Julia, GO): 2.1 M real annual values recomputed independently with 0
+  mismatches; MINOR documentation — the interpolated Dec 31 belongs to the water year
+  AFTER a leap calendar year and touches every metric of that year (mean 0.25 %, max 2.1 %
+  of the annual total) — `docs/SIGNATURES.md` §14 corrected; `Printf` compat relaxed to
+  "1" (the generated "1.11.0" would have refused Julia 1.9/1.10).
+Regression tests for all of it in the three languages; suites green (Julia 355 climate
+assertions + the full suite, Python 174, rpkg 1,179); cross-check unchanged (annual values
+bit-identical, summaries within 4e-14 / 1e-12, including rpkg's Mann-Kendall).
+
+**Blind review round 3 (Codex) — Julia GO; ports NO-GO on custom-input boundaries only.
+Fixed the same day:** the canonical cumulative percentage must lie in 1..99 (an input of
+1e-14 canonicalised to 0 % and emitted `prcp_0_dowy`); Julia's kernels take a Real-only
+observation conversion (`coalesce_q` let a complex value through); Python validates all
+eight preprocessing limits and the five policy flags when overridden and routes Arrow
+decimal / object columns through the `numbers.Real` scalar contract; rpkg validates every
+resolved limit and flag with the typed readers, checks season lists in the raw JSON,
+validates explicit season overrides, and its default preprocessing config now carries the
+configured season definitions (it fell back to hard-coded DJF for a custom config — real,
+shipped config unaffected); exact integer counts (sums of logicals) are documented as
+exempt from the sequential-sum convention. Suites green (Julia 366 climate assertions,
+Python 175, rpkg 1,190); cross-check unchanged.
+
+**Blind review round 4 (Codex, verification of round 3) — Julia GO, Python GO, rpkg NO-GO
+on two MAJORs, fixed 2026-10-12/13:** (1) R still coerced inadmissible observations —
+`as.numeric()` parsed numeric strings and dropped imaginary parts, so a string day gave
+`prcp_annual = 367` and all-string temperatures a qualifying year with GDD 2007.5 where
+Julia gives missing / no valid year. FIX: a package-level `.real_values()` mirroring Julia's
+`_real_vector` (numeric and logical → value; character, complex, factor and other types →
+NA; list columns element-wise) is now the only observation conversion for Q, PPT, SWE, TMIN
+and TMAX in preprocessing and in both climate kernels. (2) The SWE policy ignored
+`config$snow_na_policy` overrides and `.onLoad` read its three settings untyped (an
+override of 0/0 still filled a gap and qualified the year; JSON `reject_negative_swe = 1`
+silently qualified negative SWE). FIX: the SWE limits and flag are resolved from the config
+with the typed readers (`.cfg_int` ≥ 0, `.cfg_bool`), default to the package values, and
+are used throughout the SWE block; the default preprocessing config carries
+`snow_na_policy`. Reinstalled; full rpkg suite 1,205 passed; cross-check unchanged (annual
+values bit-identical, summaries ≤ 4e-14 / 1e-12). Codex round 5 (rpkg verification): its interim
+log confirms both round-4 reproductions and the round-3 regressions pass in R and Julia
+("inadmissible observations produce missing metrics, the SWE 0/0 override leaves the gap
+missing and excludes the year, invalid SWE limits and flags raise errors"); the process then
+sat idle for 3.5 h under the overnight memory pressure (below) and was stopped before
+writing its report. Rerun 2026-10-13 on the quiet machine (report in 4 min): both round-4
+MAJORs and every round-3 regression PASS; one new MAJOR — a list-typed input column came
+out of `preprocess_daily_data` as a list again (each cleaned year was re-bound into the
+ORIGINAL frame, whose column type won), so qualification succeeded and the runoff-ratio,
+elasticity and flow-volume families then failed on the list column (579 fields missing for
+a list Q). FIX: the observation columns present (Q, PPT, SWE, TMIN, TMAX) are converted with
+`.real_values()` once on the whole input frame before the yearly loop; end-to-end
+regression test added (list PPT with a string day → double columns, `Qann_mean` 365,
+`annual_runoff_ratio_mean` 1, `prcp_annual_mean` 365); reinstalled, full suite 1,212
+passed, cross-check unchanged. **Codex round 6 (2026-10-13): GO** — the round-5
+reproduction passes for every observation column (1,128 result fields and all 378 annual
+rows equal the numeric control), the round-4 and round-3 reproductions pass, 11 regenerated
+Julia fixtures are byte-identical (9,256 finite annual values), 114 climate assertions.
+
+**Sonnet 5.5 blind review of the rpkg port (resumed on the round-5 build) — GO:** 38,047
+synthetic annual cells with 0 bit differences against Julia (edge cases, interpolation
+stress, tie-rich quantised rain, ±Inf/NaN, a 400-year direct-call fuzz), summaries within
+5.2e-14; seven real Daymet gages through both runners 11,232 annual rows bit-identical, 12 QA
+flags equal; an exact-rational reference matches 13,595 cells. The three defects it found
+during the review were the ones fixed in rounds 1–2 (strict crossing rule, `approx`
+rounding, single-precision Mann-Kendall / exact Spearman). Three MINORs fixed 2026-10-13:
+the roxygen block of `preprocess_daily_data` had been glued to the new gap-filling helper
+(`document()` would have dropped the export) — helper moved above the block with `@noRd`,
+roxygen regenerated (NAMESPACE now carries the four climate exports, Rd pages added); an
+explicit JSON `null` in the `climate` / `na_handling` sections was accepted by R (jsonlite
+turns it into "absent") where Julia rejects it — rejected now on the unsimplified JSON;
+the cross-check fixture's header and `mk_rtol = 1e-6` default were stale (Mann-Kendall is
+double precision now; default = rtol). Also: `Kendall` dropped from Imports (unused since
+2026-10-12), stale "irreducible Spearman" / "1e-7 residual" statements corrected. NOTEs
+recorded, no code change: Gini of a constant series can be −5.9e-18 (floating noise, never
+in real data); the crossing allowance is 1e-12 × total, so it flips at 2e-12 mm for a 2 mm
+year (as designed); the R runner needs ~1.6 GB more memory than Julia's and orders columns
+by locale (the gates compare sets); the parity runs were all aarch64 (long double = double
+there), so an x86-64 run of the ports remains undone; `STREAMFLOW_SIGNATURES_CONFIG` vs
+`STREAMFLOW_CONFIG` stays on the deferred list. The rpkg reference re-baseline (decision
+18) ran on the round-5 build, batched like the Julia products; these later edits are
+non-numeric and were re-verified by the suite and cross-check after reinstalling.
+
+**rpkg reference re-baselined on product #1 v2 (decision 18; 2026-10-13).** The rpkg port
+ran product #1's configuration (WY 1993–2025, 60 %, climate family, reprocessed Daymet)
+in the same 8 gage batches as Julia — 166 min of R, 6,678 gages, 0 errors — merged in the
+Julia gage order (`~/HISSS_data/climate-rerun-12oct2026/rpkg_reference_1993_2025_13oct2026`,
+2,277 columns, 27,602,160 annual rows). Gates against the Julia product: strict schema
+equality PASS (identical column and gage sets); swallowed-failure scan PASS on all eight
+logs; annual parquet equality PASS at the August tolerance (1e-6) with the residuals named
+on the command line (`gate_annual_waived.txt`): 1 reference-only row (`avg_storage`, the
+signed-zero `unique` divergence, unchanged since August) and 319 of 26,782,607 finite pairs
+(0.0012 %), every one a discrete threshold crossing moved by a last-bit tie (`D*_day` 290,
+`D25_to_D75` 59, `TQmean` 18, `dur_low_pulses_*` 2); NA patterns identical. At 1e-9 the
+only additional class is `qp_slope_sd` (145 rows, ≤ 4.4e-11 relative on values in the
+thousands). **The 39 climate signatures are bit-identical in every one of their annual
+cells**, and the ~199 recession-family residual rows of the August run are gone. Identity R² (diagnostic): 2,228 of 2,244 columns Perfect (99.3 %; August 98.8 %), 10 Good,
+6 Poor (all FDC90th), 0 below 0.95; mean 0.999925. The 2026-08-27 rpkg reference (1,653
+columns, single-precision Mann-Kendall) is superseded; `docs/CROSS_LANGUAGE_STATUS.md`
+carries the new baseline. After the hygiene edits the reinstalled package re-verified: full
+suite 1,212 passed, both cross-check fixtures PASS (R now at the default 4e-14 for the
+Mann-Kendall fields too), an explicit JSON null in `climate` or `na_handling` refuses to
+load, the shipped config loads, the five exports resolve.
+
+**Sonnet 5.5 blind review of the Python port — GO (final snapshot; 593 differential
+case-runs against Julia, 410,156 annual rows and 368,560 summary values with 0 mismatches,
+worst summary difference 2e-12 relative; real Daymet data on 65 gages and the whole batch
+b1 (968,666 finite annual pairs) bit-identical; an independent naive reference of 20,054
+annual values agrees; existing families bitwise unchanged with or without TMIN/TMAX).**
+Four MINORs fixed 2026-10-13: PPT / SWE interpolation was written back for invalid years
+(Julia writes only when valid) and their residual-NaN rejection depended on
+`reject_residual_na` (Julia's is unconditional) — the two blocks now mirror `io.jl`
+exactly; NumPy integer limits (`np.int64`) were rejected by the round-3 validators
+(`numbers.Real` now, booleans still excluded); the climate functions and registries are
+exported from the package. Q, PPT and SWE preprocessing now also go through the
+`numbers.Real` observation contract (numeric strings were coerced by NumPy). NOTE items:
+the 1e-12 crossing tolerance is an implementer decision (round 2) not in the guidelines —
+recorded as such and confirmed by the user 2026-10-13, and its boundary is now pinned in all three
+suites (storms of 1 ∓ δ mm: δ = 1e-12 crosses on day 7, 4e-12 on day 301); the Python
+runner needs ~40 % more memory than Julia's and has no batching; an all-zero
+precipitation year gives `prcp_max_dowy = 1` in every language (none in the input: 376,799
+gage-years, minimum annual total 1.9 mm) — `docs/SIGNATURES.md` §14. Suites: Python 177,
+Julia 369 climate assertions + the full suite, rpkg climate file 107. The Sonnet rpkg review
+stalled (stream watchdog, no report) and is resumed after the reruns.
+
+**FINAL production reruns (round-3 Julia; 2026-10-12/13).** Product #1 (WY 1993–2025):
+8 batches in 2 h 8 min (129–2,088 s each while the reviewers shared the laptop), merge
+against the delivered product, 0 per-gage family failures, gates 5/5, annual validation
+PASS (894,846 non-NaN (gage, signature) means, 0 mismatches), output review PASS on every
+gate with the pre-final numbers above — and **bitwise identical to the pre-final run**
+(2,277 columns × 6,678 gages; all 27,602,161 annual rows), so the round-3 and round-4 fixes
+changed no production value, as designed. Product #2 (WY 1980–2025): batches 1–2 finished
+(2,629 s, 4,236 s), batch 3 was stopped by the runner's 120-minute cap at 0.1 gages/s —
+the laptop's 8 GB swap was 88 % used by other applications and the 2.5 GB Julia process
+crawled; resumed 2026-10-13 08:19 from the two finished batches (same command and
+environment, verified by the runner) with the cap at 480 min: the remaining six batches took
+151–909 s on the quiet machine (all eight: 2,629 / 4,236 / 909 / 258 / 151 / 155 / 167 /
+159 s). The annual-parquet merge then failed at the runner's default 1 GB DuckDB budget
+(34,681,331 rows; `--memory-limit 3GB` completed it in 30 s — the default is too small for
+the 46-year product). Product #2 result: 0 per-gage family failures, gates 5/5, annual
+validation PASS (842,401 non-NaN (gage, signature) means, 0 mismatches), output review
+PASS on every gate: 1,252 Q-only + metadata columns identical on all 6,250 gages; the 24
+continuous climate-dependent signatures R² ≥ 0.999 on shared gage-years (runoff ratios
+≤ 2.0e-4 absolute on 223,715 shared gage-years; elasticity_annual 0.9994); discrete snow
+timings changed in ≤ 0.05 % of gage-years; the old `_mean`s reproduced from the new annual
+values on the old year sets (R² ≥ 0.999); 624 new columns populated (min finite fraction
+0.766) and within the physical ranges; seasonal identity holds.
+
+**Version-2 products, coverage and flags (from the CSVs).** Every gage of product #1
+(6,678) and 6,223 of the 6,250 of product #2 carry climate summary statistics (the other 27 have a
+Daymet series but exactly 20 qualifying years from WY 1980, and WY 1980 has no climate
+value because the input begins 1980-01-01 — 19 climate years fall below the 20-value floor,
+so their climate summaries are NaN while the annual values are in the parquet) (the 2026 products: 5,513 / 5,635 usable);
+`annual_runoff_ratio` is present for 6,646 / 6,195 (the un-normalized gages excluded);
+the frost-date trend statistics survive the record-anchored gate on 5,995 / 5,671 gages.
+`flagged_for_high_na` is TRUE for 560 (#1) / 401 (#2) gages — regenerated by the run
+(the delivered columns say 1,224 / 1,243 and are wrong; the 2026-09-04 recomputation on the
+old columns gave 791 / 598; fewer now because every gage carries the climate families).
+`area_normalized = FALSE` for 32 / 28 gages (gage sets unchanged; the 37-vs-32/28
+discrepancy noted 2026-10-05 stays open) and `flagged_for_qann_range` for 159 / 151.
+Folders: `~/HISSS_data/climate-rerun-12oct2026/processedOuts_{1993,1980}_2025_climate_12oct2026`
+(signatures CSV, annual parquet, timing JSON with provenance, batch logs, validation and
+review files, explorers and dashboards); nothing deposited (decision 20).
+
+**Output-review design and the pre-final dry run (2026-10-12).**
+`docs/benchmarks/compare_climate_rerun.py` classifies every column of a rerun against
+the superseded product: Q-only + metadata must be identical per gage; climate-dependent
+columns are gated on SHARED GAGE-YEARS (decision 16) — continuous signatures R² ≥ 0.999
+and 99th-percentile relative difference ≤ 1e-3 on the annual values, discrete snow
+timings reported as the fraction of gage-years changed, elasticity reported only — plus
+the old product's `_mean` recomputed from the new annual values on the old year set
+(R² ≥ 0.999); the summary-level trend statistics move for every gage because two climate
+years were added and are reported, not gated; new columns must be populated and pass
+physical sniff ranges. The pre-final product #1 (round-2 code) passed every gate against
+`processedOuts_drought_28jul2026`: 1,252 Q-only + metadata columns identical on all 6,678
+gages; runoff ratios within 1.8e-4 absolute on 163,422 shared gage-years; discrete snow
+timings changed in ≤ 0.05 % of gage-years; old means reproduced with R² 1.000
+(elasticity_annual 0.9993); `flagged_for_high_na` regenerated (1,518 gages change — the
+delivered column was wrong, Known Issues).
+
 
 ### Fixed (HIGH): second review of the session's Daymet work — batched runner, explorer, tools (2026-10-05)
 Four Sonnet 5.5 reviewers (2026-10-01) re-checked every update since 2026-09-29: the Daymet
