@@ -288,7 +288,7 @@ Moved 2026-09-29 to `docs/reconciliation/guidelines_todos.md` and
 
 ## [October 2026]
 
-### Fixed: the staged version-2 explorers could not find their `_annual/` sidecar (2026-10-14)
+### Fixed (MEDIUM): the staged version-2 explorers could not find their `_annual/` sidecar (2026-10-14)
 
 Answering "which sidecar files must be uploaded with the HTMLs" showed that both staged
 explorers in `~/Downloads/Signatures_v2_12oct2026/` embed the RUN folder's sidecar name
@@ -309,7 +309,7 @@ the embedded name. Deposit rule: upload each explorer HTML together with its com
 same level, names unchanged — the page also needs internet for Leaflet (unpkg) and the basemap
 tiles. Rule added to `.claude/rules/benchmarks.md`.
 
-### Fixed: explorer and dashboard basemaps — CARTO's tiles now require an API key (2026-10-13)
+### Fixed (MEDIUM): explorer and dashboard basemaps — CARTO's tiles now require an API key (2026-10-13)
 
 The user's review of the version-2 explorers found no basemap, only CARTO's "API KEY
 REQUIRED" watermark: `basemaps.cartocdn.com` now answers every keyless request with that
