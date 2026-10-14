@@ -9,7 +9,8 @@
 
 Local staging only (user decision 2026-10-12: nothing is uploaded). Copies and renames the run's
 artifacts to the deposit names used in 2026 (`hisss_signatures_wyW_2025.csv`, the annual parquet,
-the provenance JSON, the explorer + `_annual/` sidecar, the validation files), extends the data
+the provenance JSON, the explorer + `_annual/` sidecar — with the sidecar folder name the explorer
+embeds rewritten to the deposit name — the validation files), extends the data
 dictionary and category table with the climate family (extend_data_dictionary_climate.py),
 rewrites the counts and the climate / Daymet / high-NA paragraphs of the 2026 README, writes the
 run notes and a rename manifest. Numbers come from the files themselves, never from this script.
@@ -37,6 +38,18 @@ def copy(src, dst):
     return os.path.basename(src), os.path.basename(dst)
 
 
+def rename_sidecar_dir(html_path, old_dir, new_dir):
+    """Point the explorer's embedded sidecar folder name at the renamed folder (exactly one match)."""
+    with open(html_path, "rb") as fh:
+        t = fh.read()
+    old = f'"dir":"{old_dir}"'.encode(); new = f'"dir":"{new_dir}"'.encode()
+    n = t.count(old)
+    if n != 1:
+        raise SystemExit(f"{html_path}: expected exactly one embedded sidecar dir {old!r}, found {n}")
+    with open(html_path, "wb") as fh:
+        fh.write(t.replace(old, new))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--run-dir", required=True); ap.add_argument("--prefix", required=True)
@@ -58,10 +71,17 @@ def main():
         manifest.append(copy(src, os.path.join(a.out, dst)))
     expl = os.path.join(run, f"signature_explorer_{W}_2025_60pct_climate.html")
     if os.path.exists(expl):
-        manifest.append(copy(expl, os.path.join(a.out, f"hisss_signature_explorer_{tag}.html")))
+        expl_dst = os.path.join(a.out, f"hisss_signature_explorer_{tag}.html")
+        manifest.append(copy(expl, expl_dst))
         side = expl[:-5] + "_annual"
         if os.path.isdir(side):
-            manifest.append(copy(side, os.path.join(a.out, f"hisss_signature_explorer_{tag}_annual")))
+            side_dst = f"hisss_signature_explorer_{tag}_annual"
+            manifest.append(copy(side, os.path.join(a.out, side_dst)))
+            # The explorer loads its per-signature time series from the folder named in its
+            # embedded `"dir"` (build stem + `_annual`), so the renamed sidecar folder must be
+            # named there too — otherwise the time-series panel reports "annual sidecar not
+            # found" (staging defect found and fixed 2026-10-14).
+            rename_sidecar_dir(expl_dst, os.path.basename(side), side_dst)
     for name, dst in [("validation_gates.txt", f"hisss_validation_gates_{tag}.txt"),
                       ("validation_annual_values.txt", f"hisss_validation_annual_values_{tag}.txt"),
                       ("validation_climate_rerun_review.txt", f"hisss_validation_rerun_review_{tag}.txt"),

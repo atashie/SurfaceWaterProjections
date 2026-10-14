@@ -288,6 +288,27 @@ Moved 2026-09-29 to `docs/reconciliation/guidelines_todos.md` and
 
 ## [October 2026]
 
+### Fixed: the staged version-2 explorers could not find their `_annual/` sidecar (2026-10-14)
+
+Answering "which sidecar files must be uploaded with the HTMLs" showed that both staged
+explorers in `~/Downloads/Signatures_v2_12oct2026/` embed the RUN folder's sidecar name
+(`signature_explorer_1993_2025_60pct_climate_annual`): `build_signature_explorer.py` derives
+the folder name from the output stem and writes it into the page (`D.meta.annual.dir`, the
+only thing the page loads at view time besides Leaflet and the tiles), and
+`stage_hydroshare_climate_v2.py` renamed the folder to
+`hisss_signature_explorer_wy1993_2025_annual` without rewriting the page. The map and the
+signature values (embedded) worked; every per-gage time-series panel would have said "annual
+sidecar not found" — confirmed headlessly (a sidecar `<script>` load fails under the embedded
+name, succeeds under the staged one). The 2026 staged explorers embed the deposit name and are
+not affected; the run-folder explorers keep their own names and never were. Fix: the stage
+script now rewrites the embedded name right after renaming the folder (`rename_sidecar_dir()`,
+exactly one match or abort), and the two staged pages were patched in place (that one string;
+now 100,193,900 and 95,036,409 bytes, md5 `45d257ee…` / `16877dda…`); both load `Qann.js` from
+the embedded name. Deposit rule: upload each explorer HTML together with its complete
+`_annual/` folder (139 `.js` files; 178 MB for WY 1993–2025, 226 MB for WY 1980–2025) at the
+same level, names unchanged — the page also needs internet for Leaflet (unpkg) and the basemap
+tiles. Rule added to `.claude/rules/benchmarks.md`.
+
 ### Fixed: explorer and dashboard basemaps — CARTO's tiles now require an API key (2026-10-13)
 
 The user's review of the version-2 explorers found no basemap, only CARTO's "API KEY

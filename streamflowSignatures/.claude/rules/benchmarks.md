@@ -44,4 +44,9 @@ paths:
   OpenStreetMap fallback → layers control); CARTO's tiles watermark keyless requests since
   2026-10 — never reintroduce them. Check a rebuilt HTML with `check_html_basemap.py` (tiles
   loaded, attribution, screenshot) before staging it.
+- Explorer sidecars: `build_signature_explorer.py --annual` writes the per-signature time series to
+  `<out-stem>_annual/` AND embeds that folder name in the page (`D.meta.annual.dir`). Renaming the
+  HTML for a deposit means renaming the folder and rewriting the embedded name together
+  (`stage_hydroshare_climate_v2.py` does; the 2026-10-14 staging defect did not) — then load a
+  sidecar headlessly to prove it. A deposit ships the HTML with its complete `_annual/` folder.
 - Procedure, env vars and the post-run checklist: `/run-benchmark`.
