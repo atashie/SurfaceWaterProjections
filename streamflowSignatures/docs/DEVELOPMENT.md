@@ -79,6 +79,11 @@ Signature functions receive clean data
 - Constant-SD detection is a QA flag, not a year rejection criterion
 - `ice_affected_days_total` per-gage output aggregates ice-related NA days from diagnostics
 - Seasonal completeness is computed from RAW observations (pre-interpolation)
+- **KNOWN ISSUE (2026-10-16, fix on hold)**: the three benchmark runners LEFT-join each
+  gage's Daymet series onto its streamflow rows BEFORE this pipeline, so a date absent from
+  the streamflow record has no PPT/TMIN/TMAX/SWE either and step 4 interpolates climate that
+  exists in the input (storm days → biased low). Proposed fix: outer join (Q-only columns
+  must stay bit-identical) — CHANGELOG → Known Issues; `docs/plans/2026-10-16-precipitation-review.md`.
 - `generate_stats()` has optional `trend_completeness` / `decade_completeness` params
 
 ### Annual Values Export (July 2026; all three languages since August 2026)

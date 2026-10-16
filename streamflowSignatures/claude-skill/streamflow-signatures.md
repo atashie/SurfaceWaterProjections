@@ -122,6 +122,12 @@ Thirty-nine pure-climate signatures from Daymet precipitation and temperature
   no dry day.
 - Products rerun on the reprocessed Daymet input (calendar 1980–2025, every gage) carry
   climate for WY 2024–2025 as well; WY 1980 has none (the input starts 1980-01-01).
+- ⚠ KNOWN ISSUE (2026-10-16, every product, fix on hold): climate is joined onto the
+  streamflow ROWS, so a day absent from a gage's streamflow record is linearly interpolated
+  in PPT (and TMIN/TMAX/SWE) although Daymet has it; such days are mostly storms, so the
+  affected years' totals run low. 919 of 200,832 gage-years in the WY 1993–2025 product
+  (median 6 mm); 8 gages' `prcp_annual_mean` are off by more than 1 % (02146285 by
+  −24.5 %). The runoff ratios and elasticity inherit it.
 
 ### Streamflow Drought Metrics (July 2026)
 

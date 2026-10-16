@@ -23,6 +23,12 @@ loads every session is `docs/STATUS.md`.
 ## [Unreleased]
 
 ### Planned
+- **Climate on Daymet's own dates — the fix for the streamflow-frame Known Issue (found
+  2026-10-16) — ON HOLD pending discussion with the research team (user decision,
+  2026-10-16).** Scope when approved: outer join in the three runners, Julia first; gate:
+  every Q-only column bit-identical (`check_additivity.jl --expect-added 0`); then rerun
+  both version-2 products (the 1,172 gage-years with absent streamflow dates change in the
+  PPT/TMIN/TMAX/SWE-derived families). Design: `docs/plans/2026-10-16-precipitation-review.md` §5.
 - **Daymet climate input: the product-rerun decision is PENDING (NEXT).** The reprocessed
   input `daymet_1980_2025_29sep2026.parquet` (8,017 basins, calendar 1980–2025, no NaN) was
   built 2026-09-30 and adversarially reviewed 2026-10-01. On the 5,965 basins with stale
@@ -126,6 +132,38 @@ loads every session is `docs/STATUS.md`.
 - BFImax estimation via Collischonn & Fan (2013) backward filter — would give BFI_Eckhardt_param per-gage BFImax instead of fixed 0.8, improving discriminating power (currently range [0.47–0.80] due to BFImax saturation)
 
 ### Known Issues
+- **MEDIUM (every product, found 2026-10-16 by the Pacific-coast precipitation review) —
+  climate rides on the streamflow DATES: a day absent from a gage's streamflow record (no
+  row, as opposed to a row with NA) loses its Daymet value as well, and the preprocessor
+  then linearly interpolates PPT (and TMIN/TMAX/SWE) across the hole as if the climate were
+  missing.** All three runners left-join each gage's climate onto its own streamflow rows
+  before `preprocess_daily_data()` builds the date grid
+  (`docs/benchmarks/run_julia_benchmark.jl:220` and `:332`, `run_python_benchmark.py:319`,
+  `run_rpkg_benchmark.R:276`), so the library never sees the Daymet values of those days.
+  Gages drop out preferentially during storms, so the interpolate is biased low. Measured on
+  the WY 1993–2025 version-2 annual parquet against the Daymet input: 919 of 200,832
+  `prcp_annual` gage-years (679 gages) differ from the true water-year sum, every one with
+  ≥ 1 absent streamflow date (0 counterexamples; 253 further gage-years with absent dates
+  happen to match); |diff| median 6 mm, p90 54, p99 327, max −606 mm (02146285 WY 2024: 22
+  absent dates in 1–2-day runs carried 713 mm, 32 mm/day against 2 mm/day on the present
+  days; product 943 mm, Daymet 1,549 mm). Per-gage `prcp_annual_mean` bias exceeds 1 % at 8
+  gages (02146285 −24.5 %, 0214297160 −6.1 %, 0214269560 −3.4 %, 02329342 −3.3 %, 02336030
+  −2.4 %, 11363930 −1.9 %, 11153650 −1.8 %, 03250190 −1.1 %); the 70 affected Pacific-coast
+  gages are all within 1.9 %, so this does NOT explain the coastal 3–4.5 m totals (which the
+  review found consistent with or below PRISM basin means and station normals). The same
+  frame feeds the Q-to-PPT family (runoff ratios, elasticity, Q-P seasonality, avg_storage),
+  the snow family (`swe_max_to_ppt`, SWE itself) and the temperature metrics, so by code
+  reading the 2026 deliveries and the WY 1980–2025 version-2 product carry the same
+  behaviour (not measured there). Not a library defect: `preprocess_daily_data()` is correct
+  for the frame it is given. **Proposed fix**: give the preprocessor the climate on Daymet's
+  own dates — an outer join on `date` in the three runners (Q becomes NA on the added rows,
+  which the grid normalisation already produces for absent dates, so every Q-only column
+  must stay bit-identical; `check_additivity.jl` is the gate) — Julia first, then the
+  ports, then a rerun of both version-2 products. **DECISION (user, 2026-10-16): documented
+  for future work; the fix is NOT implemented until it has been discussed with the research
+  team.** Record and evidence: `docs/plans/2026-10-16-precipitation-review.md`;
+  `~/HISSS_data/climate-rerun-12oct2026/precip_review_16oct2026/` (scripts +
+  `full_domain_prcp_check.parquet`, one row per product gage-year).
 - **Explorers and dashboards built before 2026-10-13 show CARTO's "API KEY REQUIRED"
   watermark instead of a basemap** (CARTO withdrew keyless tiles; points and panels still
   work). Affected deliveries: the 2026 explorers and validation dashboards of HydroShare
@@ -287,6 +325,27 @@ Moved 2026-09-29 to `docs/reconciliation/guidelines_todos.md` and
 ---
 
 ## [October 2026]
+
+### Reviewed: Pacific-coast annual precipitation totals; one defect found (2026-10-16)
+
+User question: basin totals of ~4 m on the Pacific coast looked high. Findings
+(`docs/plans/2026-10-16-precipitation-review.md`): (1) only 3 of 6,678 gages in the
+WY 1993–2025 version-2 product exceed 4,000 mm and 58 exceed 3,000 mm — Coast Mountains,
+windward Olympics/Cascades and SE Alaska headwaters; the explorer's robust colour scale
+clips at the domain p95 (1,764 mm), which paints every wet coastal basin the top colour.
+(2) Against GAGES-II PRISM 1971–2000 basin means the product's median ratio is 0.99–1.03
+west of the Cascades (1.07 for the rest of CONUS) and 0.59–0.87 in the wettest Olympic
+basins; station normals (Forks 3,046, Hoh 3,298, Tofino 3,271, Coquitlam Lake 3,616,
+Ketchikan 3,798 mm; Quinault basin estimate 4,724 mm) bracket or exceed our values; in
+BC / SE Alaska 43 gages have mean runoff > mean precipitation (Daymet low in windward
+mountains, plus glacier melt). (3) `daymet_aggregate.py` is a coverage × true-area weighted
+MEAN, not a sum, validated against exactextract and the co-authors' gdptools series — no
+defect. (4) `calculate_precipitation_metrics` reproduces the Daymet water-year sum to
+1e-6 mm for 199,913 of 200,832 gage-years; the Dec 31 fill in 364-day Daymet water years is
+the documented behaviour. (5) The remaining 919 gage-years expose the streamflow-frame
+defect recorded under Known Issues (MEDIUM; fix deferred — user decision 2026-10-16).
+Docs: caveats in `docs/SIGNATURES.md` §8 / §12 / §14, `docs/DEVELOPMENT.md` (NA handling),
+the claude-skill and the co-author relay list; STATUS one-liner. No code changed.
 
 ### Fixed (MEDIUM): the staged version-2 explorers could not find their `_annual/` sidecar (2026-10-14)
 

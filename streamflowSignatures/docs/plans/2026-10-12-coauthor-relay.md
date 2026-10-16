@@ -81,3 +81,17 @@ decisions: `docs/plans/2026-10-12-climate-metrics-plan.md` §1.
    the analysis window"; 85,000 vs 100,000 km²; cross-references after the §2.1.1/§2.1.2 swap;
    title/abstract naming; citations (Albers 2026 vs 2017, Myneni DOI, Hatchett year, Condon
    2010 → 2020, "htpps://"); "Claude Code 0.145.0"; §5.1.2 "0103500".
+
+## For discussion with the research team (added 2026-10-16)
+
+1. Climate on the streamflow frame (CHANGELOG → Known Issues, MEDIUM): a day absent from a
+   gage's streamflow record is interpolated in PPT/TMIN/TMAX/SWE too, although Daymet has
+   it; 919 of 200,832 gage-years in the WY 1993–2025 product, 8 gages > 1 % on mean annual
+   precipitation (one −24.5 %), Pacific coast ≤ 1.9 %; runoff ratios and elasticity inherit
+   it. Proposed: outer-join the climate (Q-only columns unchanged) and rerun both version-2
+   products before the deposit. Decision wanted: fix now, or document and ship.
+   `docs/plans/2026-10-16-precipitation-review.md` §5.
+2. Pacific-coast precipitation totals (3–4.5 m on the Coast Mountains, windward
+   Olympics/Cascades, SE Alaska) are consistent with or below PRISM basin means and station
+   normals; the explorer's robust colour scale clips at the domain p95 (1,764 mm). No
+   change proposed; same record, §1–§2.
