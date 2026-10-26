@@ -1,28 +1,19 @@
 # Summary Documentation for Streamflow Signatures
 
 > **Auto-synced from**: [Google Doc](https://docs.google.com/document/d/e/2PACX-1vSVjtqLKk1r9TczxLEBhlnzfBWbm1TQVfvqERm-jEwLISZTEWx73ofV4Ng9H0JaXA/pub)
-> **Last synced**: 2026-10-12 (315 extracted paragraphs vs 277 on 2026-09-29). **Two new
-> metric sets and a naming convention; nothing implemented yet.** (1) NEW **§3.9 Climate
-> Metrics** — 39 annual metrics from Daymet prcp/tmin/tmax: precipitation totals (annual +
-> 4 seasons), 1-day and 5-day maxima and their timing, 50 % and centre-of-mass dates, days
-> above 10/25/50 mm, annual sd and cv, longest dry spell (+ start/end dowy), Gini index,
-> Walsh–Lawler seasonality index, temperature maxima/minima (annual + 4 seasons) and their
-> timing, first/last frost dowy, growing degree days (annual + 4 seasons). The Gini and
-> seasonality equations are images the text extraction does not capture. (2) **§3.8 Snow
-> gains five snowfall metrics** (snowfall_annual/_xSeason, snowfall_max_dowy,
-> snowfall_frac_annual, snowfall_frac_coldseason Nov–Apr) — Daymet carries no snowfall
-> variable, so a derivation rule is needed. (3) **Part 1.1 prescribes
-> `variableName_annual` / `variableName_xSeason` (win, spr, sumr, fall)** and the doc
-> renames shipped columns (Q_annual, Qsumr, Qfall, Negative_annual, runoff_ratio_annual /
-> _Xseason, Flow_Reversals_xSeason) — a CSV-contract change, user decision pending. (4) A
-> new §1.1 "Streamflow data sources" (duplicate 1.1 numbering); Part 6 is now a "Resource
-> Collections" placeholder with co-author notes and References moved to Part 7; six wording
-> edits. Open items: `docs/reconciliation/guidelines_todos.md` (2026-10-12).
+> **Last synced**: 2026-10-21 (310 paragraphs vs 315 on 2026-10-12). Five regions, all of
+> them the user's 2026-10-12 edits finally propagating to the published page: the five §3.8
+> snowfall lines are gone (not implemented, by decision), GDD now reads Σ(max(0, Tmax+Tmin)/2)
+> (base 0 °C, clamped) and `frost_first_dowy` / `frost_last_dowy` say "minimum daily
+> temperature" — all three match `julia/src/climate.jl`; plus a stray "m" in the title
+> ("mSummary"). §3.9 Climate Metrics (39) is implemented in all three languages since
+> 2026-10-12. Open doc-side items: `docs/reconciliation/guidelines_todos.md` (2026-10-21).
 
 ---
 
 
-# Summary Documentation for Streamflow Signatures
+
+# mSummary Documentation for Streamflow Signatures
 
 GitHub repo here· Summary data audit sheet here
 
@@ -438,16 +429,6 @@ melt_com_dowy: Day of water year when cumulative melt reaches 50% of the water-y
 
 swe_max_to_ppt: swe_max divided by total water-year precipitation (years with precipitation ≤ 10 mm return NA).
 
-snowfall_annual / _Xseason: annual or seasonal snowfall (depth, mm)
-
-snowfall_xSeason: seasonal snowfall (depth, mm)
-
-snowfall_max_dowy: maximum daily snowfall
-
-snowfall_frac_annual: annual snowfall fraction (0 to 1, where 1 = all precipitation is snowfall and 0 = no precipitation is snowfall)
-
-snowfall_frac_coldseason: Nov-April snowfall fraction (0 to 1, where 1 = all precipitation is snowfall and 0 = no precipitation is snowfall)
-
 Requirements and decisions:
 
 snow_on_dowy and snow_off_dowy are censored (NA) when the anchor spell touches Oct 1 or Sep 30, since the snowpack predates or outlasts the water year.
@@ -506,17 +487,17 @@ temp_max_xSeason: Maximum temperature for each season
 
 temp_min_xSeason: Minimum temperature for each season
 
-frost_first_dowy: First day of water year below 0 degrees C
+frost_first_dowy: First day of water year with minimum daily temperature below 0 degrees C
 
-frost_last_dowy: Last day of water year below 0 degrees C between October and June
+frost_last_dowy: Last day of water year with minimum daily temperature below 0 degrees C between October and June
 
 GDD_cum_annual: annual growing degree days are a metric of heat accumulation; calculated as the annual cumulative sum of daily growing degree days
 
-GDD = ∑((Tmax+Tmin)/2)
+GDD = ∑(max(0, Tmax+Tmin)/2)
 
 GDD_cum_xSeason: growing degree days are a metric of heat accumulation; calculated as the cumulative sum of daily growing degree days for each season
 
-GDD = ∑((Tmax+Tmin)/2)
+GDD = ∑(max(0, Tmax+Tmin)/2)
 
 ## Part 4: Data Ingestion and Utility Functions
 

@@ -23,6 +23,46 @@ fails GitHub's rich rendering because of a GitHub-side mermaid bundle crash (ver
 against GitHub's own mermaid README, not this file) — re-check after GitHub ships a fixed
 bundle; until then the 3x PNG beside the doc is the review copy.
 
+**2026-10-21 — co-author edits synced (106 vs 109 paragraphs; 14 regions); reconciliation
+pass.** Snapshot overwritten. Thirteen of the fourteen regions are the switch from author–year
+to numbered citations (1–36), the removal of the three title lines, the §5.1.x → §5.1–5.3
+renumbering and a Figure 2 inset sentence. Checked against code, config and the census
+(`docs/plans/2026-09-04-filtering-stage-census.md`, new §10). Findings by direction of fix:
+- **Manuscript wrong or imprecise, code/docs right (relay):**
+  1. **§2 funnel sentence** now reads "…at least 20 years of valid streamflow data with >30 days
+     over .0001 mm/day and were located in watersheds with polygons smaller than 85,000 km
+     (≤ largest HUC8 size), yielding 7,964 gages" — two stages fused: the streamflow rule yields
+     8,014 (§2.1.1 and §3 Resource 3 still say so), the boundary layer 7,964; the exclusion
+     rule applied was 100,000 km² (54 basins dropped; 6 of the 7,964 polygons are 87,150–97,182
+     km²); "km" → "km²"; double full stop. In code the rule is "at least 30 days" (`>= 30`) with
+     Q strictly `> 0.0001`, counted per CALENDAR year at compilation (water years only from the
+     per-year screening onwards). Measured 2026-10-21 (census §10): of the 8,980 excluded
+     candidates 8,787 failed the record-length pre-check before any flow value was examined,
+     113 were never retrieved and 80 failed the per-year rule — 67 of those lack 20 years with
+     30 days of ANY positive flow, 5 fail only the 0.0001 mm/day level, 4 were lost to the
+     qualifier-code mask ("A R" revised values set to NA), 3 to record length, 1 now passes.
+     Suggested: "…at least 20 calendar years with at least 30 days of flow above 0.0001 mm/day,
+     yielding 8,014 gages; 7,964 of these have a watershed polygon ≤ 100,000 km²".
+  2. §2.2.1 still "121 streamflow and hydroclimate signatures … eight signature families" (the
+     "100 annually resolved … 21 stand-alone" clause was cut) while the §2 preamble says nine —
+     2026-10-12 item 2 unchanged; once the version-2 products are deposited the numbers are
+     139 annual + 21 scalars = 160 signatures, nine categories, 2,277 columns.
+  3. §2.1.4: Annual NLCD now carries "(CITE)" — add the Annual NLCD Collection 1 reference; the
+     MODIS 500 m / composite-interval sentence was cut (no loss). "Falcone 2011; 2017" collapsed
+     to reference 22 alone — check the 2017 GAGES-II update is still cited for the
+     human-interference indicators (§3 Resource 3).
+  4. Carried, all still present: §2.1.1 seasons Jan–Mar / Apr–Jun / Jul–Sep / Oct–Dec (code:
+     DJF / MAM / JJA / SON); §2.1.3 "1980–2023", gdptools; gap-rule wording; in-window 20-year
+     floor; the 80 % seasonal rule and the 12-flag sentences; §4 quartiles are product #2's;
+     reference entries and typos (2026-10-12 item 7).
+- **Verified consistent:** the numbered citations map one-to-one onto the previous author–year
+  citations where checked (1 Lin, 20 DeCicco, 21 Albers, 22 Falcone, 23 ECCC 2016, 24 Lehner &
+  Grill, 25 Linke, 26 Thornton, 29 Myneni, 31 McMillan, 32–33 Petersky & Harpold / Hatchett,
+  34 ECCC 2025, 35 Lehner 2022, 36 Friedl).
+- **Code/docs-side:** the qualifier-code mask finding (USGS "A R" = approved-revised days set to
+  NA by `generate_streamflow_dt`; 4 candidates lost, footprint in the compiled records in census
+  §10) is a legacy-ingestion item logged in CHANGELOG → Known Issues, not a manuscript item.
+
 **2026-10-12 — co-author edits synced (109 vs 110 paragraphs; nine regions); reconciliation
 pass.** Snapshot overwritten. The edits track the guidelines' new §3.9 Climate Metrics (same
 day): the §2 preamble now lists NINE signature families. Every changed methods claim was

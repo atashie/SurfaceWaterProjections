@@ -259,7 +259,14 @@ Daymet reaches 5,517 / 5,638 of the product gages (4 / 3 of them have all-NaN cl
 so 5,513 / 5,635 carry climate signatures; a reprocessed input covering every product gage
 was built 2026-09-30 but no product uses it yet); trend statistics survive the
 completeness gate for ~93 % of gages on dense signatures. Rerun with
-`docs/benchmarks/qualification_census.jl`.
+`docs/benchmarks/qualification_census.jl`. Of the 8,980 excluded candidates, the compilation's
+flow threshold (≥ 30 days > 0.0001 mm/day per calendar year, 20 such years) removed 72 by
+itself — 67 zero-flow or diverted channels and 5 at the threshold level; 8,787 failed the
+7,300-row length pre-check before any value was examined, 4 were lost to the USGS `A R`
+qualifier mask (a HIGH known issue: 193,542 approved days on 987 compiled gages are NA, and
+1,370 water years in 676 gages — 1,177 in product #1, 950 in #2 — are rejected for that reason
+alone; fix approved 2026-10-26, gage sets frozen, not yet applied) and 3 to length (2026-10-21,
+census §10; a fifth, 11129800, is both a zero-flow and a mask casualty).
 
 ## Interpreting Results
 

@@ -271,3 +271,85 @@ That run used **`min_num_years = 30`** (raw-data script and `config.R`; lowered 
   Daymet path is given, so the R golden run could only contain Daymet gages.
 - The unexplained "6,041" (§7) is within 5 of the og run's 6,046 successes; probably a count
   from that run, not verified.
+
+
+## 10. Addendum 2026-10-21 — what the compilation's flow rule removed (user question)
+
+Question: how many candidate gages did "at least 20 years of valid streamflow data with
+>30 days over .0001 mm/day" remove, and how many of those because of the flow threshold itself?
+
+**Rule as coded** (`R/helperFunctions.R` → `process_gages_rawToRaw` + `generate_streamflow_dt`;
+`config.R` `MIN_Q_VALUE_AND_DAYS = c(0.0001, 30)`, `MIN_NUM_YEARS = 20`): (i) retrieval
+pre-check — more than 365 × 20 = 7,300 daily rows inside 1979-10-01 … 2025-10-01, else
+`no_data` (no flow value is examined); (ii) USGS values whose qualifier string is not exactly
+`A`, `A e`, `P` or `P e` are set to NA (HYDAT symbols are never masked); (iii) a CALENDAR year
+counts when at least 30 non-NA values exceed 0.0001 (mm/day after area normalization; raw
+units for gages without a drainage area); (iv) fewer than 20 counted years →
+`insufficient_years`. Once a gage qualifies every day in the window is kept, and no flow
+threshold is applied downstream (`preprocess_daily_data` rejects water years on NA count and
+gap length only). The `config.R` comment "values below are set to NA" does not describe this
+path — values are only counted.
+
+**Method.** The 80 `insufficient_years` gages (69 USGS, 11 HYDAT) were re-fetched 2026-10-21
+(NWIS legacy daily-values service, the one `readNWISdv` used in February; ECCC GeoMet
+`hydrometric-daily-mean`, served from HYDAT) and the gate replayed under four variants of rule
+(iii) with `docs/benchmarks/min_flow_rule_replay.py`; the 8,014 compiled gages were scanned
+with `docs/benchmarks/min_flow_rule_footprint.py` on the local copy of
+`combined_streamflow_data_09feb2026.parquet` (899,935,349 bytes, `PAR1` footer, 111,624,189
+rows). Replay check: 76 of the 80 recorded year counts reproduce exactly, 3 differ by one year
+(records extended since February), and 02441390 now has 37 qualifying years (16 in February —
+its record was revised; it would pass today). Per-gage table:
+`docs/filtering_min_flow_rule_2026-10-21.csv`.
+
+| Excluded candidates (8,980) | Gages | US / Canada | What removed them |
+|---|---|---|---|
+| record-length pre-check (`no_data`) | 8,787 | 2,812 / 5,975 | ≤ 7,300 daily rows in the window — the flow threshold never ran |
+| retrieval never completed (`processing`) | 113 | 113 / 0 | — |
+| per-year rule (`insufficient_years`) | 80 | 69 / 11 | split below |
+| ↳ **zero flow** | **67** | 57 / 10 | ≥ 20 years with 30 valid days but < 20 years with 30 days of ANY positive flow — dry channels, diversions, canals (Pecos River 08398500–08405150, Trent Canal lock 02EC016, 09513860, 07232250/900 …); here the threshold acts as "> 0" |
+| ↳ **the 0.0001 mm/day level itself** | **5** | 5 / 0 | ≥ 20 years with 30 positive days, < 20 above the threshold: 06863000 (21 → 19 years), 06871800 (23 → 7), 07155590 (22 → 8), 07305500 (20 → 19), 09386300 (20 → 18); 0.0001 mm/day is 0.01–0.62 cfs at their drainage areas |
+| ↳ qualifier-code mask | 4 | 4 / 0 | 02201230, 07069000, 07074420, 07188653: 23–27 qualifying years without the mask, 15–19 with it — their revised periods (`A R`) were NA |
+| ↳ record length | 3 | 2 / 1 | 02479310, 04084445, 05NB039: fewer than 20 years with 30 valid days under any value rule |
+| ↳ now passes | 1 | 1 / 0 | 02441390 (revised since February) |
+
+**Answer.** The flow threshold proper removed **72** gages (67 zero-flow + 5 at the level); the
+flow-and-length rule as a whole removed 8,867 (8,980 less the 113 never retrieved), 8,787 of
+them on record length alone.
+
+**Footprint among the 8,014 compiled gages** (calendar years 1979–2025, 322,232 gage-years):
+2,269 gage-years (0.7 %) in 489 gages have ≥ 30 valid days but < 30 days above 0.0001 — 2,044
+of them (455 gages) are zero-flow years, 225 (100 gages) sit in the band 0 < Q ≤ 0.0001 mm/day.
+These years did not count towards the 20, but every one of them is in the compiled data and
+in the products (admission is unaffected by construction: 7,525 gages have no such year; one
+gage has 23).
+
+### 10.1 FINDING (HIGH, every product) — the qualifier-code mask drops approved, revised values
+`generate_streamflow_dt` keeps a USGS value only when its qualifier string is exactly `A`,
+`A e`, `P` or `P e`. NWIS's `R` means "Records for these data have been revised" — an
+APPROVED value — yet every `A R` day is NA in the compiled record: **181,461 days on 755
+gages** (1,571 gage-water-years; 934 with > 30 masked days; 277 whole years). Replaying the
+preprocessor's two rules (> 30 NA days, NA run > 3 days) on those gage-years with and without
+the mask: 1,215 are rejected with it, 1 without — **1,214 water years in 613 gages are lost
+solely to the mask** (worst: 07362000 16 years, 03250322 15, 07056000 12, 02313700 12,
+01585200 11). 553 of the 613 gages are in product #1 v2 and 447 in #2 v2; 71 / 193 of the 755
+`A R` gages are outside the products (how many because of the mask was not separated).
+Revisions cluster in the most recent years (2013–2025 for most of the worst gages), so record
+ends, trend last-decade completeness and the drought/pulse `*_all` thresholds are hit hardest.
+Smaller masks: `A <` 11,444 days / 139 gages and `A >` 218 (values at a reporting limit),
+`A [4]` 419 / 101, and 15,257 days of provisional values with remark codes (`P Dis` 3,873,
+`P Rat` 3,763, `P Ice` 3,693, `P ***` 1,372, `P Bkw` 889, `P Eqp` 416, `P Fld`, `P [4]`, `P <`,
+`P ZFL` 193 — zero flow is a valid value —, `P Ssn`, `P Mnt`, `P >`), most of which are
+defensible to drop. The manuscript's "we retained original agency quality flags, including
+ice-affected and estimated values" is true of the `flag` column but not of the values behind
+`A R`. **Fix (NOT applied — user decision): accept `R` (and decide `<`, `>`, `ZFL`) in
+`keep_codes`, re-ingest the affected USGS gages, rerun.** CORRECTION 2026-10-23 (Codex review of
+the rerun plan): the 1,214 / 613 budget above counted NAs among existing rows only; on the full
+October–September calendar (missing days count as NA, as the preprocessor does) the loss is
+**1,197 water years in 601 gages for `A R` alone and 1,370 in 676 gages with `A <`, `A >`,
+`A [4]` included** (1,177 in product #1 v2 / 950 in #2 v2; 899 / 757 product gages hold a masked
+approved day inside their window); the union of the four approved codes is 193,542 days on 987
+gages; 11129800 is a fifth compile-floor casualty (20 qualifying calendar years without the mask).
+Plan and decisions (2026-10-26, gage sets frozen):
+`docs/plans/2026-10-21-qualifier-mask-fix-rerun-plan.md`. Tables: `masked_days_by_gage_wy_flag.csv`
+and `AR_gage_wy_budget.csv`, written by the footprint tool. Logged: CHANGELOG → Known Issues,
+`docs/STATUS.md`.

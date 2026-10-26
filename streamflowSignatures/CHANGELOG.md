@@ -132,6 +132,31 @@ loads every session is `docs/STATUS.md`.
 - BFImax estimation via Collischonn & Fan (2013) backward filter — would give BFI_Eckhardt_param per-gage BFImax instead of fixed 0.8, improving discriminating power (currently range [0.47–0.80] due to BFImax saturation)
 
 ### Known Issues
+- **Compiled USGS records drop every day whose NWIS qualifier is `A R` (approved, "records
+  revised") — HIGH, every product (found 2026-10-21).** `generate_streamflow_dt`
+  (`R/helperFunctions.R`) keeps a value only when the qualifier string is exactly `A`, `A e`,
+  `P` or `P e`; `R` = "Records for these data have been revised" marks an APPROVED value. In
+  `combined_streamflow_data_09feb2026.parquet`: 181,461 `A R` days on 755 gages are NA, plus
+  the other approved remark codes `A <` (11,444 days / 139 gages), `A >` (218 / 30) and `A [4]`
+  (419 / 101) — 193,542 approved days on 987 gages (908 in product #1 v2, 757 in #2 v2).
+  Full-calendar replay of the preprocessor's rules (2026-10-23, Codex-verified): 1,370 water
+  years in 676 gages become valid once those days are finite (1,197 / 601 from `A R` alone);
+  1,177 of them in #1 v2 (619 gages) and 950 in #2 v2 (502 gages); 899 / 757 product gages hold
+  such a day inside their window; revisions cluster in 2013–2025, so record ends and last-decade
+  completeness are hit hardest; 5 candidates fell below the 20-year compilation floor because of
+  it. The provisional remark codes (`P Ice`, `P Dis`, `P Rat`, `P ***`, `P Bkw`, `P Eqp`, `P ZFL`,
+  …; 15,257 days on 263 gages) are masked too; many of those days carry a value at the agency
+  today under a new status, their February state is unknowable. Fix = the rule in `keep_codes`,
+  a re-fetch and splice, a rerun of both products with the gage sets FROZEN (user decision
+  2026-10-23) — NOT applied; plan v3 `docs/plans/2026-10-21-qualifier-mask-fix-rerun-plan.md`,
+  **DECISIONS (user, 2026-10-26): every default of plan v3 approved** (restore `R`, `<`, `>`,
+  `[4]` with the censored bounds kept as values; provisional-remark days out of scope; splice as a
+  patched snapshot with ledger, raw responses and the three-dataset control; gage sets frozen;
+  the climate outer-join fix stays out; internal v3 / public "version 2"; metadata updated in
+  place; rpkg re-baseline; code reviews by area; local staging; start now) — implementation
+  pending. Measurement: census §10.1
+  (`docs/plans/2026-09-04-filtering-stage-census.md`); tools
+  `docs/benchmarks/min_flow_rule_footprint.py`, `min_flow_rule_replay.py`.
 - **MEDIUM (every product, found 2026-10-16 by the Pacific-coast precipitation review) —
   climate rides on the streamflow DATES: a day absent from a gage's streamflow record (no
   row, as opposed to a row with NA) loses its Daymet value as well, and the preprocessor
@@ -325,6 +350,51 @@ Moved 2026-09-29 to `docs/reconciliation/guidelines_todos.md` and
 ---
 
 ## [October 2026]
+
+### Reviewed: what the compilation's flow rule removed; the `A R` qualifier mask found (2026-10-21)
+
+User question: how many of the 16,994 candidate gages did "at least 20 years with > 30 days
+over 0.0001 mm/day" remove, and how many because of the flow threshold itself? Re-fetched the
+80 `insufficient_years` candidates (NWIS + ECCC GeoMet) and replayed the R compilation gate
+under four rule variants (76 of 80 recorded year counts reproduce exactly), and scanned the
+8,014 compiled gages. Result: the threshold proper removed **72** gages — 67 zero-flow /
+diverted channels (the threshold acts as "> 0") and 5 at the 0.0001 level; 8,787 of the 8,980
+excluded failed the 7,300-row length pre-check before any value was examined, 113 were never
+retrieved, 4 were lost to the qualifier mask, 3 to length, 1 now passes. Among the compiled
+gages the rule left 2,269 gage-years (0.7 %) uncounted, none of which affected admission.
+Side finding, HIGH → Known Issues above: the `A R` (approved, revised) qualifier mask. Full
+record `docs/plans/2026-09-04-filtering-stage-census.md` §10; per-gage table
+`docs/filtering_min_flow_rule_2026-10-21.csv`; tools `docs/benchmarks/min_flow_rule_*.py`;
+the manuscript's §2 funnel sentence wording is relayed in `manuscript_log.md` (2026-10-21).
+Follow-up (user request 2026-10-21, revised 2026-10-23): a plan to fix the mask and regenerate
+both products with a QA/QC against the version-2 runs —
+`docs/plans/2026-10-21-qualifier-mask-fix-rerun-plan.md` (version 2). **DECISION (user,
+2026-10-23): no new watershed enters the analysis** — the corrected products keep the version-2
+gage sets; gages that would newly qualify (29 / 26) stay out and are listed. Codex round 1
+(`docs/plans/2026-10-21-qualifier-reviews/codex_plan_review_round1.md`) returned NO-GO on the
+first draft: its oracle counted NAs among existing rows rather than on the full water-year
+calendar (50 false positives, 33 misses — rebuilt: 1,370 restorable water years in 676 gages for
+the four approved codes, 1,197 / 601 for `A R` alone; 899 / 757 product gages hold a masked
+approved day inside their window); the claim that provisional-remark days carry no value today
+was wrong (1,273 numeric in the samples, re-coded after approval); restoring Q does not change
+the climate join (the rows exist); the harness, validator, rpkg gate and staging script carry
+hard-coded assumptions that must be parameterized first; the schedule is four to six days, not
+two to three. All 14 findings verified and folded in; the stale "15,460 provisional days" above
+and in census §10.1 corrected to 15,257; `docs/filtering_min_flow_rule_2026-10-21.csv` now
+marks 11129800 as a mask casualty too. Year-level oracle (forecast):
+`docs/plans/2026-10-21-qualifier-fix-expected-years.csv`. Codex round 2 (delta review of plan
+v2, `codex_plan_review_round2.md`): GO WITH CHANGES — the reviewer re-derived all 1,656 oracle
+rows, the totals and the would-qualify lists, and confirmed by a Julia experiment that
+climate-only annual values stay exactly equal on shared years; its eight changes (the runner
+derives `num_water_years` / `start` / `end` from the qualifying years, so "metadata unchanged"
+must exclude them; a deposited per-product selection manifest with a `--gage-list` in the
+splitter and an auditor that distinguishes qualified / selected / emitted; an acceptance oracle
+built from base + cached source records; an audit-fetch universe of all 1,185 masked gages; a
+numerical sensitivity run for censored values; a full resume fingerprint and a dirty-tree
+refusal for products; a full baseline reproduction of v2; partitioned validators; about seven
+person-days) are folded into plan v3 (2026-10-26). **DECISIONS (user, 2026-10-26): all plan-v3
+defaults approved** (recorded in the Known Issues bullet above and in plan §3 / §9); nothing run
+yet.
 
 ### Reviewed: Pacific-coast annual precipitation totals; one defect found (2026-10-16)
 

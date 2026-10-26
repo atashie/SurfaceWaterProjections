@@ -8,6 +8,26 @@ blocks to `changelog-old.md` when they are fully resolved. Moved here VERBATIM f
 
 ---
 
+**Synced 2026-10-21 — 5 changed regions (310 vs 315 paragraphs); the user's 2026-10-12 edits
+have propagated to the published page, nothing new to implement. Snapshot overwritten.** Verified
+against code: (1) the five §3.8 snowfall lines are deleted (plan §1 items 4/6/11: not
+implemented — relay item 10 closes); (2) GDD now reads "Σ(max(0, Tmax+Tmin)/2)" =
+Σ max(0, (Tmax+Tmin)/2), base 0 °C, clamped — matches `julia/src/climate.jl` (`gdd_base_c` 0;
+relay item 3 landed); (3) `frost_first_dowy` / `frost_last_dowy` now say "minimum daily
+temperature below 0 degrees C" — matches TMIN < `frost_temp_c` (the temperature half of relay
+item 8 landed; "(NA when none)" and the explicit Oct 1 – Jun 30 window are still absent).
+- [ ] DOC-SIDE (relay, added 2026-10-26 — becomes due when the qualifier-mask fix lands): the
+  data-processing paragraph says "USGS values are kept only for qualifiers A, A e, P, P e (others
+  set to NA)" (snapshot l. 540). That rule is the HIGH known issue of 2026-10-21 (approved
+  values with the remark codes `R`, `<`, `>`, `[4]` were set to NA; plan
+  `docs/plans/2026-10-21-qualifier-mask-fix-rerun-plan.md`); after the fix the sentence must
+  read: USGS values are kept whenever the status is A or P and a finite value is served, the
+  remark code is carried in the flag column (censored `<` / `>` values are the reported bound).
+- [ ] DOC-SIDE (relay): the title now reads "mSummary Documentation…" (stray "m"). Everything
+  else in the 2026-10-12 DOC-SIDE item and the carried list is unchanged (duplicate 1.1
+  numbering, Gini / seasonality equations as images, §3.9 header + Requirements block, BFI
+  interval, Hecht 2024, `recession_alpha_point_cloud`, avg_storage / ice_affected_days_total).
+
 **Synced 2026-10-12 — 13 changed regions since 2026-09-29 (315 vs 277 paragraphs); two NEW
 metric sets and a naming convention, NONE implemented. Snapshot overwritten.** Checked against
 code (`julia/src/`, `config/signatures_config.json`): no existing Part 1–3 rule changed in

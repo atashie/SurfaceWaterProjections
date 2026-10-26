@@ -18,6 +18,7 @@ decisions: `docs/plans/2026-10-12-climate-metrics-plan.md` §1.
    `gdd_cum_win/spr/sum/fal`; every `_xSeason` → `_win`, `_spr`, `_sum`, `_fal`.
 3. §3.9 GDD: replace "GDD = ∑((Tmax+Tmin)/2)" with "GDD = Σ max(0, (Tmax + Tmin)/2 − 0 °C)"
    (base temperature 0 °C, negative days contribute 0) — confirm the published page shows it.
+   LANDED on the published page 2026-10-21 (as "Σ(max(0, Tmax+Tmin)/2)", equivalent).
 4. §3.9 dry day: add "a dry day has precipitation ≤ 0.1 mm" to the three
    `prcp_intermit_annual*` lines; add "strictly above" to the three `prcp_ndays_abv_*mm` lines.
 5. §3.9 `prcp_5d_max`: add "the five-day window lies within the water year";
@@ -33,13 +34,15 @@ decisions: `docs/plans/2026-10-12-climate-metrics-plan.md` §1.
 8. §3.9 frost: `frost_first_dowy` → "first day of the water year with basin-mean tmin < 0 °C
    (NA when none)"; `frost_last_dowy` → "last day with tmin < 0 °C between Oct 1 and Jun 30
    (NA when none)". Temperature extremes: "maximum of daily tmax" / "minimum of daily tmin".
+   PARTLY LANDED 2026-10-21: both frost lines now say "minimum daily temperature below 0 degrees C";
+   the "(NA when none)" clauses and the Oct 1 – Jun 30 wording are still missing.
 9. §3.9 header: add "Function: calculate_precipitation_metrics(), calculate_temperature_metrics().
    Requires Daymet prcp, tmin, tmax" and a Requirements block: precipitation metrics on
    PPT-qualified years, temperature metrics on years where both tmin and tmax pass the same
    screen (≤ 30 missing days, gaps ≤ 3 days interpolated; no sign check); frost dates carry
    the snow family's first/last-decade gate; 16 statistics per metric, no scalars.
 10. §3.8: the five snowfall lines are deleted on the editing copy — confirm the published page
-    follows; §3.9 is the ninth category "Climate" (precipitation + temperature families).
+    follows (CONFIRMED 2026-10-21: gone from the published page); §3.9 is the ninth category "Climate" (precipitation + temperature families).
 11. Part 1: the new "1.1 Streamflow data sources" duplicates the number of "1.1 Time
     conventions" → renumber 1.1–1.4; 3.1 "daicly" → "daily".
 12. Part 6 "Resource Collections" still carries working notes ("Insert the table…", "Here is the

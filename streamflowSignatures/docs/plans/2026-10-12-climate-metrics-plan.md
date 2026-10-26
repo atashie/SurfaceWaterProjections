@@ -32,9 +32,9 @@ product uses it yet (`EO_data_processing/README_DAYMET.md`).
 | 21 | Relay list | yes, one line per item, incl. the manuscript season error. |
 | 22 | Crossing tolerance (review round 2, implementer decision 2026-10-12, confirmed by the user 2026-10-13) | `prcp_50_dowy` crosses when `cumulative ≥ fraction × total − 1e-12 × total`; 1e-12 of an annual total is physically nothing and the closest production margin is 1.3e-9; boundary pinned by tests in all three languages. |
 
-Open with the co-authors (relay): the published guidelines page still carries the snowfall
-lines and the GDD formula without a base (the user's edits had not propagated at the
-2026-10-12 re-sync); the Gini and seasonality equations are images.
+Relay status 2026-10-21: the published guidelines page now shows the snowfall lines deleted,
+the GDD clamp at base 0 °C and frost on the minimum temperature (the user's edits propagated);
+the Gini and seasonality equations are still images.
 
 ## 2. The 39 metrics — definitions as implemented
 
