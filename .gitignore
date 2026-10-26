@@ -7,3 +7,4 @@
 .streamflowSignatures/streamflowVisualizationApp/.Renviron
 streamflowSignatures/data_out/
 streamflowSignatures/test_output/nul
+.DS_Store

@@ -17,6 +17,9 @@ using JSON
 using Logging
 using SHA
 
+# Climate-frame helper (Phase A′, 2026-10-26): STREAMFLOW_CLIMATE_FRAME = left | outer
+include(joinpath(@__DIR__, "climate_frame.jl"))
+
 # Configuration
 const STREAMFLOW_PATH = get(ENV, "STREAMFLOW_DATA_PATH",
     raw"D:\processedOuts_feb2026\combined_streamflow_data_09feb2026.parquet")
@@ -42,6 +45,10 @@ function main()
         v = get(ENV, "STREAMFLOW_END_WATER_YEAR", "")
         v != "" ? parse(Int, v) : nothing
     end
+    # Climate frame (2026-10-26): "left" = the streamflow dates only (the frame of every
+    # product before the qualifier rerun); "outer" = + Daymet rows on absent dates inside
+    # the record span and the gage's water years. Errors on any other value.
+    local climate_frame = climate_frame_mode()
 
     println("=" ^ 70)
     println("JULIA BENCHMARK - Streamflow Signatures")
@@ -64,6 +71,7 @@ function main()
     println("Annual values: save=$(CFG_SAVE_ANNUAL_VALUES)")
     println("Stats floor: min_values_for_stats=$(CFG_MIN_VALUES_FOR_STATS) (recession/elasticity exempt)")
     println("Experiment: OUTPUT_PREFIX=$(OUTPUT_PREFIX), START_WY=$(start_water_year), END_WY=$(end_water_year), MIN_QUAL_FRAC=$(min_qualifying_frac)")
+    println("Climate frame: STREAMFLOW_CLIMATE_FRAME=$(climate_frame) (left = streamflow dates only; outer = + Daymet rows on absent dates)")
     println("Output dir: $(OUTPUT_DIR)")
     println()
 
@@ -213,13 +221,16 @@ function main()
             end
             gage_df = DataFrame(gage_data_view)
 
-            # Merge climate data BEFORE preprocessing so PPT (and SWE) are available
+            # Merge climate data BEFORE preprocessing so PPT (and SWE) are available.
+            # Phase A′ (2026-10-26): the frame helper of climate_frame.jl under the
+            # STREAMFLOW_CLIMATE_FRAME switch. Only "no climate for this gage" is tolerated
+            # (the group lookup); a helper failure surfaces instead of masquerading as
+            # missing climate (the former broad `catch`, Codex round 3 finding 2).
             if has_climate && grouped_climate !== nothing
-                try
-                    gage_climate = DataFrame(grouped_climate[(key.gage_id,)])[:, climate_cols]
-                    gage_df = leftjoin(gage_df, gage_climate, on=[:gage_id, :date])
-                catch
-                    # Climate data not available for this gage
+                gage_climate = haskey(grouped_climate, (key.gage_id,)) ?
+                    DataFrame(grouped_climate[(key.gage_id,)])[:, climate_cols] : nothing
+                if gage_climate !== nothing
+                    gage_df = frame_with_climate(gage_df, gage_climate, climate_frame)
                 end
             end
 
@@ -593,6 +604,32 @@ function main()
         println("  Warning: Metadata file not found: $METADATA_PATH")
     end
 
+    # Pinned QA schema (2026-10-26, rerun plan Phase C): flagged_for_high_na's denominator
+    # is the set of signature columns PRESENT in the assembled table, i.e. the union of the
+    # executed gages' result keys, so a subset run whose cohort lacks a family would flag
+    # differently from the full product. STREAMFLOW_QA_SCHEMA=<full-product CSV> adds every
+    # column of that header that is absent here as missing BEFORE the flags are computed,
+    # and refuses a run that emits a column the pinned header does not have.
+    qa_schema = get(ENV, "STREAMFLOW_QA_SCHEMA", "")
+    if qa_schema != ""
+        isfile(qa_schema) || error("STREAMFLOW_QA_SCHEMA file not found: $qa_schema")
+        pinned = names(CSV.read(qa_schema, DataFrame; limit=0))
+        meta_cols = ["gage_id", "latitude", "longitude", "basin_area", "gage_type", "num_water_years", "start_water_year",
+                     "end_water_year", "area_normalized", "NDAMS_2009", "MAJ_DDENS_2009", "STOR_NID_2009", "IMPNLCD06",
+                     "DEVNLCD06", "FRESHW_WITHDRAWAL", "HYDRO_DISTURB_INDX", "CLASS", "RHBN", "REGULATED", "human_interference_class"]
+        absent_meta = [c for c in pinned if c in meta_cols && !(c in names(results_df))]
+        isempty(absent_meta) || error("STREAMFLOW_QA_SCHEMA: metadata column(s) of the pinned header are absent from this run (a metadata layer failed to load?): $absent_meta")
+        added = [c for c in pinned if !(c in names(results_df)) && !startswith(c, "flagged_") && !(c in meta_cols)]
+        for c in added
+            results_df[!, c] = fill(missing, nrow(results_df))
+        end
+        extra = [c for c in names(results_df) if !(c in pinned)]
+        isempty(extra) || error("STREAMFLOW_QA_SCHEMA: this run emits $(length(extra)) column(s) absent from the pinned header: $(first(extra, 10))")
+        timing["qa_schema"] = Dict("path" => abspath(qa_schema), "n_columns" => length(pinned), "n_added_as_missing" => length(added),
+                                   "sha256" => bytes2hex(SHA.sha256(read(qa_schema))))
+        println("  Pinned QA schema: $(length(pinned)) columns, $(length(added)) absent here added as missing")
+    end
+
     # Compute QA/QC flags
     println("  Computing QA/QC flags...")
     results_df = compute_qa_flags(results_df)
@@ -682,10 +719,12 @@ function main()
             "git_working_tree_dirty" => git_dirty,
             "julia_version" => string(VERSION),
             "hostname" => gethostname(),
+            "climate_frame" => climate_frame,   # resolved STREAMFLOW_CLIMATE_FRAME (2026-10-26)
             "env_overrides" => Dict(k => get(ENV, k, nothing) for k in
                 ["STREAMFLOW_START_WATER_YEAR", "STREAMFLOW_END_WATER_YEAR",
                  "STREAMFLOW_MIN_QUALIFYING_DATA_FRACTION", "STREAMFLOW_CONFIG",
-                 "STREAMFLOW_GAGES_II_DIR", "STREAMFLOW_OUTPUT_PREFIX"] if haskey(ENV, k)),
+                 "STREAMFLOW_GAGES_II_DIR", "STREAMFLOW_OUTPUT_PREFIX",
+                 "STREAMFLOW_CLIMATE_FRAME"] if haskey(ENV, k)),
         )
     end
 

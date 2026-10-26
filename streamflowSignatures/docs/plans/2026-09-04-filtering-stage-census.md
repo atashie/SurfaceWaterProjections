@@ -350,6 +350,8 @@ October–September calendar (missing days count as NA, as the preprocessor does
 approved day inside their window); the union of the four approved codes is 193,542 days on 987
 gages; 11129800 is a fifth compile-floor casualty (20 qualifying calendar years without the mask).
 Plan and decisions (2026-10-26, gage sets frozen):
-`docs/plans/2026-10-21-qualifier-mask-fix-rerun-plan.md`. Tables: `masked_days_by_gage_wy_flag.csv`
+`docs/plans/2026-10-21-qualifier-mask-fix-rerun-plan.md`. RULE FIXED in the ingestion code 2026-10-26 (`R/usgs_qualifiers.R`: status letter A or P, finite value, not the
+no-data sentinel; `R/tests/test_qualifier_codes.R`); the compiled parquet and both products are patched by
+Phases B–D of that plan. Tables: `masked_days_by_gage_wy_flag.csv`
 and `AR_gage_wy_budget.csv`, written by the footprint tool. Logged: CHANGELOG → Known Issues,
 `docs/STATUS.md`.

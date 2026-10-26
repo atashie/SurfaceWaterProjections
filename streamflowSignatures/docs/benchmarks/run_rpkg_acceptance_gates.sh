@@ -20,11 +20,23 @@
 # (Codex 2026-08-26 MAJOR).
 set -uo pipefail
 
-DIR=/Volumes/Untitled/processedOuts_portref_24aug2026
-REF=$DIR/streamflow_1993_2025_60pct_portref_24aug2026
+# Parameterized 2026-10-26 (rerun plan Phase C): every path and expectation can be set from
+# the environment; the defaults are the August 2026 port-campaign reference.
+#   DIR          folder holding the candidate run (default the August reference folder)
+#   REF          reference prefix path, i.e. <folder>/<prefix> without _signatures.csv
+#   EXPECT_COLS  column count both files must have (1,653 for the 2026 deliveries,
+#                2,277 for the version-2 / version-3 products)
+#   ANNUAL_TOL   tolerance of the annual-parquet gate (default 1e-6)
+#   ANNUAL_WAIVERS  extra arguments for check_annual_parquet_equality.py naming the
+#                characterised residuals, e.g. "--allow-key-diff 1 --allow-value-diff 465"
+DIR=${DIR:-/Volumes/Untitled/processedOuts_portref_24aug2026}
+REF=${REF:-$DIR/streamflow_1993_2025_60pct_portref_24aug2026}
 PREFIX=${1:-rpkg_full_26aug2026}
-PORT=$DIR/$PREFIX
+PORT=${PORT:-$DIR/$PREFIX}
 PY=${PY:-.venv/bin/python}
+EXPECT_COLS=${EXPECT_COLS:-1653}
+ANNUAL_TOL=${ANNUAL_TOL:-1e-6}
+ANNUAL_WAIVERS=${ANNUAL_WAIVERS:-}
 
 # Resolve the run log: explicit arg > <PREFIX>_run.log > fail. Never guess.
 if [ "${2:-}" != "" ]; then
@@ -126,10 +138,10 @@ for f in "$REF"_signatures.csv "$PORT"_signatures.csv; do
 done
 
 # 1. Strict schema + gage-set equality (the acceptance gate proper).
-run "schema equality (1,653 columns / 6,678 gages)" \
+run "schema equality ($EXPECT_COLS columns, identical gage set)" \
   $PY docs/benchmarks/check_schema_equality.py \
       "$REF"_signatures.csv "$PORT"_signatures.csv \
-      --expect-reference-columns 1653 --expect-candidate-columns 1653
+      --expect-reference-columns "$EXPECT_COLS" --expect-candidate-columns "$EXPECT_COLS"
 
 # 2. Swallowed per-gage family exceptions in the run log.
 #    NOTE: this REFUSES to certify a log ending in R's deferred-warning
@@ -147,10 +159,11 @@ run "no swallowed signature-family failures" \
 # 3. Cross-language annual parquet (the sufficient annual check — unlike
 #    validate_annual_values.py, which is self-referential).
 if [ -f "$PORT"_signatures_annual.parquet ]; then
-  run "annual parquet equality vs Julia (tol 1e-6)" \
+  # shellcheck disable=SC2086  # ANNUAL_WAIVERS is a deliberate word-split argument list
+  run "annual parquet equality vs Julia (tol $ANNUAL_TOL${ANNUAL_WAIVERS:+; waivers: $ANNUAL_WAIVERS})" \
     $PY docs/benchmarks/check_annual_parquet_equality.py \
         --ref "$REF"_signatures_annual.parquet \
-        --port "$PORT"_signatures_annual.parquet --tol 1e-6 --max-show 10
+        --port "$PORT"_signatures_annual.parquet --tol "$ANNUAL_TOL" --max-show 10 $ANNUAL_WAIVERS
 else
   echo; echo ">>> annual parquet MISSING for $PREFIX — collector did not write"; fail=1
 fi

@@ -44,6 +44,10 @@ def main():
                     help="another run's CSV for column-set + overlap comparison")
     ap.add_argument("--floor", type=int, default=None,
                     help="stats floor in effect (checks non-exempt signatures)")
+    ap.add_argument("--expect-same-gages", action="store_true",
+                    help="with --reference-csv: gate 5 requires the EXACT gage set of the reference and "
+                         "equal immutable site attributes (lat/lon, basin_area, gage_type, area_normalized, "
+                         "the human-interference columns), not just overlap + lat/lon (rerun plan Phase C, 2026-10-26)")
     ap.add_argument("--expect-signatures", type=int, default=139,
                     help="distinct annual signatures the parquet must hold (default 139 = "
                          "100 through Aug 2026 + 39 climate bases, 2026-10-12; pass 100 for "
@@ -70,9 +74,30 @@ def main():
                        suffixes=("", "_r"))
         meta_ok = bool(np.isclose(m.latitude, m.latitude_r, rtol=1e-9).all() and
                        np.isclose(m.longitude, m.longitude_r, rtol=1e-9).all())
-        gate("5 overlap + metadata consistency", meta_ok,
-             f"run={len(sp)}, ref={len(sr)}, shared={len(sp & sr)}, "
-             f"run-only={len(sp - sr)}, ref-only={len(sr - sp)}; lat/lon match={meta_ok}")
+        if args.expect_same_gages:
+            immutable = [c for c in ("latitude", "longitude", "basin_area", "gage_type", "area_normalized",
+                                     "NDAMS_2009", "MAJ_DDENS_2009", "STOR_NID_2009", "IMPNLCD06", "DEVNLCD06",
+                                     "FRESHW_WITHDRAWAL", "HYDRO_DISTURB_INDX", "CLASS", "RHBN", "REGULATED",
+                                     "human_interference_class") if c in prod.columns and c in ref.columns]
+            mm = prod.set_index("gage_id")[immutable].sort_index()
+            rr = ref.set_index("gage_id")[immutable].sort_index()
+            diff_cols = {}
+            if sp == sr:
+                for c in immutable:
+                    a_, b_ = mm[c], rr[c]
+                    if pd.api.types.is_numeric_dtype(a_) and pd.api.types.is_numeric_dtype(b_):
+                        ne = ~((a_.isna() & b_.isna()) | np.isclose(a_.astype(float), b_.astype(float), rtol=1e-9, atol=0, equal_nan=False))
+                    else:
+                        ne = ~((a_.isna() & b_.isna()) | (a_.astype(str) == b_.astype(str)))
+                    if ne.any():
+                        diff_cols[c] = int(ne.sum())
+            gate("5 gage set EQUAL + immutable attributes equal", sp == sr and not diff_cols,
+                 f"run={len(sp)}, ref={len(sr)}, run-only={len(sp - sr)}, ref-only={len(sr - sp)}; "
+                 f"attribute columns compared={len(immutable)}, differing={diff_cols}")
+        else:
+            gate("5 overlap + metadata consistency", meta_ok,
+                 f"run={len(sp)}, ref={len(sr)}, shared={len(sp & sr)}, "
+                 f"run-only={len(sp - sr)}, ref-only={len(sr - sp)}; lat/lon match={meta_ok}")
 
     # G3: snow sanity
     sm = pd.to_numeric(prod["swe_max_mean"], errors="coerce")

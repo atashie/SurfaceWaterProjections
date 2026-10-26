@@ -40,6 +40,9 @@ from streamflow_signatures import (
     calculate_all_signatures,
 )
 from streamflow_signatures import AnnualCollector
+# Climate-frame helper (Phase A′, 2026-10-26): STREAMFLOW_CLIMATE_FRAME = left | outer
+sys.path.insert(0, str(Path(__file__).parent))
+from climate_frame import climate_frame_mode, frame_with_climate  # noqa: E402
 from streamflow_signatures.qa_qc import compute_qa_flags
 from streamflow_signatures.metadata import load_gages_ii_interference
 from streamflow_signatures.config import (
@@ -140,8 +143,9 @@ def _provenance():
     env_keys = ["STREAMFLOW_START_WATER_YEAR", "STREAMFLOW_END_WATER_YEAR",
                 "STREAMFLOW_MIN_QUALIFYING_DATA_FRACTION", "STREAMFLOW_CONFIG",
                 "STREAMFLOW_GAGES_II_DIR", "STREAMFLOW_OUTPUT_PREFIX",
-                "STREAMFLOW_ALLOW_LEGACY"]
+                "STREAMFLOW_ALLOW_LEGACY", "STREAMFLOW_CLIMATE_FRAME"]
     return {
+        "climate_frame": climate_frame_mode(),   # resolved STREAMFLOW_CLIMATE_FRAME (2026-10-26)
         "streamflow": _file_info(STREAMFLOW_PATH, hash_big),
         "climate": _file_info(CLIMATE_PATH, hash_big),
         "metadata": _file_info(METADATA_PATH, hash_big),
@@ -161,6 +165,10 @@ def main():
     start_water_year = _env_int("STREAMFLOW_START_WATER_YEAR")
     end_water_year = _env_int("STREAMFLOW_END_WATER_YEAR")
     min_qualifying_frac = _env_float("STREAMFLOW_MIN_QUALIFYING_DATA_FRACTION")
+    # Climate frame (2026-10-26): left = the streamflow dates only (every product before
+    # the qualifier rerun); outer = + Daymet rows on absent dates inside the record span
+    # and the gage's water years. Errors on any other value.
+    climate_frame = climate_frame_mode()
 
     print("=" * 70)
     print("PYTHON BENCHMARK - Streamflow Signatures")
@@ -174,6 +182,8 @@ def main():
     print(f"Annual values: save={SAVE_ANNUAL_VALUES}")
     print(f"Experiment: OUTPUT_PREFIX={OUTPUT_PREFIX}, START_WY={start_water_year}, "
           f"END_WY={end_water_year}, MIN_QUAL_FRAC={min_qualifying_frac}")
+    print(f"Climate frame: STREAMFLOW_CLIMATE_FRAME={climate_frame} "
+          "(left = streamflow dates only; outer = + Daymet rows on absent dates)")
     print(f"Output dir: {OUTPUT_DIR}")
     print()
 
@@ -316,7 +326,8 @@ def main():
             if climate_by_gage is not None:
                 cslice = climate_by_gage.get(gage_id)
                 if cslice is not None:
-                    gage_df = gage_df.merge(cslice, on=["gage_id", "date"], how="left")
+                    # Phase A′ (2026-10-26): climate_frame.py under STREAMFLOW_CLIMATE_FRAME
+                    gage_df = frame_with_climate(gage_df, cslice, climate_frame)
 
             result = preprocess_daily_data(gage_df)
 
@@ -619,6 +630,30 @@ def main():
             print("  Warning: GAGES-II data not available")
     else:
         print(f"  Warning: Metadata file not found: {METADATA_PATH}")
+
+    # Pinned QA schema (2026-10-26, rerun plan Phase C; mirrors the Julia runner): every
+    # column of the full-product header absent here is added as NaN before the flags are
+    # computed, so a subset run's flagged_for_high_na denominator equals the product's.
+    qa_schema = os.environ.get("STREAMFLOW_QA_SCHEMA", "")
+    if qa_schema:
+        if not os.path.isfile(qa_schema):
+            raise SystemExit(f"STREAMFLOW_QA_SCHEMA file not found: {qa_schema}")
+        pinned = list(pd.read_csv(qa_schema, nrows=0).columns)
+        meta_cols = {"gage_id", "latitude", "longitude", "basin_area", "gage_type", "num_water_years", "start_water_year",
+                     "end_water_year", "area_normalized", "NDAMS_2009", "MAJ_DDENS_2009", "STOR_NID_2009", "IMPNLCD06",
+                     "DEVNLCD06", "FRESHW_WITHDRAWAL", "HYDRO_DISTURB_INDX", "CLASS", "RHBN", "REGULATED", "human_interference_class"}
+        absent_meta = [c for c in pinned if c in meta_cols and c not in results_df.columns]
+        if absent_meta:
+            raise SystemExit(f"STREAMFLOW_QA_SCHEMA: metadata column(s) of the pinned header are absent from this run (a metadata layer failed to load?): {absent_meta}")
+        added = [c for c in pinned if c not in results_df.columns and not c.startswith("flagged_") and c not in meta_cols]
+        for c in added:
+            results_df[c] = np.nan
+        extra = [c for c in results_df.columns if c not in pinned]
+        if extra:
+            raise SystemExit(f"STREAMFLOW_QA_SCHEMA: this run emits {len(extra)} column(s) absent from the pinned header: {extra[:10]}")
+        timing["qa_schema"] = {"path": os.path.abspath(qa_schema), "n_columns": len(pinned), "n_added_as_missing": len(added),
+                               "sha256": hashlib.sha256(open(qa_schema, "rb").read()).hexdigest()}
+        print(f"  Pinned QA schema: {len(pinned)} columns, {len(added)} absent here added as NaN")
 
     # Compute QA/QC flags
     print("  Computing QA/QC flags...")

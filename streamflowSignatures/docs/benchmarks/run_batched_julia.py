@@ -21,8 +21,11 @@ Needs duckdb and pyarrow (e.g. ~/HISSS_data/venvs/daymet; the repo .venv has no 
 
 Steps:
   split  --streamflow SF.parquet --batches K --out-dir IN [--climate NAME=PATH[,max_date=YYYY-MM-DD]
-         [,sites_with_data_in=PATH]] ...
-      Gages (sorted ids) go to batch rank % K.
+         [,sites_with_data_in=PATH]] ... [--gage-list MANIFEST]
+      Gages (sorted ids) go to batch rank % K. --gage-list (2026-10-26, rerun plan decision
+      3): a selection manifest, one gage id per line; only those gages are split (the frozen
+      cohort), every listed id must exist in the parquet, and the manifest's path, sha256 and
+      counts go into batches.json.
       Writes:
         * streamflow_b<k>.parquet: every column, rows in the original file order;
         * climate_<NAME>_b<k>.parquet: site_id, Date, prcp, swe, tmin, tmax, the six
@@ -34,9 +37,21 @@ Steps:
   run    --wrapper W.jl --project JULIA_PROJECT --inputs IN --climate NAME --out-dir OUT
          --metadata META.csv [--gages-ii-dir DIR] [--min-avail-gb 1.5] [--max-minutes 120]
          [--heap-size-hint 2500M] [--julia ~/.juliaup/bin/julia]
+      [--climate-frame left|outer] [--qa-schema HEADER.csv] [--stage NAME]
+      [--parent-manifest PATH] [--require-clean-tree]
       Checks that every input exists (Julia would skip a missing climate or metadata file
       silently), then runs the K batches of IN/batches.json one at a time. It sets the
-      STREAMFLOW_* env overrides and STREAMFLOW_HASH_INPUTS=1.
+      STREAMFLOW_* env overrides and STREAMFLOW_HASH_INPUTS=1; --climate-frame and
+      --qa-schema set STREAMFLOW_CLIMATE_FRAME / STREAMFLOW_QA_SCHEMA (2026-10-26). Every
+      batch record carries a FINGERPRINT — git revision and dirty state, Julia version,
+      julia/Manifest.toml, config, metadata, selection manifest and the batch's own input
+      files, all sha256 — plus the stage name, the parent-cohort manifest and the resolved
+      climate frame; a rerun skips a done batch only when its command, environment and
+      fingerprint are unchanged, the tree is clean and its output files hash as recorded. The
+      snapshot (tree, config, metadata, reference files) is re-taken before every batch and a
+      change stops the run. --require-clean-tree refuses to run on a dirty or unknown tree (a
+      product run must be tied to a commit); --require-annual makes a missing annual parquet a
+      batch failure.
       Julia runs in its own process group. Every 2 s the guard samples its RSS and the
       system's available memory (free + inactive + speculative pages). It kills the whole
       group and stops when:
@@ -49,7 +64,11 @@ Steps:
       Writes OUT/batch_runs.json (exit code, seconds, peak RSS, lowest available memory,
       earlier attempts) and appends every attempt to OUT/b<k>/run.log.
   merge  --out-dir OUT --prefix PREFIX [--reference REF.csv [--allow-missing]] [--memory-limit 1GB]
-      Refuses an incomplete or inconsistent set of batches. It requires every batch of
+         [--qa-schema HEADER.csv]
+      Refuses an incomplete or inconsistent set of batches. With --qa-schema every batch
+      header must equal that file's header (the pinned full-product schema), not only each
+      other's. The merged timing JSON carries the shared fingerprint, the stage, the parent
+      manifest, the selection and the climate frame. It requires every batch of
       batches.json, found through OUT/batch_runs.json, to be done: folders b1..bK, exit
       code 0, one CSV and one timing JSON each, and either one annual parquet in every
       batch or none. Each batch's CSV gages must belong to that batch. Its rows must equal
@@ -87,7 +106,7 @@ CLIMATE_COLS = ["site_id", "Date", "prcp", "swe", "tmin", "tmax"]  # tmin/tmax s
 CLIMATE_OPTIONS = {"max_date", "sites_with_data_in"}
 # provenance every batch must share; the streamflow and climate entries are per batch
 SHARED_PROVENANCE = ["git_revision", "git_working_tree_dirty", "julia_version", "hostname", "config", "metadata",
-                     "env_overrides"]
+                     "env_overrides", "climate_frame"]   # climate_frame: the resolved STREAMFLOW_CLIMATE_FRAME (2026-10-26)
 SHARED_COUNTS = ["language", "n_signature_columns", "n_metadata_columns", "n_qaqc_flags"]
 
 
@@ -157,6 +176,109 @@ def write_sorted_annual(files, path, mem, temp_dir, chunk_rows=2_000_000, group_
     return total
 
 
+def sha256_of(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for blk in iter(lambda: fh.read(1 << 24), b""):
+            h.update(blk)
+    return h.hexdigest()
+
+
+def git_state(repo):
+    try:
+        rev = subprocess.run(["git", "-C", repo, "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
+        dirty = bool(subprocess.run(["git", "-C", repo, "status", "--porcelain"], capture_output=True, text=True,
+                                    check=True).stdout.strip())
+    except Exception:  # noqa: BLE001
+        return None, None
+    return rev, dirty
+
+
+def dir_sha256(path):
+    """sha256 over the sorted relative file names and contents of a directory tree."""
+    h = hashlib.sha256()
+    for root, dirs, files in sorted(os.walk(path)):
+        dirs.sort()
+        for f in sorted(files):
+            p = os.path.join(root, f)
+            h.update(os.path.relpath(p, path).encode()); h.update(b"\0")
+            h.update(sha256_of(p).encode()); h.update(b"\n")
+    return h.hexdigest()
+
+
+def julia_version_probe(julia):
+    """`julia --version` in its own session, the whole group killed afterwards, so a julia that
+    does not answer --version (the self-test's fake spawns a grandchild) leaves nothing."""
+    jv = None
+    try:
+        pr = subprocess.Popen([julia, "--version"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+                              start_new_session=True)
+        try:
+            out, _ = pr.communicate(timeout=2)
+            jv = out.strip() if pr.returncode == 0 and out else None
+        except subprocess.TimeoutExpired:
+            pass
+        finally:
+            try:
+                os.killpg(pr.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            pr.wait()
+    except Exception:  # noqa: BLE001
+        jv = None
+    return jv
+
+
+def tree_fingerprint(a, julia_version="probe"):
+    """Everything a batch's result depends on besides its own inputs (rerun plan Phase C): the
+    tree (and, when dirty, the working-tree diff and every untracked file's content), the Julia
+    version and manifest, the config, the metadata, the GAGES-II and HYDAT files, the wrapper, the
+    resolved STREAMFLOW_QA_SCHEMA file and the climate frame."""
+    repo = os.path.dirname(os.path.normpath(a.project))
+    rev, dirty = git_state(repo)
+    dirty_sha = None
+    if dirty:
+        try:
+            diff = subprocess.run(["git", "-C", repo, "diff", "HEAD", "--binary"], capture_output=True, check=True).stdout
+            untracked = subprocess.run(["git", "-C", repo, "ls-files", "--others", "--exclude-standard"], capture_output=True, text=True, check=True).stdout.split()
+            h = hashlib.sha256(diff)
+            for u in sorted(untracked):
+                up = os.path.join(repo, u)
+                if os.path.isfile(up):
+                    h.update(u.encode()); h.update(sha256_of(up).encode())
+            dirty_sha = h.hexdigest()
+        except Exception:  # noqa: BLE001
+            dirty_sha = "unavailable"
+    jv = julia_version_probe(a.julia) if julia_version == "probe" else julia_version
+    manifest = os.path.join(a.project, "Manifest.toml")
+    config = os.environ.get("STREAMFLOW_CONFIG") or os.path.join(repo, "config", "signatures_config.json")
+    # the runner resolves GAGES-II from STREAMFLOW_GAGES_II_DIR, else metadata.gages_ii_dir of the config, and
+    # HYDAT from metadata.hydat_path of the config (relative to the repo root) — hash what IT will read
+    try:
+        cfg = json.load(open(config)).get("metadata", {})
+    except Exception:  # noqa: BLE001
+        cfg = {}
+    gages_ii = os.environ.get("STREAMFLOW_GAGES_II_DIR") or a.gages_ii_dir or cfg.get("gages_ii_dir")
+    hydat = cfg.get("hydat_path") or os.path.join("metadata", "canadian_hydat_interference.csv")
+    if not os.path.isabs(hydat):
+        hydat = os.path.join(repo, hydat)
+    qa = os.environ.get("STREAMFLOW_QA_SCHEMA")
+    return {"git_revision": rev, "git_working_tree_dirty": dirty, "dirty_tree_sha256": dirty_sha, "julia_version": jv,
+            "julia_manifest_sha256": sha256_of(manifest) if os.path.isfile(manifest) else None,
+            "config": {"path": os.path.abspath(config), "sha256": sha256_of(config) if os.path.isfile(config) else None},
+            "metadata_sha256": sha256_of(a.metadata),
+            "gages_ii_dir": gages_ii, "gages_ii_dir_sha256": dir_sha256(gages_ii) if gages_ii and os.path.isdir(gages_ii) else None,
+            "hydat_path": hydat, "hydat_sha256": sha256_of(hydat) if os.path.isfile(hydat) else None,
+            "qa_schema_sha256": sha256_of(qa) if qa and os.path.isfile(qa) else None,
+            "climate_frame_env": os.environ.get("STREAMFLOW_CLIMATE_FRAME"),
+            "wrapper_sha256": sha256_of(a.wrapper)}
+
+
+def output_hashes(d):
+    o = batch_outputs(d)
+    return {os.path.basename(f): sha256_of(f) for kind in ("csv", "annual", "timing") for f in o[kind]}
+
+
 def file_provenance(path):
     """Size, mtime, sha256 and (for parquet) the PAR1 footer of a source file."""
     p = os.path.abspath(path)
@@ -200,9 +322,27 @@ def split(a):
     c = con()
     gages = [r[0] for r in c.execute(f"SELECT DISTINCT gage_id FROM read_parquet('{a.streamflow}') "
                                      f"ORDER BY gage_id").fetchall()]
+    n_source = len(gages)
+    selection = None
+    if a.gage_list:
+        listed = [l.strip() for l in open(a.gage_list) if l.strip()]
+        dup = sorted(g for g, n in collections.Counter(listed).items() if n > 1)
+        if dup:
+            sys.exit(f"--gage-list {a.gage_list} lists {len(dup)} gages more than once, e.g. {dup[:5]}")
+        absent = sorted(set(listed) - set(gages))
+        if absent:
+            sys.exit(f"--gage-list {a.gage_list}: {len(absent)} listed gages are not in the parquet, e.g. {absent[:5]}")
+        keep = set(listed)
+        gages = [g for g in gages if g in keep]
+        selection = {"path": os.path.abspath(a.gage_list), "sha256": sha256_of(a.gage_list), "n_listed": len(listed),
+                     "n_selected": len(gages), "n_in_source": n_source}
+        print(f"selection manifest: {len(listed)} gages listed, all present; {n_source - len(gages)} source gages left out",
+              flush=True)
     batches = [gages[k::a.batches] for k in range(a.batches)]
     meta = {"streamflow": os.path.abspath(a.streamflow), "batches": a.batches, "gages": len(gages),
-            "assignment": "sorted gage_id, rank % K", "sources": sources, "files": {}}
+            "gages_in_source": n_source, "selection": selection,
+            "assignment": "sorted gage_id, rank % K" + (" over the selection manifest" if selection else ""),
+            "sources": sources, "files": {}}
     keep_sites = {}
     for name, path, opts in climates:
         if "sites_with_data_in" in opts:
@@ -255,12 +395,14 @@ def batch_outputs(d):
             (("csv", "*_signatures.csv"), ("annual", "*_signatures_annual.parquet"), ("timing", "*_timing.json"))}
 
 
-def outputs_ok(d, since=None):
-    """One signatures CSV and one timing JSON (written after `since`, if given), at most one annual parquet."""
+def outputs_ok(d, since=None, require_annual=False):
+    """One signatures CSV and one timing JSON, at most one annual parquet (exactly one with
+    require_annual); with `since`, every one of them written after it (a stale annual parquet beside
+    a fresh CSV is a failure)."""
     o = batch_outputs(d)
-    if len(o["csv"]) != 1 or len(o["timing"]) != 1 or len(o["annual"]) > 1:
+    if len(o["csv"]) != 1 or len(o["timing"]) != 1 or len(o["annual"]) > 1 or (require_annual and len(o["annual"]) != 1):
         return False
-    return since is None or all(os.path.getmtime(f) >= since for f in o["csv"] + o["timing"])
+    return since is None or all(os.path.getmtime(f) >= since for f in o["csv"] + o["timing"] + o["annual"])
 
 
 def kill_group(p, grace=30):
@@ -302,6 +444,26 @@ def run(a):
                  + "\n  ".join(missing))
     signal.signal(signal.SIGTERM, on_signal)
     signal.signal(signal.SIGHUP, on_signal)
+    if a.climate_frame:
+        os.environ["STREAMFLOW_CLIMATE_FRAME"] = a.climate_frame
+    if a.qa_schema:
+        a.qa_schema = os.path.abspath(os.path.expanduser(a.qa_schema))
+        if not os.path.isfile(a.qa_schema):
+            sys.exit(f"--qa-schema {a.qa_schema} not found")
+        os.environ["STREAMFLOW_QA_SCHEMA"] = a.qa_schema
+    if a.parent_manifest:
+        a.parent_manifest = os.path.abspath(os.path.expanduser(a.parent_manifest))
+        if not os.path.isfile(a.parent_manifest):
+            sys.exit(f"--parent-manifest {a.parent_manifest} not found")
+    tree = tree_fingerprint(a)
+    if a.require_clean_tree and (tree["git_revision"] is None or tree["git_working_tree_dirty"] is not False):
+        sys.exit(f"--require-clean-tree: the source tree is {'unknown' if tree['git_revision'] is None else 'dirty'} "
+                 f"(revision {tree['git_revision']}); commit first — a product run must be tied to a commit")
+    bjm = json.load(open(bj))
+    stage = {"stage": a.stage, "parent_manifest": ({"path": a.parent_manifest, "sha256": sha256_of(a.parent_manifest)}
+                                                 if a.parent_manifest else None),
+             "selection": bjm.get("selection"), "climate_frame": os.environ.get("STREAMFLOW_CLIMATE_FRAME", "left (unset)"),
+             "qa_schema": ({"path": a.qa_schema, "sha256": sha256_of(a.qa_schema)} if a.qa_schema else None)}
     os.makedirs(a.out_dir, exist_ok=True)
     log_path = os.path.join(a.out_dir, "batch_runs.json")
     runs = json.load(open(log_path)) if os.path.exists(log_path) else {}
@@ -314,9 +476,19 @@ def run(a):
             env["STREAMFLOW_GAGES_II_DIR"] = a.gages_ii_dir
         envrec = {e: env[e] for e in env if e.startswith("STREAMFLOW_")}
         cmd = [a.julia, f"--project={a.project}", f"--heap-size-hint={a.heap_size_hint}", a.wrapper]
+        # the execution snapshot is re-taken before EVERY batch: a tree, config or input that changed
+        # mid-run must not ride into later batches
+        tree_now = tree_fingerprint(a, julia_version=tree["julia_version"])   # the probe ran once
+        if tree_now != tree:
+            sys.exit(f"the source tree, config, metadata or reference files changed before batch {k}: "
+                     f"{[kk for kk in tree if tree_now.get(kk) != tree.get(kk)]} — stop; a stage runs on one snapshot")
+        fingerprint = dict(tree, inputs={"streamflow": sha256_of(env["STREAMFLOW_DATA_PATH"]),
+                                         "climate": sha256_of(env["STREAMFLOW_CLIMATE_PATH"])}, **stage)
         prev = runs.get(str(k))
-        if prev and prev.get("rc") == 0 and prev.get("cmd") == cmd and prev.get("env") == envrec and outputs_ok(out):
-            print(f"batch {k}: done earlier with the same command and environment, skipped", flush=True)
+        if (prev and prev.get("rc") == 0 and prev.get("cmd") == cmd and prev.get("env") == envrec
+                and prev.get("fingerprint") == fingerprint and not fingerprint.get("git_working_tree_dirty")
+                and outputs_ok(out, require_annual=a.require_annual) and prev.get("outputs") == output_hashes(out)):
+            print(f"batch {k}: done earlier with the same command, environment, fingerprint and output hashes, skipped", flush=True)
             continue
         os.makedirs(out, exist_ok=True)
         t0, peak, low, why, interrupted = time.time(), 0.0, float("inf"), None, None
@@ -348,11 +520,14 @@ def run(a):
         rc = p.returncode if why is None else -999
         rec = {"rc": rc, "seconds": round(time.time() - t0, 1), "peak_rss_gb": round(peak, 2),
                "min_available_gb": round(low, 2) if low != float("inf") else None, "stopped": why,
-               "cmd": cmd, "env": envrec}
-        if rc == 0 and not outputs_ok(out, since=t0 - 1):
+               "cmd": cmd, "env": envrec, "fingerprint": fingerprint}
+        if rc == 0 and not outputs_ok(out, since=t0 - 1, require_annual=a.require_annual):
             rec["rc"] = -998
-            rec["stopped"] = ("exit 0, but the batch folder holds no fresh signatures CSV + timing JSON "
+            rec["stopped"] = ("exit 0, but the batch folder holds no fresh signatures CSV + timing JSON"
+                              + (" + annual parquet" if a.require_annual else "") + " — a stale file counts as missing "
                               "(does the wrapper honour STREAMFLOW_OUTPUT_DIR?)")
+        if rec["rc"] == 0:
+            rec["outputs"] = output_hashes(out)
         if prev:
             rec["earlier_attempts"] = prev.pop("earlier_attempts", []) + [prev]
         runs[str(k)] = rec
@@ -365,6 +540,10 @@ def run(a):
             raise interrupted
         if rec["rc"] != 0:
             sys.exit(f"batch {k} failed; see {out}/run.log")
+    tree_end = tree_fingerprint(a, julia_version=tree["julia_version"])
+    if tree_end != tree:
+        sys.exit(f"the source tree, config, metadata or reference files changed during the last batch: "
+                 f"{[kk for kk in tree if tree_end.get(kk) != tree.get(kk)]} — the run is not tied to one snapshot")
 
 
 def merge(a):
@@ -413,11 +592,19 @@ def merge(a):
     if problems:
         sys.exit("batches from different code, config or inputs:\n  " + "\n  ".join(problems))
 
+    pinned = None
+    if a.qa_schema:
+        with open(a.qa_schema, newline="") as fh:
+            pinned = fh.readline()
     header, rows, where, per_batch = None, {}, {}, {}
     for k, (o, t) in enumerate(zip(outs, timings), 1):
         allowed = set(batch_gages[k - 1])
         with open(o["csv"][0], newline="") as fh:
             h, body = fh.readline(), fh.readlines()
+        if pinned is not None and h != pinned:
+            hs, hb = next(csv.reader([pinned])), next(csv.reader([h]))
+            sys.exit(f"b{k}: header differs from the pinned schema {a.qa_schema} (only here: "
+                     f"{sorted(set(hb) - set(hs))[:10]}; missing here: {sorted(set(hs) - set(hb))[:10]})")
         if header is None:
             header = h
         elif h != header:
@@ -483,6 +670,13 @@ def merge(a):
         if n_ann != sum(t["n_annual_rows"] for t in timings):
             sys.exit(f"merged {n_ann} annual rows, the batches report {sum(t['n_annual_rows'] for t in timings)}")
 
+    # the files merged must be the files the run recorded (a replaced or truncated output is refused); checked
+    # after the consistency checks above so that an inconsistency is reported by its own name first
+    for k, d in enumerate(dirs, 1):
+        rec_h = runs[str(k)].get("outputs")
+        if rec_h is not None and rec_h != output_hashes(d):
+            sys.exit(f"b{k}: its output files do not hash as batch_runs.json recorded them — rerun the batch")
+
     summary = {f"b{k}": {"total_seconds": t.get("total_seconds"), "n_gages_processed": t.get("n_gages_processed"),
                          "n_annual_rows": t.get("n_annual_rows")} for k, t in enumerate(timings, 1)}
     sources = bj.get("sources") or {}
@@ -493,6 +687,23 @@ def merge(a):
         "path": bj["files"].get(f"climate_{climate_name}_b1.parquet", {}).get("source"), "note": note}
     prov["batch_inputs"] = {f"b{k}": {f: (t.get("provenance") or {}).get(f) for f in ("streamflow", "climate")}
                             for k, t in enumerate(timings, 1)}
+    # stage provenance (2026-10-26): the shared fingerprint of the batch records, the stage name,
+    # the parent-cohort manifest, the selection and the climate frame; the per-batch input hashes
+    # are the batches' OWN inputs
+    fps = [runs[str(k)].get("fingerprint") or {} for k in range(1, n_batches + 1)]
+    shared_fp = {kk: v for kk, v in fps[0].items() if kk != "inputs"} if fps and fps[0] else {}
+    for k, fp in enumerate(fps[1:], 2):
+        diff = [kk for kk in shared_fp if fp.get(kk) != shared_fp[kk]]
+        if diff:
+            sys.exit(f"b{k}: fingerprint differs from b1 in {diff}")
+    prov["fingerprint"] = shared_fp
+    prov["batch_input_sha256"] = {f"b{k}": fp.get("inputs") for k, fp in enumerate(fps, 1)}
+    prov["selection"] = bj.get("selection")
+    if pinned is not None:
+        prov["qa_schema"] = {"path": os.path.abspath(a.qa_schema), "sha256": sha256_of(a.qa_schema)}
+        fp_sha = shared_fp.get("qa_schema_sha256")
+        if fp_sha and fp_sha != prov["qa_schema"]["sha256"]:
+            sys.exit(f"--qa-schema {a.qa_schema} is not the schema the batches ran with (fingerprint sha {fp_sha[:12]}…, given {prov['qa_schema']['sha256'][:12]}…)")
     phases = timings[0].get("phases") or {}
     merged_timing = {
         "language": timings[0].get("language"),
@@ -510,6 +721,9 @@ def merge(a):
     with open(os.path.join(a.out_dir, f"{a.prefix}_timing.json"), "w") as fh:
         json.dump(merged_timing, fh, indent=1)
     res = {"batches": per_batch, "gages": len(rows), "columns": len(next(csv.reader([header]))),
+           "stage": shared_fp.get("stage"), "climate_frame": p0.get("climate_frame"),
+           "parent_manifest": shared_fp.get("parent_manifest"), "selection": bj.get("selection"),
+           "qa_schema": prov.get("qa_schema"),
            "order": "reference" if a.reference else "sorted gage_id",
            "reference": os.path.abspath(a.reference) if a.reference else None,
            "missing_vs_reference": missing_ref, "extra_vs_reference": extra_ref,
@@ -528,6 +742,7 @@ def main():
     s.add_argument("--batches", type=int, required=True)
     s.add_argument("--out-dir", required=True)
     s.add_argument("--climate", action="append")
+    s.add_argument("--gage-list", default=None, help="selection manifest (one gage id per line): only these gages are split")
     r = sub.add_parser("run")
     r.add_argument("--wrapper", required=True)
     r.add_argument("--project", required=True)
@@ -540,12 +755,19 @@ def main():
     r.add_argument("--max-minutes", type=float, default=120)
     r.add_argument("--heap-size-hint", default="2500M")
     r.add_argument("--julia", default="~/.juliaup/bin/julia")
+    r.add_argument("--climate-frame", choices=["left", "outer"], default=None, help="sets STREAMFLOW_CLIMATE_FRAME")
+    r.add_argument("--qa-schema", default=None, help="full-product CSV whose header pins the QA denominator (STREAMFLOW_QA_SCHEMA)")
+    r.add_argument("--stage", default=None, help="stage name recorded in the batch records (S0, S1, S1', S2)")
+    r.add_argument("--parent-manifest", default=None, help="the product's selection manifest this stage belongs to")
+    r.add_argument("--require-clean-tree", action="store_true", help="refuse a dirty or unknown source tree")
+    r.add_argument("--require-annual", action="store_true", help="a batch without an annual parquet is a failure (products)")
     m = sub.add_parser("merge")
     m.add_argument("--out-dir", required=True)
     m.add_argument("--prefix", required=True)
     m.add_argument("--reference", default=None)
     m.add_argument("--allow-missing", action="store_true")
     m.add_argument("--memory-limit", default="1GB")
+    m.add_argument("--qa-schema", default=None, help="every batch header must equal this CSV's header")
     a = ap.parse_args()
     {"split": split, "run": run, "merge": merge}[a.cmd](a)
 

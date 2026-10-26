@@ -265,7 +265,9 @@ itself — 67 zero-flow or diverted channels and 5 at the threshold level; 8,787
 7,300-row length pre-check before any value was examined, 4 were lost to the USGS `A R`
 qualifier mask (a HIGH known issue: 193,542 approved days on 987 compiled gages are NA, and
 1,370 water years in 676 gages — 1,177 in product #1, 950 in #2 — are rejected for that reason
-alone; fix approved 2026-10-26, gage sets frozen, not yet applied) and 3 to length (2026-10-21,
+alone; the ingestion rule was fixed 2026-10-26 — `R/usgs_qualifiers.R`, status letter A or P plus a
+finite value — and the compiled record and both products are being patched with the gage sets
+frozen, plan `docs/plans/2026-10-21-qualifier-mask-fix-rerun-plan.md`) and 3 to length (2026-10-21,
 census §10; a fifth, 11129800, is both a zero-flow and a mask casualty).
 
 ## Interpreting Results

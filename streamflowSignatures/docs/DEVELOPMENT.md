@@ -776,7 +776,15 @@ For implementation details, alignment history, and known divergences, see [`CROS
 
 ### USGS (via dataRetrieval)
 - Parameter code: `00060` (Discharge, cubic feet per second)
-- Quality codes accepted: `A`, `A e`, `P`, `P e`
+- Acceptance rule (`R/usgs_qualifiers.R`, since 2026-10-26): a value is kept when its
+  qualification string starts with the status letter `A` (approved) or `P` (provisional),
+  the value is finite and it is not the service's no-data sentinel (−999999); remark codes
+  (`e`, `R`, `<`, `>`, `[4]`, `Ice`, ...) never mask at storage and stay verbatim in `flag`.
+  Until 2026-10-26 only the exact strings `A`, `A e`, `P`, `P e` were kept, which set 193,542
+  approved days (`A R`, `A <`, `A >`, `A [4]`) on 987 compiled gages to NA (census 2026-09-04
+  §10.1); the February 2026 parquet is patched by the qualifier rerun
+  (`docs/plans/2026-10-21-qualifier-mask-fix-rerun-plan.md`). Unit test:
+  `Rscript R/tests/test_qualifier_codes.R`.
 - Conversion: cfs -> mm/day using drainage area
 
 ### Canadian HYDAT (via tidyhydat)

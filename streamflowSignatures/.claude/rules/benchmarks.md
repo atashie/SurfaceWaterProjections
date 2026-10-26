@@ -32,10 +32,19 @@ paths:
   Never trust a chain's echoed exit codes — `echo "[$(date)] exit=$?"` reports the date
   substitution's status; read `merge.log` and the `validation_*.txt` files.
 - Gates vs diagnostics: `check_schema_equality.py`, `check_annual_parquet_equality.py`,
+  `check_summary_equality.py` (summary CSV cell for cell, gate state always; tie-bearing
+  rank statistics and propagated annual residuals reported by name, 2026-10-26),
   `check_signature_failures.py` and `check_additivity.jl` are GATES (non-zero exit,
   waivers named on the command line). The `compare_*` scripts intersect columns and
   exit 0 on a missing family — diagnostics only. `validate_annual_values.py` is
   self-referential (necessary, not sufficient).
+- Qualifier rerun tool chain (2026-10-26; plan `docs/plans/2026-10-21-qualifier-mask-fix-rerun-plan.md`):
+  `splice_nwis_qualifiers.py` (list → fetch → splice → control → audit), `qualifier_year_oracle.py`
+  (replay / oracle), `climate_frame_inventory.py` and `preprocess_state_ledger.py` (B′ ledgers and
+  state tables), `assess_rerun_changes.py` (the change census, duckdb venv), `build_stage_cohorts.py`
+  (S1 / S1′ manifests), `docs/qualifier_rerun_registry.csv` (the dependency registry; docs/benchmarks/*.csv is git-ignored). Production stages
+  run through `run_batched_julia.py` with `--gage-list`, `--climate-frame`, `--qa-schema`, `--stage`
+  and `--require-clean-tree`; a stage's provenance is in its merged timing JSON.
 - Dashboards and explorers group by FUNCTION FAMILY (the 17 computing functions); the
   nine signature CATEGORIES come from `docs/signature_categories.csv`. Keep every
   `SIGNATURE_GROUPS` list complete when a family is added — the snow family was silently
@@ -49,4 +58,11 @@ paths:
   HTML for a deposit means renaming the folder and rewriting the embedded name together
   (`stage_hydroshare_climate_v2.py` does; the 2026-10-14 staging defect did not) — then load a
   sidecar headlessly to prove it. A deposit ships the HTML with its complete `_annual/` folder.
+- Climate frame (2026-10-26): the three runners build each gage's frame through
+  `docs/benchmarks/climate_frame.{jl,py,R}` under `STREAMFLOW_CLIMATE_FRAME = left | outer`
+  (`left` = the streamflow dates only, bit-identical to every product before the qualifier
+  rerun; `outer` = + the gage's Daymet rows on absent streamflow dates, inside the record
+  span and the gage's water years only). Keep the three helpers in step; their fixture
+  self-tests are `selftest_climate_frame.{jl,py,R}` (Julia writes the fixture and the
+  reference, the ports read it) — run all three after touching a runner's join.
 - Procedure, env vars and the post-run checklist: `/run-benchmark`.

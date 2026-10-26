@@ -3,6 +3,7 @@
 # Paths are configured in config.R
 source("config.R")
 source("R/helperFunctions.R")
+source("R/usgs_qualifiers.R")   # USGS daily-value acceptance rule (2026-10-26)
 metadata_dir <- "D://gagesMetadata"#METADATA_DATA_DIR
 output_dir <- "D://processedOuts_feb2026"
 start_date <- DEFAULT_START_DATE

@@ -42,7 +42,12 @@ description: Run and validate a full Julia signature-extraction benchmark, exper
    `STREAMFLOW_DATA_PATH`, `STREAMFLOW_METADATA_PATH`, `STREAMFLOW_CLIMATE_PATH`,
    `STREAMFLOW_GAGES_II_DIR`, `STREAMFLOW_OUTPUT_DIR`, `STREAMFLOW_OUTPUT_PREFIX`,
    `STREAMFLOW_START_WATER_YEAR`, `STREAMFLOW_END_WATER_YEAR`,
-   `STREAMFLOW_MIN_QUALIFYING_DATA_FRACTION`, `STREAMFLOW_HASH_INPUTS`.
+   `STREAMFLOW_MIN_QUALIFYING_DATA_FRACTION`, `STREAMFLOW_HASH_INPUTS`,
+   `STREAMFLOW_CLIMATE_FRAME` (`left` | `outer`, 2026-10-26: `left` joins climate onto the
+   streamflow dates only — every product before the qualifier rerun; `outer` also takes
+   the gage's Daymet rows on absent streamflow dates inside the record span and the
+   gage's water years — `docs/benchmarks/climate_frame.{jl,py,R}`; the resolved mode is
+   in the timing JSON `provenance.climate_frame`; default `left` until the rerun lands).
    `STREAMFLOW_CONFIG` is precompile-time (item 2). rpkg reads
    `STREAMFLOW_SIGNATURES_CONFIG` instead (deferred fix — `docs/STATUS.md`).
 5. rpkg: `R CMD INSTALL rpkg` first — the package bundles the config.

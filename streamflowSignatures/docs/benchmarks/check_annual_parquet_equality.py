@@ -75,6 +75,7 @@ def main() -> int:
                          "Every waiver is printed, so a waived run still reports what "
                          "was excluded from the gate.")
     ap.add_argument("--max-show", type=int, default=20)
+    ap.add_argument("--out", type=Path, default=None, help="write the verdict and counts as JSON (consumed by assess_rerun_changes.py)")
     ap.add_argument("--allow-key-diff", type=int, default=0, metavar="N",
                     help="Permit up to N rows present on only one side. Use ONLY for a "
                          "residual that has been characterised and written down; the "
@@ -242,6 +243,23 @@ def main() -> int:
         print("\n[5] values: no finite pairs to compare")
 
     print("\n" + "=" * 62)
+    if args.out:
+        import hashlib
+        import json
+        def _sha(p):
+            h = hashlib.sha256()
+            with open(p, "rb") as fh:
+                for blk in iter(lambda: fh.read(1 << 24), b""):
+                    h.update(blk)
+            return h.hexdigest()
+        gl = str(args.out) + ".gages.txt"
+        open(gl, "w").write("\n".join(sorted(set(ref["gage_id"].astype(str)) | set(port["gage_id"].astype(str)))) + "\n")
+        json.dump({"ref": str(args.ref), "port": str(args.port), "ref_sha256": _sha(args.ref), "port_sha256": _sha(args.port),
+                   "gages_compared_file": gl, "n_gages_compared": len(set(ref["gage_id"].astype(str)) | set(port["gage_id"].astype(str))),
+                   "n_keys_ref": int(len(ref)), "n_keys_port": int(len(port)),
+                   "tol": args.tol, "failures": failures, "verdict": "FAIL" if failures else "PASS", "waive_prefix": args.waive_prefix,
+                   "allow_key_diff": args.allow_key_diff, "allow_value_diff": args.allow_value_diff,
+                   "allow_diff_signature": args.allow_diff_signature}, open(args.out, "w"), indent=1)
     if failures:
         print(f"GATE FAILED: {', '.join(failures)}")
         return 1

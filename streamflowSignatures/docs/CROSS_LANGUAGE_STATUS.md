@@ -30,6 +30,20 @@ per language below.
 | Snow metrics (14) | yes | yes | yes |
 | Drought metrics (10 + 5 scalars) | yes | yes | yes |
 
+### Climate frame and the qualifier rerun (2026-10-26): runner-level change, library untouched
+
+The three runners build each gage's climate frame through `docs/benchmarks/climate_frame.{jl,py,R}`
+under `STREAMFLOW_CLIMATE_FRAME = left | outer` (CHANGELOG [October 2026]); the fixture self-tests
+`selftest_climate_frame.{jl,py,R}` agree across the three languages in both modes (annual values
+within 1e-9, most bit-identical; summaries within 1e-6 with gate state always compared). The E7
+port gate of the rerun (`check_summary_equality.py` + `check_annual_parquet_equality.py`) names
+its residuals: the threshold-tie class on the annual gate (`D*_day`, `D25_to_D75`, `TQmean`,
+`dur_low_pulses_*`), the tie-bearing rank statistics and propagated annual residuals on the
+summary gate, and ONE column by name — **`ice_affected_days_total`**: the Python port counts ice
+days from the `flag` column (23 at 01011000 on the 40-gage dry run) while canonical Julia emits 0 for
+every gage (the standing Known Issue) and rpkg deliberately matches Julia. A genuine cross-language
+divergence of that scalar, carried as a waiver until the canonical side is fixed.
+
 ### Climate family (2026-10-12): three-way agreement before the version-2 products
 
 The 39 climate signatures (624 columns, `docs/SIGNATURES.md` §14) were ported Julia →

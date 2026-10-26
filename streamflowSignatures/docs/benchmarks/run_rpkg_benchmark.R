@@ -49,6 +49,9 @@ project_root <- normalizePath(file.path(script_dir, "../.."))
 setwd(project_root)
 cat("Working directory:", getwd(), "\n\n")
 
+# Climate-frame helper (Phase A′, 2026-10-26): STREAMFLOW_CLIMATE_FRAME = left | outer
+source(file.path(script_dir, "climate_frame.R"))
+
 env_or <- function(name, default) {
   v <- Sys.getenv(name, unset = "")
   if (v == "") default else v
@@ -66,6 +69,10 @@ env_num <- function(name) {
 start_water_year    <- env_int("STREAMFLOW_START_WATER_YEAR")
 end_water_year      <- env_int("STREAMFLOW_END_WATER_YEAR")
 min_qualifying_frac <- env_num("STREAMFLOW_MIN_QUALIFYING_DATA_FRACTION")
+# Climate frame (2026-10-26): left = the streamflow dates only (every product before the
+# qualifier rerun); outer = + Daymet rows on absent dates inside the record span and the
+# gage's water years. Errors on any other value.
+climate_frame <- climate_frame_mode()
 
 parquet_path  <- env_or("STREAMFLOW_DATA_PATH", "D:/processedOuts_feb2026/combined_streamflow_data_09feb2026.parquet")
 daymet_path   <- env_or("STREAMFLOW_CLIMATE_PATH", "D:/processedOuts_feb2026/daymet_1980_2023.parquet")
@@ -80,7 +87,9 @@ cat("Experiment: OUTPUT_PREFIX=", output_prefix,
     " START_WY=", ifelse(is.null(start_water_year), "NULL", start_water_year),
     " END_WY=", ifelse(is.null(end_water_year), "NULL", end_water_year),
     " MIN_QUAL_FRAC=", ifelse(is.null(min_qualifying_frac), "NULL", min_qualifying_frac),
-    "\nOutput dir: ", output_dir, "\n\n", sep = "")
+    "\nOutput dir: ", output_dir, "\n", sep = "")
+cat("Climate frame: STREAMFLOW_CLIMATE_FRAME=", climate_frame,
+    " (left = streamflow dates only; outer = + Daymet rows on absent dates)\n\n", sep = "")
 
 # Phase 1: Load rpkg — INSTALLED package by default. devtools::load_all() can
 # conceal installed-package failures (missing NAMESPACE exports, stale bundled
@@ -273,7 +282,11 @@ for (i in seq_along(all_gages)) {
       # preprocessor too — review 2026-10-12); has_climate means PPT is present
       if (length(setdiff(clim_cols, "date")) > 0) {
         climate_merge <- gage_climate[, clim_cols, with = FALSE]
-        gage_data <- merge(gage_data, climate_merge, by = "date", all.x = TRUE)
+        # Phase A′ (2026-10-26): climate_frame.R under STREAMFLOW_CLIMATE_FRAME. The
+        # deprecated legacy path keeps its historical left merge whatever the switch says
+        # (the Julia and Python runners' legacy branches hold their own left joins).
+        gage_data <- frame_with_climate(gage_data, climate_merge,
+                                        if (isTRUE(use_legacy)) "left" else climate_frame)
         has_climate <- "PPT" %in% clim_cols
       }
     }
@@ -545,6 +558,27 @@ if (!is.null(gages_ii) && nrow(gages_ii) > 0 && "STAID" %in% names(gages_ii)) {
 # QA/QC flags on the assembled table (after the metadata merge, mirroring
 # run_julia_benchmark.jl / run_python_benchmark.py). compute_qa_flags() returns
 # names already prefixed "flagged_for_".
+# Pinned QA schema (2026-10-26, rerun plan Phase C; mirrors the Julia runner): every column
+# of the full-product header absent here is added as NA before the flags are computed, so a
+# subset run's flagged_for_high_na denominator equals the product's.
+qa_schema <- Sys.getenv("STREAMFLOW_QA_SCHEMA", unset = "")
+if (qa_schema != "") {
+  if (!file.exists(qa_schema)) stop("STREAMFLOW_QA_SCHEMA file not found: ", qa_schema)
+  pinned <- names(data.table::fread(qa_schema, nrows = 0))
+  meta_cols <- c("gage_id", "latitude", "longitude", "basin_area", "gage_type", "num_water_years", "start_water_year",
+                 "end_water_year", "area_normalized", "NDAMS_2009", "MAJ_DDENS_2009", "STOR_NID_2009", "IMPNLCD06",
+                 "DEVNLCD06", "FRESHW_WITHDRAWAL", "HYDRO_DISTURB_INDX", "CLASS", "RHBN", "REGULATED", "human_interference_class")
+  absent_meta <- setdiff(intersect(pinned, meta_cols), names(out_dt))
+  if (length(absent_meta) > 0) stop("STREAMFLOW_QA_SCHEMA: metadata column(s) of the pinned header are absent from this run (a metadata layer failed to load?): ", paste(absent_meta, collapse = ", "))
+  added <- setdiff(pinned[!startsWith(pinned, "flagged_") & !pinned %in% meta_cols], names(out_dt))
+  for (cn in added) out_dt[[cn]] <- rep(NA_real_, nrow(out_dt))
+  extra <- setdiff(names(out_dt), pinned)
+  if (length(extra) > 0) stop("STREAMFLOW_QA_SCHEMA: this run emits ", length(extra),
+                              " column(s) absent from the pinned header: ", paste(head(extra, 10), collapse = ", "))
+  timing$qa_schema <- list(path = normalizePath(qa_schema), n_columns = length(pinned), n_added_as_missing = length(added),
+                           sha256 = digest::digest(qa_schema, algo = "sha256", file = TRUE))
+  cat("  Pinned QA schema:", length(pinned), "columns,", length(added), "absent here added as NA\n")
+}
 cat("  Computing QA/QC flags...\n")
 qa <- compute_qa_flags(out_dt)
 for (nm in names(qa)) out_dt[[nm]] <- qa[[nm]]
@@ -608,7 +642,7 @@ config_file <- Sys.getenv("STREAMFLOW_SIGNATURES_CONFIG",
 env_keys <- c("STREAMFLOW_START_WATER_YEAR", "STREAMFLOW_END_WATER_YEAR",
               "STREAMFLOW_MIN_QUALIFYING_DATA_FRACTION", "STREAMFLOW_SIGNATURES_CONFIG",
               "STREAMFLOW_OUTPUT_PREFIX", "STREAMFLOW_ALLOW_LEGACY",
-              "STREAMFLOW_RPKG_LOADALL")
+              "STREAMFLOW_RPKG_LOADALL", "STREAMFLOW_CLIMATE_FRAME")
 env_overrides <- Filter(function(x) x != "", stats::setNames(Sys.getenv(env_keys), env_keys))
 pkg_names <- c("streamflowsignatures", "data.table", "arrow", "zyp", "Kendall")
 pkg_versions <- lapply(stats::setNames(pkg_names, pkg_names), function(p)
@@ -620,6 +654,7 @@ timing$provenance <- list(
   config = file_info(config_file, hash_big),
   git_revision = git_rev,
   git_working_tree_dirty = git_dirty,
+  climate_frame = climate_frame,   # resolved STREAMFLOW_CLIMATE_FRAME (2026-10-26)
   r_version = as.character(getRversion()),
   package_versions = pkg_versions,
   hostname = Sys.info()[["nodename"]],

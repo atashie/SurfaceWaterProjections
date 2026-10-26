@@ -35,9 +35,13 @@ HYDROATLAS_GPKG <- Sys.getenv("HYDROATLAS_GPKG",
 # DATA QUALITY THRESHOLDS
 # ==============================================================================
 
-# Minimum flow threshold and required days
-# First value: minimum Q value in mm/day (values below are set to NA)
-# Second value: minimum days per water year that must exceed the threshold
+# Compile-eligibility rule of the ingestion step (run_ingest_usgs_hydat.R, the
+# process_gages_* callers of generate_streamflow_dt in R/helperFunctions.R): a CALENDAR
+# year counts toward MIN_NUM_YEARS only when at least [2] of its non-NA days exceed
+# [1] mm/day. No value is altered and no day is removed by this rule (comment corrected
+# 2026-10-26 - it used to say "values below are set to NA", which the code never did).
+# Which USGS days carry a value at all is decided by the acceptance rule in
+# R/usgs_qualifiers.R (status letter A or P, finite value, not the no-data sentinel).
 MIN_Q_VALUE_AND_DAYS <- c(0.0001, 30)
 
 # Minimum number of "good" water years required for a gage to be processed

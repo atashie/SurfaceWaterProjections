@@ -46,6 +46,13 @@ edge_included = vcat(
 edge_excluded = dropped[1:min(4, length(dropped))]
 sample_ids = unique(vcat(edge_included, edge_excluded))
 
+const SELECTED = let gl = get(ENV, "STREAMFLOW_AUDIT_GAGE_LIST", "")
+    gl == "" ? nothing : Set(filter(!isempty, strip.(readlines(gl))))
+end
+if SELECTED !== nothing && get(ENV, "STREAMFLOW_AUDIT_CENSUS", "") == ""
+    println("STREAMFLOW_AUDIT_GAGE_LIST is set but STREAMFLOW_AUDIT_CENSUS is not: the frozen-cohort contract needs the census (qualified set)")
+    exit(1)
+end
 println("Loading streamflow parquet...")
 sf = read_parquet(SF)
 if !("water_year" in names(sf))
@@ -70,7 +77,10 @@ for g in sample_ids
     frac = total_possible == 0 ? 0.0 : length(valid_win) / total_possible
     decide = (total_possible > 0) && (frac >= MIN_FRAC) && (length(valid_win) >= MIN_YEARS)
     in_prod = g in prod_set
-    match = decide == in_prod
+    # frozen cohort (2026-10-26): emission = qualified ∩ selected, so a qualifying gage outside
+    # the selection manifest is a correct exclusion, not a mismatch
+    expected = SELECTED === nothing ? decide : (decide && (g in SELECTED))
+    match = expected == in_prod
     detail = ""
     if in_prod
         row = prod[prod.gage_id .== g, :][1, :]
@@ -83,8 +93,43 @@ for g in sample_ids
     if !match
         global fails += 1
     end
-    println("$g | $in_prod | $(length(valid_win)) | $total_possible | $(round(frac, digits=3)) | $decide | $(match ? "OK" : "MISMATCH")$detail")
+    println("$g | $in_prod | $(length(valid_win)) | $total_possible | $(round(frac, digits=3)) | $decide$(SELECTED === nothing ? "" : (g in SELECTED ? " (selected)" : " (NOT selected)")) | $(match ? "OK" : "MISMATCH")$detail")
 end
 
-println(fails == 0 ? "\nAUDIT PASS ($(length(sample_ids)) gages)" : "\nAUDIT FAIL ($fails mismatches)")
-exit(fails == 0 ? 0 : 1)
+# --- Frozen-cohort contract (rerun plan Phase C / E4, 2026-10-26): emitted = selected ⊆ qualified.
+# ENV: STREAMFLOW_AUDIT_GAGE_LIST = the selection manifest (one gage id per line) the run
+# was split with; STREAMFLOW_AUDIT_CENSUS = a gage_window.csv of qualifier_year_oracle.py
+# (or the Julia census) with columns gage_id, window, qualifies|included;
+# STREAMFLOW_AUDIT_WINDOW = the window label ("1993-2025"). The would-qualify gages outside
+# the selection are listed, never added (user decision 2026-10-23).
+cohort_fails = 0
+gl = get(ENV, "STREAMFLOW_AUDIT_GAGE_LIST", "")
+if gl != ""
+    selected = SELECTED
+    emitted = prod_set
+    println("\nFrozen cohort: selection manifest $gl ($(length(selected)) gages), emitted $(length(emitted))")
+    if emitted != selected
+        global cohort_fails += 1
+        println("  MISMATCH emitted ≠ selected: emitted-only $(first(sort(collect(setdiff(emitted, selected))), 10)), selected-only $(first(sort(collect(setdiff(selected, emitted))), 10))")
+    else
+        println("  emitted == selected: OK")
+    end
+    cen = get(ENV, "STREAMFLOW_AUDIT_CENSUS", "")
+    if cen != ""
+        win = get(ENV, "STREAMFLOW_AUDIT_WINDOW", "$(START_YEAR)-$(END_YEAR)")
+        cdf = CSV.read(cen, DataFrame; types=Dict("gage_id" => String))
+        qcol = "qualifies" in names(cdf) ? "qualifies" : "included"
+        cw = cdf[string.(cdf.window) .== win, :]
+        qualified = Set(cw.gage_id[coalesce.(string.(cw[!, qcol]) .== "true", false) .| coalesce.(string.(cw[!, qcol]) .== "True", false)])
+        not_q = sort(collect(setdiff(selected, qualified)))
+        would = sort(collect(setdiff(qualified, selected)))
+        missing_evidence = sort(collect(setdiff(selected, Set(cw.gage_id))))
+        isempty(missing_evidence) || (println("  FAIL: $(length(missing_evidence)) selected gages have no census row (no qualification evidence): $(first(missing_evidence, 10))"); global cohort_fails += 1)
+        println("  census $cen window $win: qualified $(length(qualified)); selected ⊆ qualified: $(isempty(not_q) ? "OK" : "FAIL $(first(not_q, 10))")")
+        println("  would-qualify gages outside the selection (listed, not added): $(length(would))" * (isempty(would) ? "" : " — $(join(would, " "))"))
+        isempty(not_q) || (global cohort_fails += 1)
+    end
+end
+
+println(fails == 0 && cohort_fails == 0 ? "\nAUDIT PASS ($(length(sample_ids)) gages)" : "\nAUDIT FAIL ($fails sample mismatches, $cohort_fails cohort failures)")
+exit(fails == 0 && cohort_fails == 0 ? 0 : 1)

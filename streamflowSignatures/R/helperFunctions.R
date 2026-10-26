@@ -27,6 +27,17 @@ require(ecmwfr)  # For accessing ERA5 data
 require(terra)   # For spatial operations
 require(ncdf4)
 
+# USGS daily-value acceptance rule (2026-10-26; decision 1d of the qualifier-mask rerun
+# plan): a pure, unit-tested file. Sourced here when this file is sourced from the
+# repository root (the convention of every run_*.R script) or from R/; the ingestion
+# script sources it explicitly as well. generate_streamflow_dt() refuses to run without it.
+local({
+  cand <- c("R/usgs_qualifiers.R", "usgs_qualifiers.R")
+  hit <- cand[file.exists(cand)]
+  if (length(hit) > 0) source(hit[1]) else
+    warning("R/usgs_qualifiers.R not found - source it before ingesting USGS data")
+})
+
 # Helper to wrap metric calculations with error handling
 # Returns the function result on success, NULL on error (with logging)
 safe_calculate <- function(fn, data, gage_id, label, ctx, log_level = "warn", ...) {
@@ -628,9 +639,15 @@ generate_streamflow_dt <- function(dt, data_origin,
       streamy <- gage_data[, c("Date", val_col, code_col)]
       names(streamy) <- c("Date", "Q_rawUnits", "flag")
       
-      # Mask Q as before by acceptable codes, but keep the flag column
-      keep_codes <- c("A", "A e", "P", "P e")
-      streamy$Q_rawUnits[!(streamy$flag %in% keep_codes)] <- NA_real_
+      # Acceptance rule (2026-10-26, R/usgs_qualifiers.R): status letter A or P, finite
+      # value, not the NWIS no-data sentinel; remark codes (e, R, <, >, [4], Ice, ...)
+      # never mask at storage - the full code stays in `flag`. The former rule kept only
+      # the exact strings "A", "A e", "P", "P e" and set every approved-remark day to NA
+      # (193,542 days on 987 gages; census 2026-09-04 §10.1).
+      if (!exists("usgs_qualifier_mask", mode = "function")) {
+        stop("generate_streamflow_dt: source R/usgs_qualifiers.R first (USGS acceptance rule)")
+      }
+      streamy$Q_rawUnits <- usgs_qualifier_mask(streamy$flag, streamy$Q_rawUnits)
       
       # Convert to mm/day using drainage area (sqkm) from metadata row
       gage_id <- gage_data$site_no[1]
