@@ -393,8 +393,45 @@ built from base + cached source records; an audit-fetch universe of all 1,185 ma
 numerical sensitivity run for censored values; a full resume fingerprint and a dirty-tree
 refusal for products; a full baseline reproduction of v2; partitioned validators; about seven
 person-days) are folded into plan v3 (2026-10-26). **DECISIONS (user, 2026-10-26): all plan-v3
-defaults approved** (recorded in the Known Issues bullet above and in plan §3 / §9); nothing run
-yet.
+defaults approved** (recorded in the Known Issues bullet above and in plan §3 / §9). **Later the
+same day (user, after discussion with the research team): decision 5 REVERSED — the
+climate-frame fix (Known Issues, MEDIUM, 2026-10-16) is folded into this run**; plan v4 adds
+§10: a runner-level, span-restricted outer join (an unrestricted one would move every gage's
+qualification denominator and drop gages, breaking the freeze), tests in the three languages,
+a three-stage attribution (S0 baseline, S1 spliced input + old join, S2 = the product, plus a
+one-batch interaction check), and a change census that must reconcile every changed cell to
+one of the two input ledgers (0 unexplained changes, per-column magnitude and p-value-crossing
+tables, the eight > 1 % precipitation-bias gages re-checked). Forecast
+`docs/plans/2026-10-26-outer-join-forecast.csv`: 1,174 / 938 Q-valid gage-years with absent
+days in 857 / 722 product gages, 147 / 122 of them also splice-affected; 5,069 / 4,893 gages
+untouched by either fix. Codex round 3 on v4: NO-GO — a span-only outer join would insert
+3,562 / 5,116 whole interior water years that have no streamflow (759 / 894 product gages),
+which the preprocessor rejects but whose seasonal flags move the Q-only
+`season_excluded_years_*` scalars; the inserted rows must be restricted to the gage's original
+water-year set (fixtures pin it); the ledger must carry secondary interpolation changes (the
+Daymet-missing Dec 31 moves when a neighbour is filled; 3 per window) and nonlinear bases are
+gated by recomputation, not summed deltas; the restored P falls on 501 and rises on 418 of the
+919 deviating gage-years, so no direction is gated; the stages run on one tree behind a
+fingerprinted `STREAMFLOW_CLIMATE_FRAME` switch, stage 1 only on the splice-affected gages;
+695 `_pval` columns of five types. All eight findings verified and folded into plan v5
+(`codex_plan_review_round3.md`). Codex round 4 on v5: GO WITH CHANGES, decisions 12–17
+endorsed, the Q-only invariance of the year-set restriction confirmed by the reviewer's own
+Julia fixture, 7 findings, all verified and folded into plan v6
+(`codex_plan_review_round4.md`): a ledger of changed PREPROCESSED values loses raw-mask changes
+(a restored day equal to its interpolate flips a raw seasonal completeness flag, `io.jl`
+l. 326, with no value delta) → three input ledgers plus per-stage state tables (raw masks,
+interpolation mask, seasonal flags, rejection reasons); `flagged_for_high_na` is computed over
+the EXECUTED gages' columns (`run_julia_benchmark.jl` l. 466), so every subset stage pins the
+full-product header as its denominator; identities gated on executed gages only, the S1′
+cohort composed from the realized support (165 / 135 overlap gages — 24 / 15 gages carry
+restored years with absent dates, 18 / 13 of them outside the join forecast); the registry
+enumerated per output kind (the record-wide recession minimum-event gate, `recession.jl`
+l. 515, and the Q–P seasonality floor make OLD years' keys appear; the snow / frost anchored
+gates touch the trend statistics only); the GDD gate uses the thresholded per-day formula
+(`climate.jl` l. 476); §0 / Phase D / E4 / E5 aligned with §10 (A = complement of U;
+`emitted = selected ⊆ qualified`); §10.8 narrowed (exposure ≠ residual); the effort table sums
+to 12.5 person-days + ~23 h unattended, and one person cannot finish before the 2026-11-09
+submission (decisions 18 baseline drift and 19 schedule proposed). Nothing run yet.
 
 ### Reviewed: Pacific-coast annual precipitation totals; one defect found (2026-10-16)
 

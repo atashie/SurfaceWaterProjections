@@ -87,7 +87,8 @@ decisions: `docs/plans/2026-10-12-climate-metrics-plan.md` §1.
 
 ## For discussion with the research team (added 2026-10-16)
 
-1. Climate on the streamflow frame (CHANGELOG → Known Issues, MEDIUM): a day absent from a
+1. (DECIDED 2026-10-26 with the research team: the fix is folded into the qualifier-mask rerun,
+   `docs/plans/2026-10-21-qualifier-mask-fix-rerun-plan.md` §10.) Climate on the streamflow frame (CHANGELOG → Known Issues, MEDIUM): a day absent from a
    gage's streamflow record is interpolated in PPT/TMIN/TMAX/SWE too, although Daymet has
    it; 919 of 200,832 gage-years in the WY 1993–2025 product, 8 gages > 1 % on mean annual
    precipitation (one −24.5 %), Pacific coast ≤ 1.9 %; runoff ratios and elasticity inherit
