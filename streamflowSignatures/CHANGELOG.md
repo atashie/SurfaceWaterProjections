@@ -156,8 +156,12 @@ loads every session is `docs/STATUS.md`.
   the climate outer-join fix stays out — REVERSED the same day, folded in; internal v3 / public
   "version 2"; metadata updated in place; rpkg re-baseline; code reviews by area; local staging;
   start now). **Phase A DONE 2026-10-26**: the ingestion rule is fixed (`R/usgs_qualifiers.R`,
-  [October 2026]); the compiled parquet and the products are patched by Phases B–D (in
-  progress). Measurement: census §10.1
+  [October 2026]). **Phases B–D DONE 2026-10-28**: the compiled parquet is patched (every one
+  of the 193,542 target days restored from re-fetched NWIS records, ledger + raw responses +
+  audit B1–B8 PASS) and both products are rebuilt as version 3 with the gage sets frozen —
+  1,177 / 950 water years restored exactly as the oracle forecast, change census 0 unexplained
+  (plan §11, [October 2026]). NOT yet deposited: the public resources still carry the masked
+  values. Measurement: census §10.1
   (`docs/plans/2026-09-04-filtering-stage-census.md`); tools
   `docs/benchmarks/min_flow_rule_footprint.py`, `min_flow_rule_replay.py`.
 - **MEDIUM (every product, found 2026-10-16 by the Pacific-coast precipitation review) —
@@ -189,7 +193,12 @@ loads every session is `docs/STATUS.md`.
   must stay bit-identical; `check_additivity.jl` is the gate) — Julia first, then the
   ports, then a rerun of both version-2 products. **DECISION (user, 2026-10-16): documented
   for future work; the fix is NOT implemented until it has been discussed with the research
-  team.** Record and evidence: `docs/plans/2026-10-16-precipitation-review.md`;
+  team.** REVERSED 2026-10-26 (user, after the research-team discussion): the fix is folded into
+  the qualifier rerun — Phase A′ `climate_frame.{jl,py,R}` + `STREAMFLOW_CLIMATE_FRAME=outer`
+  (a span-restricted outer join inside each gage's original water-year set), and both products
+  are rebuilt as version 3 on 2026-10-27 (3,241 / 2,221 Daymet days inserted in valid years on
+  874 / 734 gages; every precipitation and GDD total equals its daily sum, gate 5b; plan §10 /
+  §11). NOT yet deposited. Record and evidence: `docs/plans/2026-10-16-precipitation-review.md`;
   `~/HISSS_data/climate-rerun-12oct2026/precip_review_16oct2026/` (scripts +
   `full_domain_prcp_check.parquet`, one row per product gage-year).
 - **Explorers and dashboards built before 2026-10-13 show CARTO's "API KEY REQUIRED"
@@ -354,7 +363,7 @@ Moved 2026-09-29 to `docs/reconciliation/guidelines_todos.md` and
 
 ## [October 2026]
 
-### Qualifier rerun, Phases A and A′ implemented: the USGS acceptance rule and the climate-frame switch (2026-10-26)
+### Qualifier rerun — Phases A–H: the USGS acceptance rule, the climate-frame switch, the version-3 products built and verified (2026-10-26 … 2026-10-28)
 
 Plan `docs/plans/2026-10-21-qualifier-mask-fix-rerun-plan.md` v6; decisions 12–19 taken as
 their defaults when the user said to proceed (2026-10-26). Nothing in `julia/src`,
@@ -478,9 +487,36 @@ their defaults when the user said to proceed (2026-10-26). Nothing in `julia/src
   79, not 87; numerical-only differences separated from substantive ones).
   DECISION (user, 2026-10-26): B checkpoint APPROVED — the tree is committed as the tagged
   baseline `qualifier-rerun-baseline-2026-10-26` and Phase D starts; the S1 / S1′ attribution
-  stages are KEPT (not dropped). A preview of product #1 in the final configuration and an
-  internal min / max / mean review summary with a comparison dashboard are built for the user's
-  data review only (run folder `preview_1993_2025/`; not documented further, not published).
+  stages are KEPT. A product-#1 preview and an internal min / max / mean review summary were
+  built for the user's data review only (run folder `preview_1993_2025/`, `review_<WU>/`; not
+  published).
+- **Phases D–H executed (2026-10-26 … 2026-10-28).** Consolidated record:
+  `docs/plans/2026-10-21-qualifier-rerun-results.md`; dated log with every defect and review
+  disposition: plan §11; run folder `~/HISSS_data/qualifier-rerun-26oct2026/` (`README.md` there).
+  - D: S0 = version 2 bitwise on both windows (decision 18); the version-3 products built from
+    the clean worktree of the tag — #1 6,678 gages / 27,766,578 annual rows, #2 6,250 /
+    34,813,881 — E1–E4 PASS; B′ delta ledgers complete (2,702,639 / 2,217,736 attributed daily
+    values); change census vs version 2 **PASS on both windows** (0 unexplained of 387,055 /
+    360,065 non-equal annual cells; 5,069 / 4,894 untouched gages identical; 1,177 / 950 water
+    years restored, 0 lost); E7 Python port on the 1,609 / 1,356 changed gages PASS with named
+    residuals; the S1 / S1′ / class-U stage identities hold, the interaction residual is
+    reported. Six verification-tool defects fixed post-tag in the main tree (none in the products;
+    results record §5) — `assess_rerun_changes.py`, `preprocess_state_ledger.py`,
+    `check_summary_equality.py --allow-gate-state-column` (new), `stage_attribution.py` (new).
+  - E6: explorers for both products, basemap check PASS.
+  - F: rpkg re-baselined on #1 v3 — 0 errors, schema and failure gates PASS, annual 1e-6 PASS with
+    the same named residuals as version 2, climate family bit-identical, R² 0.999922
+    (`docs/CROSS_LANGUAGE_STATUS.md`).
+  - G round 1: three blind reviews (Sonnet 5.5 ×2, Codex) GO WITH CHANGES, no blocker; headline
+    numbers reproduced independently; every finding applied the same day
+    (`docs/plans/2026-10-21-qualifier-reviews/README.md`).
+  - H (local): `stage_hydroshare_qualifier_v3.py` (new) + `reconstruct_qualifier_patched_streamflow.py`
+    (new) stage R1 / R2 / R3 in `~/Downloads/Signatures_v3_28oct2026/` under the public name
+    "version 2" — frozen selection manifests, would-qualify lists, the validation record, the
+    corrected streamflow table beside the immutable February compile with ledger, raw responses,
+    control report, oracle and an executable reconstruction recipe (verified); `check` PASS. Not
+    uploaded. Version-3 docs: README, STATUS, DEVELOPMENT, DATA_SOURCES, CROSS_LANGUAGE_STATUS, the
+    user skill, `python/README.md`, the reconciliation logs (co-author relays).
 
 ### Reviewed: what the compilation's flow rule removed; the `A R` qualifier mask found (2026-10-21)
 

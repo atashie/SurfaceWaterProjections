@@ -226,14 +226,17 @@ def main():
     log(f"annual rows: old {n_old:,}, new {n_new:,}; {tot}")
     diff = con.execute("SELECT * FROM d WHERE status <> 'equal'").df()
     # Q-valid years per gage: the state tables, else the Qann keys
+    valid_old = {g: set(int(y) for y in ys) for g, ys in con.execute("SELECT gage_id, list(DISTINCT water_year) FROM o WHERE signature = 'Qann' GROUP BY gage_id").fetchall()}
+    valid_new = {g: set(int(y) for y in ys) for g, ys in con.execute("SELECT gage_id, list(DISTINCT water_year) FROM n WHERE signature = 'Qann' GROUP BY gage_id").fetchall()}
+    valid_source = "Qann annual keys"; not_replayed = []
     if state_a is not None:
-        valid_old = {g: set(d.loc[d["q_valid"] == "True", "wy"]) for g, d in state_a[(state_a["wy"] >= w0) & (state_a["wy"] <= w1)].groupby("gage_id")}
-        valid_new = {g: set(d.loc[d["q_valid"] == "True", "wy"]) for g, d in state_b[(state_b["wy"] >= w0) & (state_b["wy"] <= w1)].groupby("gage_id")}
-        valid_source = "state tables"
-    else:
-        valid_old = {g: set(int(y) for y in ys) for g, ys in con.execute("SELECT gage_id, list(DISTINCT water_year) FROM o WHERE signature = 'Qann' GROUP BY gage_id").fetchall()}
-        valid_new = {g: set(int(y) for y in ys) for g, ys in con.execute("SELECT gage_id, list(DISTINCT water_year) FROM n WHERE signature = 'Qann' GROUP BY gage_id").fetchall()}
-        valid_source = "Qann annual keys"
+        # the state tables cover the replayed (affected) gages only (B′ runs on the affected manifest, 2026-10-27);
+        # a gage absent from them keeps its Qann keys
+        so = {g: set(int(y) for y in d.loc[d["q_valid"] == "True", "wy"]) for g, d in state_a[(state_a["wy"] >= w0) & (state_a["wy"] <= w1)].groupby("gage_id")}
+        sn = {g: set(int(y) for y in d.loc[d["q_valid"] == "True", "wy"]) for g, d in state_b[(state_b["wy"] >= w0) & (state_b["wy"] <= w1)].groupby("gage_id")}
+        valid_old.update(so); valid_new.update(sn)
+        not_replayed = [g for g in common if g not in so or g not in sn]
+        valid_source = f"state tables for {len(set(so) & set(sn))} replayed gages, Qann annual keys for the {len(not_replayed)} others"
     rec_old = {g: v for g, v in con.execute("SELECT gage_id, sum(\"value\") FROM o WHERE signature = 'n_recession_events' AND NOT isnan(\"value\") GROUP BY gage_id").fetchall()}
     rec_new = {g: v for g, v in con.execute("SELECT gage_id, sum(\"value\") FROM n WHERE signature = 'n_recession_events' AND NOT isnan(\"value\") GROUP BY gage_id").fetchall()}
     qp_old = {g: v for g, v in con.execute("SELECT gage_id, count(DISTINCT water_year) FROM o WHERE signature = 'qp_bimodality' AND NOT isnan(\"value\") GROUP BY gage_id").fetchall()}
@@ -289,6 +292,10 @@ def main():
                 return "gate-emitted old year withdrawn (recession min_events crossed downward)"
             if eg.startswith("qp") and qp_old.get(g, 0) >= qp_min > qp_new.get(g, 0):
                 return "gate-emitted old year withdrawn (Q–P seasonality min_years crossed downward)"
+            if k in ("Q_only", "coupled") and rest:
+                return f"restored-day year ({'Q-only' if k == 'Q_only' else 'coupled'}; key withdrawn on an old year)"
+            if d_ == "record_dependent" and (c in ("A-Q", "A-QJ") if k == "Q_only" else c != "U"):
+                return "record-dependent base of an affected gage: key withdrawn on an old year (validated by the E7 key-set identity of 5c)"
             return "UNEXPLAINED: lost key"
         if st == "gained" and wy not in vo:
             if wy in oracle_gained.get(g, set()):
@@ -307,8 +314,12 @@ def main():
                 for var in dv - {"Q"}:
                     if valid_var(state_a, "a", g, wy, var) is False and valid_var(state_b, "b", g, wy, var) is True:
                         return f"newly eligible climate year ({var} validity flipped; state tables)"
-                if state_a is None:
-                    return "UNEXPLAINED: gained key on an old year (no state tables to show a validity flip)"
+            if k in ("Q_only", "coupled") and rest:
+                return f"restored-day year ({'Q-only' if k == 'Q_only' else 'coupled'}; key emitted on an old year)"
+            if d_ == "record_dependent" and (c in ("A-Q", "A-QJ") if k == "Q_only" else c != "U"):
+                return "record-dependent base of an affected gage: key emitted on an old year (validated by the E7 key-set identity and value recomputation of 5c)"
+            if k in ("climate_only", "coupled") and state_a is None:
+                return "UNEXPLAINED: gained key on an old year (no state tables to show a validity flip)"
             return "UNEXPLAINED: gained key on an old year"
         # changed / nan_state on a shared key
         if k == "Q_only":
@@ -384,9 +395,11 @@ def main():
         ga = pd.read_csv(a.gage_a, dtype=str, keep_default_na=False).set_index("gage_id"); gb = pd.read_csv(a.gage_b, dtype=str, keep_default_na=False).set_index("gage_id")
         col = f"{a.window}_total_possible"
         missing_tp = [g for g in common if g not in ga.index or g not in gb.index]
+        missing_not_u = [g for g in missing_tp if classes.at[g, "class"] != "U"]
         bad_tp = [(g, ga.at[g, col], gb.at[g, col]) for g in common if g in ga.index and g in gb.index and ga.at[g, col] != gb.at[g, col]]
-        gate("freeze: total_possible identical (gage tables)", "PASS" if not bad_tp and not missing_tp else "FAIL",
-             f"{len(common)} gages; {len(bad_tp)} differ {bad_tp[:5]}; absent from a gage table {len(missing_tp)} {missing_tp[:5]}")
+        gate("freeze: total_possible identical (gage tables)", "PASS" if not bad_tp and not missing_not_u else "FAIL",
+             f"{len(common) - len(missing_tp)} replayed gages compared; {len(bad_tp)} differ {bad_tp[:5]}; not replayed {len(missing_tp)}, "
+             f"all class U: {not missing_not_u} (non-U absent {missing_not_u[:5]})")
     else:
         gate("freeze: total_possible identical (gage tables)", "NOT RUN", "no --gage-a/--gage-b")
 
@@ -556,7 +569,7 @@ def main():
     accepted = set(a.accept_waiver or [])
     for nm, path, bound_to, waiver_keys in (
             ("5c: absolute recomputation of every changed or gained annual value (E7 annual gate, second language)", a.e7_annual_json, a.new_annual, ("allow_diff_signature", "waive_prefix")),
-            ("5g: summary statistics, scalars and flags validated numerically (E7 summary gate)", a.e7_summary_json, a.new_csv, ("waive_column",))):
+            ("5g: summary statistics, scalars and flags validated numerically (E7 summary gate)", a.e7_summary_json, a.new_csv, ("waive_column", "allow_gate_state_column"))):
         if not (path and os.path.isfile(path)):
             gate(nm, "NOT RUN", "no E7 verdict JSON given"); continue
         j = json.load(open(path))

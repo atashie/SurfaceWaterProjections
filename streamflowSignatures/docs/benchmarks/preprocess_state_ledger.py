@@ -300,9 +300,11 @@ def cmd_diff(a):
                 else:
                     problems.append("raw change without a source ledger entry")
             # (2) clean, on both sides: the raw value, or the recomputed interpolate, in a Q-valid year; NaN otherwise
-            for side, (s_, i_, cv, qok) in (("old", (sa_, i_a, ca, val_a["Q"])), ("new", (sb_, i_b, cb, val_b["Q"]))):
+            for side, (s_, i_, cv, qok, vok) in (("old", (sa_, i_a, ca, val_a["Q"], val_a[v])), ("new", (sb_, i_b, cb, val_b["Q"], val_b[v]))):
                 rv = s_[f"{v}_raw"][i_]
-                exp = (rv if not np.isnan(rv) else interp_value(s_[f"{v}_raw"], i_)) if qok else np.nan
+                # an NA day is interpolated only in a year the variable itself is valid in: a climate variable with
+                # > 30 NAs or a gap > 3 days keeps its finite days raw and its NA days NaN (0214269560 WY1997, 2026-10-27)
+                exp = (rv if not np.isnan(rv) else (interp_value(s_[f"{v}_raw"], i_) if vok else np.nan)) if qok else np.nan
                 if not same(cv, exp):
                     problems.append(f"{side} clean value is not raw / the interpolate of its stage")
             # (3) pre, on both sides: clean where the variable's year is valid, NaN otherwise

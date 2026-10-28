@@ -212,6 +212,15 @@ fraction, 20-year floor, one self-contained folder each):
   TRUE). Folders `~/HISSS_data/climate-rerun-12oct2026/processedOuts_{1993,1980}_2025_climate_12oct2026`;
   staged `~/Downloads/Signatures_v2_12oct2026/`. Until deposited, the HydroShare
   resources still hold the 2026 columns.
+- **Version 3 of both (2026-10-27/28; validated, NOT yet deposited; to be published as
+  "version 2")** — the version-2 configuration rerun on a corrected input with the gage sets
+  frozen: the USGS days masked by the `A R` / `A <` / `A >` / `A [4]` qualifier bug are restored
+  (1,177 / 950 water years valid again on 619 / 502 gages; 899 / 757 gages hold a restored day),
+  and climate is joined on Daymet's own calendar inside the record span so absent streamflow
+  days keep their precipitation (`STREAMFLOW_CLIMATE_FRAME=outer`; 3,241 / 2,221 inserted days
+  in valid years). Annual rows 27,766,578 / 34,813,881; the 5,069 / 4,894 untouched gages are
+  bit-identical to version 2. Folders
+  `~/HISSS_data/qualifier-rerun-26oct2026/processedOuts_{1993,1980}_2025_climate_v3_26oct2026`.
 
 Provenance caveat: #1 was built from the original Daymet parquet, #2 from a
 parquet rebuilt out of the annual Daymet CSVs after the original was found
@@ -266,8 +275,8 @@ itself — 67 zero-flow or diverted channels and 5 at the threshold level; 8,787
 qualifier mask (a HIGH known issue: 193,542 approved days on 987 compiled gages are NA, and
 1,370 water years in 676 gages — 1,177 in product #1, 950 in #2 — are rejected for that reason
 alone; the ingestion rule was fixed 2026-10-26 — `R/usgs_qualifiers.R`, status letter A or P plus a
-finite value — and the compiled record and both products are being patched with the gage sets
-frozen, plan `docs/plans/2026-10-21-qualifier-mask-fix-rerun-plan.md`) and 3 to length (2026-10-21,
+finite value — and the compiled record and both products were patched 2026-10-27 as version 3 with
+the gage sets frozen, plan `docs/plans/2026-10-21-qualifier-mask-fix-rerun-plan.md`) and 3 to length (2026-10-21,
 census §10; a fifth, 11129800, is both a zero-flow and a mask casualty).
 
 ## Interpreting Results

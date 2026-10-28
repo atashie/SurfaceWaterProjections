@@ -8,6 +8,29 @@ Manuscript Reconciliation Log` on 2026-09-29.
 
 ---
 
+**2026-10-28 — version-3 products built and verified (qualifier mask + climate frame; no
+sync — relay items for the Methods text, due before the deposit).** Manuscript-side:
+  1. Qualifier handling needs a sentence: USGS daily values are kept whenever the agency status
+     is approved (A) or provisional (P) and a finite value is served; remark codes (`R`, `e`,
+     `<`, `>`, `[4]`, `Ice`, …) are carried as flags and never mask a value (censored `<` / `>`
+     values enter as the reported bound). The February 2026 compile had masked the approved
+     remark codes; the deposited products restore those days from re-fetched NWIS records
+     (193,542 days on 987 compiled gages; 1,177 / 950 water years of the two products valid
+     again on 619 / 502 gages).
+  2. The frozen-cohort statement: the products describe the gage sets selected under the
+     February compile (6,678 / 6,250) — a gage that qualifies only under the corrected record
+     is listed in the data notes, not added (user decision 2026-10-23; 31 / 29 such gages under the
+     four restored codes — the forecast's 29 / 26 counted `A R` alone).
+  3. Climate join: each gage's Daymet series enters the preprocessor on Daymet's own calendar
+     inside the record span (a day absent from the streamflow record keeps its precipitation),
+     so precipitation totals equal the daily sums; this replaces the earlier implicit
+     interpolation across absent dates (3,241 / 2,221 gage-days in valid years).
+  4. Numbers that move with the rerun: the annual-value totals (27,766,578 / 34,813,881 rows) and
+     the per-site COVERAGE of Figure 3 (metric-years / possible metric-years rises for the 619 /
+     502 gages that regained 1,177 / 950 water years; the figure should be regenerated from the
+     deposited product). Unchanged by the freeze: every count in the gage funnel, the ecoregion
+     site counts of Figure 2 / Figure 3B (6,678 / 6,250), the basin-size quartiles of §4.
+
 Session-start reconciliation of the HISSS manuscript draft (Scientific Data,
 submission target Nov 9 2026) against code + repo docs. Snapshot:
 `docs/MANUSCRIPT_DRAFT.md`; workflow: `/sync-docs` §3.

@@ -16,7 +16,7 @@ implemented — relay item 10 closes); (2) GDD now reads "Σ(max(0, Tmax+Tmin)/2
 relay item 3 landed); (3) `frost_first_dowy` / `frost_last_dowy` now say "minimum daily
 temperature below 0 degrees C" — matches TMIN < `frost_temp_c` (the temperature half of relay
 item 8 landed; "(NA when none)" and the explicit Oct 1 – Jun 30 window are still absent).
-- [ ] DOC-SIDE (relay, added 2026-10-26 — becomes due when the qualifier-mask fix lands): the
+- [ ] DOC-SIDE (relay, added 2026-10-26; DUE since 2026-10-28 — the fix landed in the version-3 products): the
   data-processing paragraph says "USGS values are kept only for qualifiers A, A e, P, P e (others
   set to NA)" (snapshot l. 540). That rule is the HIGH known issue of 2026-10-21 (approved
   values with the remark codes `R`, `<`, `>`, `[4]` were set to NA; plan

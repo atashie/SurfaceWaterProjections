@@ -42,9 +42,15 @@ paths:
   `splice_nwis_qualifiers.py` (list → fetch → splice → control → audit), `qualifier_year_oracle.py`
   (replay / oracle), `climate_frame_inventory.py` and `preprocess_state_ledger.py` (B′ ledgers and
   state tables), `assess_rerun_changes.py` (the change census, duckdb venv), `build_stage_cohorts.py`
-  (S1 / S1′ manifests), `docs/qualifier_rerun_registry.csv` (the dependency registry; docs/benchmarks/*.csv is git-ignored). Production stages
+  (S1 / S1′ manifests), `stage_attribution.py` (stage identities on executed gages + the reported
+  interaction residual), `check_annual_parquet_equality.py --gages --allow-diff-signature` and
+  `check_summary_equality.py --gages --waive-column --allow-gate-state-column` (the E7 gates;
+  every allowance is NAMED and the census accepts it only by exact name, `--accept-waiver`),
+  `docs/qualifier_rerun_registry.csv` (the dependency registry; docs/benchmarks/*.csv is git-ignored). Production stages
   run through `run_batched_julia.py` with `--gage-list`, `--climate-frame`, `--qa-schema`, `--stage`
-  and `--require-clean-tree`; a stage's provenance is in its merged timing JSON.
+  and `--require-clean-tree`; a stage's provenance is in its merged timing JSON. Verification
+  tools run from the MAIN tree; a product stage runs from the clean worktree of the tag, which is
+  never edited (2026-10-27).
 - Dashboards and explorers group by FUNCTION FAMILY (the 17 computing functions); the
   nine signature CATEGORIES come from `docs/signature_categories.csv`. Keep every
   `SIGNATURE_GROUPS` list complete when a family is added — the snow family was silently

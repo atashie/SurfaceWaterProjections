@@ -766,6 +766,9 @@ python docs/benchmarks/build_experiment_vs_julia_dashboard.py startIn1993_80pct
 | `docs/benchmarks/analyze_drought_redundancy.jl` | Measures drought-duration overlap with the pulse metrics on the annual series |
 | `docs/benchmarks/run_batched_julia.py` | Runs a Julia benchmark wrapper in gage batches to bound memory on the 16 GB laptop: `split` the inputs (source sha256 recorded), `run` each batch under a memory and time guard, `merge` (refuses incomplete or inconsistent batches; reference gage order, else sorted by id) |
 | `docs/benchmarks/selftest_run_batched_julia.py` | Self-test of the batched runner on synthetic inputs with a fake julia (split, resume, guards, merge refusals) |
+| `docs/benchmarks/run_julia_benchmark_prod_{1993,1980}_2025_60pct_climate.jl` | **STANDARD PRODUCT** wrappers of the version-2 / version-3 products (climate family; run through the batched runner with `--gage-list`, `--climate-frame outer`, `--qa-schema`) |
+| `docs/benchmarks/climate_frame.{jl,py,R}` (+ `selftest_climate_frame.*`) | The climate frame of the three runners under `STREAMFLOW_CLIMATE_FRAME = left \| outer` (2026-10-26) |
+| `docs/benchmarks/splice_nwis_qualifiers.py`, `qualifier_year_oracle.py`, `climate_frame_inventory.py`, `preprocess_state_ledger.py`, `assess_rerun_changes.py`, `build_stage_cohorts.py`, `stage_attribution.py`, `check_summary_equality.py`, `stage_hydroshare_qualifier_v3.py`, `reconstruct_qualifier_patched_streamflow.py` | The qualifier-rerun chain (input splice + audit, year oracle, daily delta ledgers, change census, stage attribution, port summary gate, deposit staging + reconstruction recipe) — `docs/plans/2026-10-21-qualifier-rerun-results.md` |
 | `docs/benchmarks/convert_daymet_csvs_to_parquet.py` | Rebuilds `daymet_1980_2023.parquet` from the 44 annual Daymet CSVs (Python equivalent of the R `convert_daymet_zip_to_parquet()`) |
 | `docs/benchmarks/comparison_report.md` | Generated comparison report |
 | `docs/benchmarks/julia_vs_golden_r_summary.md` | Generated Julia vs Golden R detailed report |
@@ -782,8 +785,12 @@ For implementation details, alignment history, and known divergences, see [`CROS
   (`e`, `R`, `<`, `>`, `[4]`, `Ice`, ...) never mask at storage and stay verbatim in `flag`.
   Until 2026-10-26 only the exact strings `A`, `A e`, `P`, `P e` were kept, which set 193,542
   approved days (`A R`, `A <`, `A >`, `A [4]`) on 987 compiled gages to NA (census 2026-09-04
-  §10.1); the February 2026 parquet is patched by the qualifier rerun
-  (`docs/plans/2026-10-21-qualifier-mask-fix-rerun-plan.md`). Unit test:
+  §10.1); the February 2026 parquet was patched 2026-10-26 by the qualifier rerun — the
+  193,542 target days re-fetched from NWIS and spliced in (`docs/benchmarks/splice_nwis_qualifiers.py`;
+  `~/HISSS_data/qualifier-rerun-26oct2026/input/combined_streamflow_data_09feb2026_qualifier_patched.parquet`
+  + `correction_ledger.csv` + the raw responses; audit B1–B8), and the version-3 products are
+  built from it with the gage sets frozen (`docs/plans/2026-10-21-qualifier-mask-fix-rerun-plan.md`).
+  Unit test:
   `Rscript R/tests/test_qualifier_codes.R`.
 - Conversion: cfs -> mm/day using drainage area
 
@@ -878,6 +885,7 @@ signatures instead (see DECISION above).
 |------|----------|---------|-------------|
 | `combined_streamflow_data_09feb2026.parquet` | `D:/processedOuts_feb2026/` | Feb 2026 | Current streamflow parquet with bug fixes. 111,624,189 rows / 8,014 gages, **858 MiB** (899,935,349 B) |
 | `combined_watershed_metadata_09feb2026.csv` | `D:/processedOuts_feb2026/` | Feb 2026 | Corresponding metadata, 2.1 MiB |
+| `combined_streamflow_data_09feb2026_qualifier_patched.parquet` + `combined_watershed_metadata_09feb2026_qualifier_patched.csv` | `~/HISSS_data/qualifier-rerun-26oct2026/input/` (MacBook) | Oct 2026 | The February parquet with the 193,542 qualifier-masked USGS days restored (same rows, schema and order; `correction_ledger.csv` beside it) and the metadata's derived year counts recomputed by the compile's rule. Input of the version-3 products |
 | **`daymet_1980_2023_rebuilt_10aug2026.parquet`** | `D:/processedOuts_feb2026/` | Aug 2026 | **USE THIS** for climate (PPT, temp, SWE). 97,757,220 rows / 6,087 sites / WY-covering CY 1980–2023, **3.76 GiB** (4,040,997,608 B). Rebuilt from the annual CSVs after the original was truncated — see below |
 | `daymet_1980_2025_29sep2026.parquet` | drive `daymet-processed-29sep2026/` (run folder `~/HISSS_data/daymet-processed-29sep2026/` on the MacBook) | Sep 2026 | Reprocessed Daymet V4 R1 input, **not used by any product until the user's rerun decision**. 134,605,430 rows / 8,017 basins / calendar 1980–2025, columns `site_id, Date, prcp, tmin, tmax, swe, vp, srad`, no NaN; **4.78 GiB** (5,134,193,404 B), md5 `c059076088cd8abd963c64094468e90f`. Companion `daymet_basin_flags.csv` flags 101 questionable basins. See `EO_data_processing/README_DAYMET.md` |
 | `daymet_1980_2023/` (44 annual CSVs) | `D:/` (drive root) | Jan 2026 | **Source of record** for Daymet: `site_id, month, year, prcp, tmin, tmax, swe, vp, srad`; no day column. 10,825,714,689 B = 10.08 GiB total, ~234.6 MiB/yr. Rebuild the parquet with `docs/benchmarks/convert_daymet_csvs_to_parquet.py` |

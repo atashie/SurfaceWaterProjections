@@ -143,6 +143,12 @@ def main():
     ap.add_argument("--rtol", type=float, default=1e-6); ap.add_argument("--atol", type=float, default=1e-12)
     ap.add_argument("--ref-annual"); ap.add_argument("--cand-annual"); ap.add_argument("--waive-column", action="append", default=[])
     ap.add_argument("--gages"); ap.add_argument("--max-show", type=int, default=20); ap.add_argument("--out")
+    ap.add_argument("--allow-gate-state-column", action="append", default=[], metavar="REGEX",
+                    help="the ONE named exception to 'a gate-state difference is never waived': in a column matching REGEX, a NaN-vs-finite "
+                         "cell of a tie-bearing (gage, base) pair is accepted only when each side's value is reproduced by the statistic "
+                         "recomputed from that side's own annual series (the rank / Pettitt ambiguity of a zero-heavy series, where the "
+                         "languages break a tie differently and one side's period is constant). Every such cell is printed and counted "
+                         "(gate_state_tie_verified); the regex is recorded in the JSON and must be accepted by name downstream.")
     ap.add_argument("--annual-rtol", type=float, default=1e-9, help="annual tolerance above which a (gage, base) pair counts as an annual residual")
     a = ap.parse_args()
     gages = set(l.strip() for l in open(a.gages) if l.strip()) if a.gages else None
@@ -167,7 +173,7 @@ def main():
         recomputed = recompute_pairs(a.ref_annual, a.cand_annual, resid | ties)
         szero = signed_zero_pairs(a.ref_annual, set(common))
         print(f"(gage, base) pairs with a signed-zero tie in the reference series (rank statistics reported as the named Known-Issue residual): {len(szero)} {sorted(szero)[:8]}")
-    n_gated = n_bad = n_state = n_waived = n_tie = n_resid = n_szero = 0; worst = (0.0, None, None); bad_cols = {}; shown = []
+    n_gated = n_bad = n_state = n_waived = n_tie = n_resid = n_szero = n_state_ok = 0; worst = (0.0, None, None); bad_cols = {}; shown = []
     for c in cols:
         r, k = ref[c], cand[c]
         base, suf = split_col(c)
@@ -204,10 +210,29 @@ def main():
             gated_over = over & ~((tie_mask | resid_mask) & exempt_ok) & ~sz_mask
             n_gated += int(both.sum()); n_state += int(state.sum()); n_tie += int((over & tie_mask & ~resid_mask & exempt_ok).sum()); n_resid += int((over & resid_mask & exempt_ok).sum())
             n_szero += int((over & sz_mask & ~((tie_mask | resid_mask) & exempt_ok)).sum())
-            # a gate-state difference (NaN vs finite) is NEVER waived — not by column, not by residual class
-            if state.any():
-                n_bad += int(state.sum()); bad_cols[c] = bad_cols.get(c, 0) + int(state.sum())
-                for g in list(r.index[state])[:2]:
+            # a gate-state difference (NaN vs finite) is NEVER waived by column or residual class; the one named exception
+            # (--allow-gate-state-column) is a cell of a tie-bearing pair whose two values are each reproduced by the
+            # statistics recomputed from that side's own annual series — verified, printed and counted, never assumed
+            state_ok = pd.Series(False, index=r.index)
+            if state.any() and ties and any(re.search(p_, c) for p_ in a.allow_gate_state_column):
+                for g in r.index[state]:
+                    rec_ = recomputed.get((g, base)) if (g, base) in ties else None
+                    if not rec_ or c not in rec_[0] or c not in rec_[1]:
+                        continue
+                    er, ec = rec_[0][c], rec_[1][c]
+                    rg = np.nan if pd.isna(r.get(g)) else float(r.get(g)); kg = np.nan if pd.isna(k.get(g)) else float(k.get(g))
+                    er = np.nan if er is None or pd.isna(er) else float(er); ec = np.nan if ec is None or pd.isna(ec) else float(ec)
+                    ok_r = (np.isnan(er) and np.isnan(rg)) or (np.isfinite(er) and np.isfinite(rg) and abs(er - rg) <= a.atol + a.rtol * max(abs(er), abs(rg)))
+                    ok_c = (np.isnan(ec) and np.isnan(kg)) or (np.isfinite(ec) and np.isfinite(kg) and abs(ec - kg) <= a.atol + a.rtol * max(abs(ec), abs(kg)))
+                    state_ok[g] = bool(ok_r and ok_c)
+            n_state_ok += int(state_ok.sum())
+            for g in list(r.index[state_ok])[:3]:
+                if len(shown) < a.max_show:
+                    shown.append((c, g, r.get(g), k.get(g), "gate-state of a tie pair, both sides reproduced by recomputation (named allowance)"))
+            state_bad = state & ~state_ok
+            if state_bad.any():
+                n_bad += int(state_bad.sum()); bad_cols[c] = bad_cols.get(c, 0) + int(state_bad.sum())
+                for g in list(r.index[state_bad])[:2]:
                     if len(shown) < a.max_show:
                         shown.append((c, g, r.get(g), k.get(g), "gate-state"))
             if is_waived:
@@ -216,7 +241,7 @@ def main():
             nb = int(gated_over.sum())
             if nb:
                 n_bad += nb; bad_cols[c] = nb
-                for g in list(rv.index[gated_over])[:2] + list(r.index[state])[:1]:
+                for g in list(rv.index[gated_over])[:2] + list(r.index[state_bad])[:1]:
                     if len(shown) < a.max_show:
                         shown.append((c, g, r.get(g), k.get(g)))
         else:
@@ -232,7 +257,7 @@ def main():
     print(f"compared {len(common)} gages x {len(cols)} columns ({n_gated:,} numeric cells); worst relative difference {worst[0]:.3e} at {worst[1]} / {worst[2]}")
     print(f"gated mismatches {n_bad:,} in {len(bad_cols)} columns (gate-state differences {n_state:,}); waived by column {n_waived:,}; "
           f"tie-sensitive rank statistics verified by recomputation: {n_tie:,}; propagated annual residuals verified by recomputation: {n_resid:,}; "
-          f"signed-zero tie rank statistics (Known Issue, reported): {n_szero:,}")
+          f"signed-zero tie rank statistics (Known Issue, reported): {n_szero:,}; gate-state cells of tie pairs verified by recomputation (named allowance): {n_state_ok:,}")
     for s_ in shown:
         print("  MISMATCH", s_)
     if bad_cols:
@@ -251,7 +276,7 @@ def main():
     rep = {"ref": a.ref, "cand": a.cand, "ref_sha256": _sha(a.ref), "cand_sha256": _sha(a.cand), "waive_column": a.waive_column,
            "gages_compared_file": gl, "n_gages_compared": len(common), "n_cells_compared": n_gated,
            "gages": len(common), "columns": len(cols), "rtol": a.rtol, "atol": a.atol, "gated_mismatches": n_bad,
-           "gate_state_differences": n_state, "waived": n_waived, "tie_sensitive_reported": n_tie, "annual_residual_reported": n_resid, "signed_zero_tie_reported": n_szero, "worst_rel": worst[0], "worst_col": worst[1],
+           "gate_state_differences": n_state, "gate_state_tie_verified": n_state_ok, "allow_gate_state_column": a.allow_gate_state_column, "waived": n_waived, "tie_sensitive_reported": n_tie, "annual_residual_reported": n_resid, "signed_zero_tie_reported": n_szero, "worst_rel": worst[0], "worst_col": worst[1],
            "bad_columns": bad_cols, "verdict": "PASS" if ok else "FAIL"}
     if a.out:
         json.dump(rep, open(a.out, "w"), indent=1, default=str)

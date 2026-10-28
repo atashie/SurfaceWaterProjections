@@ -30,7 +30,9 @@ per language below.
 | Snow metrics (14) | yes | yes | yes |
 | Drought metrics (10 + 5 scalars) | yes | yes | yes |
 
-### Climate frame and the qualifier rerun (2026-10-26): runner-level change, library untouched
+### Climate frame and the qualifier rerun (2026-10-26 … 2026-10-28): runner-level change, library untouched
+
+Full record of the rerun: `docs/plans/2026-10-21-qualifier-rerun-results.md`.
 
 The three runners build each gage's climate frame through `docs/benchmarks/climate_frame.{jl,py,R}`
 under `STREAMFLOW_CLIMATE_FRAME = left | outer` (CHANGELOG [October 2026]); the fixture self-tests
@@ -43,6 +45,41 @@ summary gate, and ONE column by name — **`ice_affected_days_total`**: the Pyth
 days from the `flag` column (23 at 01011000 on the 40-gage dry run) while canonical Julia emits 0 for
 every gage (the standing Known Issue) and rpkg deliberately matches Julia. A genuine cross-language
 divergence of that scalar, carried as a waiver until the canonical side is fixed.
+
+**E7 at scale (2026-10-27, plan §11): the Python port on the 1,609 / 1,356 gages whose values the
+version-3 rerun changed (products #1 / #2; S2 inputs with climate, `outer`, pinned schema).**
+Annual: key sets identical (6,725,235 / 7,778,988 shared, 0 one-sided; NA patterns identical);
+117 / 188 of 6,478,680 / 7,501,467 finite pairs beyond 1e-9, every one in the two documented
+classes — threshold ties on day-of-year and pulse counts (`D1_day`…`D99_day`, `D25_to_D75`,
+`TQmean`, `dur_low_pulses_all`, `n_low_pulses_all`; max 4.0 / 5.6 days) and float noise
+(`elasticity_annual`, `qp_slope_sd`, ≤ 4.4e-11 relative); the gate passes only with the 19
+signatures named and the count bounded at the observed value. Summary (3,338,102 / 2,858,935
+numeric cells): 0 gated mismatches; 103 finite-value cells waived by column — `ice_affected_days_total`
+and the FDC90th / FDCmid rank + Pettitt statistics of zero-heavy series (15896000: Julia all-zero
+vs Python 4.8e-29, the near-zero-tail OLS class; 02304500 / 02313230 / 401733105392404:
+Pettitt change-point tie flips) — and, separately, 8 / 7 gate-state cells of those columns (NaN in
+one language, finite in the other) accepted only because the statistic recomputed from each side's own annual
+series reproduces that side (`--allow-gate-state-column`, the single named exception to "gate
+state is never waived"); 1,510 / 2,503 tie-bearing rank statistics and 472 / 775 propagated
+annual residuals verified by recomputation; 15 / 18 signed-zero ties reported. The change census
+binds both verdict JSONs to the assessed files by sha256 and accepts each waiver by exact name.
+
+**rpkg re-baselined on product #1 version 3 (plan Phase F, 2026-10-28).** The installed package (built from
+the clean worktree of the tag) ran the product's configuration — corrected streamflow input, patched
+metadata, `STREAMFLOW_CLIMATE_FRAME=outer`, the pinned version-2 schema — on the same 8 gage batches as
+Julia: 87 min of R, 6,678 gages, 0 errors, merged in the Julia gage order
+(`~/HISSS_data/qualifier-rerun-26oct2026/rpkg_reference_1993_2025_28oct2026/`, 2,277 columns,
+27,766,577 annual rows). Gates against the Julia product: strict schema equality PASS; swallowed-failure
+scan PASS on all eight logs; annual parquet equality PASS at 1e-6 with the residuals named on the command
+line (`gate_annual_waived.txt`): 1 reference-only row (`avg_storage`, the signed-zero `unique` divergence,
+unchanged since August) and 323 of 26,939,257 finite pairs (0.0012 %), every one a discrete threshold
+crossing moved by a last-bit tie (`D1_day`…`D99_day` 244, `D25_to_D75` 59, `TQmean` 18,
+`dur_low_pulses_all` / `_year` 1 + 1; the largest a 40-day `D90_day` step on a stepped duration curve);
+NA patterns identical. At 1e-9 the only additional class is `qp_slope_sd` (146 rows, ≤ 4.4e-11 relative).
+**The 39 climate signatures are bit-identical in every one of their annual cells**, as on version 2;
+53 signatures carry some last-bit difference (all ≤ 1e-9 but the 18 named above). Identity R² (diagnostic):
+2,227 of 2,244 columns Perfect (99.2 %), 11 Good, 6 Poor (all FDC90th Pettitt / rank fields), 0 below 0.95;
+mean 0.999922. The version-2 reference of 2026-10-13 is superseded.
 
 ### Climate family (2026-10-12): three-way agreement before the version-2 products
 
