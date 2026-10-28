@@ -115,10 +115,12 @@ FLOW_REVERSAL_THRESHOLD <- 0.02  # 2%
 # ==============================================================================
 # USGS DATA QUALITY CODES
 # ==============================================================================
-# Codes that indicate acceptable data quality from USGS NWIS
-
-USGS_ACCEPTED_CODES <- c("A", "A e", "P", "P e")
-# A = Approved, P = Provisional, e = estimated
+# The acceptance rule lives in R/usgs_qualifiers.R (USGS_STATUS_LETTERS, usgs_qualifier_keep):
+# a daily value is kept when its qualification string starts with the status letter A
+# (approved) or P (provisional), the value is finite and not the no-data sentinel; remark
+# codes (e, R, <, >, [4], Ice, ...) never mask a value and stay verbatim in `flag`.
+# The former constant USGS_ACCEPTED_CODES <- c("A", "A e", "P", "P e") described the rule
+# that masked 193,542 approved days; removed 2026-10-28 (nothing read it any more).
 
 # ==============================================================================
 # PARQUET PROCESSING

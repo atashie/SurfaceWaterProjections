@@ -36,6 +36,13 @@ end
 same(a, b) = (isnan(a) && isnan(b)) || a === b || a == b
 close_to(a, b; atol=1e-9, rtol=1e-9) = abs(a - b) <= atol + rtol * max(abs(a), abs(b))
 
+# default mode (user decision 2026-10-28): "outer" when the variable is unset
+default_mode = withenv("STREAMFLOW_CLIMATE_FRAME" => nothing) do
+    climate_frame_mode()
+end
+check("climate_frame_mode() is \"outer\" when STREAMFLOW_CLIMATE_FRAME is unset (default since 2026-10-28)",
+      default_mode == "outer")
+
 # ---------------- fixture ----------------
 const GID = "CF1"
 wy_of(d) = month(d) >= 10 ? year(d) + 1 : year(d)

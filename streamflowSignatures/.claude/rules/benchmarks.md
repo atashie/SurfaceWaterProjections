@@ -68,7 +68,10 @@ paths:
   `docs/benchmarks/climate_frame.{jl,py,R}` under `STREAMFLOW_CLIMATE_FRAME = left | outer`
   (`left` = the streamflow dates only, bit-identical to every product before the qualifier
   rerun; `outer` = + the gage's Daymet rows on absent streamflow dates, inside the record
-  span and the gage's water years only). Keep the three helpers in step; their fixture
-  self-tests are `selftest_climate_frame.{jl,py,R}` (Julia writes the fixture and the
-  reference, the ports read it) — run all three after touching a runner's join.
+  span and the gage's water years only). Default `outer` since 2026-10-28 (user decision);
+  every product wrapper pins its frame with `get!` (`left` for the pre-rerun products, `outer`
+  for the version-3 climate wrappers), and the version-3 wrappers refuse to write into the
+  delivered product folder. Keep the three helpers in step; their fixture self-tests are
+  `selftest_climate_frame.{jl,py,R}` (Julia writes the fixture and the reference, the ports
+  read it; each checks the default) — run all three after touching a runner's join.
 - Procedure, env vars and the post-run checklist: `/run-benchmark`.

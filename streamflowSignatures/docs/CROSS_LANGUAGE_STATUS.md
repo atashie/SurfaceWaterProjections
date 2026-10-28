@@ -35,9 +35,11 @@ per language below.
 Full record of the rerun: `docs/plans/2026-10-21-qualifier-rerun-results.md`.
 
 The three runners build each gage's climate frame through `docs/benchmarks/climate_frame.{jl,py,R}`
-under `STREAMFLOW_CLIMATE_FRAME = left | outer` (CHANGELOG [October 2026]); the fixture self-tests
+under `STREAMFLOW_CLIMATE_FRAME = left | outer` (CHANGELOG [October 2026]; default `outer` since
+2026-10-28, `left` pinned by the pre-rerun wrappers); the fixture self-tests
 `selftest_climate_frame.{jl,py,R}` agree across the three languages in both modes (annual values
-within 1e-9, most bit-identical; summaries within 1e-6 with gate state always compared). The E7
+within 1e-9, most bit-identical; summaries within 1e-6 with gate state always compared; Julia 41,
+Python 38, R 43 checks PASS 2026-10-28, each including the default). The E7
 port gate of the rerun (`check_summary_equality.py` + `check_annual_parquet_equality.py`) names
 its residuals: the threshold-tie class on the annual gate (`D*_day`, `D25_to_D75`, `TQmean`,
 `dur_low_pulses_*`), the tie-bearing rank statistics and propagated annual residuals on the

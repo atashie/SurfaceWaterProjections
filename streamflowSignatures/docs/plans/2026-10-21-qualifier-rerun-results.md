@@ -89,5 +89,7 @@ PASS means agreement under the named allowances listed in the gate files, not un
 
 ## 6. Open (user)
 
-Commit → push → `publish_to_hisss.sh`; the HydroShare deposit of the staged folders; whether
-`STREAMFLOW_CLIMATE_FRAME` should default to `outer`; the co-author relays (`docs/reconciliation/`).
+Done 2026-10-28: commit `161c56e` pushed, tag pushed, mirror published; DECISION (user): the
+climate-frame default is `outer` (helpers, batch-runner record, wrappers, self-tests, docs updated
+the same day — CHANGELOG [October 2026], Phase H). Open: the HydroShare deposit of the staged
+folders (the user uploads, planned 2026-10-29); the co-author relays (`docs/reconciliation/`).

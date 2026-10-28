@@ -17,13 +17,14 @@
 # Both frames must carry a Date column `date` (asserted). Added rows carry gage_id, date,
 # water_year / month / dowy (add_water_year_columns; year and doy from the date when the
 # frame has them), the climate columns and NA for Q and every other column; the result is
-# ordered by date, as data.table's merge() orders the left frame. Default mode `left` until the rerun's
-# products land (then `outer`, Phase H).
+# ordered by date, as data.table's merge() orders the left frame. Default mode `outer` since
+# 2026-10-28 (user decision; the version-3 products are built with it); `left` reproduces every
+# product before the qualifier rerun and the S0 / S1 attribution baselines.
 
 CLIMATE_FRAME_MODES <- c("left", "outer")
 
 climate_frame_mode <- function() {
-  v <- tolower(trimws(Sys.getenv("STREAMFLOW_CLIMATE_FRAME", unset = "left")))
+  v <- tolower(trimws(Sys.getenv("STREAMFLOW_CLIMATE_FRAME", unset = "outer")))   # default outer since 2026-10-28
   if (!v %in% CLIMATE_FRAME_MODES) {
     stop("STREAMFLOW_CLIMATE_FRAME must be one of ", paste(CLIMATE_FRAME_MODES, collapse = ", "),
          "; got \"", v, "\"")

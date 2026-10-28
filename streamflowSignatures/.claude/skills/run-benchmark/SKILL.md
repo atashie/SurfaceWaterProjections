@@ -47,8 +47,9 @@ description: Run and validate a full Julia signature-extraction benchmark, exper
    streamflow dates only — every product before the qualifier rerun; `outer` also takes
    the gage's Daymet rows on absent streamflow dates inside the record span and the
    gage's water years — `docs/benchmarks/climate_frame.{jl,py,R}`; the resolved mode is
-   in the timing JSON `provenance.climate_frame`; default `left`; the version-3 product wrappers
-   pin `outer` explicitly, and flipping the default is a pending user decision — STATUS).
+   in the timing JSON `provenance.climate_frame`; default `outer` since 2026-10-28 (user
+   decision; `left` reproduces every pre-rerun product); every product wrapper pins its own
+   frame with `get!`, so the batched runner's `--climate-frame` still wins).
    `STREAMFLOW_CONFIG` is precompile-time (item 2). rpkg reads
    `STREAMFLOW_SIGNATURES_CONFIG` instead (deferred fix — `docs/STATUS.md`).
 5. rpkg: `R CMD INSTALL rpkg` first — the package bundles the config.

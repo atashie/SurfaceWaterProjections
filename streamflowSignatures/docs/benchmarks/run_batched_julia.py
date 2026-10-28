@@ -462,7 +462,7 @@ def run(a):
     bjm = json.load(open(bj))
     stage = {"stage": a.stage, "parent_manifest": ({"path": a.parent_manifest, "sha256": sha256_of(a.parent_manifest)}
                                                  if a.parent_manifest else None),
-             "selection": bjm.get("selection"), "climate_frame": os.environ.get("STREAMFLOW_CLIMATE_FRAME", "left (unset)"),
+             "selection": bjm.get("selection"), "climate_frame": os.environ.get("STREAMFLOW_CLIMATE_FRAME", "outer (default)"),
              "qa_schema": ({"path": a.qa_schema, "sha256": sha256_of(a.qa_schema)} if a.qa_schema else None)}
     os.makedirs(a.out_dir, exist_ok=True)
     log_path = os.path.join(a.out_dir, "batch_runs.json")
@@ -755,7 +755,8 @@ def main():
     r.add_argument("--max-minutes", type=float, default=120)
     r.add_argument("--heap-size-hint", default="2500M")
     r.add_argument("--julia", default="~/.juliaup/bin/julia")
-    r.add_argument("--climate-frame", choices=["left", "outer"], default=None, help="sets STREAMFLOW_CLIMATE_FRAME")
+    r.add_argument("--climate-frame", choices=["left", "outer"], default=None,
+                   help="sets STREAMFLOW_CLIMATE_FRAME (unset = the helpers' default, outer since 2026-10-28; left = the pre-rerun join)")
     r.add_argument("--qa-schema", default=None, help="full-product CSV whose header pins the QA denominator (STREAMFLOW_QA_SCHEMA)")
     r.add_argument("--stage", default=None, help="stage name recorded in the batch records (S0, S1, S1', S2)")
     r.add_argument("--parent-manifest", default=None, help="the product's selection manifest this stage belongs to")

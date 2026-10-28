@@ -217,7 +217,7 @@ fraction, 20-year floor, one self-contained folder each):
   frozen: the USGS days masked by the `A R` / `A <` / `A >` / `A [4]` qualifier bug are restored
   (1,177 / 950 water years valid again on 619 / 502 gages; 899 / 757 gages hold a restored day),
   and climate is joined on Daymet's own calendar inside the record span so absent streamflow
-  days keep their precipitation (`STREAMFLOW_CLIMATE_FRAME=outer`; 3,241 / 2,221 inserted days
+  days keep their precipitation (`STREAMFLOW_CLIMATE_FRAME=outer`, the code's default since 2026-10-28; 3,241 / 2,221 inserted days
   in valid years). Annual rows 27,766,578 / 34,813,881; the 5,069 / 4,894 untouched gages are
   bit-identical to version 2. Folders
   `~/HISSS_data/qualifier-rerun-26oct2026/processedOuts_{1993,1980}_2025_climate_v3_26oct2026`.

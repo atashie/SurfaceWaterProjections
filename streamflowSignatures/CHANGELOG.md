@@ -27,9 +27,10 @@ loads every session is `docs/STATUS.md`.
   2026-10-16) — APPROVED 2026-10-26 (user with the research team; plan decision 5 reversed)
   and folded into the qualifier rerun.** The runner-level fix is IMPLEMENTED (Phase A′,
   2026-10-26, [October 2026]): `docs/benchmarks/climate_frame.{jl,py,R}` behind
-  `STREAMFLOW_CLIMATE_FRAME = left | outer`, default `left` until the products land; the
-  products themselves (stage S2 of plan §10.4) are pending with Phases B–D. Design:
-  `docs/plans/2026-10-16-precipitation-review.md` §5 and the rerun plan §10.
+  `STREAMFLOW_CLIMATE_FRAME = left | outer`; the version-3 products are BUILT with `outer`
+  (2026-10-27/28, not yet deposited) and `outer` is the DEFAULT since 2026-10-28 (user
+  decision; Phase H below). Design: `docs/plans/2026-10-16-precipitation-review.md` §5 and
+  the rerun plan §10.
 - **Daymet climate input: the product-rerun decision is PENDING (NEXT).** The reprocessed
   input `daymet_1980_2025_29sep2026.parquet` (8,017 basins, calendar 1980–2025, no NaN) was
   built 2026-09-30 and adversarially reviewed 2026-10-01. On the 5,965 basins with stale
@@ -395,8 +396,8 @@ their defaults when the user said to proceed (2026-10-26). Nothing in `julia/src
   asserted to be calendar dates. The Julia production join's broad `catch` is narrowed to
   "no climate for this gage": a helper or join failure now aborts the run instead of
   masquerading as missing climate. The deprecated legacy branches keep their left joins
-  (rpkg passes `left` explicitly when `use_legacy`). Default `left` until the rerun's
-  products land (then `outer`, Phase H). Verification: fixture self-tests
+  (rpkg passes `left` explicitly when `use_legacy`). Default `left` until the products
+  landed, `outer` since 2026-10-28 (Phase H below). Verification: fixture self-tests
   `selftest_climate_frame.{jl,py,R}` (one synthetic gage with absent storm days, a whole
   absent interior water year, the Dec 31 neighbour, the 30-absent-day and 4-day-gap
   eligibility flips, a record starting and ending mid-year; Julia 40 checks, Python 37, R 42:
@@ -517,6 +518,23 @@ their defaults when the user said to proceed (2026-10-26). Nothing in `julia/src
     control report, oracle and an executable reconstruction recipe (verified); `check` PASS. Not
     uploaded. Version-3 docs: README, STATUS, DEVELOPMENT, DATA_SOURCES, CROSS_LANGUAGE_STATUS, the
     user skill, `python/README.md`, the reconciliation logs (co-author relays).
+  - H, commit `161c56e` pushed, tag pushed, mirror published (2026-10-28). **DECISION (user,
+    2026-10-28): `STREAMFLOW_CLIMATE_FRAME` defaults to `outer`** — the one correct frame is the
+    default of the public code, `left` stays as the explicit reproduction mode of every
+    pre-rerun product and of the S0 / S1 attribution baselines. Changed: `climate_frame.{jl,py,R}`
+    (default and headers); `run_batched_julia.py` (stage record `outer (default)`, flag help);
+    the ten pre-rerun Julia wrappers pin `left` with `get!`; the two climate product wrappers
+    `run_julia_benchmark_prod_{1993,1980}_2025_60pct_climate.jl` rewritten for the version-3
+    inputs and prefix (`get!` `outer` so the batched runner's `--climate-frame` still wins,
+    `STREAMFLOW_HASH_INPUTS=1`, a guard that refuses to write into the delivered product folder,
+    and the docstring states that the products were built through the batched runner with the
+    FROZEN selection manifests — run standalone the wrapper would ADD the 31 / 29 would-qualify
+    gages); `config.R`'s stale, unread `USGS_ACCEPTED_CODES <- c("A", "A e", "P", "P e")` removed
+    in favour of a pointer to `R/usgs_qualifiers.R` (the acceptance rule that keeps every `A` / `P`
+    status with a finite value, remark codes in `flag`, fixed at Phase A). Verification: fixture
+    self-tests Julia 41 / Python 38 / R 43 PASS (each gained a default-mode check),
+    `selftest_run_batched_julia.py` 28/28, `R/tests/test_qualifier_codes.R` 37 PASS, every wrapper
+    parses, both product-folder guards fire. Nothing in the three libraries; no product touched.
 
 ### Reviewed: what the compilation's flow rule removed; the `A R` qualifier mask found (2026-10-21)
 

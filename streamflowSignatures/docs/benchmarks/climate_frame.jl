@@ -21,7 +21,8 @@
 # climate columns, and `missing` for Q, flag and every other column; they are appended
 # after the joined rows (the preprocessor re-grids every water year by date, so the row
 # order is immaterial). The library is untouched (decision 12). The default mode is
-# `left` until the qualifier rerun's products land (then `outer`, Phase H).
+# `outer` since 2026-10-28 (user decision; the version-3 products are built with it);
+# `left` reproduces every product before the qualifier rerun and the S0 / S1 baselines.
 
 using DataFrames, Dates
 
@@ -30,10 +31,11 @@ const CLIMATE_FRAME_MODES = ("left", "outer")
 """
     climate_frame_mode() -> String
 
-Read `STREAMFLOW_CLIMATE_FRAME` at runtime; "left" when unset; any other value errors.
+Read `STREAMFLOW_CLIMATE_FRAME` at runtime; "outer" when unset (since 2026-10-28); any
+other value errors.
 """
 function climate_frame_mode()
-    v = lowercase(strip(get(ENV, "STREAMFLOW_CLIMATE_FRAME", "left")))
+    v = lowercase(strip(get(ENV, "STREAMFLOW_CLIMATE_FRAME", "outer")))
     v in CLIMATE_FRAME_MODES ||
         error("STREAMFLOW_CLIMATE_FRAME must be one of $(join(CLIMATE_FRAME_MODES, ", ")); got \"$v\"")
     return v

@@ -40,4 +40,9 @@ get!(ENV, "STREAMFLOW_GAGES_II_DIR", joinpath(_DRIVE, "gagesMetadata"))
 
 mkpath(ENV["STREAMFLOW_OUTPUT_DIR"])
 
+# Climate frame: the left join of every product before the qualifier rerun (the default
+# became `outer` on 2026-10-28 - docs/benchmarks/climate_frame.jl); pinned so this wrapper
+# keeps reproducing what it produced.
+get!(ENV, "STREAMFLOW_CLIMATE_FRAME", "left")
+
 include(joinpath(@__DIR__, "run_julia_benchmark.jl"))

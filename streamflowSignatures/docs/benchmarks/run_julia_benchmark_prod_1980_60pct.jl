@@ -15,4 +15,9 @@ ENV["STREAMFLOW_MIN_QUALIFYING_DATA_FRACTION"] = "0.60"
 get!(ENV, "STREAMFLOW_OUTPUT_PREFIX", "streamflow_1980_60pct_16jul2026")
 # STREAMFLOW_OUTPUT_DIR is honored if set in the environment; no hardcoded default.
 
+# Climate frame: the left join of every product before the qualifier rerun (the default
+# became `outer` on 2026-10-28 - docs/benchmarks/climate_frame.jl); pinned so this wrapper
+# keeps reproducing what it produced.
+get!(ENV, "STREAMFLOW_CLIMATE_FRAME", "left")
+
 include(joinpath(@__DIR__, "run_julia_benchmark.jl"))

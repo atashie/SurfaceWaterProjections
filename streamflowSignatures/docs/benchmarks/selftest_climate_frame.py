@@ -32,6 +32,7 @@ def split_key(k):
 import argparse
 import json
 import math
+import os
 import sys
 from pathlib import Path
 
@@ -40,7 +41,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "python"))
-from climate_frame import frame_with_climate  # noqa: E402
+from climate_frame import climate_frame_mode, frame_with_climate  # noqa: E402
 from streamflow_signatures import (AnnualCollector, calculate_all_signatures,  # noqa: E402
                                    preprocess_daily_data)
 from streamflow_signatures.stats import generate_stats  # noqa: E402
@@ -62,6 +63,16 @@ def check(label, cond):
     else:
         n_fail += 1
         print(f"  FAIL: {label}")
+
+
+# default mode (user decision 2026-10-28): "outer" when the variable is unset
+_cf_saved = os.environ.pop("STREAMFLOW_CLIMATE_FRAME", None)
+try:
+    check('climate_frame_mode() is "outer" when STREAMFLOW_CLIMATE_FRAME is unset (default since 2026-10-28)',
+          climate_frame_mode() == "outer")
+finally:
+    if _cf_saved is not None:
+        os.environ["STREAMFLOW_CLIMATE_FRAME"] = _cf_saved
 
 
 def same(a, b):

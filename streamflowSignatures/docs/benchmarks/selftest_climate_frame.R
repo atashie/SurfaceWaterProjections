@@ -27,6 +27,12 @@ check <- function(label, cond) {
   if (isTRUE(cond)) { n_pass <<- n_pass + 1L; cat("  PASS:", label, "\n") }
   else { n_fail <<- n_fail + 1L; cat("  FAIL:", label, "\n") }
 }
+# default mode (user decision 2026-10-28): "outer" when the variable is unset
+.cf_saved <- Sys.getenv("STREAMFLOW_CLIMATE_FRAME", unset = NA)
+Sys.unsetenv("STREAMFLOW_CLIMATE_FRAME")
+check("climate_frame_mode() is \"outer\" when STREAMFLOW_CLIMATE_FRAME is unset (default since 2026-10-28)",
+      identical(climate_frame_mode(), "outer"))
+if (!is.na(.cf_saved)) Sys.setenv(STREAMFLOW_CLIMATE_FRAME = .cf_saved)
 same <- function(a, b) (is.na(a) && is.na(b)) || (!is.na(a) && !is.na(b) && a == b)
 SUFFIXES <- c("_senn_slp", "_linear_slp", "_spearman_rho", "_spearman_pval", "_mk_rho", "_mk_pval",
               "_mean", "_median", "_pettitt_cp_year", "_pettitt_pval", "_pettitt_pre_mean",

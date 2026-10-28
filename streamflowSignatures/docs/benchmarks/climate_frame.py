@@ -16,8 +16,9 @@ frame under the runtime switch STREAMFLOW_CLIMATE_FRAME:
 Added rows carry gage_id, date, water_year / month / dowy (add_water_year_columns; year
 and doy from the date when the frame has them), the climate columns, NaN for Q and
 every other numeric column and None for the rest; they are appended after the merged
-rows (the preprocessor re-grids every water year by date). Default mode `left` until
-the rerun's products land (then `outer`, Phase H).
+rows (the preprocessor re-grids every water year by date). Default mode `outer` since
+2026-10-28 (user decision; the version-3 products are built with it); `left` reproduces
+every product before the qualifier rerun and the S0 / S1 attribution baselines.
 """
 import os
 import sys
@@ -33,8 +34,8 @@ CLIMATE_FRAME_MODES = ("left", "outer")
 
 
 def climate_frame_mode():
-    """STREAMFLOW_CLIMATE_FRAME at runtime; "left" when unset; any other value errors."""
-    v = os.environ.get("STREAMFLOW_CLIMATE_FRAME", "left").strip().lower()
+    """STREAMFLOW_CLIMATE_FRAME at runtime; "outer" when unset (since 2026-10-28); any other value errors."""
+    v = os.environ.get("STREAMFLOW_CLIMATE_FRAME", "outer").strip().lower()
     if v not in CLIMATE_FRAME_MODES:
         raise ValueError(f"STREAMFLOW_CLIMATE_FRAME must be one of {CLIMATE_FRAME_MODES}; got {v!r}")
     return v
