@@ -1,0 +1,206 @@
+id,measure,value,source
+wy1993_2025.gages,rows (gages),6678,hisss_signatures_wy1993_2025.csv
+wy1993_2025.columns,columns,2277,hisss_signatures_wy1993_2025.csv
+wy1993_2025.meta_cols,metadata columns (first 20),"20: ['gage_id', 'latitude', 'longitude', 'basin_area', 'gage_type', 'num_water_years', 'start_water_year', 'end_water_year', 'area_normalized', 'NDAMS_2009', 'MAJ_DDENS_2009', 'STOR_NID_2009', 'IMPNLCD06', 'DEVNLCD06', 'FRESHW_WITHDRAWAL', 'HYDRO_DISTURB_INDX', 'CLASS', 'RHBN', 'REGULATED', 'human_interference_class']",hisss_signatures_wy1993_2025.csv
+wy1993_2025.stat_cols,signature × statistic columns,2224,hisss_signatures_wy1993_2025.csv
+wy1993_2025.bases,annual signatures (bases with _mean),139,hisss_signatures_wy1993_2025.csv
+wy1993_2025.bases_x16,bases × 16 == stat columns,2224 == 2224: True,hisss_signatures_wy1993_2025.csv
+wy1993_2025.scalars,per-gage scalar columns,"21: ['drought_threshold_fixed_p10', 'drought_threshold_fixed_p2', 'drought_threshold_fixed_p20', 'drought_threshold_fixed_p30', 'drought_threshold_fixed_p5', 'elasticity_static', 'elasticity_years_low_ppt', 'elasticity_years_total', 'ice_affected_days_total', 'log_a_seasonality_amplitude_all', 'log_a_seasonality_amplitude_first_half', 'log_a_seasonality_amplitude_last_half', 'log_a_seasonality_minimum_all', 'log_a_seasonality_minimum_first_half', 'log_a_seasonality_minimum_last_half', 'recession_alpha_point_cloud_linear_reservoir', 'runoff_ratio_high_count', 'season_excluded_years_fall', 'season_excluded_years_spring', 'season_excluded_years_summer', 'season_excluded_years_winter']",hisss_signatures_wy1993_2025.csv
+wy1993_2025.flags,QA flag columns,"12: ['flagged_for_bfi_eckhardt_range', 'flagged_for_bfi_lynehollick_range', 'flagged_for_d50_range', 'flagged_for_elasticity_range', 'flagged_for_flashiness_range', 'flagged_for_high_na', 'flagged_for_percentile_order', 'flagged_for_qann_range', 'flagged_for_runoff_ratio_range', 'flagged_for_seasonal_sum', 'flagged_for_timing_order', 'flagged_for_tqmean_range']",hisss_signatures_wy1993_2025.csv
+wy1993_2025.composition,20 + bases×16 + scalars + flags,20 + 2224 + 21 + 12 = 2277,hisss_signatures_wy1993_2025.csv
+wy1993_2025.gage_type,gage_type counts,"{'USGS': 5495, 'Canada': 1183}",hisss_signatures_wy1993_2025.csv
+wy1993_2025.us_ca_by_id,US (all-digit id) / Canada,5495 / 1183,hisss_signatures_wy1993_2025.csv
+wy1993_2025.area_normalized_false,area_normalized FALSE,32,hisss_signatures_wy1993_2025.csv
+wy1993_2025.area_normalized_false_by_type,area_normalized FALSE by gage_type,{'Canada': 32},hisss_signatures_wy1993_2025.csv
+wy1993_2025.flagged_for_bfi_eckhardt_range,flagged_for_bfi_eckhardt_range TRUE,0,hisss_signatures_wy1993_2025.csv
+wy1993_2025.flagged_for_bfi_lynehollick_range,flagged_for_bfi_lynehollick_range TRUE,0,hisss_signatures_wy1993_2025.csv
+wy1993_2025.flagged_for_d50_range,flagged_for_d50_range TRUE,0,hisss_signatures_wy1993_2025.csv
+wy1993_2025.flagged_for_elasticity_range,flagged_for_elasticity_range TRUE,113,hisss_signatures_wy1993_2025.csv
+wy1993_2025.flagged_for_flashiness_range,flagged_for_flashiness_range TRUE,0,hisss_signatures_wy1993_2025.csv
+wy1993_2025.flagged_for_high_na,flagged_for_high_na TRUE,471,hisss_signatures_wy1993_2025.csv
+wy1993_2025.flagged_for_percentile_order,flagged_for_percentile_order TRUE,0,hisss_signatures_wy1993_2025.csv
+wy1993_2025.flagged_for_qann_range,flagged_for_qann_range TRUE,159,hisss_signatures_wy1993_2025.csv
+wy1993_2025.flagged_for_runoff_ratio_range,flagged_for_runoff_ratio_range TRUE,114,hisss_signatures_wy1993_2025.csv
+wy1993_2025.flagged_for_seasonal_sum,flagged_for_seasonal_sum TRUE,0,hisss_signatures_wy1993_2025.csv
+wy1993_2025.flagged_for_timing_order,flagged_for_timing_order TRUE,0,hisss_signatures_wy1993_2025.csv
+wy1993_2025.flagged_for_tqmean_range,flagged_for_tqmean_range TRUE,0,hisss_signatures_wy1993_2025.csv
+wy1993_2025.qann_flag_on_unnormalized,flagged_for_qann_range TRUE among un-normalized,22,hisss_signatures_wy1993_2025.csv
+wy1993_2025.num_water_years,num_water_years min / median / max,20 / 32.0 / 33,hisss_signatures_wy1993_2025.csv
+wy1993_2025.min_fraction,min num_water_years / window years,0.606 (window 33),hisss_signatures_wy1993_2025.csv
+wy1993_2025.complete_records,gages with num_water_years == 33,3267,hisss_signatures_wy1993_2025.csv
+wy1993_2025.ge30,gages with num_water_years >= 30,4730,hisss_signatures_wy1993_2025.csv
+wy1993_2025.start_end,start_water_year min / end_water_year max,1993.0 / 2025.0,hisss_signatures_wy1993_2025.csv
+wy1993_2025.basin_area_quartiles,"basin_area q25 / median / q75 (km2), n with area","166 / 645 / 2500, n=6646",hisss_signatures_wy1993_2025.csv
+wy1993_2025.trend_gate_bases,bases where trend count < mean count (gated) / equal (exempt or saturated),"130 / 9; equal: ['alpha_linear', 'b_events', 'b_pointcloud', 'concavity', 'elasticity_annual', 'elasticity_rolling', 'log_a_events', 'log_a_pointcloud', 'n_recession_events']",hisss_signatures_wy1993_2025.csv
+wy1993_2025.trend_gate_Qann,Qann: mean / senn / pettitt_cp_year non-NA,6678 / 6266 / 6607,hisss_signatures_wy1993_2025.csv
+wy1993_2025.mean_count_max,max non-NA _mean count over bases,6678,hisss_signatures_wy1993_2025.csv
+wy1993_2025.unnorm_na.Climate,non-NA _mean cells on un-normalized gages / all gages — category Climate (39 signatures),1248 of 1248 / 260186 of 260442,hisss_signatures_wy1993_2025.csv
+wy1993_2025.unnorm_na.Drought,non-NA _mean cells on un-normalized gages / all gages — category Drought (10 signatures),320 of 320 / 66780 of 66780,hisss_signatures_wy1993_2025.csv
+wy1993_2025.unnorm_na.Flashiness,non-NA _mean cells on un-normalized gages / all gages — category Flashiness (16 signatures),425 of 512 / 104168 of 106848,hisss_signatures_wy1993_2025.csv
+wy1993_2025.unnorm_na.Flow Duration,non-NA _mean cells on un-normalized gages / all gages — category Flow Duration (3 signatures),96 of 96 / 20034 of 20034,hisss_signatures_wy1993_2025.csv
+wy1993_2025.unnorm_na.Flow Timing,non-NA _mean cells on un-normalized gages / all gages — category Flow Timing (15 signatures),480 of 480 / 100125 of 100170,hisss_signatures_wy1993_2025.csv
+wy1993_2025.unnorm_na.Flow Volume,non-NA _mean cells on un-normalized gages / all gages — category Flow Volume (23 signatures),736 of 736 / 153594 of 153594,hisss_signatures_wy1993_2025.csv
+wy1993_2025.unnorm_na.Precipitation Streamflow,non-NA _mean cells on un-normalized gages / all gages — category Precipitation Streamflow (2 signatures),0 of 64 / 13290 of 13356,hisss_signatures_wy1993_2025.csv
+wy1993_2025.unnorm_na.Snow,non-NA _mean cells on un-normalized gages / all gages — category Snow (14 signatures),400 of 448 / 71874 of 93492,hisss_signatures_wy1993_2025.csv
+wy1993_2025.unnorm_na.Storage,non-NA _mean cells on un-normalized gages / all gages — category Storage (17 signatures),185 of 544 / 105106 of 113526,hisss_signatures_wy1993_2025.csv
+wy1993_2025.unnorm_na.storage_detail,Storage signatures: non-NA _mean count on the un-normalized gages (of n un-normalized),"{'BFI_Eckhardt': 32, 'BFI_Eckhardt_param': 16, 'BFI_LyneHollick': 32, 'BFI_LyneHollick_param': 16, 'alpha_linear': 9, 'annual_runoff_ratio': 0, 'avg_storage': 0, 'b_events': 10, 'b_pointcloud': 9, 'concavity': 10, 'fall_runoff_ratio': 0, 'log_a_events': 10, 'log_a_pointcloud': 9, 'n_recession_events': 32, 'spring_runoff_ratio': 0, 'summer_runoff_ratio': 0, 'winter_runoff_ratio': 0, 'n_unnormalized': 32}",hisss_signatures_wy1993_2025.csv
+wy1993_2025.unnorm_na.flashiness_detail,Flashiness signatures with any NA _mean on the un-normalized gages: non-NA count,"{'dur_high_pulses_all': 24, 'dur_low_pulses_all': 18, 'dur_low_pulses_year': 31, 'elasticity_annual': 0, 'elasticity_rolling': 0}",hisss_signatures_wy1993_2025.csv
+wy1993_2025.season_excluded_sum,Σ season_excluded_years_* over gages (seasons failing the 80 % raw-observation rule → seasonal metrics NA),"{'season_excluded_years_fall': 3938, 'season_excluded_years_spring': 3300, 'season_excluded_years_summer': 2766, 'season_excluded_years_winter': 3532, 'gages_with_any': 2689}",hisss_signatures_wy1993_2025.csv
+wy1993_2025.negative_constant_cols,columns named Negative*/constant*,"16: ['negative_ann_linear_slp', 'negative_ann_mean', 'negative_ann_median', 'negative_ann_mk_pval']…",hisss_signatures_wy1993_2025.csv
+wy1993_2025.dictionary_rows,dictionary rows,2277,hisss_data_dictionary.csv
+wy1993_2025.dictionary_matches_csv,dictionary column_name == CSV columns (order),True,hisss_data_dictionary.csv
+wy1993_2025.dictionary_categories,dictionary category counts,"{'Climate': 624, 'Flow Volume': 372, 'Storage': 280, 'Flashiness': 259, 'Flow Timing': 240, 'Snow': 224, 'Drought': 165, 'Flow Duration': 48, 'Precipitation Streamflow': 32, 'Gage metadata': 20, 'Quality flag': 12, '(none: preprocessing diagnostic)': 1}",hisss_data_dictionary.csv
+wy1993_2025.categories_rows,categories file rows; kind counts,"160; {'annual': 139, 'scalar': 21}",hisss_signature_categories.csv
+wy1993_2025.categories_vs_canonical,"deposited categories (signature, kind, category) == docs/signature_categories.csv",True; canonical rows 160,hisss_signature_categories.csv
+wy1993_2025.categories_by_cat,categories file: annual signatures per category,"{'Climate': 39, 'Flow Volume': 23, 'Storage': 17, 'Flashiness': 16, 'Flow Timing': 15, 'Snow': 14, 'Drought': 10, 'Flow Duration': 3, 'Precipitation Streamflow': 2}",hisss_signature_categories.csv
+wy1993_2025.categories_scalars,categories file: scalar per category,"{'Storage': 8, 'Drought': 5, 'Flow Volume': 4, 'Flashiness': 3, '(none: preprocessing diagnostic)': 1}",hisss_signature_categories.csv
+wy1993_2025.annual_rows,annual parquet rows,27766578,hisss_signatures_annual_wy1993_2025.parquet
+wy1993_2025.annual_schema,annual parquet columns,"['gage_id', 'signature', 'water_year', 'value']",hisss_signatures_annual_wy1993_2025.parquet
+wy1993_2025.annual_signatures,annual parquet distinct signatures,139,hisss_signatures_annual_wy1993_2025.parquet
+wy1993_2025.annual_sigs_eq_bases,annual parquet signatures == CSV bases,True,hisss_signatures_annual_wy1993_2025.parquet
+wy1993_2025.annual_gages,annual parquet distinct gages == CSV gages,6678; equal sets: True,hisss_signatures_annual_wy1993_2025.parquet
+wy1993_2025.annual_wy_range,annual parquet water_year min / max,1993 / 2025,hisss_signatures_annual_wy1993_2025.parquet
+wy1993_2025.annual_keys_unique,"annual parquet (gage_id, signature, water_year) keys unique (duplicate rows)",0 duplicates of 27766578 rows: True,hisss_signatures_annual_wy1993_2025.parquet
+wy1993_2025.annual_seasonal_rows,rows and finite rows per Qann / Qwin / Qspr / Qsum / Qfal / negative_ann (seasonal 80 % masking witness: seasonal finite < Qann finite),"{'Qann': 202011, 'Qann (finite)': 202011, 'Qfal': 202011, 'Qfal (finite)': 202011, 'Qspr': 202011, 'Qspr (finite)': 202011, 'Qsum': 202011, 'Qsum (finite)': 202011, 'Qwin': 202011, 'Qwin (finite)': 202011, 'negative_ann': 202011, 'negative_ann (finite)': 202011}",hisss_signatures_annual_wy1993_2025.parquet
+wy1980_2025.gages,rows (gages),6250,hisss_signatures_wy1980_2025.csv
+wy1980_2025.columns,columns,2277,hisss_signatures_wy1980_2025.csv
+wy1980_2025.meta_cols,metadata columns (first 20),"20: ['gage_id', 'latitude', 'longitude', 'basin_area', 'gage_type', 'num_water_years', 'start_water_year', 'end_water_year', 'area_normalized', 'NDAMS_2009', 'MAJ_DDENS_2009', 'STOR_NID_2009', 'IMPNLCD06', 'DEVNLCD06', 'FRESHW_WITHDRAWAL', 'HYDRO_DISTURB_INDX', 'CLASS', 'RHBN', 'REGULATED', 'human_interference_class']",hisss_signatures_wy1980_2025.csv
+wy1980_2025.stat_cols,signature × statistic columns,2224,hisss_signatures_wy1980_2025.csv
+wy1980_2025.bases,annual signatures (bases with _mean),139,hisss_signatures_wy1980_2025.csv
+wy1980_2025.bases_x16,bases × 16 == stat columns,2224 == 2224: True,hisss_signatures_wy1980_2025.csv
+wy1980_2025.scalars,per-gage scalar columns,"21: ['drought_threshold_fixed_p10', 'drought_threshold_fixed_p2', 'drought_threshold_fixed_p20', 'drought_threshold_fixed_p30', 'drought_threshold_fixed_p5', 'elasticity_static', 'elasticity_years_low_ppt', 'elasticity_years_total', 'ice_affected_days_total', 'log_a_seasonality_amplitude_all', 'log_a_seasonality_amplitude_first_half', 'log_a_seasonality_amplitude_last_half', 'log_a_seasonality_minimum_all', 'log_a_seasonality_minimum_first_half', 'log_a_seasonality_minimum_last_half', 'recession_alpha_point_cloud_linear_reservoir', 'runoff_ratio_high_count', 'season_excluded_years_fall', 'season_excluded_years_spring', 'season_excluded_years_summer', 'season_excluded_years_winter']",hisss_signatures_wy1980_2025.csv
+wy1980_2025.flags,QA flag columns,"12: ['flagged_for_bfi_eckhardt_range', 'flagged_for_bfi_lynehollick_range', 'flagged_for_d50_range', 'flagged_for_elasticity_range', 'flagged_for_flashiness_range', 'flagged_for_high_na', 'flagged_for_percentile_order', 'flagged_for_qann_range', 'flagged_for_runoff_ratio_range', 'flagged_for_seasonal_sum', 'flagged_for_timing_order', 'flagged_for_tqmean_range']",hisss_signatures_wy1980_2025.csv
+wy1980_2025.composition,20 + bases×16 + scalars + flags,20 + 2224 + 21 + 12 = 2277,hisss_signatures_wy1980_2025.csv
+wy1980_2025.gage_type,gage_type counts,"{'USGS': 5043, 'Canada': 1207}",hisss_signatures_wy1980_2025.csv
+wy1980_2025.us_ca_by_id,US (all-digit id) / Canada,5043 / 1207,hisss_signatures_wy1980_2025.csv
+wy1980_2025.area_normalized_false,area_normalized FALSE,28,hisss_signatures_wy1980_2025.csv
+wy1980_2025.area_normalized_false_by_type,area_normalized FALSE by gage_type,{'Canada': 28},hisss_signatures_wy1980_2025.csv
+wy1980_2025.flagged_for_bfi_eckhardt_range,flagged_for_bfi_eckhardt_range TRUE,0,hisss_signatures_wy1980_2025.csv
+wy1980_2025.flagged_for_bfi_lynehollick_range,flagged_for_bfi_lynehollick_range TRUE,0,hisss_signatures_wy1980_2025.csv
+wy1980_2025.flagged_for_d50_range,flagged_for_d50_range TRUE,0,hisss_signatures_wy1980_2025.csv
+wy1980_2025.flagged_for_elasticity_range,flagged_for_elasticity_range TRUE,98,hisss_signatures_wy1980_2025.csv
+wy1980_2025.flagged_for_flashiness_range,flagged_for_flashiness_range TRUE,0,hisss_signatures_wy1980_2025.csv
+wy1980_2025.flagged_for_high_na,flagged_for_high_na TRUE,345,hisss_signatures_wy1980_2025.csv
+wy1980_2025.flagged_for_percentile_order,flagged_for_percentile_order TRUE,0,hisss_signatures_wy1980_2025.csv
+wy1980_2025.flagged_for_qann_range,flagged_for_qann_range TRUE,151,hisss_signatures_wy1980_2025.csv
+wy1980_2025.flagged_for_runoff_ratio_range,flagged_for_runoff_ratio_range TRUE,106,hisss_signatures_wy1980_2025.csv
+wy1980_2025.flagged_for_seasonal_sum,flagged_for_seasonal_sum TRUE,0,hisss_signatures_wy1980_2025.csv
+wy1980_2025.flagged_for_timing_order,flagged_for_timing_order TRUE,0,hisss_signatures_wy1980_2025.csv
+wy1980_2025.flagged_for_tqmean_range,flagged_for_tqmean_range TRUE,0,hisss_signatures_wy1980_2025.csv
+wy1980_2025.qann_flag_on_unnormalized,flagged_for_qann_range TRUE among un-normalized,25,hisss_signatures_wy1980_2025.csv
+wy1980_2025.num_water_years,num_water_years min / median / max,20 / 44.0 / 46,hisss_signatures_wy1980_2025.csv
+wy1980_2025.min_fraction,min num_water_years / window years,0.435 (window 46),hisss_signatures_wy1980_2025.csv
+wy1980_2025.complete_records,gages with num_water_years == 46,2629,hisss_signatures_wy1980_2025.csv
+wy1980_2025.ge30,gages with num_water_years >= 30,5640,hisss_signatures_wy1980_2025.csv
+wy1980_2025.start_end,start_water_year min / end_water_year max,1980.0 / 2025.0,hisss_signatures_wy1980_2025.csv
+wy1980_2025.basin_area_quartiles,"basin_area q25 / median / q75 (km2), n with area","184 / 698 / 2718, n=6222",hisss_signatures_wy1980_2025.csv
+wy1980_2025.trend_gate_bases,bases where trend count < mean count (gated) / equal (exempt or saturated),"130 / 9; equal: ['alpha_linear', 'b_events', 'b_pointcloud', 'concavity', 'elasticity_annual', 'elasticity_rolling', 'log_a_events', 'log_a_pointcloud', 'n_recession_events']",hisss_signatures_wy1980_2025.csv
+wy1980_2025.trend_gate_Qann,Qann: mean / senn / pettitt_cp_year non-NA,6250 / 5907 / 6250,hisss_signatures_wy1980_2025.csv
+wy1980_2025.mean_count_max,max non-NA _mean count over bases,6250,hisss_signatures_wy1980_2025.csv
+wy1980_2025.unnorm_na.Climate,non-NA _mean cells on un-normalized gages / all gages — category Climate (39 signatures),1092 of 1092 / 242603 of 243750,hisss_signatures_wy1980_2025.csv
+wy1980_2025.unnorm_na.Drought,non-NA _mean cells on un-normalized gages / all gages — category Drought (10 signatures),280 of 280 / 62500 of 62500,hisss_signatures_wy1980_2025.csv
+wy1980_2025.unnorm_na.Flashiness,non-NA _mean cells on un-normalized gages / all gages — category Flashiness (16 signatures),377 of 448 / 98577 of 100000,hisss_signatures_wy1980_2025.csv
+wy1980_2025.unnorm_na.Flow Duration,non-NA _mean cells on un-normalized gages / all gages — category Flow Duration (3 signatures),84 of 84 / 18750 of 18750,hisss_signatures_wy1980_2025.csv
+wy1980_2025.unnorm_na.Flow Timing,non-NA _mean cells on un-normalized gages / all gages — category Flow Timing (15 signatures),420 of 420 / 93750 of 93750,hisss_signatures_wy1980_2025.csv
+wy1980_2025.unnorm_na.Flow Volume,non-NA _mean cells on un-normalized gages / all gages — category Flow Volume (23 signatures),644 of 644 / 143750 of 143750,hisss_signatures_wy1980_2025.csv
+wy1980_2025.unnorm_na.Precipitation Streamflow,non-NA _mean cells on un-normalized gages / all gages — category Precipitation Streamflow (2 signatures),0 of 56 / 12390 of 12500,hisss_signatures_wy1980_2025.csv
+wy1980_2025.unnorm_na.Snow,non-NA _mean cells on un-normalized gages / all gages — category Snow (14 signatures),360 of 392 / 71779 of 87500,hisss_signatures_wy1980_2025.csv
+wy1980_2025.unnorm_na.Storage,non-NA _mean cells on un-normalized gages / all gages — category Storage (17 signatures),116 of 476 / 98398 of 106250,hisss_signatures_wy1980_2025.csv
+wy1980_2025.unnorm_na.storage_detail,Storage signatures: non-NA _mean count on the un-normalized gages (of n un-normalized),"{'BFI_Eckhardt': 28, 'BFI_Eckhardt_param': 10, 'BFI_LyneHollick': 28, 'BFI_LyneHollick_param': 10, 'alpha_linear': 2, 'annual_runoff_ratio': 0, 'avg_storage': 0, 'b_events': 2, 'b_pointcloud': 2, 'concavity': 2, 'fall_runoff_ratio': 0, 'log_a_events': 2, 'log_a_pointcloud': 2, 'n_recession_events': 28, 'spring_runoff_ratio': 0, 'summer_runoff_ratio': 0, 'winter_runoff_ratio': 0, 'n_unnormalized': 28}",hisss_signatures_wy1980_2025.csv
+wy1980_2025.unnorm_na.flashiness_detail,Flashiness signatures with any NA _mean on the un-normalized gages: non-NA count,"{'dur_high_pulses_all': 23, 'dur_low_pulses_all': 18, 'elasticity_annual': 0, 'elasticity_rolling': 0}",hisss_signatures_wy1980_2025.csv
+wy1980_2025.season_excluded_sum,Σ season_excluded_years_* over gages (seasons failing the 80 % raw-observation rule → seasonal metrics NA),"{'season_excluded_years_fall': 4778, 'season_excluded_years_spring': 3881, 'season_excluded_years_summer': 3201, 'season_excluded_years_winter': 4289, 'gages_with_any': 2725}",hisss_signatures_wy1980_2025.csv
+wy1980_2025.negative_constant_cols,columns named Negative*/constant*,"16: ['negative_ann_linear_slp', 'negative_ann_mean', 'negative_ann_median', 'negative_ann_mk_pval']…",hisss_signatures_wy1980_2025.csv
+wy1980_2025.dictionary_rows,dictionary rows,2277,hisss_data_dictionary.csv
+wy1980_2025.dictionary_matches_csv,dictionary column_name == CSV columns (order),True,hisss_data_dictionary.csv
+wy1980_2025.dictionary_categories,dictionary category counts,"{'Climate': 624, 'Flow Volume': 372, 'Storage': 280, 'Flashiness': 259, 'Flow Timing': 240, 'Snow': 224, 'Drought': 165, 'Flow Duration': 48, 'Precipitation Streamflow': 32, 'Gage metadata': 20, 'Quality flag': 12, '(none: preprocessing diagnostic)': 1}",hisss_data_dictionary.csv
+wy1980_2025.categories_rows,categories file rows; kind counts,"160; {'annual': 139, 'scalar': 21}",hisss_signature_categories.csv
+wy1980_2025.categories_vs_canonical,"deposited categories (signature, kind, category) == docs/signature_categories.csv",True; canonical rows 160,hisss_signature_categories.csv
+wy1980_2025.categories_by_cat,categories file: annual signatures per category,"{'Climate': 39, 'Flow Volume': 23, 'Storage': 17, 'Flashiness': 16, 'Flow Timing': 15, 'Snow': 14, 'Drought': 10, 'Flow Duration': 3, 'Precipitation Streamflow': 2}",hisss_signature_categories.csv
+wy1980_2025.categories_scalars,categories file: scalar per category,"{'Storage': 8, 'Drought': 5, 'Flow Volume': 4, 'Flashiness': 3, '(none: preprocessing diagnostic)': 1}",hisss_signature_categories.csv
+wy1980_2025.annual_rows,annual parquet rows,34813881,hisss_signatures_annual_wy1980_2025.parquet
+wy1980_2025.annual_schema,annual parquet columns,"['gage_id', 'signature', 'water_year', 'value']",hisss_signatures_annual_wy1980_2025.parquet
+wy1980_2025.annual_signatures,annual parquet distinct signatures,139,hisss_signatures_annual_wy1980_2025.parquet
+wy1980_2025.annual_sigs_eq_bases,annual parquet signatures == CSV bases,True,hisss_signatures_annual_wy1980_2025.parquet
+wy1980_2025.annual_gages,annual parquet distinct gages == CSV gages,6250; equal sets: True,hisss_signatures_annual_wy1980_2025.parquet
+wy1980_2025.annual_wy_range,annual parquet water_year min / max,1980 / 2025,hisss_signatures_annual_wy1980_2025.parquet
+wy1980_2025.annual_keys_unique,"annual parquet (gage_id, signature, water_year) keys unique (duplicate rows)",0 duplicates of 34813881 rows: True,hisss_signatures_annual_wy1980_2025.parquet
+wy1980_2025.annual_seasonal_rows,rows and finite rows per Qann / Qwin / Qspr / Qsum / Qfal / negative_ann (seasonal 80 % masking witness: seasonal finite < Qann finite),"{'Qann': 255145, 'Qann (finite)': 255145, 'Qfal': 255145, 'Qfal (finite)': 255145, 'Qspr': 255145, 'Qspr (finite)': 255145, 'Qsum': 255145, 'Qsum (finite)': 255145, 'Qwin': 255145, 'Qwin (finite)': 255145, 'negative_ann': 255145, 'negative_ann (finite)': 255145}",hisss_signatures_annual_wy1980_2025.parquet
+products.overlap,gages in both products / only #1 / only #2,5771 / 907 / 479,both CSVs
+r3.meta_rows,metadata rows (candidate gages),16994,hisss_gage_metadata.csv
+r3.meta_cols,metadata columns,"['gage_id', 'latitude', 'longitude', 'basin_area', 'gage_type', 'num_years', 'start_year', 'end_year', 'num_days', 'processing_status', 'error_message', 'area_normalized', 'source_dir', 'Downstream_HB_ID']",hisss_gage_metadata.csv
+r3.meta_by_type,candidates by gage_type,"{'USGS': 9154, 'Canada': 7840}",hisss_gage_metadata.csv
+r3.meta_status,processing_status × gage_type,"{'Canada': {'insufficient_years': 11, 'no_data': 5975, 'processing': 0, 'success': 1854}, 'USGS': {'insufficient_years': 69, 'no_data': 2812, 'processing': 113, 'success': 6160}}",hisss_gage_metadata.csv
+r3.compiled,compiled (success) gages; by type,"8014; {'USGS': 6160, 'Canada': 1854}",hisss_gage_metadata.csv
+r3.compiled_unnormalized,compiled with area_normalized FALSE; by type,73; {'Canada': 73},hisss_gage_metadata.csv
+r3.all_unnormalized,all candidates with area_normalized FALSE,1601,hisss_gage_metadata.csv
+r3.compiled_gt85k,"compiled with published basin_area > 85,000 km2 / > 100,000 km2 / no area",58 / 52 / 73,hisss_gage_metadata.csv
+r3.meta_years,compiled: num_years min / max; start_year min; end_year max,20.0 / 47.0; 1979.0; 2025.0,hisss_gage_metadata.csv
+r3.meta_padding,metadata USGS ids that start with 0 (should be 0 = zero-stripped),0,hisss_gage_metadata.csv
+r3.ledger_rows,qualifier ledger rows / distinct gages,193542 / 987,hisss_streamflow_qualifier_corrections.csv
+r3.ledger_old_flag,ledger old_flag counts,"{'A R': 181461, 'A <': 11444, 'A [4]': 419, 'A >': 218}",hisss_streamflow_qualifier_corrections.csv
+r3.ledger_status,ledger status counts; status_today counts,"{'restored': 193542}; {'A': 193446, 'P': 96}",hisss_streamflow_qualifier_corrections.csv
+r3.ledger_dates,ledger date min / max,1985-02-23 / 2025-10-01,hisss_streamflow_qualifier_corrections.csv
+r3.flags_rows,Daymet flag rows; low_confidence / low_pixel_support; in_p1 / in_p2,101; 57 / 45; 46 / 33,hisss_daymet_basin_flags.csv
+r3.flags_reasons,Daymet flag component counts,"{'hydrobasins_fallback': 30, 'area_mismatch': 28, 'no_area_reference': 27, 'low_pixel_support': 45}",hisss_daymet_basin_flags.csv
+r3.list_wy1993_2025,gage list wy1993_2025: ids; == product gage set,6678; True,hisss_gage_selection_wy1993_2025.txt
+r3.list_wy1980_2025,gage list wy1980_2025: ids; == product gage set,6250; True,hisss_gage_selection_wy1980_2025.txt
+r3.would_qualify,would-qualify rows per window,"{'1993-2025': 31, '1980-2025': 29}",hisss_would_qualify_not_added.csv
+r3.interference,HYDAT interference rows; RHBN counts; REGULATED counts,"8012; {'FALSE': 7696, 'TRUE': 316}; {'FALSE': 4525, 'TRUE': 3116, nan: 371}",hisss_hydat_interference.csv
+r3.input_dictionary,input dictionary rows per table,"{'hisss_daymet_basin_flags.csv': 19, 'hisss_streamflow_qualifier_corrections.csv': 15, 'hisss_gage_metadata.csv': 14, 'hisss_streamflow_daily.parquet': 9, 'hisss_daymet_basin_daily.parquet': 8, 'hisss_would_qualify_not_added.csv': 5, 'hisss_hydat_interference.csv': 3, 'hisss_gage_selection_wy1993_2025.txt / hisss_gage_selection_wy1980_2025.txt': 1}",hisss_input_data_dictionary.csv
+r3.daymet_rows,Daymet rows (file metadata),134605430,hisss_daymet_basin_daily.parquet
+r3.daymet_schema,Daymet columns,"['site_id', 'Date', 'prcp', 'tmin', 'tmax', 'swe', 'vp', 'srad']",hisss_daymet_basin_daily.parquet
+r3.q_rows,streamflow rows (file metadata),111624189,hisss_streamflow_daily.parquet
+r3.q_schema,streamflow columns,"['gage_id', 'Date', 'Q', 'year', 'month', 'doy', 'water_year', 'dowy', 'flag']",hisss_streamflow_daily.parquet
+r3.daymet_missing,Daymet null / NaN / inf per variable (all six),"{'prcp': {'null': 0, 'nan': 0, 'inf': 0}, 'tmin': {'null': 0, 'nan': 0, 'inf': 0}, 'tmax': {'null': 0, 'nan': 0, 'inf': 0}, 'swe': {'null': 0, 'nan': 0, 'inf': 0}, 'vp': {'null': 0, 'nan': 0, 'inf': 0}, 'srad': {'null': 0, 'nan': 0, 'inf': 0}}",hisss_daymet_basin_daily.parquet
+r3.daymet_grid,Daymet rows == distinct dates per site (summed over batches; equality ⇒ no duplicate dates within a batch) and rows per site == 46 × 365,"8017 of 8017 sites; all 16,790: True",hisss_daymet_basin_daily.parquet
+r3.daymet_sites,Daymet distinct site_id,8017,hisss_daymet_basin_daily.parquet
+r3.daymet_dates,Daymet Date min / max; rows per site min / max,1980-01-01 / 2025-12-31; 16790 / 16790,hisss_daymet_basin_daily.parquet
+r3.daymet_vs_compiled,compiled gages with Daymet / without; Daymet sites not compiled,8013 / ['05KH009']; 4,hisss_daymet_basin_daily.parquet
+r3.q_dates_unique,streamflow gages whose row count == distinct Date count (batch-summed),8014 of 8014,hisss_streamflow_daily.parquet
+r3.q_nonmissing,streamflow rows with a discharge value (rows − null Q),111229979,hisss_streamflow_daily.parquet
+r3.q_gages,streamflow distinct gages; US (digit ids) / Canada,8014; 6160 / 1854,hisss_streamflow_daily.parquet
+r3.q_rows_sum,streamflow rows (scan),111624189,hisss_streamflow_daily.parquet
+r3.q_dates,streamflow Date min / max,1979-10-01 / 2025-10-01,hisss_streamflow_daily.parquet
+r3.q_dates_by_agency,max Date US / Canada; gages ending 2025-10-01,2025-10-01 / 2024-12-31; 5381,hisss_streamflow_daily.parquet
+r3.q_na_rows,rows with NA/NaN Q (NaN / null); negative Q rows / gages,0 / 394210; 21518 / 82,hisss_streamflow_daily.parquet
+r3.q_padding,streamflow USGS ids starting with 0,4896,hisss_streamflow_daily.parquet
+r3.q_vs_meta,streamflow gage set == compiled (success) metadata keys,True,hisss_streamflow_daily.parquet
+products.in_compiled,product gages ⊂ compiled: #1 / #2,True / True,metadata
+r4.simplified.features,polygons,7964,hisss_watershed_boundaries.gpkg
+r4.simplified.sources,watershed_geom_source counts,"{'gagesii': 6164, 'hydrobasins': 29, 'wsc_eccc': 1771}",hisss_watershed_boundaries.gpkg
+r4.simplified.low_conf,low_confidence TRUE; geom_simplified TRUE; area_flag TRUE,"(56, 7823, 28)",hisss_watershed_boundaries.gpkg
+r4.simplified.areas,"geom_area_km2 > 85,000 / > 100,000; max; polygons 85,000–100,000","(6, 0, 97182.0, 6)",hisss_watershed_boundaries.gpkg
+r4.simplified.by_type,gage_type counts,"{'Canada': 1800, 'USGS': 6164}",hisss_watershed_boundaries.gpkg
+r4.simplified.unique_ids,distinct gage_id,7964,hisss_watershed_boundaries.gpkg
+r4.simplified.product_overlap,product gages with a polygon (zero-stripped join): #1 / #2,6634 / 6205,hisss_watershed_boundaries.gpkg
+r4.unsimplified.features,polygons,8017,hisss_watershed_boundaries_unsimplified.gpkg
+r4.unsimplified.sources,watershed_geom_source counts,"{'gagesii': 6164, 'hydrobasins': 30, 'wsc_eccc': 1823}",hisss_watershed_boundaries_unsimplified.gpkg
+r4.unsimplified.low_conf,low_confidence TRUE; geom_simplified TRUE; area_flag TRUE,"(57, 0, 28)",hisss_watershed_boundaries_unsimplified.gpkg
+r4.unsimplified.areas,"geom_area_km2 > 85,000 / > 100,000; max; polygons 85,000–100,000","(59, 53, 1696282.0, 6)",hisss_watershed_boundaries_unsimplified.gpkg
+r4.unsimplified.by_type,gage_type counts,"{'Canada': 1853, 'USGS': 6164}",hisss_watershed_boundaries_unsimplified.gpkg
+r4.unsimplified.unique_ids,distinct gage_id,8017,hisss_watershed_boundaries_unsimplified.gpkg
+r4.unsimplified.product_overlap,product gages with a polygon (zero-stripped join): #1 / #2,6678 / 6250,hisss_watershed_boundaries_unsimplified.gpkg
+r4.layers_diff,unsimplified minus simplified ids; simplified minus unsimplified,53; [],both GeoPackages
+r4.geoparquet,GeoParquet rows / columns,7964 / 13,hisss_watershed_boundaries.parquet
+r4.qa_rows,QA csv rows; low_confidence TRUE,7964; 56,hisss_watershed_boundaries_qa.csv
+r4.attr_rows_cols,attribute table rows × columns,8014 × 211,hisss_watershed_hydroatlas_attributes.csv
+r4.attr_has_downstream,Downstream_HB_ID column present,True,hisss_watershed_hydroatlas_attributes.csv
+r4.attr_first_cols,first 13 columns,"['gage_id', 'latitude', 'longitude', 'basin_area', 'gage_type', 'Downstream_HB_ID', 'n_member_basins', 'watershed_area_sum_SUB_AREA', 'outlet_UP_AREA', 'watershed_area_rel_diff', 'outlet_ORDER', 'outlet_ENDO', 'outlet_COAST']",hisss_watershed_hydroatlas_attributes.csv
+r4.attr_product_overlap,product gages with an attribute row: #1 / #2 (zero-stripped),6678 / 6250,hisss_watershed_hydroatlas_attributes.csv
+r4.attr_overlap_layers,attribute rows with a polygon: simplified / unsimplified,7960 / 8013,hisss_watershed_hydroatlas_attributes.csv
+r4.attr_padding,attribute USGS ids starting with 0,4896,hisss_watershed_hydroatlas_attributes.csv
+r4.level12_mean_area,"mean member level-12 subbasin area over the domain (Σ SUB_AREA / Σ n_member_basins), km2; median per-gage mean",130.8; 139.4,hisss_watershed_hydroatlas_attributes.csv
+r4.attr_dictionary,attribute dictionary rows; aggregation counts,"211; {'area-weighted mean across upstream basins (SUB_AREA-weighted)': 92, 'HydroATLAS upstream-accumulated (_u) / pour-point (_p) value at the outlet basin': 91, 'diagnostic / key': 13, 'dominant class: SUB_AREA-weighted mode across upstream member subbasins': 9, ""dominant class: argmax of the outlet basin's upstream (_u) class fractions"": 2, 'areal fraction of the dominant class (0-100)': 2, 'minimum across upstream basins (true watershed low point)': 1, 'maximum across upstream basins (true watershed high point)': 1}",hisss_hydroatlas_attributes_dictionary.csv
+r5.lai_rows,LAI rows,2150280,hisss_modis_lai_monthly.parquet
+r5.lai_gages,LAI distinct gage_id / canon_id,7964 / 7964,hisss_modis_lai_monthly.parquet
+r5.lai_months,"LAI distinct (year, month); first / last","270; [2002, 7] / [2024, 12]",hisss_modis_lai_monthly.parquet
+r5.lai_cols,LAI columns,"['gage_id', 'canon_id', 'year', 'month', 'lai_min', 'lai_q05', 'lai_q25', 'lai_q50', 'lai_q75', 'lai_q95', 'lai_max', 'lai_mean', 'lai_std', 'n_eff_pixels', 'n_basin_pixels', 'valid_pixel_frac', 'mean_obs_valid_frac', 'frac_cloud', 'frac_snow_ice', 'frac_aerosol', 'frac_backup_algorithm', 'n_composites', 'low_confidence', 'partial_month', 'good_coverage_frac', '__index_level_0__']",hisss_modis_lai_monthly.parquet
+r5.lai_product_overlap,product gages with LAI rows (canon_id join): #1 / #2; exact gage_id join: #1 / #2,6634 / 6205; 6599 / 6196,hisss_modis_lai_monthly.parquet
+r5.lulc_rows,LULC rows; gages; years min / max / n,191136; 7964; 2001 / 2024 / 24,hisss_modis_lulc_annual.parquet
+r5.lulc_schemes,LULC class columns; by scheme,"102; Counter({'lc_type1': 17, 'lc_type2': 16, 'lc_prop1': 16, 'lc_type5': 12, 'lc_type3': 11, 'lc_prop2': 11, 'lc_prop3': 10, 'lc_type4': 9})",hisss_modis_lulc_annual.parquet
+r5.lulc_product_overlap,product gages with LULC rows (canon_id): #1 / #2,6634 / 6205,hisss_modis_lulc_annual.parquet
+r5.sig_daymet_modis,product gages with Daymet AND MODIS LULC: #1 / #2; either,6634 / 6205; 7112,R3 Daymet + R5 LULC
+r5.nlcd_rows,NLCD rows; gages; years min / max / n; class columns; collection,250879; 6119; 1985 / 2025 / 41; 16; ['C1V2'],hisss_nlcd_annual.parquet
+r5.nlcd_product_overlap,product gages with NLCD rows (canon_id): #1 / #2,5454 / 5007,hisss_nlcd_annual.parquet
+r5.excluded,NLCD excluded gages; reasons,45; {'outside the CONUS Annual NLCD footprint (Alaska)': 45},hisss_nlcd_excluded_gages.csv
+r5.nlcd_plus_excluded,NLCD gages + excluded == US gages in LULC universe,6164 vs 6164,hisss_nlcd_annual.parquet

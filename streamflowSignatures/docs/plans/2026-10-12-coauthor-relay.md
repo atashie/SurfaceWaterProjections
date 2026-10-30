@@ -1,5 +1,9 @@
 # Relay list for the co-authors — 2026-10-12 sync (guidelines §3.9 + manuscript)
 
+> SUPERSEDED 2026-10-30 by `docs/reconciliation/2026-10-30-coauthor-relay.md`, which carries
+> every still-open item of this list (its item 51) with the measured corrections of the
+> 2026-10-30 review.
+
 One line per item, "replace X with Y" where possible (user preference 2026-09-04). Sources:
 `docs/reconciliation/guidelines_todos.md` and `manuscript_log.md` (2026-10-12 entries);
 decisions: `docs/plans/2026-10-12-climate-metrics-plan.md` §1.

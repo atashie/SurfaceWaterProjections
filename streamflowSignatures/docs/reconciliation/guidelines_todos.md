@@ -8,6 +8,30 @@ blocks to `changelog-old.md` when they are fully resolved. Moved here VERBATIM f
 
 ---
 
+**Synced 2026-10-30 — 3 changed regions (310 vs 310 paragraphs); a reorder, nothing to
+implement. Snapshot overwritten.** The title's stray "m" is fixed and Part 3 is renumbered:
+3.3 Flow Timing, 3.4 Flow Flashiness, 3.5 Precipitation-to-Streamflow, 3.6 Snow, 3.7 Climate
+Metrics, 3.8 Drought, 3.9 Storage (Storage was 3.3, Climate 3.9). Verified as a pure move:
+the sorted paragraph multisets of the two snapshots differ only in the title and the seven
+section headers. Every open item below stands; "§3.9" in the 2026-10-12 / 2026-10-21 items
+and in the repo docs now reads §3.7 (climate) — left as written, dated. The mechanical
+re-verification of every number in Parts 1–3 against `config/signatures_config.json` is
+scheduled as rows R1–R10 of `docs/plans/2026-10-30-manuscript-accuracy-review-plan.md`
+(user request 2026-10-30: manuscript + guidelines accuracy review).
+- [x] DOC-SIDE: stray "m" in the title — fixed on the published page 2026-10-30.
+- [ ] DOC-SIDE (relay, carried from the 2026-10-12 snow review): §3.6 Snow still says "for
+  water years 1980–2023" — the deposited Daymet table and both signature products run to
+  WY 2025.
+- [ ] DOC-SIDE (relay, from the 2026-10-30 review — items 44–50 of
+  `docs/reconciliation/2026-10-30-coauthor-relay.md`): Part 1.1 "watersheds smaller than
+  85,000 km²" (no size filter yields the 8,014) and "Albers et al., 2026" (2017); Part 1.3 "60 % of
+  the possible water years in the analysis window" → the denominator runs from the window start to
+  the gage's last water year in the window (`run_julia_benchmark.jl` l. 259–269); Part 4
+  `data_out/daymet_1980_2023.parquet` → the 1980–2025 table; §3.1 "Negative_annual" → the shipped
+  name is `negative_ann` (lower case — the 2026-10-12 relay item 1 wrote "Negative_ann"). Every
+  numeric parameter of Parts 1–3 re-verified against `config/signatures_config.json` and the code:
+  all match (ledger rows R2–R4, R8).
+
 **Synced 2026-10-21 — 5 changed regions (310 vs 315 paragraphs); the user's 2026-10-12 edits
 have propagated to the published page, nothing new to implement. Snapshot overwritten.** Verified
 against code: (1) the five §3.8 snowfall lines are deleted (plan §1 items 4/6/11: not

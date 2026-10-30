@@ -1,19 +1,21 @@
 # Summary Documentation for Streamflow Signatures
 
 > **Auto-synced from**: [Google Doc](https://docs.google.com/document/d/e/2PACX-1vSVjtqLKk1r9TczxLEBhlnzfBWbm1TQVfvqERm-jEwLISZTEWx73ofV4Ng9H0JaXA/pub)
-> **Last synced**: 2026-10-21 (310 paragraphs vs 315 on 2026-10-12). Five regions, all of
-> them the user's 2026-10-12 edits finally propagating to the published page: the five §3.8
-> snowfall lines are gone (not implemented, by decision), GDD now reads Σ(max(0, Tmax+Tmin)/2)
-> (base 0 °C, clamped) and `frost_first_dowy` / `frost_last_dowy` say "minimum daily
-> temperature" — all three match `julia/src/climate.jl`; plus a stray "m" in the title
-> ("mSummary"). §3.9 Climate Metrics (39) is implemented in all three languages since
-> 2026-10-12. Open doc-side items: `docs/reconciliation/guidelines_todos.md` (2026-10-21).
+> **Last synced**: 2026-10-30 (310 paragraphs, as on 2026-10-21). Three regions, NO content
+> change: the stray "m" in the title is gone and Part 3 is REORDERED — 3.3 Flow Timing, 3.4
+> Flow Flashiness, 3.5 Precipitation-to-Streamflow, 3.6 Snow, 3.7 Climate Metrics, 3.8
+> Drought, 3.9 Storage (was 3.3 Storage … 3.9 Climate; verified as a pure move of the
+> paragraph multiset). Repo notes that say "§3.9 Climate" now mean §3.7. Every definition
+> is unchanged; open doc-side items: `docs/reconciliation/guidelines_todos.md` (2026-10-30);
+> the full number-vs-config re-verification is Part C of
+> `docs/plans/2026-10-30-manuscript-accuracy-review-plan.md`.
 
 ---
 
 
 
-# mSummary Documentation for Streamflow Signatures
+
+# Summary Documentation for Streamflow Signatures
 
 GitHub repo here· Summary data audit sheet here
 
@@ -153,7 +155,271 @@ Each segment's slope is the coefficient of an ordinary least-squares regression 
 
 Units: log10(mm/day) per unit exceedance probability; slopes are typically negative.
 
-### 3.3 Storage
+### 3.3 Flow Timing
+
+Function: analyze_flow_timing_trends()
+
+Purpose: Analyzes the timing of flow events (day of maximum flow, cumulative flow percentiles). Day 1 = start of water year (Oct 1).
+
+Metrics:
+
+Dxx_day: Day of water year when cumulative flow reaches xx percentile. Labeled, for the 20th percentile flow for example, as D20_day. Calculated for percentiles = {1, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 99}.
+
+D25_to_D75: Count of days between 25% and 75% cumulative flow.
+
+Dmax: Water year day of maximum daily flow.
+
+### 3.4 Flow Flashiness
+
+Function: calculate_pulse_metrics()
+
+Purpose: Calculates metrics for high/low flow pulses (frequency, duration) and flow reversals.
+
+Metrics:
+
+n_high_pulses_year / n_high_pulses_all: Number of high-flow pulse events per year. A high-pulse day is a day with flow above the 90th percentile of flow; _year and _all calculate percentiles from Q for the specified year or the period of record, respectively. A pulse event is a maximal run of consecutive pulse days.
+
+n_low_pulses_year / n_low_pulses_all: Number of low-flow pulse events per year. A low-pulse day is a day with flow below the 10th percentile of flow; _year and _all as above. Zero-flow days are included in all calculations; on strongly intermittent streams the 10th-percentile threshold can be exactly 0, in which case zero-flow days do not count as low-pulse days because the comparison is strictly below the threshold.
+
+dur_high_pulses_year / dur_high_pulses_all: Mean duration in days of high-flow pulses per year.
+
+dur_low_pulses_year / dur_low_pulses_all: Mean duration in days of low-flow pulses per year.
+
+TQmean: Percentage of days with flow above the annual mean.
+
+Flow_Reversals_annual / _xSeason: Number of flow reversals (annual and seasonal). Only includes changes in flow direction exceeding 2% of current flow: a reversal day requires a sign change between the incoming and outgoing day-to-day flow differences, with the outgoing change larger than 2% of that day's flow. Threshold of 2% selected to remove error / noise.
+
+Requirements and decisions:
+
+This metric requires data from across the period of record; confirm that the code can actually calculate the 90th/10th percentiles from the full period of record before the annual metrics.
+
+High/low flow pulses are defined using the 90th and 10th percentiles of flow (Q).
+
+Calculate annual metrics using period-of-record percentiles (_all); the _year variants are retained as a complementary per-year sensitivity.
+
+Function: analyze_flashiness_trends()
+
+Purpose: Calculates the Richards-Baker (R-B) flashiness index by water year from daily streamflow data.
+
+Metrics:
+
+flashinessRB (R-B Index): Sum of absolute differences in consecutive daily streamflow divided by the sum of total flow: R-B = Σ|Q(i) − Q(i−1)| / ΣQ(i) (Baker et al. 2004). Dimensionless; higher values indicate flashier streamflow response. I.e., higher day-to-day change in streamflow relative to total streamflow.
+
+Function: calculate_streamflow_elasticity(). Requires precipitation data
+
+Purpose: Calculates streamflow elasticity, which measures how sensitive streamflow is to changes in precipitation. From Sawicz et al. (2011). Values around 1.0 indicate proportional response; values greater than 1 define the catchment as elastic (sensitive to precipitation change), less than 1 as inelastic.
+
+Metrics:
+
+elasticity_static (departure-from-mean, Sawicz et al. 2011): Overall catchment elasticity — median of annual elasticity values (single per-gage value, no statistics). For each qualifying water year i:
+
+E_i = [ (Q_i − Q_mean) / (P_i − P_mean) ] / (Q_mean / P_mean)
+
+where Q_i and P_i are that water year's total streamflow and precipitation (mm), and Q_mean and P_mean are the means over all qualifying years. Years where |P_i − P_mean| ≤ 0.1 mm are skipped. Then elasticity_static = median(E_i).
+
+elasticity_rolling: Rolling-window elasticity, used to detect trends in catchment sensitivity over time. Same formula, but computed within each window of 11 consecutive qualifying-year observations, using the window's own means (Q_mean_w, P_mean_w):
+
+E_j = [ (Q_j − Q_mean_w) / (P_j − P_mean_w) ] / (Q_mean_w / P_mean_w)
+
+elasticity_rolling(t) = median of the E_j within the window ending in year t.
+
+elasticity_annual (year-over-year differences): Measures year-to-year sensitivity (accounting for antecedent conditions) rather than deviation-from-mean sensitivity:
+
+E_t = [ (Q_t − Q_t−1) / (P_t − P_t−1) ] / (Q_mean / P_mean)
+
+where the differences are between adjacent qualifying years, Q_mean / P_mean are the whole-record means, and the value is assigned to the later year t. Pairs with |P_t − P_t−1| ≤ 0.1 mm are skipped.
+
+elasticity_years_total / elasticity_years_low_ppt: Diagnostic scalars: the number of years available for the gage, and the number excluded for annual PPT below 10 mm.
+
+Requirements and decisions:
+
+Requires daily streamflow (Q) and precipitation (PPT) data; calculating differences between years, so a minimum of two years of "good data" is needed for any pair, and a minimum of 15 years of valid data for the elasticity calculation overall.
+
+Years with annual precipitation < 10 mm are flagged and excluded from analysis.
+
+The year-over-year calculation requires both years of each pair to pass the minimum data requirements (consecutive qualifying years).
+
+Year qualification is handled by the centralized preprocessor (config).
+
+Count the number of years each site doesn't have sufficient data within a year, and what the number of excluded years would be if the threshold were < 30% data missing — added as documentation, not a filter.
+
+Output: elasticity_static is a single value; elasticity_rolling and elasticity_annual each carry the 16 standard statistics (see Part 2). The elasticity family is exempt from the trend-completeness requirements and the 20-value statistics floor (Part 1.3).
+
+### 3.5 Precipitation-to-Streamflow
+
+Function: calculate_qp_seasonality(). Requires precipitation data
+
+Purpose: Quantifies the seasonality in the relationship between cumulative streamflow (Q) and cumulative precipitation (P). Based on Wrede et al. (2015).
+
+Metrics:
+
+qp_slope_sd: Standard deviation of the 12 monthly mean cumulative Q-P slopes. Higher values indicate stronger seasonal variation in the streamflow-precipitation cumulative relationship.
+
+qp_bimodality: Bimodality coefficient of the Q-P slope distribution = (skewness² + 1) / kurtosis. Values > 0.555 suggest bimodal or strongly seasonal patterns.
+
+Method and parameters:
+
+Requires daily streamflow (Q), precipitation (PPT), month, and day-of-water-year columns; year qualification is handled by the centralized preprocessor.
+
+Calculates a 30-day rolling slope (backward-looking) of cumulative Q vs cumulative P for each water year, then aggregates the rolling slopes to 12 monthly mean values per year.
+
+Function: analyze_Q_PPT_relationships(). Requires precipitation data
+
+Purpose: Analyzes runoff ratios (streamflow divided by precipitation).
+
+Metrics:
+
+runoff_ratio_annual: Annual water year total streamflow divided by annual precipitation (Q/P).
+
+runoff_ratio_Xseason: seasonal streamflow divided by seasonal precipitation.
+
+runoff_ratio_high_count: Count of years where the annual runoff ratio is greater than 2 (per-gage diagnostic scalar).
+
+Requirements and decisions:
+
+Precipitation (PPT) data must be available alongside streamflow (Q).
+
+Same QAQC procedures for Q should apply to NAs (missing data) in precipitation; zero is okay in precipitation data.
+
+Calculates separate runoff ratios for annual and seasonal periods (winter, spring, summer, fall).
+
+Cases where annual PPT < 10 mm or seasonal PPT < 1 mm: the ratio is set to NA.
+
+### 3.6 Snow
+
+Function: calculate_snow_metrics(). Requires SWE data (Daymet)
+
+Purpose: Fourteen metrics are computed from daily snow water equivalent (SWE; Daymet V4) for water years 1980–2023. All metrics operate on a thresholded series SWE* = SWE if SWE ≥ 10 mm, else SWE* = 0. Days with SWE below 10 mm are treated as snow-free for both durations and magnitudes. A "snow day" is a day with SWE* > 0. A "spell" is a maximal run of consecutive snow days and the "anchor spell" is the spell containing the annual SWE maximum. If the annual SWE maximum falls across more than one day, then the anchor spell will correspond to the period with the first day with the annual SWE maximum. Gages without Daymet coverage carry NA for all snow metrics.
+
+Metrics:
+
+swe_max: Maximum daily SWE in the water year (mm). A snow-free year reports a valid 0.
+
+swe_max_dowy: Day of water year when maximum SWE (i.e., swe_max) occurs . NA in snow-free years.
+
+snow_cover_days: Number of days with SWE ≥ 10 mm. A snow-free year reports a valid 0.
+
+snow_on_dowy: First day of the anchor spell.
+
+snow_off_dowy: First snow-free day after the anchor spell.
+
+melt_season_days: Number of days during the melt season (i.e., between the day of max SWE and the first subsequent day of no snow). Calculated as: snow_off_dowy − swe_max_dowy.
+
+melt_rate: rate of snowmelt during the melt season: swe_max divided by melt_season_days (mm/day; net ablation rate between peak and snow-off).
+
+ssm: Snow seasonality metric = (seasonal snow days − ephemeral snow days) / total snow days, where a seasonal spell lasts at least 60 continuous days (Hatchett 2021; Petersky & Harpold 2018). Ranges −1 (fully ephemeral) to +1 (fully seasonal).
+
+swe_apr1: SWE on April 1.
+
+melt_before_peak: Total melt (sum of daily SWE decreases) occurring before the peak day (mm).
+
+melt_before_peak_pct: melt_before_peak as a percentage of total water-year melt.
+
+melt_before_peak_to_max_swe: Ratio of total melt to maximum SWE: melt_before_peak divided by swe_max.
+
+melt_com_dowy: Day of water year when cumulative melt reaches 50% of the water-year total (melt center of mass).
+
+swe_max_to_ppt: swe_max divided by total water-year precipitation (years with precipitation ≤ 10 mm return NA).
+
+Requirements and decisions:
+
+snow_on_dowy and snow_off_dowy are censored (NA) when the anchor spell touches Oct 1 or Sep 30, since the snowpack predates or outlasts the water year.
+
+Timing and melt metrics are NA in snow-free years; magnitude metrics (swe_max, snow_cover_days, swe_apr1, swe_max_to_ppt) report valid zeros.
+
+In addition to the standard trend-completeness requirements, the ten timing/melt/regime metrics require at least 80% of SWE-valid years in both the first and last decade of the gage's SWE record to be snowy before trend statistics are reported (prevents trends conditioned only on snow-present years at gages whose snow is disappearing or appearing).
+
+### 3.7 Climate Metrics
+
+prcp_annual / _xSeason: total amount of precipitation in one year or season (depth, mm)
+
+prcp_1d_max: maximum precipitation (depth, mm) in a water year
+
+prcp_5d_max: maximum 5 consecutive day precipitation (depth, mm) total in a given water year
+
+prcp_max_dowy: day of water year when maximum precipitation (i.e., prcp_1d_max) occurs
+
+prcp_50_dowy: day of water year when precipitation hits 50% of total annual precipitation (i.e., prcp_annual)
+
+prcp_cm_dowy: center of mass is calculated by summing the day of water year weighted rainfall (mm) and dividing by prcp_annual
+
+prcp_ndays_abv_10mm: number of days in a water year with precipitation above 10mm
+
+prcp_ndays_abv_25mm: number of days in a water year with precipitation above 25mm
+
+prcp_ndays_abv_50mm: number of days in a water year with precipitation above 50mm
+
+prcp_annual_sd: standard deviation for annual precipitation
+
+prcp_annual_cv: coefficient of variability for annual precipitation
+
+precip_intermit_annual: Annual precipitation intermittency; maximum number of consecutive days in water year without precipitation
+
+precip_intermit_annual_dowy_start: day of water year corresponding to the start of the maximum number of consecutive days in water year without precipitation
+
+precip_intermit_annual_dowy_end: day of water year corresponding to the end of the maximum number of consecutive days in water year without precipitation
+
+prcp_gini : Gini index of precipitation, where 0 is perfectly uniform and 1 is all rain occurs on a single day (Sahbeni et al. 2023)
+
+Where G is the Gini index, n is the total number of days, and yi is the precipitation for the ith day
+
+prcp_seasonality_index: quantification of the variability of precipitation through the year. Hypothetically values can vary from 0-1.83, if every month of a year has the same magnitude of rainfall then the value is 0, if total annual rainfall occurs within one month then value is 1.83. Based on calculation from Sumner et al. 1988
+
+where Ri is the total annual precipitation for the particular year under study and Xmm is the actual monthly precipitation for month n.
+
+temp_max_annual: Maximum annual temperature (deg C)
+
+temp_max_annual_dowy: day of water year on which temp_max_annual occurs
+
+temp_min_annual: Minimum annual temp (deg C)
+
+temp_min_annual_dowy: day of water year on which temp_min_annual occurs
+
+temp_max_xSeason: Maximum temperature for each season
+
+temp_min_xSeason: Minimum temperature for each season
+
+frost_first_dowy: First day of water year with minimum daily temperature below 0 degrees C
+
+frost_last_dowy: Last day of water year with minimum daily temperature below 0 degrees C between October and June
+
+GDD_cum_annual: annual growing degree days are a metric of heat accumulation; calculated as the annual cumulative sum of daily growing degree days
+
+GDD = ∑(max(0, Tmax+Tmin)/2)
+
+GDD_cum_xSeason: growing degree days are a metric of heat accumulation; calculated as the cumulative sum of daily growing degree days for each season
+
+GDD = ∑(max(0, Tmax+Tmin)/2)
+
+### 3.8 Drought
+
+Function: calculate_drought_metrics()
+
+Purpose: Drought duration and deficit against fixed percentile thresholds calculated per-water-year, following Adelsperger et al. (in review). Daily flow is first smoothed with a 7-day centered moving average, applied within continuous runs of consecutive dates only (the window never averages across a gap left by a rejected year). Thresholds are magnitude percentiles of the smoothed flow pooled over the gage's whole record, computed with the unbiased Weibull plotting position p = i/(n+1) (Laaha et al. 2017); a gage needs at least 10 qualifying years to receive thresholds. Drought severity levels mirror the U.S. Drought Monitor classes: p30 (D0, abnormally dry), p20 (D1), p10 (D2), p5 (D3), p2 (D4, exceptional).
+
+Metrics:
+
+drought_duration_fixed_p{2,5,10,20,30}: Number of days in the water year with smoothed flow strictly below the threshold (days).
+
+drought_deficit_fixed_p{2,5,10,20,30}: Sum of (threshold − smoothed flow) over those days — the magnitude-weighted counterpart to duration, separating long shallow droughts from short severe ones. Units: mm for area-normalized gages (raw flow units otherwise; see notes).
+
+drought_threshold_fixed_p{2,5,10,20,30}: The threshold values themselves (mm/day for area-normalized gages; one per gage, no statistics), reported so thresholds are auditable.
+
+Requirements and decisions:
+
+A year with no sub-threshold days reports a valid 0, not NA.
+
+Thresholds come from each analysis window's own record, so drought values are comparable within a product but must not be compared across the WY 1993–2025 and WY 1980–2025 products.
+
+The five levels form a severity ladder — duration and deficit are non-decreasing from p2 up to p30 by construction — not five independent measurements.
+
+On strongly intermittent streams the low-level thresholds can be exactly 0; the strict below-threshold comparison then reports 0 duration and 0 deficit every year. Check drought_threshold_fixed_p{n} before reading zeros as "no drought".
+
+drought_duration_fixed_p10 is highly correlated with the low-pulse metrics (both use a 10th-percentile threshold) and should not be presented alongside them as independent evidence.
+
+Units: the duration metrics are scale-invariant and valid for all gages; deficits and thresholds carry flow units, so for the small set of un-normalized gages (area_normalized = false) they are in raw m³/s-based units and are not comparable across gages.
+
+### 3.9 Storage
 
 Functions: analyze_baseflow_indices(), analyze_baseflow_indices_with_parameters()
 
@@ -234,270 +500,6 @@ Requirements and decisions:
 Count the number of recession events in each year.
 
 To control the quality of fitted parameters, calculate recession fits and create a flag for any R² < 0.8.
-
-Function: analyze_Q_PPT_relationships(). Requires precipitation data
-
-Purpose: Analyzes runoff ratios (streamflow divided by precipitation).
-
-Metrics:
-
-runoff_ratio_annual: Annual water year total streamflow divided by annual precipitation (Q/P).
-
-runoff_ratio_Xseason: seasonal streamflow divided by seasonal precipitation.
-
-runoff_ratio_high_count: Count of years where the annual runoff ratio is greater than 2 (per-gage diagnostic scalar).
-
-Requirements and decisions:
-
-Precipitation (PPT) data must be available alongside streamflow (Q).
-
-Same QAQC procedures for Q should apply to NAs (missing data) in precipitation; zero is okay in precipitation data.
-
-Calculates separate runoff ratios for annual and seasonal periods (winter, spring, summer, fall).
-
-Cases where annual PPT < 10 mm or seasonal PPT < 1 mm: the ratio is set to NA.
-
-### 3.4 Flashiness
-
-Function: calculate_pulse_metrics()
-
-Purpose: Calculates metrics for high/low flow pulses (frequency, duration) and flow reversals.
-
-Metrics:
-
-n_high_pulses_year / n_high_pulses_all: Number of high-flow pulse events per year. A high-pulse day is a day with flow above the 90th percentile of flow; _year and _all calculate percentiles from Q for the specified year or the period of record, respectively. A pulse event is a maximal run of consecutive pulse days.
-
-n_low_pulses_year / n_low_pulses_all: Number of low-flow pulse events per year. A low-pulse day is a day with flow below the 10th percentile of flow; _year and _all as above. Zero-flow days are included in all calculations; on strongly intermittent streams the 10th-percentile threshold can be exactly 0, in which case zero-flow days do not count as low-pulse days because the comparison is strictly below the threshold.
-
-dur_high_pulses_year / dur_high_pulses_all: Mean duration in days of high-flow pulses per year.
-
-dur_low_pulses_year / dur_low_pulses_all: Mean duration in days of low-flow pulses per year.
-
-TQmean: Percentage of days with flow above the annual mean.
-
-Flow_Reversals_annual / _xSeason: Number of flow reversals (annual and seasonal). Only includes changes in flow direction exceeding 2% of current flow: a reversal day requires a sign change between the incoming and outgoing day-to-day flow differences, with the outgoing change larger than 2% of that day's flow. Threshold of 2% selected to remove error / noise.
-
-Requirements and decisions:
-
-This metric requires data from across the period of record; confirm that the code can actually calculate the 90th/10th percentiles from the full period of record before the annual metrics.
-
-High/low flow pulses are defined using the 90th and 10th percentiles of flow (Q).
-
-Calculate annual metrics using period-of-record percentiles (_all); the _year variants are retained as a complementary per-year sensitivity.
-
-Function: analyze_flashiness_trends()
-
-Purpose: Calculates the Richards-Baker (R-B) flashiness index by water year from daily streamflow data.
-
-Metrics:
-
-flashinessRB (R-B Index): Sum of absolute differences in consecutive daily streamflow divided by the sum of total flow: R-B = Σ|Q(i) − Q(i−1)| / ΣQ(i) (Baker et al. 2004). Dimensionless; higher values indicate flashier streamflow response. I.e., higher day-to-day change in streamflow relative to total streamflow.
-
-Function: calculate_streamflow_elasticity(). Requires precipitation data
-
-Purpose: Calculates streamflow elasticity, which measures how sensitive streamflow is to changes in precipitation. From Sawicz et al. (2011). Values around 1.0 indicate proportional response; values greater than 1 define the catchment as elastic (sensitive to precipitation change), less than 1 as inelastic.
-
-Metrics:
-
-elasticity_static (departure-from-mean, Sawicz et al. 2011): Overall catchment elasticity — median of annual elasticity values (single per-gage value, no statistics). For each qualifying water year i:
-
-E_i = [ (Q_i − Q_mean) / (P_i − P_mean) ] / (Q_mean / P_mean)
-
-where Q_i and P_i are that water year's total streamflow and precipitation (mm), and Q_mean and P_mean are the means over all qualifying years. Years where |P_i − P_mean| ≤ 0.1 mm are skipped. Then elasticity_static = median(E_i).
-
-elasticity_rolling: Rolling-window elasticity, used to detect trends in catchment sensitivity over time. Same formula, but computed within each window of 11 consecutive qualifying-year observations, using the window's own means (Q_mean_w, P_mean_w):
-
-E_j = [ (Q_j − Q_mean_w) / (P_j − P_mean_w) ] / (Q_mean_w / P_mean_w)
-
-elasticity_rolling(t) = median of the E_j within the window ending in year t.
-
-elasticity_annual (year-over-year differences): Measures year-to-year sensitivity (accounting for antecedent conditions) rather than deviation-from-mean sensitivity:
-
-E_t = [ (Q_t − Q_t−1) / (P_t − P_t−1) ] / (Q_mean / P_mean)
-
-where the differences are between adjacent qualifying years, Q_mean / P_mean are the whole-record means, and the value is assigned to the later year t. Pairs with |P_t − P_t−1| ≤ 0.1 mm are skipped.
-
-elasticity_years_total / elasticity_years_low_ppt: Diagnostic scalars: the number of years available for the gage, and the number excluded for annual PPT below 10 mm.
-
-Requirements and decisions:
-
-Requires daily streamflow (Q) and precipitation (PPT) data; calculating differences between years, so a minimum of two years of "good data" is needed for any pair, and a minimum of 15 years of valid data for the elasticity calculation overall.
-
-Years with annual precipitation < 10 mm are flagged and excluded from analysis.
-
-The year-over-year calculation requires both years of each pair to pass the minimum data requirements (consecutive qualifying years).
-
-Year qualification is handled by the centralized preprocessor (config).
-
-Count the number of years each site doesn't have sufficient data within a year, and what the number of excluded years would be if the threshold were < 30% data missing — added as documentation, not a filter.
-
-Output: elasticity_static is a single value; elasticity_rolling and elasticity_annual each carry the 16 standard statistics (see Part 2). The elasticity family is exempt from the trend-completeness requirements and the 20-value statistics floor (Part 1.3).
-
-### 3.5 Drought
-
-Function: calculate_drought_metrics()
-
-Purpose: Drought duration and deficit against fixed percentile thresholds calculated per-water-year, following Adelsperger et al. (in review). Daily flow is first smoothed with a 7-day centered moving average, applied within continuous runs of consecutive dates only (the window never averages across a gap left by a rejected year). Thresholds are magnitude percentiles of the smoothed flow pooled over the gage's whole record, computed with the unbiased Weibull plotting position p = i/(n+1) (Laaha et al. 2017); a gage needs at least 10 qualifying years to receive thresholds. Drought severity levels mirror the U.S. Drought Monitor classes: p30 (D0, abnormally dry), p20 (D1), p10 (D2), p5 (D3), p2 (D4, exceptional).
-
-Metrics:
-
-drought_duration_fixed_p{2,5,10,20,30}: Number of days in the water year with smoothed flow strictly below the threshold (days).
-
-drought_deficit_fixed_p{2,5,10,20,30}: Sum of (threshold − smoothed flow) over those days — the magnitude-weighted counterpart to duration, separating long shallow droughts from short severe ones. Units: mm for area-normalized gages (raw flow units otherwise; see notes).
-
-drought_threshold_fixed_p{2,5,10,20,30}: The threshold values themselves (mm/day for area-normalized gages; one per gage, no statistics), reported so thresholds are auditable.
-
-Requirements and decisions:
-
-A year with no sub-threshold days reports a valid 0, not NA.
-
-Thresholds come from each analysis window's own record, so drought values are comparable within a product but must not be compared across the WY 1993–2025 and WY 1980–2025 products.
-
-The five levels form a severity ladder — duration and deficit are non-decreasing from p2 up to p30 by construction — not five independent measurements.
-
-On strongly intermittent streams the low-level thresholds can be exactly 0; the strict below-threshold comparison then reports 0 duration and 0 deficit every year. Check drought_threshold_fixed_p{n} before reading zeros as "no drought".
-
-drought_duration_fixed_p10 is highly correlated with the low-pulse metrics (both use a 10th-percentile threshold) and should not be presented alongside them as independent evidence.
-
-Units: the duration metrics are scale-invariant and valid for all gages; deficits and thresholds carry flow units, so for the small set of un-normalized gages (area_normalized = false) they are in raw m³/s-based units and are not comparable across gages.
-
-### 3.6 Flow Timing
-
-Function: analyze_flow_timing_trends()
-
-Purpose: Analyzes the timing of flow events (day of maximum flow, cumulative flow percentiles). Day 1 = start of water year (Oct 1).
-
-Metrics:
-
-Dxx_day: Day of water year when cumulative flow reaches xx percentile. Labeled, for the 20th percentile flow for example, as D20_day. Calculated for percentiles = {1, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 99}.
-
-D25_to_D75: Count of days between 25% and 75% cumulative flow.
-
-Dmax: Water year day of maximum daily flow.
-
-### 3.7 Precipitation Streamflow
-
-Function: calculate_qp_seasonality(). Requires precipitation data
-
-Purpose: Quantifies the seasonality in the relationship between cumulative streamflow (Q) and cumulative precipitation (P). Based on Wrede et al. (2015).
-
-Metrics:
-
-qp_slope_sd: Standard deviation of the 12 monthly mean cumulative Q-P slopes. Higher values indicate stronger seasonal variation in the streamflow-precipitation cumulative relationship.
-
-qp_bimodality: Bimodality coefficient of the Q-P slope distribution = (skewness² + 1) / kurtosis. Values > 0.555 suggest bimodal or strongly seasonal patterns.
-
-Method and parameters:
-
-Requires daily streamflow (Q), precipitation (PPT), month, and day-of-water-year columns; year qualification is handled by the centralized preprocessor.
-
-Calculates a 30-day rolling slope (backward-looking) of cumulative Q vs cumulative P for each water year, then aggregates the rolling slopes to 12 monthly mean values per year.
-
-### 3.8 Snow
-
-Function: calculate_snow_metrics(). Requires SWE data (Daymet)
-
-Purpose: Fourteen metrics are computed from daily snow water equivalent (SWE; Daymet V4) for water years 1980–2023. All metrics operate on a thresholded series SWE* = SWE if SWE ≥ 10 mm, else SWE* = 0. Days with SWE below 10 mm are treated as snow-free for both durations and magnitudes. A "snow day" is a day with SWE* > 0. A "spell" is a maximal run of consecutive snow days and the "anchor spell" is the spell containing the annual SWE maximum. If the annual SWE maximum falls across more than one day, then the anchor spell will correspond to the period with the first day with the annual SWE maximum. Gages without Daymet coverage carry NA for all snow metrics.
-
-Metrics:
-
-swe_max: Maximum daily SWE in the water year (mm). A snow-free year reports a valid 0.
-
-swe_max_dowy: Day of water year when maximum SWE (i.e., swe_max) occurs . NA in snow-free years.
-
-snow_cover_days: Number of days with SWE ≥ 10 mm. A snow-free year reports a valid 0.
-
-snow_on_dowy: First day of the anchor spell.
-
-snow_off_dowy: First snow-free day after the anchor spell.
-
-melt_season_days: Number of days during the melt season (i.e., between the day of max SWE and the first subsequent day of no snow). Calculated as: snow_off_dowy − swe_max_dowy.
-
-melt_rate: rate of snowmelt during the melt season: swe_max divided by melt_season_days (mm/day; net ablation rate between peak and snow-off).
-
-ssm: Snow seasonality metric = (seasonal snow days − ephemeral snow days) / total snow days, where a seasonal spell lasts at least 60 continuous days (Hatchett 2021; Petersky & Harpold 2018). Ranges −1 (fully ephemeral) to +1 (fully seasonal).
-
-swe_apr1: SWE on April 1.
-
-melt_before_peak: Total melt (sum of daily SWE decreases) occurring before the peak day (mm).
-
-melt_before_peak_pct: melt_before_peak as a percentage of total water-year melt.
-
-melt_before_peak_to_max_swe: Ratio of total melt to maximum SWE: melt_before_peak divided by swe_max.
-
-melt_com_dowy: Day of water year when cumulative melt reaches 50% of the water-year total (melt center of mass).
-
-swe_max_to_ppt: swe_max divided by total water-year precipitation (years with precipitation ≤ 10 mm return NA).
-
-Requirements and decisions:
-
-snow_on_dowy and snow_off_dowy are censored (NA) when the anchor spell touches Oct 1 or Sep 30, since the snowpack predates or outlasts the water year.
-
-Timing and melt metrics are NA in snow-free years; magnitude metrics (swe_max, snow_cover_days, swe_apr1, swe_max_to_ppt) report valid zeros.
-
-In addition to the standard trend-completeness requirements, the ten timing/melt/regime metrics require at least 80% of SWE-valid years in both the first and last decade of the gage's SWE record to be snowy before trend statistics are reported (prevents trends conditioned only on snow-present years at gages whose snow is disappearing or appearing).
-
-3.9 Climate Metrics
-
-prcp_annual / _xSeason: total amount of precipitation in one year or season (depth, mm)
-
-prcp_1d_max: maximum precipitation (depth, mm) in a water year
-
-prcp_5d_max: maximum 5 consecutive day precipitation (depth, mm) total in a given water year
-
-prcp_max_dowy: day of water year when maximum precipitation (i.e., prcp_1d_max) occurs
-
-prcp_50_dowy: day of water year when precipitation hits 50% of total annual precipitation (i.e., prcp_annual)
-
-prcp_cm_dowy: center of mass is calculated by summing the day of water year weighted rainfall (mm) and dividing by prcp_annual
-
-prcp_ndays_abv_10mm: number of days in a water year with precipitation above 10mm
-
-prcp_ndays_abv_25mm: number of days in a water year with precipitation above 25mm
-
-prcp_ndays_abv_50mm: number of days in a water year with precipitation above 50mm
-
-prcp_annual_sd: standard deviation for annual precipitation
-
-prcp_annual_cv: coefficient of variability for annual precipitation
-
-precip_intermit_annual: Annual precipitation intermittency; maximum number of consecutive days in water year without precipitation
-
-precip_intermit_annual_dowy_start: day of water year corresponding to the start of the maximum number of consecutive days in water year without precipitation
-
-precip_intermit_annual_dowy_end: day of water year corresponding to the end of the maximum number of consecutive days in water year without precipitation
-
-prcp_gini : Gini index of precipitation, where 0 is perfectly uniform and 1 is all rain occurs on a single day (Sahbeni et al. 2023)
-
-Where G is the Gini index, n is the total number of days, and yi is the precipitation for the ith day
-
-prcp_seasonality_index: quantification of the variability of precipitation through the year. Hypothetically values can vary from 0-1.83, if every month of a year has the same magnitude of rainfall then the value is 0, if total annual rainfall occurs within one month then value is 1.83. Based on calculation from Sumner et al. 1988
-
-where Ri is the total annual precipitation for the particular year under study and Xmm is the actual monthly precipitation for month n.
-
-temp_max_annual: Maximum annual temperature (deg C)
-
-temp_max_annual_dowy: day of water year on which temp_max_annual occurs
-
-temp_min_annual: Minimum annual temp (deg C)
-
-temp_min_annual_dowy: day of water year on which temp_min_annual occurs
-
-temp_max_xSeason: Maximum temperature for each season
-
-temp_min_xSeason: Minimum temperature for each season
-
-frost_first_dowy: First day of water year with minimum daily temperature below 0 degrees C
-
-frost_last_dowy: Last day of water year with minimum daily temperature below 0 degrees C between October and June
-
-GDD_cum_annual: annual growing degree days are a metric of heat accumulation; calculated as the annual cumulative sum of daily growing degree days
-
-GDD = ∑(max(0, Tmax+Tmin)/2)
-
-GDD_cum_xSeason: growing degree days are a metric of heat accumulation; calculated as the cumulative sum of daily growing degree days for each season
-
-GDD = ∑(max(0, Tmax+Tmin)/2)
 
 ## Part 4: Data Ingestion and Utility Functions
 

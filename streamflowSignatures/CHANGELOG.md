@@ -401,6 +401,41 @@ Moved 2026-09-29 to `docs/reconciliation/guidelines_todos.md` and
 
 ## [October 2026]
 
+### Added: manuscript + guidelines accuracy review — claim census tool, ledger, relay note (2026-10-30)
+
+User request 2026-10-30: check the HISSS manuscript and the signature guidelines doc for
+methodological accuracy and verify every "number of X" against the finalized datasets.
+Decisions (user, 2026-10-30): guidelines doc AND deposited dictionary in scope; ecoregions,
+Figure 3 coverage and the §4 quartile wording out of scope; relay as one-line items plus the
+three tables as corrected rows; blind reviews A / B / C + Codex.
+- **New tool** `docs/benchmarks/manuscript_claim_census.py`: recomputes 201 measurements (gage,
+  row, column, year, variable, class, flag and overlap counts) from the HydroShare files as
+  deposited (the MD5-matched staged folders), writing
+  `docs/plans/2026-10-30-manuscript-claim-ledger.csv`; runs in ~10 s; `--skip-heavy` skips the
+  two 100 M-row scans. Every readme number reproduced.
+- **Ledger** `docs/plans/2026-10-30-manuscript-claim-ledger.md` (plan:
+  `2026-10-30-manuscript-accuracy-review-plan.md`): ~100 claims with measured values and
+  statuses; **relay** `docs/reconciliation/2026-10-30-coauthor-relay.md` (54 items; supersedes
+  the 2026-10-12 list). Reviews in `docs/plans/2026-10-30-manuscript-reviews/`.
+- Findings worth a code-side note (no code change): the 60 % gage-inclusion denominator is
+  "window start → the gage's last water year in the window" (`run_julia_benchmark.jl`
+  l. 259–269), which the deposited R1 / R2 readmes misstate as "the window's years"; the seasonal
+  80 % rule masked no valid year in either product and `season_excluded_years_*` counts rejected
+  years too (`io.jl` l. 442); the constant-value flag is an internal diagnostic never exported;
+  the shipped negative-days base is `negative_ann` (lower case). The ~110 km² level-12 mean
+  subbasin area in the manuscript is unsupported (measured ~131 km² over the domain).
+- Codex on the ledger: NO-GO at first (11 MAJOR + 8 MINOR), all applied; the census was tightened
+  on its request (finite-value filter, key uniqueness in both annual parquets, no duplicate dates per
+  gage, all six Daymet variables complete on a 46 × 365 grid; 205 measurements). Guidelines-side
+  error found: §3.9 exempts parameterized BFI from the completeness gates — the code applies them.
+- DECISIONS (user, 2026-10-30): the deposited readmes and dictionary stay as they are (the
+  denominator wording, the "storage" note and the dictionary caveats are too specific for them);
+  nothing is committed or pushed until the manuscript and the guidelines doc are updated with the
+  user; the relay note is not sent — the corrections are worked through section by section instead.
+- Doc sync the same day: guidelines = a pure reorder (3.3 Flow Timing … 3.7 Climate … 3.9
+  Storage); manuscript = major revision (227 vs 106 paragraphs). Repo notes that say "§3.9
+  Climate" now mean §3.7 (not yet rewritten).
+
 ### Qualifier rerun — Phases A–H: the USGS acceptance rule, the climate-frame switch, the version-3 products built and verified (2026-10-26 … 2026-10-28)
 
 Plan `docs/plans/2026-10-21-qualifier-mask-fix-rerun-plan.md` v6; decisions 12–19 taken as
@@ -778,6 +813,9 @@ their defaults when the user said to proceed (2026-10-26). Nothing in `julia/src
     **DECISION (user, 2026-10-30): none of these findings holds up this release** — all noted for a potential
     future release ([Unreleased] → Planned; Known Issues). Collection abstract replaced by the user 13:05 with the
     verified text (nine categories, 8,017 Daymet basins, the zero-strip join rule, the mirror URL) + 4 keywords.
+  - H, commit `86327e8` pushed, mirror published from a clean worktree (2026-10-30, user: "commit and push and
+    mirror the publish"); the parallel manuscript/guidelines review files and its CHANGELOG/STATUS hunks were
+    left out of the commit (its own user decision: not committed until the manuscript and guidelines are updated).
   - H, commit `161c56e` pushed, tag pushed, mirror published (2026-10-28). **DECISION (user,
     2026-10-28): `STREAMFLOW_CLIMATE_FRAME` defaults to `outer`** — the one correct frame is the
     default of the public code, `left` stays as the explicit reproduction mode of every

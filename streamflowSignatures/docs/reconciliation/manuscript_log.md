@@ -8,6 +8,58 @@ Manuscript Reconciliation Log` on 2026-09-29.
 
 ---
 
+**2026-10-30 — MAJOR co-author revision synced (227 vs 106 paragraphs; 15 regions). Snapshot
+overwritten; the reconciliation pass is being run as a claim-by-claim review of the WHOLE
+text (`docs/plans/2026-10-30-manuscript-accuracy-review-plan.md`, user request the same day)
+rather than as a region diff — findings land there and in the consolidated relay note.**
+What changed: Table 1 (data sources), Table 3 (land-cover datasets) and Table 4 (resources)
+are now one-cell-per-paragraph tables in the text; §2.1.1 regains a funnel paragraph ("remove
+ephemeral streams … less than 20 years … polygons smaller than 85,000 km² … 7,964") and the
+compile paragraph; §2.2.1 now says "139 … signatures" and "nine signature families" while the
+§2 preamble still says "121 … 100 annually resolved … plus 21"; §5 Technical Validation
+(three-level audit) is new; Usage Notes are §6.1–6.3; the funding paragraph is filled;
+references renumbered 1–43 (Omernik 42, Hecht 41, Corak VPD 43, Anderson 29 added; Lehner
+2022 lakes is 22). First-read findings, every one to be MEASURED before relay (plan §1):
+Table 1's "6,041 – 7,964" signatures row and "DAYMET (6,041)", "Cathment Polygons 8,014",
+"MODIS 2021-2024 / NLCD 1985-2024", "at least X%"; Table 3's MCD12Q1 "5 schemes / 2021-2024"
+and LAI "2022-2024" against §3's eight schemes / 2001–2024 / 2002–2024; HydroATLAS cited as
+22; §3 R1–R2 still "1,653 columns, 100 × 16, 18,898,406 / 24,366,487 rows, run provenance and
+validation reports, JSON" (seven files deposited, decision 2026-10-29); R3 still "6,087 basins
+(97,757,220 records, 1980–2023)" and credits the metadata table with GAGES-II / RHBN columns it
+does not hold; §2.1.3 "1980–2023", gdptools, "day length"; §2.1.2 "aggregated … only where we
+had sufficient streamflow data coverage"; §2.2.1 "water year and seasonal metrics … 80 %"
+(seasonal only). Carried and still present: seasons Jan–Mar…, gap-rule wording, 85,000 vs
+100,000 km², in-window 20-year floor, cross-references (2.1.1 / 2.1.2 / 5.1.1 / 5.1.3),
+"0103500", "Claude Code 0.145.0", Myneni DOI, the 2026-10-28 relay items 1–4.
+REVIEW RUN THE SAME DAY (user decisions 1a+b, 4a, 7a, 8a; items 2, 3, 5 out of scope): every
+number recomputed from the deposited files by `docs/benchmarks/manuscript_claim_census.py`
+(201 measurements, `docs/plans/2026-10-30-manuscript-claim-ledger.csv`); the ledger
+`docs/plans/2026-10-30-manuscript-claim-ledger.md` holds ~100 rows with measured values and
+statuses; three blind Sonnet reviews + Codex in `docs/plans/2026-10-30-manuscript-reviews/`
+(A numbers: 29 mismatches, all in the ledger; B methods: 7 wrong + 10 imprecise, three new
+rows I5 / I6 / O1; C dictionary definitions: 0 HIGH, 7 MEDIUM omissions). NEW findings beyond the
+first read: (1) the 60 % gage-inclusion denominator is the years from the WINDOW START to the
+gage's LAST water year in the window (`run_julia_benchmark.jl` l. 259–269) — 325 gages of the
+1980–2025 product have fewer than 60 % of the 46 window years; the manuscript is ambiguous and the
+deposited R1 / R2 readmes say "of the window's years" (wrong) — relay item 22 + a note for the
+deposit; (2) the seasonal 80 % rule masked no valid water year in either product (every Qwin…Qfal
+row finite) and `season_excluded_years_*` counts rejected years too; (3) the 20-value floor
+blanks all 16 statistics, not only trends; (4) "storage" is not structurally NA for un-normalized
+gages — only avg_storage and the Q-to-PPT family are; (5) HydroBASINS level-12 "110 km²" is
+unsupported (measured ~131 km² over the domain); (6) Table 1 / Table 3 / Table 4 cells (eight
+MODIS schemes, 2001 / 2002 start years, 8,017 Daymet basins, seven files per signature resource);
+(7) the shipped negative-days column is `negative_ann` (lower case), correcting the 2026-10-12
+relay. Consolidated relay note: `docs/reconciliation/2026-10-30-coauthor-relay.md` (54 items,
+tables as corrected rows; supersedes the 2026-10-12 list and the 2026-10-28 entry above).
+Codex (gpt-6-astra) on the ledger: NO-GO as first written, 11 MAJOR + 8 MINOR, all applied before
+the relay was finalized — the 60 % denominator ends at the gage's last water year WITH DATA (min
+0.600), 7,964 polygons cover 7,960 compiled gages + 4 uncompiled stations, the guidelines wrongly
+exempt parameterized BFI from the completeness gates (relay 52b), the deposited dictionary's
+`_pettitt_pct_change` rows omit the absolute denominator (relay 53a — deposit-side), snow /
+climate annual values begin in WY 1981, "MCD12Q1 … all HISSS watersheds" overstates coverage
+(44 / 45 product gages have none), the Daymet table's key is `site_id`; the "110 km²" and
+"most gages with the same record length" claims are downgraded to not verifiable.
+
 **2026-10-28 — version-3 products built and verified (qualifier mask + climate frame; no
 sync — relay items for the Methods text, due before the deposit).** Manuscript-side:
   1. Qualifier handling needs a sentence: USGS daily values are kept whenever the agency status
