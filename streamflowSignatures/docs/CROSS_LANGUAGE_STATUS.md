@@ -32,7 +32,7 @@ per language below.
 
 ### Climate frame and the qualifier rerun (2026-10-26 … 2026-10-28): runner-level change, library untouched
 
-Full record of the rerun: `docs/plans/2026-10-21-qualifier-rerun-results.md`.
+Full record of the rerun: `docs/QUALIFIER_RERUN_RESULTS.md`.
 
 The three runners build each gage's climate frame through `docs/benchmarks/climate_frame.{jl,py,R}`
 under `STREAMFLOW_CLIMATE_FRAME = left | outer` (CHANGELOG [October 2026]; default `outer` since

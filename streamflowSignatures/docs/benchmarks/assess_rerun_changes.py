@@ -15,6 +15,7 @@ could not run (an input not given) makes the verdict INCOMPLETE (exit 2), never 
         [--gage-a gage_S0.csv --gage-b gage_S2.csv] [--delta-ledger daily_delta_ledger_S0_S2.csv]
         [--daily-a daily_S0.parquet --daily-b daily_S2.parquet] [--e7-annual-json J] [--e7-summary-json J]
         [--expect-identical LIST] [--gages LIST] [--memory-limit 3GB]
+        [--accept-waiver NAME ...] [--max-list 25]
 
 Classes per gage inside the window (plan §5 E5): A-Q = a restored splice-ledger day in a
 water year of the window, or a state-table change the splice caused; A-J = an inserted climate

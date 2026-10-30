@@ -23,6 +23,38 @@ loads every session is `docs/STATUS.md`.
 ## [Unreleased]
 
 ### Planned
+- **Future release — findings of the 2026-10-30 deposit review (DECISION, user, 2026-10-30: "insufficiently
+  meaningful to hold up the release of this version"; noted for a potential future release, the current
+  HydroShare deposit ships unchanged).** Full verified list: `docs/plans/2026-10-21-qualifier-reviews/deposit_review_2026-10-30/TRIAGE.md`.
+  Code (values would change; Julia first, then the Python/rpkg ports, then a product rerun):
+  - [ ] `Flow_Reversals_fall` — the water-year series masked to Sep+Oct+Nov is counted as one run, so Nov 30 →
+    Sep 1 counts as adjacent (`julia/src/pulses.jl`, seasonal loop); count each season on contiguous dates.
+  - [ ] Mann–Kendall tie correction double-counts a tie group holding both −0.0 and +0.0 (`julia/src/stats.jl`,
+    `unique` vs `count(==)`); 13 / 14 deposited series, mostly `elasticity_annual`, tau off < 0.01. Same root
+    cause as the storage year-gate −0.0 item — fix both by normalising −0.0 to +0.0 on input.
+  - [ ] HydroATLAS attributes of mis-snapped outlets (36 gages ≤ 100 km² aggregated over > 100,000 km²; 2,020 rows
+    with `watershed_area_rel_diff` > 0.5): re-snap or mark the rows unusable; state the scale in the readme.
+  Deposited text (re-render + re-upload):
+  - [ ] HydroATLAS dictionary: scale factors of `lka_pc_use`, `dor_pc_pva` (% ×10), `pop_ct_usu` (thousands),
+    `nli_ix_uav` (×100), `hft_ix_u93/u09` (×10); GDP total vs per capita (2011 int. USD PPP, 2015);
+    `outlet_ORDER` is HydroBASINS classical order, not Strahler; class legends; a boundary-layer dictionary.
+  - [ ] Vegetation readme: the NLCD explorer shows the NLCD table's union flag, not the boundary flag;
+    dictionary `n_composites` = mean over all tiles of the month's run (not the basin's tiles);
+    `good_coverage_frac` modal denominator; 37 unnamed LULC class codes; dtype column; LAI explorer
+    "older version" phrase.
+  - [ ] Signatures readmes/dictionaries: the qualification denominator (window start → the gage's last
+    in-window year, not the full window); `_pettitt_pct_change` uses abs(pre_mean) and NA ≤ 1e-10; the
+    20-value floor on every statistic; climate/snow signatures share the streamflow year mask and no Canadian
+    gage has WY 2025; drought zero-threshold wording (negative flows); `avg_storage` = storage at mean Q;
+    `_pettitt_delta_mean` units; percentile-order `≤`; `negative_ann_*` counts interpolated days; recession
+    phase convention; annual-Parquet columns + dtypes; forcing-quality flags pointer; explorer colour scale
+    pooling the raw-m³/s gages.
+  - [ ] Input dictionary: `no_area_reference` = fallback AND no published area; the 0.5 / `coverage_sum < 4`
+    thresholds; agency flag-code legend (`Dis`, `Eqp`, `Fld`, `Ssn`, `Mnt`, `***`, `[4]`).
+  - [ ] All five readmes: "Hydrologic Information Signatures and Summary Statistics" → "Hydroclimate
+    Information, Signatures and Summary Statistics" (the resource titles and abstracts already use it).
+  Repo docs (not deposited; may be fixed any time): `EO_data_processing/geometry/README.md`, `README_DAYMET.md`
+  (53 large basins), `EO_data_processing/README.md` (LULC 102 class columns), `R/aggregate_hydroatlas_metadata.R`.
 - **Climate on Daymet's own dates — the fix for the streamflow-frame Known Issue (found
   2026-10-16) — APPROVED 2026-10-26 (user with the research team; plan decision 5 reversed)
   and folded into the qualifier rerun.** The runner-level fix is IMPLEMENTED (Phase A′,
@@ -31,14 +63,15 @@ loads every session is `docs/STATUS.md`.
   (2026-10-27/28, not yet deposited) and `outer` is the DEFAULT since 2026-10-28 (user
   decision; Phase H below). Design: `docs/plans/2026-10-16-precipitation-review.md` §5 and
   the rerun plan §10.
-- **Daymet climate input: the product-rerun decision is PENDING (NEXT).** The reprocessed
+- **Daymet climate input: IN USE since the version-2 builds of 2026-10-12/13 and the version-3
+  products (2026-10-27); open only for the co-author confirmation of polygons / weights / fill.** The reprocessed
   input `daymet_1980_2025_29sep2026.parquet` (8,017 basins, calendar 1980–2025, no NaN) was
   built 2026-09-30 and adversarially reviewed 2026-10-01. On the 5,965 basins with stale
   data it reproduces the co-authors' series. The user accepted it on raw-data equivalence
   and dropped the signature replay (DECISION, 2026-10-01); the questionable polygons are
-  kept and flagged in `daymet_basin_flags.csv`. No product uses it yet. A rerun on it would
-  give 1,165 (#1) / 615 (#2) more gages usable climate, complete the four all-NaN Florida
-  gages (Known Issues) and regenerate `flagged_for_high_na` (below). On the 16 GB laptop,
+  kept and flagged in `daymet_basin_flags.csv`. The reruns on it gave 1,165 (#1) / 615 (#2)
+  more gages usable climate, completed the four all-NaN Florida gages (Known Issues) and
+  regenerated `flagged_for_high_na` (below). On the 16 GB laptop,
   run Julia in gage batches with `docs/benchmarks/run_batched_julia.py`. Record:
   `[October 2026]`, `[September 2026]` and the action plan §0
   (`docs/plans/2026-09-29-daymet-reprocessing-action-plan.md`); the superseded planning
@@ -134,9 +167,13 @@ loads every session is `docs/STATUS.md`.
 - BFImax estimation via Collischonn & Fan (2013) backward filter — would give BFI_Eckhardt_param per-gage BFImax instead of fixed 0.8, improving discriminating power (currently range [0.47–0.80] due to BFImax saturation)
 
 ### Known Issues
+- **Deposited signature values carry two small code defects (found 2026-10-30, LOW, both version-3 products;
+  DEFERRED to a future release by user decision 2026-10-30):** `Flow_Reversals_fall` counts a spurious Nov 30 →
+  Sep 1 transition (up to ±2 per gage-year); the Mann–Kendall tie correction double-counts ±0.0 ties (13 / 14
+  series). The HydroATLAS attribute table keeps 36 mis-snapped small-gage rows. Planned item above; TRIAGE file.
 - **Compiled USGS records drop every day whose NWIS qualifier is `A R` (approved, "records
   revised") — HIGH, every product (found 2026-10-21).** `generate_streamflow_dt`
-  (`R/helperFunctions.R`) keeps a value only when the qualifier string is exactly `A`, `A e`,
+  (`R/helperFunctions.R`, the rule until 2026-10-26) kept a value only when the qualifier string was exactly `A`, `A e`,
   `P` or `P e`; `R` = "Records for these data have been revised" marks an APPROVED value. In
   `combined_streamflow_data_09feb2026.parquet`: 181,461 `A R` days on 755 gages are NA, plus
   the other approved remark codes `A <` (11,444 days / 139 gages), `A >` (218 / 30) and `A [4]`
@@ -150,7 +187,7 @@ loads every session is `docs/STATUS.md`.
   …; 15,257 days on 263 gages) are masked too; many of those days carry a value at the agency
   today under a new status, their February state is unknowable. Fix = the rule in `keep_codes`,
   a re-fetch and splice, a rerun of both products with the gage sets FROZEN (user decision
-  2026-10-23) — NOT applied; plan v3 `docs/plans/2026-10-21-qualifier-mask-fix-rerun-plan.md`,
+  2026-10-23) — APPLIED in the version-3 products (Phases A–H, [October 2026]); plan v3 `docs/plans/2026-10-21-qualifier-mask-fix-rerun-plan.md`,
   **DECISIONS (user, 2026-10-26): every default of plan v3 approved** (restore `R`, `<`, `>`,
   `[4]` with the censored bounds kept as values; provisional-remark days out of scope; splice as a
   patched snapshot with ledger, raw responses and the three-dataset control; gage sets frozen;
@@ -492,7 +529,7 @@ their defaults when the user said to proceed (2026-10-26). Nothing in `julia/src
   built for the user's data review only (run folder `preview_1993_2025/`, `review_<WU>/`; not
   published).
 - **Phases D–H executed (2026-10-26 … 2026-10-28).** Consolidated record:
-  `docs/plans/2026-10-21-qualifier-rerun-results.md`; dated log with every defect and review
+  `docs/QUALIFIER_RERUN_RESULTS.md`; dated log with every defect and review
   disposition: plan §11; run folder `~/HISSS_data/qualifier-rerun-26oct2026/` (`README.md` there).
   - D: S0 = version 2 bitwise on both windows (decision 18); the version-3 products built from
     the clean worktree of the tag — #1 6,678 gages / 27,766,578 annual rows, #2 6,250 /
@@ -518,6 +555,229 @@ their defaults when the user said to proceed (2026-10-26). Nothing in `julia/src
     control report, oracle and an executable reconstruction recipe (verified); `check` PASS. Not
     uploaded. Version-3 docs: README, STATUS, DEVELOPMENT, DATA_SOURCES, CROSS_LANGUAGE_STATUS, the
     user skill, `python/README.md`, the reconciliation logs (co-author relays).
+  - H, deposit review of R1 (2026-10-29). **DECISION (user, 2026-10-29): the HydroShare deposit is the FIRST AND ONLY public version** — nothing was ever published, so no user-facing text carries a version label, "previous build", "supersedes", "corrected (this version)" or "regenerated" wording, and the validation files that only compare against an internal build (change census, classes, port check) are not deposited. Mechanics: the signature README now comes from
+    `docs/benchmarks/hydroshare_readme_signatures.tmpl.md` (every number from the files; the join rule, the known issues
+    `ice_affected_days_total` = 0 and `flagged_for_qann_range` 22 / 32, the missing-value tokens, the code-mirror link,
+    the two manifest rows); run notes without previous-build text; dictionary rows in the table's column order, the
+    three reworded definitions without history; the explorer's three title strings and subtitle source name patched
+    by the staging tool (`--explorer-title-drop`; `build_signature_explorer.py --source-label` for future builds);
+    `check` refuses version / previous-build wording. R1 re-staged (data files byte-identical, 156 files). Blind review
+    of LIVE (the August 2026 upload) vs NEW by three Sonnet reviewers + Codex: data CLEAR — the 1,653 original columns
+    in order, 0 Q-only / metadata cells changed on the 5,779 non-restored gages, 0 Q-only annual keys lost, every
+    difference in the four allowed classes (restored USGS days; reprocessed Daymet + outer frame; the 39-base climate
+    family; the regenerated `flagged_for_high_na`); the one lost key (`elasticity_annual` 05527500 WY 2018: |ΔP| fell
+    under the 0.1 mm floor), the rescaled elasticities of 11239300 (record-wide Q/P normalization after WY 2024 gained
+    climate) and the multi-day snow-timing flips (thresholded SWE spells, 5e-5 relative SWE change) traced to class 2.
+    DECISION (user, 2026-10-29, later): the deposit replaces only the files already in each resource — for R1 the
+    seven August files, the sidecar as a ZIP (`--deposit minimal`, default; the README's file table and the gage-set
+    pointer follow the mode; `check` verifies the ZIP against the folder). Not uploaded yet (the user uploads).
+  - H, deposit review of R2 (2026-10-29, later). LIVE R2 (August upload, 7 files, 5 byte-identical to the August staging; readme /
+    dictionary = the Aug-25 uploads) vs the re-staged folder: three blind Sonnet reviewers (tables / explorer + ZIP / documents) + Codex
+    (tables): data CLEAR — 6,932,166 Q-only + metadata cells string-identical on the 5,493 non-restored gages, 0 Q-only annual keys lost,
+    72,644 Q-only keys gained (all on the 757 restored gages), climate `_mean` / `_median` never value→NaN, every trend-statistic
+    value→NaN reproduced by the trend gate (0 mismatches on the 22 gated climate signatures), `flagged_for_high_na` 1,243 → 345
+    reproduced from the table, all 139 sidecar series = the parquet, ZIP clean. **DECISION (user, 2026-10-29): the repo's canonical
+    categories are used throughout the deposit** (H1 of `docs/plans/2026-09-10-manuscript-category-edits.md` §C, applied): the staging
+    tool generates `hisss_signature_categories.csv` from `docs/signature_categories.csv` (signature, kind, category, function_family;
+    139 annual + 21 scalars, table column order) and sets the dictionary's category column from the same sheet; readme lede and
+    file-table row name the nine categories. Document fixes from the review (template + tool, both R1 and R2 re-rendered; data files
+    untouched): the join rule now states that the input-data gage-metadata table stores EVERY USGS id zero-stripped (verified: none of
+    its 9,154 all-digit ids starts with 0; 3,982 / 4,373 leading-zero ids of R2 / R1 match only after stripping) — "some long" was
+    wrong; the climate-metrics bullet claimed timing columns that do not exist (only `prcp_max_dowy`, `temp_max_annual_dowy`,
+    `temp_min_annual_dowy` carry timing); `ice_affected_days_total` wording no longer asserts a cause; the Pettitt sentence is
+    window-aware (`${pettitt_note}`). The R1 / R2 abstracts' contents sentence names only the seven deposited files and the nine
+    categories. Upload sets: `~/Downloads/hisss_R{1,2}_upload_2026-10-29/` (seven files each, same names as the live files) with
+    MD5 notes beside them; R1's readme, dictionary and categories file changed after the hand-over (noted in its MD5 note).
+  - H, deposit review of R3 (2026-10-29, night; user: "full review and update of the six files"). LIVE R3 (August upload, 6 files;
+    the four data files byte-identical to the August staging, readme / dictionary = the Aug-25 uploads) vs a re-staged six-file folder:
+    `stage_hydroshare_qualifier_v3.py inputs` rewritten for the three decisions (`--deposit minimal`, the default: the corrected
+    streamflow parquet under the live name, the patched metadata, the reprocessed Daymet parquet, the HYDAT table, dictionary and
+    README generated with every number read from the files and the three data inputs checked against the sha256 the products
+    recorded; `--companions` adds the ledger, the Daymet flags, the two gage-selection lists and the would-qualify list; `--deposit
+    full` = the former 26-file scheme; `check --deposit / --companions`; `copy()` clones with `cp -p -c`). Three blind Sonnet reviewers
+    (streamflow + metadata + HYDAT / Daymet / documents) + Codex (streamflow + metadata): data CLEAR — 193,542 Q cells NA → finite,
+    all on ledger keys with flags `A R` / `A <` / `A >` / `A [4]`, 0 off-ledger changes, every non-Q cell bit-identical in all 909 row
+    groups, NA rows 587,752 → 394,210; metadata 88 rows changed (`num_years` / `num_days`; `end_year` on 2), all ledger gages, and the
+    compile's year rule reproduces the metadata on 8,014 / 8,014 compiled gages; Daymet compared exhaustively on the 5,965 shared
+    basins (95,797,900 cells per variable: max |Δ| 0.0152 mm prcp, 0.0029 °C temperature, 0.263 mm swe, 0.256 Pa vp, 0.0925 W/m²
+    srad; annual prcp totals within ±0.012 %), 365 rows per site-year, no NaN, 8,013 compiled gages + 4; HYDAT md5 identical. Document
+    findings (all applied in the tool and re-rendered): the HYDAT release 2025-10-14 is stated as INFERRED (H3 of
+    `docs/plans/2026-09-10-manuscript-category-edits.md` §C done); the request window 1979-10-01 – 2025-10-01 replaces "ends at the
+    retrieval"; Daymet basin counts (8,013 compiled + 4 non-compiled), overlapping low-confidence reasons and the flagged basins'
+    product membership; the join-rule counts are computed (direct-id matches and pad-to-8 misses among the 8,014 compiled gages);
+    negative Q documented with its row count; the dictionary `flag` row no longer contradicts its NULL-flag count. Reviewer notes:
+    the ledger's conversion is 86400·10⁶ / 3280.84³ = 2.4465753 per km², not 2.44657 (a rounding in the brief; data exact); 554
+    negative and 12,035 zero restored values are the agency's served values. OPEN (user): the R1 / R2 readmes point readers to the
+    ledger, the gage-selection lists and the would-qualify list "in the input-data resource" — add the five small companion files to
+    R3 (`--companions`) or reword those two readmes. **DECISION (user, 2026-10-29, night): the five companion files are ADDED to
+    R3** — the deposit is eleven files (six replaced in place, five added: correction ledger, Daymet flags, two gage-selection lists,
+    would-qualify list); staged at `~/Downloads/Signatures_v3_28oct2026/resource3_input_data/` (the six-file rendering kept at
+    `…_six_files_2026-10-29/`), upload set `~/Downloads/hisss_R3_upload_2026-10-29/` + MD5 note; reviewer C round 3 on the added
+    rows (every number verified: ledger byte-identical to the rerun's, selection lists = the products' first column, would-qualify
+    31 + 29 all failing at baseline and passing after; its minor items applied: dictionary rows for every ledger column and for
+    `in_product`, the per-gage wording of the possible-years columns, `canon_id` marked zero-stripped). The signatures readme template
+    no longer says the input-data resource "holds the compile" (the February table is not deposited under the first-version rule) —
+    R1 / R2 readmes re-rendered, data untouched. Session scratch `hs_r3/` (brief, hash manifests, the reports).
+  - H, deposit review R5 (assessed) and R4 (done), 2026-10-29 night / 2026-10-30. **R5** (Vegetation and Land Cover,
+    `27da6208…`; live files downloaded loose, seven of nine — the LAI parquet and the NLCD exclusions list not yet):
+    five byte-identical to the August staging; readme / dictionary are the Aug-25 versions (the Sep-4 join-rule and
+    coverage patches were never uploaded — the live text says `gage_id` is zero-padded and joins the products directly,
+    wrong for 44 ids, and understates the coverage counts by 35 / 9). Recomputed against the frozen gage sets (identical
+    to the August products, same order): MODIS 6,634 / 6,205, NLCD 5,454 / 5,007; every product gage without a MODIS
+    record is one of the 53 large Canadian basins. The three EO explorers render CARTO's "API KEY REQUIRED" watermark
+    (tiles return HTTP 200; `check_html_basemap.py` screenshot). OPEN (user): upload the Sep-4 docs with two wording
+    fixes ("validated June 2026 delivery"; dictionary rows naming `combined_watershed_metadata`) and rebuild the
+    explorers. R3 nit found on the way (NOT applied; R3 is staged): the flags dictionary's `no_area_reference` row
+    ("no published drainage area to compare against") describes a flag set only on HydroBASINS fallbacks (27 / 27;
+    68 official-polygon basins without a published area are unflagged). **R4** (geometry / attributes, `1283981f…`;
+    live = `~/Downloads/hisss-file5/`): six files byte-identical to the August staging, readme Aug-25. Findings:
+    (1) the readme's "four US gages included in the boundary layer from the signature products" is WRONG — 01591000 /
+    01591400 / 01591610 / 01591700 are in neither product (metadata `processing_status` 'processing'); (2) a
+    reproducibility GAP — R3's Daymet table was aggregated over the FULL-RESOLUTION outlines plus the 53 basins
+    > 100,000 km², while R4 deposits the 200 m simplification without them, and neither readme said so (the
+    simplified polygons move prcp annual totals within ±0.1 % and swe within ±2.5 %, p01–p99, 2023 gate).
+    **DECISION (user, 2026-10-30): R4 = readme replaced + the unsimplified layer ADDED as a GeoPackage** — the second
+    exception to replace-only. New tool `docs/benchmarks/stage_hydroshare_r4_geometry.py`: writes
+    `hisss_watershed_boundaries_unsimplified.gpkg` (8,017 polygons, 1,491,255,296 B, md5 `865268468f94003b055edb0104e72219`)
+    from the Daymet build's verified parquet (`watershed_polygons_fullres_large_29sep2026.parquet`, rebuilt
+    byte-identically 2026-10-01) and verifies it WKB-identical (polygons promoted to multipolygons, as the GPKG
+    driver stores them); computes every readme number (sources 6,164 / 1,823 / 30; `low_confidence` 57 = 56 +
+    `02OA024`; the 141 guard basins agree to 1e-13° — the two builds ran in different environments, so not byte-
+    identical; every other shared basin < 2 % in area, max 1.99 %; overlaps 7,960 / 8,013; every product gage has a
+    polygon in the new layer, the simplified one lacks 44 / 45; the 9 un-padded ids in both layers); renders readme +
+    abstract (first-version framing; "June delivery" → build; the attribute table's USGS ids have 8 / 9 / 10 / 15
+    digits — the dictionary's "8-digit" row left as deposited, flagged in the readme); copies the six unchanged
+    files, writes manifests; `--upload` → `~/Downloads/hisss_R4_upload_final_2026-10-30/` + MD5 note (final readme md5
+    `f7f6a587996e3ead4141047d8b651ef8`, 12,698 B). Blind review: Sonnet A (data) CLEAR — GeoPackage = parquet on all
+    8,017 geometries and 12 attribute columns, every readme number reproduced; Sonnet B (docs) two rounds, all wording
+    items applied (WKB-identical wording, the Daymet effect quoted with its 1st–99th-percentile qualifiers, computed
+    snippet examples 01011000 / 02HA003, "17,166 … across all HISSS tables"); Codex (data, read-only sandbox) ANOMALY,
+    all MINOR and all applied — two August-era readme claims were false as written: "zero duplicate … geometries"
+    (ids are unique but 8 groups of co-located gages share one outline, 7 in the unsimplified layer — now computed
+    and stated) and "identical content in both formats" for the attribute CSV / parquet (the decimal export agrees to
+    5e-10 — now computed and stated); plus the guard-basin tolerance (1.3e-13°, not 1e-13°), the area maximum (1.990 %),
+    the 97.8 % denominator (7,896 polygons with a published area), the opening "29" qualified per layer, and the Daymet
+    effect dated to its 2023 gate. Follow-ups:
+    one clause in the R3 readme pointing to the unsimplified layer; the R4 dictionary `gage_id` row. Staged
+    `~/Downloads/Signatures_v3_28oct2026/resource4_geometry_attributes/`. Session scratch `hs_r5/` (R5 checks,
+    `review_brief_r4.md`, `review_r4_{A,B,codex}/`).
+  - H, deposit update of the Vegetation and Land Cover resource (R5, `27da6208…`), 2026-10-30 morning. The user
+    uploaded the Watershed Geometry and Basin Attributes set (readme replaced, unsimplified GeoPackage added) and, by
+    mistake, the same two files into the Vegetation and Land Cover resource (removed the same day). Live copies
+    re-downloaded (`~/Downloads/hisss-vegetation-and-land-cover-current/`): the two annual parquets and the three
+    explorers byte-identical to the August staging, the dictionary the Aug-25 version (CRLF); the LAI parquet, the
+    exclusions list and the EO readme were not in the download (never were in any of the user's downloads) — the user
+    confirms them on the page. **DECISIONS (user, 2026-10-30): (1) readme + dictionary re-staged with the fixes;
+    (2) the three explorers rebuilt; (3) the two stray files deleted.** New tool
+    `docs/benchmarks/stage_hydroshare_eo_docs.py`: computes every readme number from the tables and asserts the
+    invariants (LAI 2,150,280 rows = 7,964 × 270 months, 17 all-NA basins; LULC 191,136 rows, 102 class columns in
+    8 schemes summing to 100 within 1e-13; NLCD 250,879 rows, 6,119 gages, 16 classes, C1V2; 45 Alaska exclusions =
+    the EO-universe US gages absent from NLCD; 44 un-padded ids = the EO ids that differ from the attribute table's
+    agency form, all 9–10 digits with a leading zero; EO universe = the deposited simplified layer, 7,964 = 8,017 − 53;
+    product coverage 6,634 / 6,205 with exact-join deficits 35 / 9, every missing gage among the 53 large basins; NLCD
+    5,454 / 5,007, every missing US gage Alaskan or large; the dictionary covers every column), renders the readme
+    (universe paragraph rewritten: the products were computed on the June 2026 layer deposited as the simplified
+    GeoPackage; the 53 large basins + `05KH009` have no EO record; the unsimplified layer in the geometry resource was
+    not used; "validated June 2026 delivery" → build; the metadata table joins on `canon_id`; the basemap sentence),
+    patches the dictionary (the three `canon_id` rows and the two exclusion-list rows named the internal
+    `combined_watershed_metadata` → the deposited `hisss_gage_metadata.csv`; LF endings), asserts no forbidden
+    wording, writes the manifest; `--upload` → `~/Downloads/hisss_vegetation_and_land_cover_upload_2026-10-30/`
+    (readme 11,252 B md5 `a2bc8a4e747507c2bdc8ca3ecfc1561a`, dictionary 28,645 B, three explorers) + MD5 note.
+    Explorer rebuild: `EO_data_processing/viz/build_{lai,lulc,nlcd}_explorer.py` took no arguments and hard-coded
+    SageMaker paths incl. the lost June `geometry_7964.gpkg` → `--input / --legend / --geom / --out` (defaults = the
+    original paths), `read_geom()` (GeoPackage or GeoParquet, attribute columns only), `align_ids()` (geometry rows
+    keyed to the EO tables' `gage_id` through the zero-stripped `canon_id`, hard fail on an unmatched gage — an exact
+    `gage_id` join against the deposited layer drops 35 gages, because the EO tables store 44 long USGS ids un-padded
+    and the layer 9); the templates already carried the 2026-10-13 basemap fix. Run folder
+    `~/HISSS_data/eo-explorers-rebuild-30oct2026/` (README, build.log, screenshots): inputs = the deposited tables +
+    the deposited simplified layer; 14 s. Checks: embedded data vs the live pages identical per gage (gage sets, every
+    map variable, every series, definitions, band / class metadata); the template text differs only in the basemap
+    block; `check_html_basemap.py` PASS (Esri tiles 200, layers control, no CARTO request, screenshots clean). ONE
+    DIFFERENCE, investigated: `low_confidence` of `04HA001` (ECCC polygon, Albany River near Hat Island) — yes in the
+    live LAI / LULC pages (57 flagged, June 2026 layer), no in the deposited August layer (56; relative area difference
+    0.243 against the 118,000 km² reference, below the 0.5 `area_flag` rule). The June record names `04HA001` with
+    `06FD001` / `06FB001` as official polygons flagged for a reported area far above the polygon; the other two are
+    still flagged (10× / 26×), every metadata copy on record gives 118,000 km² for `04HA001`, and the June polygon's
+    MODIS pixel count matches the August polygon within 0.4 %, so the June flag is not reproducible from the rule and
+    the inputs on hand (the June QA table was lost with the storage transition). Disposition: the explorers show the
+    deposited layer's flag, the readme names the basin, no data value is affected. Blind reviews (Sonnet A data,
+    Sonnet B documents, Codex): outcome in the next bullet.
+  - H, Vegetation and Land Cover — blind reviews and final staging, 2026-10-30 ~09:30. Sonnet A (data) CLEAR:
+    every map variable and series of the NLCD page and all gages' `lai_mean` / `LC_Type1` (45–46 gages on every
+    statistic and band) recomputed from the tables, coordinates and flags against the deposited layer, basemap by
+    headless browser; two MINOR applied — the Leaflet layers control was hidden under the definitions-panel button
+    (moved to the top-left under the zoom control) and the NLCD page's exclusion note named the pipeline's
+    `nlcd_out_of_footprint` (now the deposited file); the tables' own `low_confidence` columns measured (LAI 57 = the
+    June geometry flag; LULC 62 = that flag or `low_pixel_support`, five basins under 5 MODIS pixels; the deposited
+    layer 56) — the explorers show the layer's flag (their description now says so), the readme states all three.
+    Sonnet B (documents) CLEAR: every readme number reproduced, the Python snippet run as written; MINOR applied —
+    the dictionary's `CAVEAT_footprint` row named the internal file; the 04HA001 sentence now says the tables keep the
+    June flag; the snippet drops the duplicate `gage_id` column; the 50 % rule glossed. Codex (read-only) ANOMALY:
+    two MAJOR were artefacts of the review window (the second build changed the files mid-review; an intermediate
+    tool snapshot asserted the LULC flag equals the layer's — both already superseded); two MAJOR applied —
+    `--explorers` is now required (omitting it staged the CARTO explorers under a readme promising the keyless
+    basemap) and the dictionary's `valid_coverage_frac` definition was WRONG as deposited in August (it said fill is
+    excluded from the denominator; `nlcd_pipeline.py` divides the valid classified area by the whole polygon area) —
+    corrected, with `valid_area_km2` (missing the m² → km² conversion) and `n_composites` (counts composites read, not
+    "QA-good"); MINOR applied — the tool's assertions now prove unique complete gage × period grids, NLCD class sums
+    and ranges, LULC sums within 1e-6, the simplified-layer identity from the GeoPackage itself, `05KH009`'s
+    placement, the exclusion list's longitude; the 280× and 16-year figures are computed; the 44-id sentence names
+    the 35 / 9 deficits; "equivalent by every recorded measure" dropped; the builders refuse duplicate ids instead of
+    dropping them and check longitude too (third build byte-identical to the second). Kept as is: "17,166 distinct
+    stations" (collection-wide, as in the other readmes; not computable from this resource). Final staging
+    `~/Downloads/Signatures_v3_28oct2026/resource5_eo_products/` (manifest `hisss_staging_manifest_eo.csv`): readme
+    12,107 B md5 `a66b9ae81a186ee19c45a1eba3f05ad0`, dictionary 28,779 B md5 `45cc6a0c27e08208e7119205df53a9ce`
+    (eight rows changed against the live dictionary), explorers md5 `a64ba0b9…` / `04fe0220…` / `3c5fae10…`; upload
+    set `~/Downloads/hisss_vegetation_and_land_cover_upload_2026-10-30/` (five files) + MD5 note. Reports: session
+    scratch `hs_r5/review_eo_{A,B}/report.md`, `review_eo_codex/out.txt`. UPLOADED by the user 2026-10-30 ~09:30 and
+    VERIFIED: the seven files re-downloaded (`~/Downloads/eo-files-current/`) match the staged MD5s byte for byte. OPEN
+    (anomaly): the user reports the resource holds SEVEN files — `hisss_modis_lai_monthly.parquet` and
+    `hisss_nlcd_excluded_gages.csv` have been absent from every download of this resource since 2026-10-29, so the
+    August upload was probably incomplete; the two files are prepared for an ADD
+    (`~/Downloads/hisss_vegetation_and_land_cover_ADD_if_absent_2026-10-30/`, md5 `a1711a33…` / `8a976e05…`).
+    2026-10-30 ~09:45, user: "we are now fully updated" — all five resources carry their 2026-10-29/30 upload sets;
+    the two added files were not re-downloaded, so their live MD5s are unverified (the user compares on the page).
+  - H, live-state verification of all five HydroShare resources, 2026-10-30 ~10:30–11:00 (user: "confirm
+    or deny that we have successfully updated all documents"). Done through the user's signed-in Chrome session
+    (the Claude extension, selected as "Browser 1"; the previous extension instance opened session-less windows
+    parked below the display): `/hsapi/resource/<id>/files/` per resource. HydroShare 4.0.1 stores S3 ETags, not
+    MD5s — `<hex>-1` = md5(binary md5(file)), reproduced EXACTLY from the local upload copies for every
+    single-part file (29 of 42); multipart ETags (`-N`, 13 files) are not reproducible (part size unknown, 13
+    hypotheses tested), so those are verified by exact byte size + no other same-size local version outside the
+    staging lineage; file bodies are served cross-origin (opaque redirect) and cannot be fetched for hashing.
+    RESULT: Harmonized Input Data (11 files), Watershed Geometry and Basin Attributes (8) and Vegetation and
+    Land Cover (9, incl. the two ADDed files) are CURRENT. **Signatures Product 1993-2025 is NOT fully updated:**
+    uploaded 2026-10-29 17:57 EDT, BEFORE the evening re-render (18:38) and the night readme change (19:43) —
+    live `hisss_signature_categories.csv` is the pre-decision two-column file (3,433 B, md5 `9edec8dc…`, 139
+    rows; ETag reproduced), live dictionary 799,843 B and readme 10,841 B are the 17:57 versions (final: 799,151 /
+    10,927 B); the four data/explorer files are size-exact. **Signatures Product 1980-2025: readme only** — uploaded
+    18:50 EDT, so dictionary + categories are ETag-exact but the readme is the evening version (11,108 B; final
+    11,095 B, the one-sentence February-compile note). The collection's own title reads "Hydroclimate
+    Information, Signatures and Summary Statistics" vs the members' "Hydrologic Information …" (manuscript_log
+    item 6; user decision). The page UI shows no MD5 in view mode. Report + tools:
+    scratchpad `hs_live/REPORT_live_verification_2026-10-30.md` (session-local). The "fully updated" line above
+    is therefore corrected: four document files still need replacing from the existing upload folders.
+    2026-10-30 ~11:10: the user replaced the four files; re-fetched listing — all four single-part ETags
+    reproduced exactly from the upload copies (dictionary 799,151 B, readme 10,927 B, categories 7,691 B;
+    1980-2025 readme 11,095 B). **All five resources are now verified current** (29/42 files ETag-exact,
+    13 multipart files size-exact).
+  - H, Codex adversarial review of all five HydroShare resources, 2026-10-30 12:32–14:13 (user request: "check
+    each of the constituent files in the 5 products for accuracy and completeness"; five serial `codex exec`
+    runs, read-only, on the byte-verified upload copies). Reports + triage:
+    `docs/plans/2026-10-21-qualifier-reviews/deposit_review_2026-10-30/` (TRIAGE.md). Data reproduce
+    (means/medians/Pettitt/flags/selection/ledger/Daymet/geometry/explorer payloads). VERIFIED defects that
+    change values: `Flow_Reversals_fall` joins Nov 30 to Sep 1 within the water year (`pulses.jl` seasonal
+    loop); Mann–Kendall tie correction double-counts a ±0.0 tie group (`stats.jl`; 13 / 14 series, mostly
+    `elasticity_annual`); 36 HydroATLAS rows of mis-snapped small gages aggregated over > 100,000 km².
+    VERIFIED wrong deposited text: six HydroATLAS scale factors + GDP total/per-capita missing from the
+    attributes dictionary; Vegetation readme's NLCD-explorer flag sentence and the `n_composites`
+    definition (both staged 2026-10-30); the "≥ 60 % of the window's years" wording (implemented denominator:
+    window start → the gage's last in-window year); `_pettitt_pct_change` abs denominator. Plus documentation
+    gaps (TRIAGE §B–C). Nothing changed in the deposit; decisions pending with the user. Live abstracts of
+    four resources replaced by the user 12:44–12:54 and re-verified against the data (all figures correct).
+    **DECISION (user, 2026-10-30): none of these findings holds up this release** — all noted for a potential
+    future release ([Unreleased] → Planned; Known Issues). Collection abstract replaced by the user 13:05 with the
+    verified text (nine categories, 8,017 Daymet basins, the zero-strip join rule, the mirror URL) + 4 keywords.
   - H, commit `161c56e` pushed, tag pushed, mirror published (2026-10-28). **DECISION (user,
     2026-10-28): `STREAMFLOW_CLIMATE_FRAME` defaults to `outer`** — the one correct frame is the
     default of the public code, `left` stays as the explicit reproduction mode of every
@@ -533,8 +793,37 @@ their defaults when the user said to proceed (2026-10-26). Nothing in `julia/src
     in favour of a pointer to `R/usgs_qualifiers.R` (the acceptance rule that keeps every `A` / `P`
     status with a finite value, remark codes in `flag`, fixed at Phase A). Verification: fixture
     self-tests Julia 41 / Python 38 / R 43 PASS (each gained a default-mode check),
-    `selftest_run_batched_julia.py` 28/28, `R/tests/test_qualifier_codes.R` 37 PASS, every wrapper
+    `selftest_run_batched_julia.py` 28/28, `R/tests/test_qualifier_codes.R` 37 PASS (+5 integration checks where lubridate is installed), every wrapper
     parses, both product-folder guards fire. Nothing in the three libraries; no product touched.
+  - **Currency review, 2026-10-29** — four blind Sonnet reviewers by area (Julia, Python, R,
+    documentation + mirror) and a Codex pass over the whole tree, brief
+    `docs/plans/2026-10-21-qualifier-reviews/review_brief_currency.md` (reports
+    `sonnet_currency_review_{julia,python,r,docs}.md`, `codex_currency_review.md`): GO WITH CHANGES, no
+    blocker. Verified independently: every headline number (rows, gages, restored days, cohorts, the
+    staging manifests), the mirror = HEAD minus the exclusions at `713fdbf`, 12 wrappers 10 `left` / 2
+    `outer`, both guards fire, Julia 3,184 / Python 177 / rpkg 1,218 expectations pass. APPLIED (code):
+    `run_batched_julia.py`'s stage record claimed `outer (default)` whenever `--climate-frame` was unset,
+    although ten wrappers pin `left` → records "unset (the wrapper's pin, else the helper default)" and
+    the merged `climate_frame` keeps coming from the batches' own timing JSON; docstring and help
+    reworded; the three runners record `climate_frame_applied` beside the resolved mode (`left` on the
+    Julia legacy branch and the rpkg legacy path, null when no climate was joined — the Python legacy
+    path joins none); `splice_nwis_qualifiers.py` tokenises exactly like `R/usgs_qualifiers.R`
+    (`[\s:,]`); `R/tests/test_qualifier_codes.R`'s optional integration branch put the −999999
+    sentinel on an `A R` day and then required every approved-remark day kept — contradictory and
+    never executed here (lubridate installed 2026-10-29: 1 FAIL reproduced, fixed, 42 / 42); the
+    forensic `min_flow_rule_{footprint,replay}.py` date the four-string rule; five tool docstrings list
+    every flag. APPLIED (docs): the climate-frame defect still read "KNOWN ISSUE, fix on hold" in
+    `docs/SIGNATURES.md` (×3), `docs/DEVELOPMENT.md` and the user skill → FIXED in version 3, `outer`
+    default; the Planned Daymet entry and `docs/DATA_SOURCES.md` still said no product used the
+    reprocessed input; `run_r_benchmark.R` was called canonical (legacy monolith, no frame switch);
+    the 15,257 P-remark days stay NA in the patched parquet although a fresh ingestion keeps them —
+    stated in DEVELOPMENT and DATA_SOURCES; README front page: one public "version 2" paragraph
+    (no internal paths or `docs/plans/` links), 2,277 columns, nine categories; `flagged_for_high_na`
+    471 / 345 TRUE in version 3 recorded; STATUS condensed (Daymet and climate-metrics items closed,
+    superseded v2 rows folded, 47 lines); the results record moved to `docs/QUALIFIER_RERUN_RESULTS.md`
+    so public pointers (README, CROSS_LANGUAGE_STATUS, the staged run notes) resolve in the mirror; the
+    staged run notes' `split` example lacked `--out-dir` and pointed at `docs/plans/` → staging tool
+    and both staged files patched, the R3 abstract says "included twice", manifest rows refreshed.
 
 ### Reviewed: what the compilation's flow rule removed; the `A R` qualifier mask found (2026-10-21)
 

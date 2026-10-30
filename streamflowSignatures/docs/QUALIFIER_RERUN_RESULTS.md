@@ -1,9 +1,11 @@
 # Qualifier-mask + climate-frame rerun — fixes, final artefacts and results (2026-10-28)
 
-The consolidated record of the rerun that produced the **version-3 products** (public name "version 2").
-Design and decisions: `2026-10-21-qualifier-mask-fix-rerun-plan.md` (v6; §10 the stage design, §10.5 the
+The consolidated record of the rerun that produced the **version-3 products** (deposited without a version label: the first and only public version — user decision 2026-10-29).
+Design and decisions: `docs/plans/2026-10-21-qualifier-mask-fix-rerun-plan.md` (v6; §10 the stage design, §10.5 the
 census gates, §10.6 decisions 12–19); its §11 is the dated progress log with every run, defect and review
-disposition. Reviews verbatim: `2026-10-21-qualifier-reviews/` (index there). Run folder:
+disposition. Reviews verbatim: `docs/plans/2026-10-21-qualifier-reviews/` (index there). `docs/plans/` is the
+internal record and is not shipped in the public mirror; this file is (moved here from `docs/plans/` on 2026-10-29).
+Run folder:
 `~/HISSS_data/qualifier-rerun-26oct2026/` (its `README.md` maps every subfolder, log and script).
 
 ## 1. What was wrong and what was fixed
@@ -15,7 +17,7 @@ disposition. Reviews verbatim: `2026-10-21-qualifier-reviews/` (index there). Ru
 
 User decisions that shape the result: the gage sets are **frozen** at the version-2 cohorts (6,678 / 6,250;
 no new watershed, 2026-10-23) — 31 / 29 gages that would qualify under the corrected record are listed, not
-added; the two fixes go into one rerun (2026-10-26); internal "v3", public "version 2".
+added; the two fixes go into one rerun (2026-10-26); internal "v3"; the public deposit carries no version label (user decision 2026-10-29: nothing was published before, so the deposit is the first and only version).
 
 ## 2. Final code
 
@@ -41,7 +43,7 @@ added; the two fixes go into one rerun (2026-10-26); internal "v3", public "vers
 | Product #2 v3 — WY 1980–2025, 6,250 gages, 2,277 columns, 34,813,881 annual rows | `processedOuts_1980_2025_climate_v3_26oct2026/` (same contents) |
 | Corrected input + provenance | `input/` (patched parquet + metadata, ledger, `nwis_cache/`, control report, `oracle/`, audit), `manifests/` (selection, affected, expected-identical, stage cohorts) |
 | rpkg reference on #1 v3 | `rpkg_reference_1993_2025_28oct2026/` (gates in `gate_*.txt`) |
-| HydroShare staging (local, public name "version 2", nothing uploaded) | `~/Downloads/Signatures_v3_28oct2026/` R1 / R2 / R3 + `hisss_staging_manifest_*.csv` |
+| HydroShare staging (local, no version label, nothing uploaded) | `~/Downloads/Signatures_v3_28oct2026/` R1 / R2 / R3 + `hisss_staging_manifest_*.csv` |
 | Verification record per window | `census_<WU>/` (change census, gates JSON, classes), `e7_<WU>/` (port gates), `attribution_<WU>/`, `bprime_<WU>/` (delta ledgers, state tables), `S0_<WU>/`, `S1_<WU>/`, `S1prime_<WU>/` |
 | Internal data review (user only, not for publication) | `review_<WU>/` (min / max / mean summaries) + the dashboards |
 
@@ -91,5 +93,34 @@ PASS means agreement under the named allowances listed in the gate files, not un
 
 Done 2026-10-28: commit `161c56e` pushed, tag pushed, mirror published; DECISION (user): the
 climate-frame default is `outer` (helpers, batch-runner record, wrappers, self-tests, docs updated
-the same day — CHANGELOG [October 2026], Phase H). Open: the HydroShare deposit of the staged
-folders (the user uploads, planned 2026-10-29); the co-author relays (`docs/reconciliation/`).
+the same day — CHANGELOG [October 2026], Phase H). Done 2026-10-29: currency review of code and
+docs (four blind Sonnet reviewers by area + Codex, `docs/plans/2026-10-21-qualifier-reviews/`): GO WITH
+CHANGES, every finding applied (CHANGELOG [October 2026]); this record moved to `docs/` for the public
+mirror. Done 2026-10-29: R1 deposit review (LIVE August upload vs the staged folder; three blind Sonnet reviewers +
+Codex): data CLEAR; DECISION (user): the deposit is the first and only public version — no version label, the
+internal-comparison validation files withdrawn — and R1 re-staged from the template (CHANGELOG Phase H). Done 2026-10-29
+(later): R2 deposit review (same design, three blind Sonnet reviewers + Codex): data CLEAR; DECISION (user): the repo's
+canonical categories throughout the deposit (categories file + dictionary category column generated from
+`docs/signature_categories.csv`, both resources); readme join rule corrected (the input-data gage-metadata table stores
+every USGS id zero-stripped). Done 2026-10-29 (night): R3 deposit review (the six live files re-staged with the tool's
+rewritten `inputs` path; three blind Sonnet reviewers + Codex): data CLEAR — the streamflow table differs from the live
+copy in exactly the 193,542 ledger cells, the metadata in 88 ledger rows reproduced by the compile's year rule on all
+8,014 compiled gages, the Daymet table reproduces the live series on the 5,965 shared basins within the documented
+tolerances; document fixes applied (HYDAT release stated as inferred, request window, computed join-rule counts, negative
+Q, flag-row NULL count). Open: the R1 / R2 / R3 uploads (the user uploads; MD5 notes beside
+`~/Downloads/hisss_R{1,2,3}_upload_2026-10-29/`); DECISION (user, 2026-10-29): R3 also carries the five companion files the R1 / R2 readmes point to
+(ledger, Daymet flags, gage-selection lists, would-qualify list; `--companions`). Done 2026-10-30: R4 deposit review
+(six live files byte-identical; the readme's "four gages from the signature products" sentence corrected — they are in
+neither product; the full-resolution outlines that R3's Daymet table was aggregated over were not deposited anywhere):
+DECISION (user): the R4 readme is replaced and the unsimplified boundary layer ADDED as a GeoPackage (8,017 polygons;
+`docs/benchmarks/stage_hydroshare_r4_geometry.py`; Sonnet A data CLEAR, Sonnet B docs two rounds applied). R5 assessed
+the same night (data unchanged; the Sep-4 readme / dictionary patches and the explorer rebuild are open user
+decisions). Done 2026-10-30 (later): the user uploaded the geometry set and removed the same two files from the Vegetation
+and Land Cover resource, where they had landed by mistake; DECISIONS (user): that resource's readme and dictionary are
+re-staged with the fixes (`docs/benchmarks/stage_hydroshare_eo_docs.py`, every number computed) and its three explorers
+rebuilt (builders given path arguments and zero-stripped id alignment; run folder
+`~/HISSS_data/eo-explorers-rebuild-30oct2026/`; embedded data identical per gage to the live pages, basemap fixed; the
+`low_confidence` flag of `04HA001` differs between the June layer and the deposited one, documented). Upload set
+`~/Downloads/hisss_vegetation_and_land_cover_upload_2026-10-30/` + note; three blind reviews (Sonnet A CLEAR, Sonnet B
+CLEAR, Codex ANOMALY — an August dictionary definition corrected, tool and builders hardened) applied, CHANGELOG Phase H. Open: the Vegetation and Land Cover upload (the user also confirms the LAI parquet and the exclusions
+list on the page); the co-author relays (`docs/reconciliation/`, consolidated relay note to follow).

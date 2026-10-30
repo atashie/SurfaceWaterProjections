@@ -3,7 +3,7 @@
 Every adversarial review of the rerun, verbatim, newest last. Dispositions (what was accepted, what was
 applied and where) are in the plan's progress log, `../2026-10-21-qualifier-mask-fix-rerun-plan.md` §11, one
 row per round; the plan's Codex-findings tables (§9) hold the plan-review rounds. The consolidated results
-are in `../2026-10-21-qualifier-rerun-results.md`.
+are in `../../QUALIFIER_RERUN_RESULTS.md`.
 
 | Date | File | Scope | Verdict |
 |---|---|---|---|
@@ -20,3 +20,9 @@ are in `../2026-10-21-qualifier-rerun-results.md`.
 | 2026-10-28 | `sonnet_phase_DEH_review_evidence_tooling.md` | executed rerun evidence, post-tag tool patches, stage attribution | GO WITH CHANGES (no blocker / major) → applied |
 | 2026-10-28 | `sonnet_phase_DEH_review_staging_docs.md` | staged deposit folders, version-3 docs, staging tool | GO WITH CHANGES (no blocker) → applied |
 | 2026-10-28 | `codex_phase_DEH_review.md` | everything above, independently recomputed | GO WITH CHANGES (4 MAJOR, no blocker) → applied |
+| 2026-10-29 | `review_brief_currency.md` | the brief of the currency review after the default flip (`713fdbf`) | — |
+| 2026-10-29 | `sonnet_currency_review_julia.md` | Julia library, runner, helper, 12 wrappers, guards, unit suite | GO WITH CHANGES (4 MINOR) → applied |
+| 2026-10-29 | `sonnet_currency_review_python.md` | Python port, runner, batch runner, tools, pytest | GO WITH CHANGES (2 MAJOR) → applied |
+| 2026-10-29 | `sonnet_currency_review_r.md` | R ingestion chain, qualifier rule and test, rpkg, R runners | GO WITH CHANGES (2 MAJOR) → applied |
+| 2026-10-29 | `sonnet_currency_review_docs.md` | cross-document numbers, stale text, STATUS discipline, mirror diff, dead links | GO WITH CHANGES (3 MAJOR) → applied |
+| 2026-10-29 | `codex_currency_review.md` | everything above, whole tree, independently recomputed | GO WITH CHANGES (3 MAJOR, no blocker) → applied |

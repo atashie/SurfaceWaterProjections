@@ -329,9 +329,11 @@ Baker, D.B., et al. (2004). A new flashiness index: characteristics and applicat
 
 ### Data Quality
 - Year qualification is handled centrally by `preprocess_daily_data()` (PPT-valid years).
-- KNOWN ISSUE (2026-10-16, fix on hold): PPT is joined onto the streamflow ROWS, so a date
-  absent from the streamflow record is interpolated in PPT as well (storm days → biased
-  low); the ratios inherit it. See §14 → Data quality and caveats.
+- Climate frame: since the version-3 products (built 2026-10-27; `STREAMFLOW_CLIMATE_FRAME=outer`,
+  the runners' default since 2026-10-28) PPT enters the screening on Daymet's own calendar, so
+  a date absent from the streamflow record keeps its precipitation. Every earlier product
+  joined PPT onto the streamflow ROWS and interpolated such days (storm days → biased low);
+  the ratios inherit it there. See §14 → Data quality and caveats.
 
 ---
 
@@ -537,9 +539,9 @@ days below the threshold are treated as snow-free for durations AND magnitudes
   therefore interpolated across that boundary in leap years rather than
   observed. Longstanding behavior — not introduced by the 2026-08-11 parquet
   rebuild, which reproduces it faithfully.
-- Days absent from the streamflow record are absent from SWE (and PPT) as well and are
-  interpolated although Daymet has them — KNOWN ISSUE of 2026-10-16, fix on hold (§14 →
-  Data quality and caveats).
+- Days absent from the streamflow record keep their SWE (and PPT) since the version-3
+  products (`STREAMFLOW_CLIMATE_FRAME=outer`); in every earlier product they were absent from
+  SWE as well and interpolated although Daymet has them (§14 → Data quality and caveats).
 - Snow metrics only run on an explicitly provided, SWE-valid-year-filtered frame
   (`snow_data`); an SWE column in the main gage frame is never used implicitly.
 
@@ -776,16 +778,20 @@ against and the annual values are bit-identical across Julia, Python and R.
   batch-1 gages, 480 such gage-years, Sonnet review 2026-10-12): mean 0.25 % of the annual
   total, median 0.1 %, max 2.1 %; above 10 mm in 5 % of those gage-years, so
   `prcp_ndays_abv_10mm` can count one unobserved day.
-- **Days absent from the streamflow record (KNOWN ISSUE, 2026-10-16; fix on hold).** The
-  benchmark runners join each gage's Daymet series onto its streamflow ROWS, so a date with
-  no streamflow row at all (not a row with NA) reaches the preprocessor without PPT either
-  and is linearly interpolated like a climate gap (≤ 3 days; a longer run rejects the year
-  for Q anyway). Gages drop out preferentially in storms, so that year's totals, wet-day
-  counts and 5-day maximum run low. Measured on the WY 1993–2025 version-2 product: 919 of
-  200,832 `prcp_annual` gage-years (0.46 %), median 6 mm, max −606 mm; 8 gages'
-  `prcp_annual_mean` off by more than 1 % (02146285 −24.5 %). TMIN/TMAX and SWE behave the
-  same. User decision 2026-10-16: documented, not fixed until discussed with the research
-  team — CHANGELOG → Known Issues; `docs/plans/2026-10-16-precipitation-review.md`.
+- **Days absent from the streamflow record (found 2026-10-16; FIXED in the version-3
+  products, built 2026-10-27).** Until then the benchmark runners joined each gage's Daymet
+  series onto its streamflow ROWS, so a date with no streamflow row at all (not a row with
+  NA) reached the preprocessor without PPT either and was linearly interpolated like a
+  climate gap (≤ 3 days; a longer run rejects the year for Q anyway). Gages drop out
+  preferentially in storms, so that year's totals, wet-day counts and 5-day maximum ran low.
+  Measured on the WY 1993–2025 version-2 product: 919 of 200,832 `prcp_annual` gage-years
+  (0.46 %), median 6 mm, max −606 mm; 8 gages' `prcp_annual_mean` off by more than 1 %
+  (02146285 −24.5 %). TMIN/TMAX and SWE behaved the same. Since the version-3 products the
+  runners build each gage's frame through `docs/benchmarks/climate_frame.{jl,py,R}` under
+  `STREAMFLOW_CLIMATE_FRAME=outer` (the default since 2026-10-28; `left` reproduces the
+  earlier join): Daymet's own calendar inside the record span and the gage's water years, so
+  annual totals equal the daily sums. Every product before version 3 carries the defect —
+  CHANGELOG → Known Issues; `docs/plans/2026-10-16-precipitation-review.md`.
 - **Non-finite inputs** (NaN, ±Inf) are missing observations in preprocessing for every
   series, and the climate kernels require finite values (a year with a residual
   non-finite value is NaN in every metric).

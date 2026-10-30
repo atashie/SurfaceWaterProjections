@@ -5,7 +5,7 @@ per-gage scalar and QA flag compared cell for cell.
 
     python docs/benchmarks/check_summary_equality.py --ref REF.csv --cand CAND.csv [--rtol 1e-6] [--atol 1e-12]
         [--ref-annual REF_annual.parquet --cand-annual CAND_annual.parquet] [--waive-column REGEX ...]
-        [--gages LIST] [--max-show 20] [--out REPORT.json]
+        [--gages LIST] [--allow-gate-state-column REGEX ...] [--max-show 20] [--out REPORT.json]
 
 Gates (all must hold): the same gage set and header; every non-numeric cell identical (metadata,
 flags, strings); every numeric cell within |d| <= atol + rtol*max(|a|,|b|) with GATE-STATE agreement

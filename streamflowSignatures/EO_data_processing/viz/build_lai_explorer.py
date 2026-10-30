@@ -14,23 +14,49 @@ lazily on click, so the whole product inlines into one double-clickable file.
 Usage: /home/sagemaker-user/.conda/envs/geo/bin/python EO_data_processing/viz/build_lai_explorer.py
 Output: data_out/eo_lai/lai_explorer.html
 """
-import os, json
+import os, json, argparse
 import numpy as np, pandas as pd, geopandas as gpd
 
 ROOT="/home/sagemaker-user/SurfaceWaterProjections/streamflowSignatures"
 LAI=f"{ROOT}/data_out/eo_lai/out_qa/watershed_modis_lai_monthly.parquet"
 GEOM=f"{ROOT}/data_out/eo_lai/geometry_7964.gpkg"
 OUT=f"{ROOT}/data_out/eo_lai/lai_explorer.html"
+# The three paths above are the June 2026 build; pass --input / --geom / --out to build elsewhere.
 MONTHS_ABBR=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
 # time-series stats to inline (order matters; the JS reads this order). 1-dp (LAI*10 int) encoding.
 TS_STATS=["lai_min","lai_q05","lai_q25","lai_q50","lai_mean","lai_q75","lai_q95","lai_max"]
 
+
+GEOM_COLS=["gage_id","canon_id","latitude","longitude","watershed_geom_source","low_confidence"]
+
+def read_geom(path,cols=GEOM_COLS):
+    """Attribute columns of the watershed layer (GeoPackage or GeoParquet); geometries are not needed. Ids must be
+    unique in both forms (a duplicate would otherwise pick one row silently)."""
+    geo=pd.read_parquet(path,columns=cols) if str(path).endswith(".parquet") else gpd.read_file(path,ignore_geometry=True)[cols]
+    for c in ("gage_id","canon_id"): geo[c]=geo[c].astype(str)
+    geo=pd.DataFrame(geo).reset_index(drop=True)
+    for c in ("gage_id","canon_id"):
+        if geo[c].duplicated().any(): raise SystemExit(f"geometry layer: duplicate {c}: {sorted(geo.loc[geo[c].duplicated(),c])[:10]}")
+    return geo
+
+def align_ids(geo,df):
+    """Key the geometry rows to the EO table's gage_id through the zero-stripped canon_id. The EO tables and the
+    boundary layer pad long USGS site numbers differently (44 vs 9 ids stored without their leading zero), so an
+    exact gage_id join would silently drop gages. Every EO gage must have a geometry row; unused rows are dropped
+    and the geometry order is kept."""
+    ids=df[["gage_id","canon_id"]].drop_duplicates().copy(); ids["canon_id"]=ids.canon_id.astype(str)
+    for c in ("gage_id","canon_id"):
+        if ids[c].duplicated().any(): raise SystemExit(f"EO table: a {c} maps to several ids: {sorted(ids.loc[ids[c].duplicated(),c])[:10]}")
+    m=geo.drop(columns="gage_id").merge(ids,on="canon_id",how="inner")
+    missing=sorted(set(ids.canon_id)-set(m.canon_id))
+    if missing: raise SystemExit(f"{len(missing)} EO gages have no geometry row, e.g. {missing[:10]}")
+    print(f"  geometry rows {len(geo):,} -> {len(m):,} matched on canon_id ({len(geo)-len(m)} unused)",flush=True)
+    return m.reset_index(drop=True)
+
 def main():
     print("loading LAI panel + geometry ...",flush=True)
     df=pd.read_parquet(LAI); df["gage_id"]=df.gage_id.astype(str)
-    geo=gpd.read_file(GEOM,ignore_geometry=True)
-    geo["gage_id"]=geo.gage_id.astype(str)
-    geo=geo[["gage_id","canon_id","latitude","longitude","watershed_geom_source","low_confidence"]].drop_duplicates("gage_id")
+    geo=align_ids(read_geom(GEOM),df)
 
     # ---- month grid (shared across all gages) ----
     df["ym"]=df.year*12+(df.month-1)
@@ -130,7 +156,7 @@ def main():
         "peak_month":(peak_month,"Climatological month of peak LAI (greenest month, averaged over years)",MONTHS_ABBR),
         "trough_month":(trough_month,"Climatological month of minimum LAI (least-green month)",MONTHS_ABBR),
         "watershed_geom_source":(geo.watershed_geom_source.fillna("NA").tolist(),"Basin polygon source: gagesii / wsc_eccc / hydrobasins",None),
-        "low_confidence":([("yes" if int(v)==1 else "no") for v in geo.low_confidence.fillna(0)],"Geometry/coverage low-confidence flag (HydroBasins fallback or area outlier)",None),
+        "low_confidence":([("yes" if int(v)==1 else "no") for v in geo.low_confidence.fillna(0)],"Low-confidence flag of the deposited watershed boundary layer (HydroBasins fallback or area outlier); the table's own low_confidence column is a separate QA flag",None),
     }
     VARS=[]; V={}
     for k,(vals,desc) in cont.items():
@@ -325,7 +351,7 @@ function hisssBasemap(map, variant, maxZoom, position) {
   L.control.layers(groups, null, {position: position || 'topright', collapsed: true}).addTo(map);
   return groups;
 }
-hisssBasemap(map, 'light', 19, 'topright');
+hisssBasemap(map, 'light', 19, 'topleft');   // under the zoom control; the top-right corner holds the definitions panel
 
 // ---------- color scales ----------
 const VIR=[[68,1,84],[59,82,139],[33,145,140],[94,201,98],[253,231,37]];
@@ -524,4 +550,10 @@ buildDefs(); populateVars();
 </html>
 """
 
-if __name__=="__main__": main()
+if __name__=="__main__":
+    ap=argparse.ArgumentParser(description="Build the self-contained MODIS LAI map explorer.")
+    ap.add_argument("--input",default=LAI,help="monthly basin LAI parquet")
+    ap.add_argument("--geom",default=GEOM,help="watershed layer (GeoPackage or GeoParquet) with gage_id, canon_id, latitude, longitude, watershed_geom_source, low_confidence")
+    ap.add_argument("--out",default=OUT,help="output HTML")
+    a=ap.parse_args(); LAI,GEOM,OUT=a.input,a.geom,a.out
+    main()

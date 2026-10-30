@@ -116,7 +116,7 @@ def _file_info(path, hash_big):
     return info
 
 
-def _provenance():
+def _provenance(climate_frame_applied=None):
     hash_big = os.environ.get("STREAMFLOW_HASH_INPUTS", "") == "1"
     here = Path(__file__).parent
     try:
@@ -146,6 +146,9 @@ def _provenance():
                 "STREAMFLOW_ALLOW_LEGACY", "STREAMFLOW_CLIMATE_FRAME"]
     return {
         "climate_frame": climate_frame_mode(),   # resolved STREAMFLOW_CLIMATE_FRAME (2026-10-26)
+        # what the join actually used (2026-10-29): None = no climate joined (no climate file, or the
+        # legacy path, which never joins climate in this runner)
+        "climate_frame_applied": climate_frame_applied,
         "streamflow": _file_info(STREAMFLOW_PATH, hash_big),
         "climate": _file_info(CLIMATE_PATH, hash_big),
         "metadata": _file_info(METADATA_PATH, hash_big),
@@ -699,7 +702,7 @@ def main():
     timing["n_signature_columns"] = len(results_df.columns) - n_meta - n_flags
     timing["n_metadata_columns"] = n_meta
     timing["n_qaqc_flags"] = n_flags
-    timing["provenance"] = _provenance()
+    timing["provenance"] = _provenance(None if (not has_climate or use_legacy) else climate_frame)
 
     timing_path = OUTPUT_DIR / f"{OUTPUT_PREFIX}_timing.json"
     with open(timing_path, "w") as f:

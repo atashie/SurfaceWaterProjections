@@ -24,6 +24,7 @@ Subcommands (run them in this order):
            request URL, window included), retried, >= --sleep s apart. Writes
            fetch_report.csv (one row per gage and series) next to the cache.
   splice   --parquet P --metadata M --masked masked_rows.parquet --cache-dir C --out-dir D
+           [--universe CSV] [--parquet-out NAME] [--metadata-out NAME]
            Q_new = value_today * conversion on the masked splice-code days that carry a
            finite, non-sentinel value today; everything else untouched; identical schema and
            row order. Writes the patched parquet, correction_ledger.csv, provenance.json and
@@ -32,7 +33,9 @@ Subcommands (run them in this order):
            Old rule vs new rule on the October fetch, and the October values against the
            February non-NA values (B2 conversion identity / source-difference report).
   audit    --parquet P --patched P2 --metadata M --metadata-patched M2 --ledger L
-           --masked masked_rows.parquet --cache-dir C --out-dir D
+           --masked masked_rows.parquet --cache-dir C --control CSV --out-dir D [--audit-universe CSV]
+           [--expect-splice-days 193542] [--expect-provisional-days 15257] [--b2-min-share 0.95]
+           [--b2-gage-min-share 0.5] [--expect-window 1979-10-01..2025-10-01] [--universe-scope]
            Gates B1–B6 and B8 -> input_audit.md + CSVs (B7 is qualifier_year_oracle.py).
 
 Needs pyarrow and pandas only (the repo .venv): `.venv/bin/python -I docs/benchmarks/splice_nwis_qualifiers.py ...`.
@@ -47,6 +50,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -83,10 +87,8 @@ def status_letter(flag):
     """First token of a NWIS qualification string ('' when absent) — R/usgs_qualifiers.R."""
     if flag is None or (isinstance(flag, float) and math.isnan(flag)):
         return ""
-    s = str(flag).strip()
-    for sep in (" ", "\t", ":", ","):
-        s = s.split(sep)[0]
-    return s
+    # the same separators as R/usgs_qualifiers.R (`[[:space:]:,]`): any whitespace, ':' or ','
+    return re.split(r"[\s:,]", str(flag).strip(), maxsplit=1)[0]
 
 
 def categorize(flag):

@@ -69,7 +69,7 @@ gage_data <- df[df$gage_id == "01011000", ]
 results <- calculate_all_signatures(gage_data, has_climate = FALSE)
 ```
 
-**Producing the full product**: the bare `calculate_all_signatures` call returns the 8 statistics per signature. The full 1,653-column summary additionally requires the `changepoint` configuration (Pettitt fields), an explicit `snow_data` frame (snow metrics), and climate data (`has_climate = true` + PPT); the annual-values parquet is a separate sidecar produced by passing the annual-values collector (it has no effect on the summary). The benchmark runners wire all of this up and are the reference entry points:
+**Producing the full product**: the bare `calculate_all_signatures` call returns the 8 statistics per signature. The full 2,277-column summary (1,653 before the climate family of 2026-10-12) additionally requires the `changepoint` configuration (Pettitt fields), an explicit `snow_data` frame (snow metrics), and climate data (`has_climate = true` + PPT); the annual-values parquet is a separate sidecar produced by passing the annual-values collector (it has no effect on the summary). The benchmark runners wire all of this up and are the reference entry points:
 
 ```bash
 julia --project=julia docs/benchmarks/run_julia_benchmark.jl   # canonical full pipeline
@@ -111,7 +111,7 @@ category is computed by one or more **function families** — the 17 functions t
 That is 139 annually resolved signatures (100 through August 2026 + 39 climate metrics,
 October 2026) plus 20 per-gage scalars across the nine categories. One further scalar, `ice_affected_days_total`, is a preprocessing
 diagnostic outside the categories (and structurally 0 in the delivered products — see
-CHANGELOG → Known Issues). **Terminology**: *category* is one of the eight above (the
+CHANGELOG → Known Issues). **Terminology**: *category* is one of the nine above (the
 term used by the manuscript, the guidelines document, and the HydroShare data
 dictionary); *function family* is the function that computes a metric.
 
@@ -125,8 +125,8 @@ Julia is canonical; all changes start there. Python and rpkg were validated at f
 |---|---|---|---|---|---|
 | **Python** | 1,653 | 1,615 / 1,620 (99.7%) | 0 | 0.999988 | 2026-08-26 |
 | **rpkg** | 1,653 | 1,601 / 1,620 (98.8%) | 9 | 0.999843 | 2026-08-27 |
-| **rpkg** (version-2 reference: climate family, reprocessed Daymet) | 2,277 | 2,228 / 2,244 (99.3%) | 6 | 0.999925 | 2026-10-13 |
-| **rpkg** (version-3 reference: corrected USGS qualifiers, climate on Daymet's calendar) | 2,277 | 2,227 / 2,244 (99.2%) | 6 | 0.999922 | 2026-10-28 |
+| **rpkg** (intermediate build of 2026-10-13: climate family, reprocessed Daymet; superseded) | 2,277 | 2,228 / 2,244 (99.3%) | 6 | 0.999925 | 2026-10-13 |
+| **rpkg** (version 2 as published: corrected USGS qualifiers, climate on Daymet's calendar) | 2,277 | 2,227 / 2,244 (99.2%) | 6 | 0.999922 | 2026-10-28 |
 
 Both ports pass strict schema equality (identical column and gage sets), a swallowed-failure log gate, and cross-language annual-parquet equality (18,898,405 of 18,898,406 rows shared, 0 NA-pattern mismatches). The few remaining sub-0.99 columns were characterized library-level differences (near-zero-tail OLS in FDC90th and downstream Pettitt tie flips; Spearman p-value methods at small n — the latter removed on 2026-10-12, when rpkg moved to `cor.test(exact = FALSE)` and a double-precision Mann-Kendall; the rpkg reference was re-baselined on the version-2 product on 2026-10-13 and on the version-3 product on 2026-10-28, with the 39 climate signatures bit-identical in every annual cell both times). All implementations share configuration via `config/signatures_config.json`.
 
@@ -176,9 +176,7 @@ Two delivered products (both 1,653 columns, 60% qualifying fraction), published 
 
 Neither is a subset of the other, and record-dependent signatures must never be compared across them (thresholds come from each run's own window).
 
-**Version 2 (built 2026-10-12/13, validated, staged for deposit, not yet published):** both windows rerun on the reprocessed Daymet input (`daymet_1980_2025_29sep2026.parquet`, every gage, calendar 1980–2025) with the 39-signature climate family — 2,277 columns, the same gage sets (6,678 / 6,250), annual parquets of 27,602,161 / 34,681,331 rows. Q-only columns are identical to the 2026 deliveries per gage; climate-dependent columns moved (new input values, two added climate years, gages that gained a climate series); `flagged_for_high_na` is regenerated. Run folders `~/HISSS_data/climate-rerun-12oct2026/processedOuts_{1993,1980}_2025_climate_12oct2026`; staged HydroShare folders `~/Downloads/Signatures_v2_12oct2026/`; review record in `docs/plans/2026-10-12-climate-reviews/` and CHANGELOG [October 2026].
-
-**Version 3 (built 2026-10-27, verified 2026-10-28, not yet deposited; to be published as "version 2", since the first version-2 folders were never deposited):** the version-2 configuration rerun on a corrected input with the gage sets frozen (6,678 / 6,250). Two defects of every earlier product are fixed: USGS days carrying an approved remark code (`A R`, `A <`, `A >`, `A [4]`) had been set to NA at compilation and are restored from re-fetched NWIS records (1,177 / 950 water years valid again); and climate now enters the per-year screening on Daymet's own calendar inside each record span (`STREAMFLOW_CLIMATE_FRAME=outer`), so absent streamflow days keep their precipitation. Annual parquets of 27,766,578 / 34,813,881 rows; the 5,069 / 4,894 gages untouched by both fixes are bit-identical to version 2. Run folders `~/HISSS_data/qualifier-rerun-26oct2026/processedOuts_{1993,1980}_2025_climate_v3_26oct2026`; fixes, verification and reviews in `docs/plans/2026-10-21-qualifier-rerun-results.md`.
+**Version 2 (October 2026; built 2026-10-27, verified 2026-10-28, not yet published):** both windows rerun with the 39-signature climate family on the reprocessed Daymet input (`daymet_1980_2025_29sep2026.parquet`, every gage, calendar 1980–2025) and on a corrected streamflow input, with the gage sets unchanged (6,678 / 6,250) — 2,277 columns, annual parquets of 27,766,578 / 34,813,881 rows. Two defects of every earlier product are fixed: USGS days carrying an approved remark code (`A R`, `A <`, `A >`, `A [4]`) had been set to NA at compilation and are restored from re-fetched NWIS records (1,177 / 950 water years valid again); and climate enters the per-year screening on Daymet's own calendar inside each record span (`STREAMFLOW_CLIMATE_FRAME=outer`, the runners' default since 2026-10-28), so absent streamflow days keep their precipitation. Climate-dependent columns moved against the 2026 deliveries (new input values, two added climate years, gages that gained a climate series) and `flagged_for_high_na` is regenerated (471 / 345 TRUE). An intermediate build of 2026-10-12/13 with the climate family alone (27,602,161 / 34,681,331 annual rows; validated, never deposited) is superseded: the 5,069 / 4,894 gages untouched by both fixes are bit-identical to it, and its Q-only columns are identical per gage to the 2026 deliveries. Record: CHANGELOG [October 2026] (the repository's internal build label for this version is v3, which is why some provenance file names carry `v3`; the design and review records live in `docs/plans/`, which the public mirror does not ship).
 
 ## Reading and Joining the Data (gage identifiers)
 

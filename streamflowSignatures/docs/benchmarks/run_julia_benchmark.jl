@@ -720,6 +720,9 @@ function main()
             "julia_version" => string(VERSION),
             "hostname" => gethostname(),
             "climate_frame" => climate_frame,   # resolved STREAMFLOW_CLIMATE_FRAME (2026-10-26)
+            # what the join actually used (2026-10-29): the legacy path keeps its plain leftjoin whatever
+            # the switch says; nothing = no climate file was joined
+            "climate_frame_applied" => (has_climate ? (use_legacy ? "left" : climate_frame) : nothing),
             "env_overrides" => Dict(k => get(ENV, k, nothing) for k in
                 ["STREAMFLOW_START_WATER_YEAR", "STREAMFLOW_END_WATER_YEAR",
                  "STREAMFLOW_MIN_QUALIFYING_DATA_FRACTION", "STREAMFLOW_CONFIG",

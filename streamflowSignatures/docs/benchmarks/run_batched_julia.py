@@ -4,8 +4,9 @@
 The runner (`run_julia_benchmark.jl`) loads the whole streamflow and climate parquets
 before it does anything per gage. The full inputs need well over 8 GB of RAM, more than
 the 16 GB laptop can spare while other work runs. Everything after loading is per gage:
-each gage's climate is left-joined onto its own streamflow dates, then its years are
-filtered, it is qualified, and its signatures are computed. So the run can be split by
+each gage's climate is joined onto its own frame (`STREAMFLOW_CLIMATE_FRAME`: `left` = its
+streamflow dates only, `outer` = + Daymet rows on absent dates; `docs/benchmarks/climate_frame.jl`),
+then its years are filtered, it is qualified, and its signatures are computed. So the run can be split by
 gage into batches with their own small input files and merged afterwards.
 
 The one cross-gage quantity is `flagged_for_high_na`: its denominator is the set of
@@ -462,7 +463,7 @@ def run(a):
     bjm = json.load(open(bj))
     stage = {"stage": a.stage, "parent_manifest": ({"path": a.parent_manifest, "sha256": sha256_of(a.parent_manifest)}
                                                  if a.parent_manifest else None),
-             "selection": bjm.get("selection"), "climate_frame": os.environ.get("STREAMFLOW_CLIMATE_FRAME", "outer (default)"),
+             "selection": bjm.get("selection"), "climate_frame": os.environ.get("STREAMFLOW_CLIMATE_FRAME") or "unset (the wrapper's pin, else the helper default outer; the resolved value is provenance.climate_frame of each batch's timing JSON)",
              "qa_schema": ({"path": a.qa_schema, "sha256": sha256_of(a.qa_schema)} if a.qa_schema else None)}
     os.makedirs(a.out_dir, exist_ok=True)
     log_path = os.path.join(a.out_dir, "batch_runs.json")
@@ -722,6 +723,7 @@ def merge(a):
         json.dump(merged_timing, fh, indent=1)
     res = {"batches": per_batch, "gages": len(rows), "columns": len(next(csv.reader([header]))),
            "stage": shared_fp.get("stage"), "climate_frame": p0.get("climate_frame"),
+           "climate_frame_applied": p0.get("climate_frame_applied"),
            "parent_manifest": shared_fp.get("parent_manifest"), "selection": bj.get("selection"),
            "qa_schema": prov.get("qa_schema"),
            "order": "reference" if a.reference else "sorted gage_id",
@@ -756,7 +758,7 @@ def main():
     r.add_argument("--heap-size-hint", default="2500M")
     r.add_argument("--julia", default="~/.juliaup/bin/julia")
     r.add_argument("--climate-frame", choices=["left", "outer"], default=None,
-                   help="sets STREAMFLOW_CLIMATE_FRAME (unset = the helpers' default, outer since 2026-10-28; left = the pre-rerun join)")
+                   help="sets STREAMFLOW_CLIMATE_FRAME for every batch (unset = the wrapper's own pin, else the helpers' default outer since 2026-10-28; left = the pre-rerun join)")
     r.add_argument("--qa-schema", default=None, help="full-product CSV whose header pins the QA denominator (STREAMFLOW_QA_SCHEMA)")
     r.add_argument("--stage", default=None, help="stage name recorded in the batch records (S0, S1, S1', S2)")
     r.add_argument("--parent-manifest", default=None, help="the product's selection manifest this stage belongs to")

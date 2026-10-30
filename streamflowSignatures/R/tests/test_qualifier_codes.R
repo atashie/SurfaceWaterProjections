@@ -157,7 +157,9 @@ if (requireNamespace("lubridate", quietly = TRUE) && file.exists(hf)) {
   env$as.data.table <- function(x) x
   dates <- seq(as.Date("1979-10-01"), by = "day", length.out = 365 * 21)
   codes <- rep(c("A", "A e", "P", "P e", "A R", "A <", "A >", "A [4]", "P Ice", NA), length.out = length(dates))
-  vals <- seq_along(dates) * 0.5; vals[codes %in% "P Ice"] <- NA; vals[is.na(codes)] <- NA; vals[5] <- -999999
+  # the sentinel sits on an `A` day (index 1), not on an approved-remark day: the approved-remark
+  # check below expects every one of those days kept (the 2026-10-29 review found it on `A R`)
+  vals <- seq_along(dates) * 0.5; vals[codes %in% "P Ice"] <- NA; vals[is.na(codes)] <- NA; vals[1] <- -999999
   env$readNWISdv <- function(siteNumber, parameterCd, startDate, endDate) data.frame(
     agency_cd = "USGS", site_no = siteNumber, Date = dates, X_00060_00003 = vals, X_00060_00003_cd = codes, stringsAsFactors = FALSE)
   eval(exprs[[which(is_def)]], env)

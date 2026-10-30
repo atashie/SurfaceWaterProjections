@@ -34,6 +34,9 @@ df = add_water_year_columns(df)
 # Optional: merge climate data for climate-dependent signatures
 climate = read_parquet("path/to/daymet.parquet")
 climate = add_water_year_columns(climate)
+# Minimal example: a left join on the streamflow dates. The production runner builds the
+# frame with docs/benchmarks/climate_frame.jl (STREAMFLOW_CLIMATE_FRAME, default outer:
+# Daymet's own calendar inside the record span, so absent streamflow days keep their climate).
 df = leftjoin(df, climate[:, [:gage_id, :date, :PPT]], on=[:gage_id, :date])
 
 # Process a single gage

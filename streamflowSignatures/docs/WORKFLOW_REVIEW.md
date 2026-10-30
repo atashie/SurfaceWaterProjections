@@ -38,7 +38,7 @@ This document provides a comprehensive review of the entire streamflow signature
 
 ### Quality Code Filtering
 
-**USGS Accepted Codes:** `"A", "A e", "P", "P e"`
+**USGS Accepted Codes (the rule until 2026-10-26; since then `R/usgs_qualifiers.R`: status letter `A` or `P`, remark codes never mask):** `"A", "A e", "P", "P e"`
 - A = Approved, P = Provisional, e = Estimated
 - All other codes → data masked as `NA`
 

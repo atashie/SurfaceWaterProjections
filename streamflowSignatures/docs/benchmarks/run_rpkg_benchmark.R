@@ -284,7 +284,8 @@ for (i in seq_along(all_gages)) {
         climate_merge <- gage_climate[, clim_cols, with = FALSE]
         # Phase A′ (2026-10-26): climate_frame.R under STREAMFLOW_CLIMATE_FRAME. The
         # deprecated legacy path keeps its historical left merge whatever the switch says
-        # (the Julia and Python runners' legacy branches hold their own left joins).
+        # (the Julia runner's legacy branch holds its own left join; the Python runner's
+        # legacy path joins no climate at all).
         gage_data <- frame_with_climate(gage_data, climate_merge,
                                         if (isTRUE(use_legacy)) "left" else climate_frame)
         has_climate <- "PPT" %in% clim_cols
@@ -655,6 +656,8 @@ timing$provenance <- list(
   git_revision = git_rev,
   git_working_tree_dirty = git_dirty,
   climate_frame = climate_frame,   # resolved STREAMFLOW_CLIMATE_FRAME (2026-10-26)
+  # what the join actually used (2026-10-29): "left" on the legacy path; NA (null) = no climate joined
+  climate_frame_applied = if (length(daymet_idx) == 0) NA else if (isTRUE(use_legacy)) "left" else climate_frame,
   r_version = as.character(getRversion()),
   package_versions = pkg_versions,
   hostname = Sys.info()[["nodename"]],

@@ -31,7 +31,7 @@ if not META.exists():                # the 80 insufficient_years rows of the 16,
 RAW = S / "fetch" / "raw"; RAW.mkdir(parents=True, exist_ok=True)
 START, END = dt.date(1979, 10, 1), dt.date(2025, 10, 1)   # DEFAULT_START_DATE / DEFAULT_END_DATE
 THR, MIN_DAYS, MIN_YEARS = 0.0001, 30, 20
-KEEP_CODES = {"A", "A e", "P", "P e"}                        # USGS mask in generate_streamflow_dt
+KEEP_CODES = {"A", "A e", "P", "P e"}                        # the February 2026 USGS mask of generate_streamflow_dt, replayed as it was (rule replaced 2026-10-26)
 
 def get(url, tries=4):
     for k in range(tries):

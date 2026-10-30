@@ -139,6 +139,8 @@ def main():
     ap.add_argument("--annual", default=None,
                     help="signatures_annual.parquet -> per-signature sidecar files + time-series plot")
     ap.add_argument("--title", default="Streamflow Signature Explorer")
+    ap.add_argument("--source-label", default=None,
+                    help="public name shown as the data source in the subtitle (default: the CSV's base name)")
     ap.add_argument("--limit", type=int, default=None, help="debug: first N gages")
     args = ap.parse_args()
 
@@ -205,7 +207,7 @@ def main():
     payload = {
         "meta": {
             "title": args.title,
-            "source": os.path.basename(args.csv),
+            "source": args.source_label or os.path.basename(args.csv),
             "generated": str(date.today()),
             "n_gages": int(len(df)),
             "stats": [[s, STAT_LABELS[s]] for s in STAT_SUFFIXES],

@@ -128,8 +128,16 @@ integration** at acceptance (software DOI), after the "move code into the CZ git
       **https://doi.org/10.4211/hs.f702201faa5d46069a5ee83ffa4c9768**
       (verified live 2026-08-25; recorded in memory, CHANGELOG, and all five
       staged resource READMEs).
-- [ ] Create the 5 member resources PRIVATE; record the 5 resource ids →
-      derive DOI strings for the manuscript; add each to the collection.
+- [x] **MEMBER RESOURCES EXIST (seen 2026-10-29 in the downloaded collection bag; all
+      Private & Shareable, all five listed as hasPart of the collection):**
+      R1 `84edce76f22e4aaebd3f50e508bacfbe` (Signatures Product 1993-2025),
+      R2 `e86b8c60fa454c18bce642b035b39ece` (Signatures Product 1980-2025),
+      R3 `e238a594bfcd4719ab4bcab232ac48dc` (Harmonized Input Data),
+      R4 `1283981f7f6a451a91f745902256443e` (Watershed Geometry and Basin Attributes),
+      R5 `27da62083ba440ebbda8b4a805aa2b1d` (Vegetation and Land Cover).
+      DOI strings at publication: `https://doi.org/10.4211/hs.<id>`. Each resource's
+      contents are being replaced by the version-2 (internal v3) staging in the
+      2026-10-29 resource-by-resource review (`docs/QUALIFIER_RERUN_RESULTS.md`).
 - [x] **Stage all files locally — DONE for ALL FIVE resources (2026-08-25)**:
       `~/Downloads/Signatures/resource{1..5}_*/` with deposit names, per-resource
       READMEs, dictionaries, abstracts, all Codex-reviewed (R1–R2, R4 this session;

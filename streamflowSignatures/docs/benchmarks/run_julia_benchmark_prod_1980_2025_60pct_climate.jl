@@ -6,7 +6,7 @@ streamflow input with the gage set FROZEN at the version-2 cohort (6,250 gages; 
 decision 2026-10-23). Supersedes the undeposited `processedOuts_1980_2025_climate_12oct2026`.
 
 What differs from version 2 (plan docs/plans/2026-10-21-qualifier-mask-fix-rerun-plan.md,
-record docs/plans/2026-10-21-qualifier-rerun-results.md):
+record docs/QUALIFIER_RERUN_RESULTS.md):
   - input `combined_streamflow_data_09feb2026_qualifier_patched.parquet`: the 193,542 USGS
     days the February compile masked under its qualifier rule (`A R`, `A <`, `A >`, `A [4]`)
     restored from re-fetched NWIS records; the metadata rows of the 987 patched gages

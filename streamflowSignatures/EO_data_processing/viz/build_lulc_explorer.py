@@ -18,7 +18,7 @@ lazily on click, so the whole product inlines into one double-clickable file.
 Usage: /home/sagemaker-user/.conda/envs/geo/bin/python EO_data_processing/viz/build_lulc_explorer.py
 Output: data_out/eo_lai/lulc_explorer.html
 """
-import os, json
+import os, json, argparse
 from collections import Counter
 import numpy as np, pandas as pd, geopandas as gpd
 
@@ -27,6 +27,7 @@ LULC=f"{ROOT}/data_out/eo_lai/lulc_out/watershed_modis_lulc_annual_29jun2026.par
 LEG =f"{ROOT}/EO_data_processing/eo_processing/lulc_legends.csv"
 GEOM=f"{ROOT}/data_out/eo_lai/geometry_7964.gpkg"
 OUT =f"{ROOT}/data_out/eo_lai/lulc_explorer.html"
+# The paths above are the June 2026 build; pass --input / --legend / --geom / --out to build elsewhere.
 SUMMARY_GROUP="Summary (IGBP-derived)"
 
 BAND_LABEL={
@@ -66,12 +67,38 @@ IGBP_GROUP={1:"forest",2:"forest",3:"forest",4:"forest",5:"forest",6:"shrub",7:"
  8:"savanna",9:"savanna",10:"grass",11:"wetland",12:"cropland",13:"urban",14:"cropland",
  15:"snow_ice",16:"barren",17:"water"}
 
+
+GEOM_COLS=["gage_id","canon_id","latitude","longitude","watershed_geom_source","low_confidence"]
+
+def read_geom(path,cols=GEOM_COLS):
+    """Attribute columns of the watershed layer (GeoPackage or GeoParquet); geometries are not needed. Ids must be
+    unique in both forms (a duplicate would otherwise pick one row silently)."""
+    geo=pd.read_parquet(path,columns=cols) if str(path).endswith(".parquet") else gpd.read_file(path,ignore_geometry=True)[cols]
+    for c in ("gage_id","canon_id"): geo[c]=geo[c].astype(str)
+    geo=pd.DataFrame(geo).reset_index(drop=True)
+    for c in ("gage_id","canon_id"):
+        if geo[c].duplicated().any(): raise SystemExit(f"geometry layer: duplicate {c}: {sorted(geo.loc[geo[c].duplicated(),c])[:10]}")
+    return geo
+
+def align_ids(geo,df):
+    """Key the geometry rows to the EO table's gage_id through the zero-stripped canon_id. The EO tables and the
+    boundary layer pad long USGS site numbers differently (44 vs 9 ids stored without their leading zero), so an
+    exact gage_id join would silently drop gages. Every EO gage must have a geometry row; unused rows are dropped
+    and the geometry order is kept."""
+    ids=df[["gage_id","canon_id"]].drop_duplicates().copy(); ids["canon_id"]=ids.canon_id.astype(str)
+    for c in ("gage_id","canon_id"):
+        if ids[c].duplicated().any(): raise SystemExit(f"EO table: a {c} maps to several ids: {sorted(ids.loc[ids[c].duplicated(),c])[:10]}")
+    m=geo.drop(columns="gage_id").merge(ids,on="canon_id",how="inner")
+    missing=sorted(set(ids.canon_id)-set(m.canon_id))
+    if missing: raise SystemExit(f"{len(missing)} EO gages have no geometry row, e.g. {missing[:10]}")
+    print(f"  geometry rows {len(geo):,} -> {len(m):,} matched on canon_id ({len(geo)-len(m)} unused)",flush=True)
+    return m.reset_index(drop=True)
+
 def main():
     print("loading LULC panel + legends + geometry ...",flush=True)
     leg=pd.read_csv(LEG)
     df=pd.read_parquet(LULC); df["gage_id"]=df.gage_id.astype(str)
-    geo=gpd.read_file(GEOM,ignore_geometry=True); geo["gage_id"]=geo.gage_id.astype(str)
-    geo=geo[["gage_id","canon_id","latitude","longitude","watershed_geom_source","low_confidence"]].drop_duplicates("gage_id")
+    geo=align_ids(read_geom(GEOM),df)
 
     years=sorted(int(y) for y in df.year.unique()); nyear=len(years)
     gages=geo.gage_id.tolist(); ngage=len(gages)
@@ -132,7 +159,7 @@ def main():
      ("dominant_group",dominant_group,"Largest AGGREGATED land-cover group (forest/savanna/shrubland/grassland/cropland/wetland/water/urban/barren-snow) - robust to IGBP's class splitting",gnames),
      ("dominant_change",dom_change,"Did the dominant IGBP class differ between mean(2001-03) and mean(2022-24)? (turnover; recent years are 2021+ reduced-confidence)",["no","yes"]),
      ("watershed_geom_source",geo.watershed_geom_source.fillna("NA").tolist(),"Basin polygon source: gagesii / wsc_eccc / hydrobasins",None),
-     ("low_confidence",[("yes" if int(v)==1 else "no") for v in geo.low_confidence.fillna(0)],"Geometry/coverage low-confidence flag (HydroBasins fallback or area outlier)",None),
+     ("low_confidence",[("yes" if int(v)==1 else "no") for v in geo.low_confidence.fillna(0)],"Low-confidence flag of the deposited watershed boundary layer (HydroBasins fallback or area outlier); the table's own low_confidence column is a separate QA flag",None),
     ]
     VARS=[]; V={}
     def add_cont(key,vals,desc,group,label,lo_zero=False):
@@ -361,7 +388,7 @@ function hisssBasemap(map, variant, maxZoom, position) {
   L.control.layers(groups, null, {position: position || 'topright', collapsed: true}).addTo(map);
   return groups;
 }
-hisssBasemap(map, 'light', 19, 'topright');
+hisssBasemap(map, 'light', 19, 'topleft');   // under the zoom control; the top-right corner holds the definitions panel
 
 // ---------- color scales (map points) ----------
 const VIR=[[68,1,84],[59,82,139],[33,145,140],[94,201,98],[253,231,37]];
@@ -568,4 +595,11 @@ buildDefs(); populateVars();
 </html>
 """
 
-if __name__=="__main__": main()
+if __name__=="__main__":
+    ap=argparse.ArgumentParser(description="Build the self-contained MODIS LULC map explorer.")
+    ap.add_argument("--input",default=LULC,help="annual basin LULC parquet")
+    ap.add_argument("--legend",default=LEG,help="lulc_legends.csv")
+    ap.add_argument("--geom",default=GEOM,help="watershed layer (GeoPackage or GeoParquet) with gage_id, canon_id, latitude, longitude, watershed_geom_source, low_confidence")
+    ap.add_argument("--out",default=OUT,help="output HTML")
+    a=ap.parse_args(); LULC,LEG,GEOM,OUT=a.input,a.legend,a.geom,a.out
+    main()

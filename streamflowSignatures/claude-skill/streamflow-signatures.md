@@ -122,12 +122,14 @@ Thirty-nine pure-climate signatures from Daymet precipitation and temperature
   no dry day.
 - Products rerun on the reprocessed Daymet input (calendar 1980–2025, every gage) carry
   climate for WY 2024–2025 as well; WY 1980 has none (the input starts 1980-01-01).
-- ⚠ KNOWN ISSUE (2026-10-16, every product, fix on hold): climate is joined onto the
-  streamflow ROWS, so a day absent from a gage's streamflow record is linearly interpolated
+- ⚠ Every product BEFORE version 3 (found 2026-10-16): climate was joined onto the
+  streamflow ROWS, so a day absent from a gage's streamflow record was linearly interpolated
   in PPT (and TMIN/TMAX/SWE) although Daymet has it; such days are mostly storms, so the
-  affected years' totals run low. 919 of 200,832 gage-years in the WY 1993–2025 product
-  (median 6 mm); 8 gages' `prcp_annual_mean` are off by more than 1 % (02146285 by
-  −24.5 %). The runoff ratios and elasticity inherit it.
+  affected years' totals run low. 919 of 200,832 gage-years in the WY 1993–2025 version-2
+  product (median 6 mm); 8 gages' `prcp_annual_mean` off by more than 1 % (02146285 by
+  −24.5 %). The runoff ratios and elasticity inherit it. FIXED in the version-3 products
+  (`STREAMFLOW_CLIMATE_FRAME=outer`, the default since 2026-10-28): climate enters on Daymet's
+  own calendar inside the record span, so annual totals equal the daily sums.
 
 ### Streamflow Drought Metrics (July 2026)
 
@@ -218,8 +220,8 @@ fraction, 20-year floor, one self-contained folder each):
   (1,177 / 950 water years valid again on 619 / 502 gages; 899 / 757 gages hold a restored day),
   and climate is joined on Daymet's own calendar inside the record span so absent streamflow
   days keep their precipitation (`STREAMFLOW_CLIMATE_FRAME=outer`, the code's default since 2026-10-28; 3,241 / 2,221 inserted days
-  in valid years). Annual rows 27,766,578 / 34,813,881; the 5,069 / 4,894 untouched gages are
-  bit-identical to version 2. Folders
+  in valid years). Annual rows 27,766,578 / 34,813,881; `flagged_for_high_na` 471 / 345 TRUE (560 / 401 in
+  version 2); the 5,069 / 4,894 untouched gages are bit-identical to version 2. Folders
   `~/HISSS_data/qualifier-rerun-26oct2026/processedOuts_{1993,1980}_2025_climate_v3_26oct2026`.
 
 Provenance caveat: #1 was built from the original Daymet parquet, #2 from a

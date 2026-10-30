@@ -18,7 +18,7 @@ Design reconciled with the Codex review (EO_data_processing/README_NLCD.md):
 Usage: /home/sagemaker-user/.conda/envs/geo/bin/python EO_data_processing/viz/build_nlcd_explorer.py
 Output: data_out/eo_nlcd/nlcd_out/nlcd_explorer.html
 """
-import os, json
+import os, json, argparse
 from collections import Counter
 import numpy as np, pandas as pd, geopandas as gpd
 
@@ -27,6 +27,7 @@ NLCD = f"{ROOT}/nlcd_out/watershed_nlcd_annual_24jul2026.parquet"
 LEG = "/home/sagemaker-user/streamflowSignatures/EO_data_processing/eo_processing/nlcd_legends.csv"
 GEOM = f"{ROOT}/watershed_polygons_26jun2026.parquet"
 OUT = f"{ROOT}/nlcd_out/nlcd_explorer.html"
+# The paths above are the July 2026 build; pass --input / --legend / --geom / --out to build elsewhere.
 SEAM_FROM = 2024  # C1V2 annual-update-path years (methodological seam)
 
 CLASS_LABEL = {11:"Open Water",12:"Perennial Ice/Snow",21:"Developed, Open Space",
@@ -40,6 +41,33 @@ GROUP = {11:"water",12:"snow/ice",21:"developed",22:"developed",23:"developed",2
  81:"agriculture",82:"agriculture",90:"wetland",95:"wetland"}
 
 
+
+GEOM_COLS=["gage_id","canon_id","latitude","longitude","watershed_geom_source","low_confidence"]
+
+def read_geom(path,cols=GEOM_COLS):
+    """Attribute columns of the watershed layer (GeoPackage or GeoParquet); geometries are not needed. Ids must be
+    unique in both forms (a duplicate would otherwise pick one row silently)."""
+    geo=pd.read_parquet(path,columns=cols) if str(path).endswith(".parquet") else gpd.read_file(path,ignore_geometry=True)[cols]
+    for c in ("gage_id","canon_id"): geo[c]=geo[c].astype(str)
+    geo=pd.DataFrame(geo).reset_index(drop=True)
+    for c in ("gage_id","canon_id"):
+        if geo[c].duplicated().any(): raise SystemExit(f"geometry layer: duplicate {c}: {sorted(geo.loc[geo[c].duplicated(),c])[:10]}")
+    return geo
+
+def align_ids(geo,df):
+    """Key the geometry rows to the EO table's gage_id through the zero-stripped canon_id. The EO tables and the
+    boundary layer pad long USGS site numbers differently (44 vs 9 ids stored without their leading zero), so an
+    exact gage_id join would silently drop gages. Every EO gage must have a geometry row; unused rows are dropped
+    and the geometry order is kept."""
+    ids=df[["gage_id","canon_id"]].drop_duplicates().copy(); ids["canon_id"]=ids.canon_id.astype(str)
+    for c in ("gage_id","canon_id"):
+        if ids[c].duplicated().any(): raise SystemExit(f"EO table: a {c} maps to several ids: {sorted(ids.loc[ids[c].duplicated(),c])[:10]}")
+    m=geo.drop(columns="gage_id").merge(ids,on="canon_id",how="inner")
+    missing=sorted(set(ids.canon_id)-set(m.canon_id))
+    if missing: raise SystemExit(f"{len(missing)} EO gages have no geometry row, e.g. {missing[:10]}")
+    print(f"  geometry rows {len(geo):,} -> {len(m):,} matched on canon_id ({len(geo)-len(m)} unused)",flush=True)
+    return m.reset_index(drop=True)
+
 def main():
     print("loading finalized NLCD panel + legend + geometry ...", flush=True)
     leg = pd.read_csv(LEG)
@@ -48,11 +76,13 @@ def main():
     colors = list(leg.hex_color)
     names = [CLASS_LABEL[c] for c in codes]
     df = pd.read_parquet(NLCD); df["gage_id"] = df.gage_id.astype(str)
-    geo = gpd.read_parquet(GEOM); geo["gage_id"] = geo.gage_id.astype(str)
-    geo = geo[["gage_id", "canon_id", "latitude", "longitude"]].drop_duplicates("gage_id")
+    geo = read_geom(GEOM, cols=["gage_id", "canon_id", "latitude", "longitude"])[["canon_id", "latitude", "longitude"]]   # joined on the zero-stripped key, see align_ids
+    df["canon_id"] = df.canon_id.astype(str)
 
     years = sorted(int(y) for y in df.year.unique()); nyear = len(years)
-    df = df.merge(geo, on="gage_id", how="left", suffixes=("", "_g"))
+    df = df.merge(geo, on="canon_id", how="left", suffixes=("", "_g"))
+    if df.latitude.isna().any() or df.longitude.isna().any():
+        raise SystemExit(f"{df.loc[df.latitude.isna() | df.longitude.isna(), 'gage_id'].nunique()} NLCD gages have no geometry row")
     gages = sorted(df.gage_id.unique()); ngage = len(gages)
     print(f"  {len(df):,} rows | {nyear} years {years[0]}..{years[-1]} | {ngage} CONUS gages", flush=True)
 
@@ -156,7 +186,7 @@ def main():
     TS = {"years": years, "names": names, "codes": codes, "colors": colors,
           "series": ser, "imperv": iser, "seam_from": SEAM_FROM}
     EXCLUDED = {"n": 45, "note": "45 Alaska gages are outside the CONUS Annual NLCD footprint and are excluded "
-                "(see nlcd_out_of_footprint CSV). They are NOT shown here and are NOT zero-valued."}
+                "(see hisss_nlcd_excluded_gages.csv). They are NOT shown here and are NOT zero-valued."}
 
     html = (TEMPLATE.replace("__POINTS__", json.dumps(POINTS)).replace("__VARS__", json.dumps(VARS))
             .replace("__TS__", json.dumps(TS)).replace("__EXCLUDED__", json.dumps(EXCLUDED)))
@@ -286,7 +316,7 @@ function hisssBasemap(map, variant, maxZoom, position) {
   L.control.layers(groups, null, {position: position || 'topright', collapsed: true}).addTo(map);
   return groups;
 }
-hisssBasemap(map, 'light', 19, 'topright');
+hisssBasemap(map, 'light', 19, 'topleft');   // under the zoom control; the top-right corner holds the definitions panel
 const VIR=[[68,1,84],[59,82,139],[33,145,140],[94,201,98],[253,231,37]];
 const lerp=(a,b,t)=>a+(b-a)*t;
 function viridis(t){t=Math.max(0,Math.min(1,t));const s=t*(VIR.length-1),i=Math.floor(s),f=s-i,a=VIR[i],b=VIR[Math.min(i+1,VIR.length-1)];
@@ -426,4 +456,10 @@ buildDefs();populateVars();
 """
 
 if __name__ == "__main__":
+    ap = argparse.ArgumentParser(description="Build the self-contained Annual NLCD map explorer.")
+    ap.add_argument("--input", default=NLCD, help="annual basin NLCD parquet")
+    ap.add_argument("--legend", default=LEG, help="nlcd_legends.csv")
+    ap.add_argument("--geom", default=GEOM, help="watershed layer (GeoPackage or GeoParquet) with gage_id, canon_id, latitude, longitude")
+    ap.add_argument("--out", default=OUT, help="output HTML")
+    a = ap.parse_args(); NLCD, LEG, GEOM, OUT = a.input, a.legend, a.geom, a.out
     main()

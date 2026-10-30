@@ -371,6 +371,8 @@ EO_data_processing/
 ├── viz/                      # self-contained QA/QC HTML explorers (Leaflet + Canvas)
 │   ├── build_lai_explorer.py   # → lai_explorer.html  (S3: watershed_modis_lai_explorer.html)
 │   └── build_lulc_explorer.py  # → lulc_explorer.html (S3: watershed_modis_lulc_explorer.html)
+│       (2026-10-30: both, and build_nlcd_explorer.py, take --input/--legend/--geom/--out; geometry rows are
+│        joined on the zero-stripped id, so the deposited boundary layer stands in for the lost geometry_7964.gpkg)
 └── tests/
 ```
 Outputs land in `data_out/` (gitignored), alongside the signature outputs.
@@ -465,7 +467,9 @@ Outputs land in `data_out/` (gitignored), alongside the signature outputs.
    overlapping static `pct_*` roll-ups intentionally dropped) + per-gage stacked-area composition
    2001–2024 with a band switcher across all 8 schemes; glossary carries the MODIS caveats (SE-US
    woody-savanna labeling; 2021+ reduced confidence). Both headless-validated (puppeteer/Chrome).
-   **EO pipeline + both explorers COMPLETE.**
+   **EO pipeline + both explorers COMPLETE.** Rebuilt 2026-10-30 for the HydroShare deposit (keyless basemap)
+   from the deposited tables and the deposited simplified boundary layer — `~/HISSS_data/eo-explorers-rebuild-30oct2026/`,
+   embedded data identical per gage to the June / July builds; CHANGELOG [October 2026].
 
 Environment (runs from **us-east-2**): Python, **`pyhdf`** for HDF4 reads (env pip-GDAL has NO HDF4 driver),
 `earthaccess rioxarray rasterio exactextract geopandas pyproj shapely pandas pyarrow

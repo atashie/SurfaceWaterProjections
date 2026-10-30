@@ -34,6 +34,9 @@ df = add_water_year_columns(df)
 # Optional: merge climate data for climate-dependent signatures
 climate = read_parquet("path/to/daymet.parquet", gage_ids=["01011000", "01030500"])
 climate = add_water_year_columns(climate)
+# Minimal example: a left merge on the streamflow dates. The production runner builds the
+# frame with docs/benchmarks/climate_frame.py (STREAMFLOW_CLIMATE_FRAME, default outer:
+# Daymet's own calendar inside the record span, so absent streamflow days keep their climate).
 df = df.merge(climate[["gage_id", "date", "PPT"]], on=["gage_id", "date"], how="left")
 
 # Process a single gage
@@ -51,7 +54,8 @@ qual_years, qualifies = filter_qualifying_years(gage_data)
 if qualifies:
     gage_data = gage_data[gage_data["water_year"].isin(qual_years)]
     results = calculate_all_signatures(gage_data, has_climate="PPT" in gage_data.columns)
-    # results is a dict of signature statistics. The ~1,653-column figure is
+    # results is a dict of signature statistics. The 2,277-column figure (1,653 before
+    # the 2026-10-12 climate family) is
     # what the FULL pipeline CSV carries for a climate+SWE gage — this bare
     # call emits the 8-stat keys only: the Pettitt changepoint fields require
     # the changepoint=... argument and the 14 snow metrics require
@@ -253,20 +257,21 @@ baseflow = analyze_baseflow_indices(gage_data)       # returns dict
 
 ## Production Reference
 
-For full-scale benchmark processing (all 7,000+ gages), see `docs/benchmarks/run_python_benchmark.py`.
+For full-scale benchmark processing (all 7,000+ gages), see `docs/benchmarks/run_python_benchmark.py`. It joins climate through `docs/benchmarks/climate_frame.py` under `STREAMFLOW_CLIMATE_FRAME` (default `outer` since 2026-10-28; `left` reproduces the products before the qualifier rerun).
 
 ## Cross-Language Validation
 
 This Python implementation is validated against the canonical Julia implementation
 — at full scale on 2026-08-26 (1,653 columns x 6,678 gages; 1,615 of 1,620 shared
 columns Perfect, none below R² 0.99; see `../docs/CROSS_LANGUAGE_STATUS.md`), and on
-2026-10-27 as the independent check of the version-3 rerun (2,277 columns; the 1,609 / 1,356
+2026-10-27 as the independent check of the October 2026 rerun (internal build v3, public "version 2"; 2,277 columns; the 1,609 / 1,356
 gages whose values changed, with the climate frame `outer`): annual key sets identical,
 117 / 188 of 6.5 M / 7.5 M values beyond 1e-9 — all documented threshold ties or float noise —
 and the summary table compared cell for cell at 1e-6 with gate state: 0 gated mismatches, 103
-cells in the named waived columns (`ice_affected_days_total`; the FDC90th / FDCmid rank and
-Pettitt statistics of zero-heavy series, 8 / 7 of them NaN in one language and finite in the
-other, accepted only after recomputation reproduced both sides), 1,510 / 2,503 tie-bearing rank
+finite-value cells in the named waived columns (`ice_affected_days_total`; the FDC90th / FDCmid
+rank and Pettitt statistics of zero-heavy series) and, separately, 8 / 7 gate-state cells of those
+columns (NaN in one language and finite in the other) accepted only after recomputation reproduced
+both sides, 1,510 / 2,503 tie-bearing rank
 statistics and 472 / 775 propagated annual residuals verified by recomputation.
 Golden reference outputs are stored in `../golden-outputs/`.
 

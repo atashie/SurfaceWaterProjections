@@ -47,7 +47,7 @@ No other sentence in the current draft names a category count or list.
 Terminology and content updates needed in the staged deposit (and on HydroShare once
 uploaded), to be applied in a later session:
 
-- **H1 — category terminology.** `hisss_data_dictionary.csv` `category` column and
+- **H1 — category terminology. APPLIED 2026-10-29 (user decision; `stage_hydroshare_qualifier_v3.py` generates the categories file and the dictionary's category column from `docs/signature_categories.csv`, 160 rows; readme lede + file row name the nine categories).** Original item: `hisss_data_dictionary.csv` `category` column and
   `hisss_signature_categories.csv` (root, R1, R2 — identical copies) carry the old 9-class
   grouping ("Snow Timing" separate; flashinessRB under Storage; scalars as "Per-gage
   scalar"): regenerate both from `docs/signature_categories.csv` (121 rows incl. the

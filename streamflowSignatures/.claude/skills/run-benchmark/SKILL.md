@@ -58,10 +58,10 @@ description: Run and validate a full Julia signature-extraction benchmark, exper
 
 ```bash
 julia --project=julia docs/benchmarks/run_julia_benchmark.jl                               # generic, ~27 min
-julia --project=julia docs/benchmarks/run_julia_benchmark_drought_1993_2025_60pct.jl       # standard product #1 wrapper
-julia --project=julia docs/benchmarks/run_julia_benchmark_prod_1980_2025_60pct_drought.jl  # standard product #2 wrapper (rebuilt climate parquet by default)
-julia --project=julia docs/benchmarks/run_julia_benchmark_prod_1993_2025_60pct_climate.jl  # product #1 VERSION 2 (climate family, reprocessed Daymet; local verified inputs)
-julia --project=julia docs/benchmarks/run_julia_benchmark_prod_1980_2025_60pct_climate.jl  # product #2 VERSION 2
+julia --project=julia docs/benchmarks/run_julia_benchmark_drought_1993_2025_60pct.jl       # 2026 delivery of product #1 (pins left)
+julia --project=julia docs/benchmarks/run_julia_benchmark_prod_1980_2025_60pct_drought.jl  # 2026 delivery of product #2 (pins left; rebuilt climate parquet by default)
+julia --project=julia docs/benchmarks/run_julia_benchmark_prod_1993_2025_60pct_climate.jl  # product #1 v3 (public "version 2": corrected input, pins outer; built through run_batched_julia.py with the frozen manifest — standalone would ADD gages)
+julia --project=julia docs/benchmarks/run_julia_benchmark_prod_1980_2025_60pct_climate.jl  # product #2 v3 (as above)
 python docs/benchmarks/run_python_benchmark.py                                             # Python port
 Rscript docs/benchmarks/run_rpkg_benchmark.R                                               # rpkg port
 ```
@@ -76,6 +76,22 @@ batches with `docs/benchmarks/run_batched_julia.py`, using a Python that has duc
   ran out of memory 2026-10-13) and read `merge.log` — a chain's echoed `$?` after `$(date)`
   is the date command's status.
 Self-test: `docs/benchmarks/selftest_run_batched_julia.py`.
+
+The version-3 products were built this way (frozen cohort, clean checkout; `PYD` = a Python with
+duckdb, `R` = the run folder, `W` = `1993-2025` / `1980-2025`, `WU` = `1993_2025` / `1980_2025`):
+
+```bash
+$PYD docs/benchmarks/run_batched_julia.py split --streamflow $R/input/combined_streamflow_data_09feb2026_qualifier_patched.parquet \
+    --batches 8 --out-dir $R/inputs_S2_$WU --climate daymet2025=~/HISSS_data/daymet-processed-29sep2026/daymet_1980_2025_29sep2026.parquet \
+    --gage-list $R/manifests/selection_$W.txt
+STREAMFLOW_OUTPUT_PREFIX=streamflow_${WU}_60pct_climate_v3_26oct2026 STREAMFLOW_HASH_INPUTS=1 $PYD docs/benchmarks/run_batched_julia.py run \
+    --wrapper docs/benchmarks/run_julia_benchmark_prod_${WU}_60pct_climate.jl --project julia --inputs $R/inputs_S2_$WU --climate daymet2025 \
+    --out-dir <run folder> --metadata $R/input/combined_watershed_metadata_09feb2026_qualifier_patched.csv --gages-ii-dir <GAGES-II dir> \
+    --climate-frame outer --qa-schema <previous build's summary CSV> --stage S2 --parent-manifest $R/manifests/selection_$W.txt \
+    --require-clean-tree --require-annual --max-minutes 150
+$PYD docs/benchmarks/run_batched_julia.py merge --out-dir <run folder> --prefix streamflow_${WU}_60pct_climate_v3_26oct2026 \
+    --reference <previous build's summary CSV> --qa-schema <same> --memory-limit 3GB
+```
 
 **Every artifact of a run goes in that run's OWN folder** (`processedOuts_<experiment>_<date>`):
 signatures CSV, annual parquet, timing JSON (with its provenance block), run log, signature

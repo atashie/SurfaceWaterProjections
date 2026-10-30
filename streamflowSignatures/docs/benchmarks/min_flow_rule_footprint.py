@@ -1,6 +1,7 @@
 """Footprint of the ingestion's per-year flow rule (>= 30 days with Q > 0.0001 mm/day per
 calendar year; R/helperFunctions.R::process_gages_rawToRaw) among the 8,014 ADMITTED gages,
-plus the USGS qualifier-code mask (generate_streamflow_dt keeps only A, A e, P, P e).
+plus the USGS qualifier-code mask of the February 2026 compile (generate_streamflow_dt kept only
+A, A e, P, P e until 2026-10-26; the rule is R/usgs_qualifiers.R since).
 
 Per gage and calendar year: non-NA days, days > 0, days > 0.0001 (Q as stored: mm/day, raw
 units for the 73 un-normalized gages). Tabulates the years with >= 30 non-NA days that the rule

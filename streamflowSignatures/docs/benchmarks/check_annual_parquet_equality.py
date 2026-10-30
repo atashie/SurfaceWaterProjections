@@ -29,7 +29,8 @@ USAGE
         --ref  REFERENCE_signatures_annual.parquet \
         --port PORT_signatures_annual.parquet \
         [--tol 1e-9] [--waive-prefix drought_ ...] [--max-show 20] \
-        [--allow-key-diff N] [--allow-value-diff N]
+        [--allow-key-diff N] [--allow-value-diff N] \
+        [--allow-diff-signature NAME ...] [--gages LIST] [--out REPORT.json]
 
 QUOTE THE TOLERANCE WITH ANY COUNT THIS PRINTS. The same run reads differently at
 different thresholds: Python vs Julia gives 267 over-tolerance rows at 1e-6 (all

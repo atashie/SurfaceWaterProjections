@@ -79,11 +79,14 @@ Signature functions receive clean data
 - Constant-SD detection is a QA flag, not a year rejection criterion
 - `ice_affected_days_total` per-gage output aggregates ice-related NA days from diagnostics
 - Seasonal completeness is computed from RAW observations (pre-interpolation)
-- **KNOWN ISSUE (2026-10-16, fix on hold)**: the three benchmark runners LEFT-join each
-  gage's Daymet series onto its streamflow rows BEFORE this pipeline, so a date absent from
-  the streamflow record has no PPT/TMIN/TMAX/SWE either and step 4 interpolates climate that
-  exists in the input (storm days → biased low). Proposed fix: outer join (Q-only columns
-  must stay bit-identical) — CHANGELOG → Known Issues; `docs/plans/2026-10-16-precipitation-review.md`.
+- **Climate frame** (defect found 2026-10-16, FIXED in the version-3 products): the three
+  benchmark runners build each gage's frame BEFORE this pipeline through
+  `docs/benchmarks/climate_frame.{jl,py,R}` under `STREAMFLOW_CLIMATE_FRAME` — `outer` (the
+  default since 2026-10-28) adds the gage's Daymet rows on dates absent from its streamflow
+  record, inside the record span and its water years, so step 4 no longer interpolates climate
+  that exists in the input; `left` (every product before version 3) joined onto the streamflow
+  rows only (storm days → biased low). Q-only columns are bit-identical between the two —
+  CHANGELOG → Known Issues; `docs/plans/2026-10-16-precipitation-review.md`.
 - `generate_stats()` has optional `trend_completeness` / `decade_completeness` params
 
 ### Annual Values Export (July 2026; all three languages since August 2026)
@@ -604,6 +607,7 @@ the WY 1993–2025 window:
 | Python | 1,653 | 6,678 | 1,615 Perfect / 5 Good / **0 below 0.99** | 0.999988 | 18,898,405 / 18,898,406 |
 | rpkg | 1,653 | 6,678 | 1,601 Perfect / 10 Good / 9 Poor / **0 below 0.95** | 0.999843 | 18,898,405 / 18,898,406 |
 | rpkg, version-2 reference (climate family, 2026-10-13) | 2,277 | 6,678 | 2,228 Perfect / 10 Good / 6 Poor / **0 below 0.95** | 0.999925 | 27,602,160 / 27,602,161 |
+| rpkg, version-3 reference (corrected input, 2026-10-28) | 2,277 | 6,678 | 2,227 Perfect / 11 Good / 6 Poor / **0 below 0.95** | 0.999922 | 27,766,577 / 27,766,578 |
 
 Both share 0 NA-pattern mismatches. rpkg's 19 non-Perfect columns are entirely
 the pre-existing irreducible classes (FDC90th near-zero-tail OLS plus its
@@ -736,7 +740,7 @@ python docs/benchmarks/build_experiment_vs_julia_dashboard.py startIn1993_80pct
 
 | File | Description |
 |------|-------------|
-| `docs/benchmarks/run_r_benchmark.R` | R canonical full signature extraction |
+| `docs/benchmarks/run_r_benchmark.R` | LEGACY monolithic R runner over `R/helperFunctions.R` (hard-coded input paths, plain left climate join, no `STREAMFLOW_CLIMATE_FRAME` switch); not canonical — Julia is, and the R port runs through `run_rpkg_benchmark.R` |
 | `docs/benchmarks/run_rpkg_benchmark.R` | rpkg package full signature extraction |
 | `docs/benchmarks/run_python_benchmark.py` | Python full signature extraction |
 | `docs/benchmarks/run_julia_benchmark.jl` | **CANONICAL** — Julia full signature extraction (reference output) |
@@ -766,9 +770,9 @@ python docs/benchmarks/build_experiment_vs_julia_dashboard.py startIn1993_80pct
 | `docs/benchmarks/analyze_drought_redundancy.jl` | Measures drought-duration overlap with the pulse metrics on the annual series |
 | `docs/benchmarks/run_batched_julia.py` | Runs a Julia benchmark wrapper in gage batches to bound memory on the 16 GB laptop: `split` the inputs (source sha256 recorded), `run` each batch under a memory and time guard, `merge` (refuses incomplete or inconsistent batches; reference gage order, else sorted by id) |
 | `docs/benchmarks/selftest_run_batched_julia.py` | Self-test of the batched runner on synthetic inputs with a fake julia (split, resume, guards, merge refusals) |
-| `docs/benchmarks/run_julia_benchmark_prod_{1993,1980}_2025_60pct_climate.jl` | **STANDARD PRODUCT** wrappers of the version-3 products (corrected input, climate frame `outer`, the version-2 prefix and inputs until 2026-10-28); built through the batched runner with the frozen selection manifest, `--climate-frame outer`, `--qa-schema` — standalone they would ADD the 31 / 29 would-qualify gages, and they refuse to write into the delivered product folder |
+| `docs/benchmarks/run_julia_benchmark_prod_{1993,1980}_2025_60pct_climate.jl` | **STANDARD PRODUCT** wrappers of the version-3 products (corrected input from `~/HISSS_data/qualifier-rerun-26oct2026/input/`, climate frame `outer`, prefix `streamflow_<w>_60pct_climate_v3_26oct2026`; until 2026-10-28 they carried the version-2 prefix and inputs); built through the batched runner with the frozen selection manifest, `--climate-frame outer`, `--qa-schema` — standalone they would ADD the 31 / 29 would-qualify gages, and they refuse to write into the delivered product folder |
 | `docs/benchmarks/climate_frame.{jl,py,R}` (+ `selftest_climate_frame.*`) | The climate frame of the three runners under `STREAMFLOW_CLIMATE_FRAME = left \| outer` (2026-10-26); default `outer` since 2026-10-28, `left` pinned by every pre-rerun wrapper |
-| `docs/benchmarks/splice_nwis_qualifiers.py`, `qualifier_year_oracle.py`, `climate_frame_inventory.py`, `preprocess_state_ledger.py`, `assess_rerun_changes.py`, `build_stage_cohorts.py`, `stage_attribution.py`, `check_summary_equality.py`, `stage_hydroshare_qualifier_v3.py`, `reconstruct_qualifier_patched_streamflow.py` | The qualifier-rerun chain (input splice + audit, year oracle, daily delta ledgers, change census, stage attribution, port summary gate, deposit staging + reconstruction recipe) — `docs/plans/2026-10-21-qualifier-rerun-results.md` |
+| `docs/benchmarks/splice_nwis_qualifiers.py`, `qualifier_year_oracle.py`, `climate_frame_inventory.py`, `preprocess_state_ledger.py`, `assess_rerun_changes.py`, `build_stage_cohorts.py`, `stage_attribution.py`, `check_summary_equality.py`, `stage_hydroshare_qualifier_v3.py`, `reconstruct_qualifier_patched_streamflow.py` | The qualifier-rerun chain (input splice + audit, year oracle, daily delta ledgers, change census, stage attribution, port summary gate, deposit staging + reconstruction recipe) — `docs/QUALIFIER_RERUN_RESULTS.md` |
 | `docs/benchmarks/convert_daymet_csvs_to_parquet.py` | Rebuilds `daymet_1980_2023.parquet` from the 44 annual Daymet CSVs (Python equivalent of the R `convert_daymet_zip_to_parquet()`) |
 | `docs/benchmarks/comparison_report.md` | Generated comparison report |
 | `docs/benchmarks/julia_vs_golden_r_summary.md` | Generated Julia vs Golden R detailed report |
@@ -790,6 +794,10 @@ For implementation details, alignment history, and known divergences, see [`CROS
   `~/HISSS_data/qualifier-rerun-26oct2026/input/combined_streamflow_data_09feb2026_qualifier_patched.parquet`
   + `correction_ledger.csv` + the raw responses; audit B1–B8), and the version-3 products are
   built from it with the gage sets frozen (`docs/plans/2026-10-21-qualifier-mask-fix-rerun-plan.md`).
+  The 15,257 provisional-remark days (`P Ice`, `P Dis`, …; 263 gages) stay NA in the patched
+  parquet and in the version-3 products (decision 1e, 2026-10-26: outside the splice's scope),
+  while a fresh ingestion under `R/usgs_qualifiers.R` keeps those that carry a finite value — so
+  re-ingesting does not reproduce the patched parquet day for day.
   Unit test:
   `Rscript R/tests/test_qualifier_codes.R`.
 - Conversion: cfs -> mm/day using drainage area

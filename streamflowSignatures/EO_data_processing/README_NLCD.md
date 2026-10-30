@@ -90,6 +90,10 @@ data_out/eo_nlcd/  CSV + parquet + data dictionary  (keyed gage_id, leading-zero
         └─►  build_nlcd_explorer.py  →  self-contained Leaflet QA/QC HTML  →  S3
 ```
 
+`build_nlcd_explorer.py` takes `--input / --legend / --geom / --out` since 2026-10-30 (the geometry file may be a
+GeoPackage or GeoParquet; rows are joined on the zero-stripped id); the deposited explorer was rebuilt that day from
+the deposited table and boundary layer (`~/HISSS_data/eo-explorers-rebuild-30oct2026/`).
+
 **Contrast with MODIS (what gets simpler / harder):**
 - **Simpler**: COG GeoTIFF → GDAL-native, no `pyhdf`, no HDF4 driver, no Earthdata/CMR
   Bearer token. Single classification scheme (16 cols vs 102). WGS84 Albers is equal-area.

@@ -5,6 +5,7 @@ climate-frame rerun (docs/plans/2026-10-21-qualifier-mask-fix-rerun-plan.md §10
     python docs/benchmarks/stage_attribution.py --window 1993-2025 --cohorts stage_cohorts_1993-2025.json
         --s0-csv ... --s0-annual ... --s1-csv ... --s1-annual ... --s1p-csv ... --s1p-annual ... --s2-csv ... --s2-annual ...
         --ledger correction_ledger.csv --out-dir attribution_1993_2025 [--atol 1e-9] [--rtol 1e-6]
+        [--class-u LIST] [--memory-limit 3GB]
 
 Stages (all on the tagged tree): S0 = February input, left; S1 = spliced input, left (executed on the splice-affected
 gages + the control sample); S1′ = February input, outer (executed on the composed interaction cohort); S2 = spliced
